@@ -1599,7 +1599,7 @@ window.addEventListener('popstate', e=>{
 window.addEventListener('load',async()=>{const s=localStorage.getItem('wu');if(!s)return;try{const u=JSON.parse(s);const{data,error}=await sb.from('users').select('*').eq('id',u.id).single();if(error||!data){localStorage.removeItem('wu');return;}loginOK(data);}catch(e){localStorage.removeItem('wu');}});
 
 async function loadAll(){
-  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup()]);
+  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB()]);
   filterSD('pel');filterSD('prod');filterSD('sup');filterSD('bprod');
   renderKeranjang();renderStok();renderPaketBuilder();renderPaketList();renderJualPaketGrid();renderVoucherList();renderPel();renderSup();renderHutang();
   loadPesanan(); // Load pesanan count for badge
@@ -1650,6 +1650,10 @@ function showPage(id,btn){
   if(id==='dashboard')renderDashboard();
   if(id==='pesanan')loadPesanan();
   if(id==='setting-toko')loadSettingToko();
+  if(id==='ppob'){initPPOBForm();}
+  if(id==='ppob-riwayat')renderPPOBRiwayat();
+  if(id==='ppob-laporan')renderPPOBLaporan();
+  if(id==='kas')renderKas();
 }
 function restorePage(){
   const lastPage=localStorage.getItem('wu_page');
@@ -2288,8 +2292,10 @@ function renderStok(){
     const bat=aBatch.filter(x=>x.barang_id===b.id&&x.qty_sisa>0);
     const dT=b.diskon_tipe?`<span class="badge pink" style="font-size:9px">Disc ${b.diskon_nilai}${b.diskon_tipe==='persen'?'%':'Rp'}</span>`:'';
     const bcTxt=b.barcode?`<span class="badge blue" style="font-size:9px;font-family:'Courier New',monospace">🔲 ${b.barcode}</span>`:'';
-    const stokColor=b.stok===0?'var(--red)':b.stok<=5?'var(--amber)':'var(--green)';
-    const stokPct=Math.min(100,Math.round(b.stok/maxStok*100));
+    const ppobTxt=isPPOB?'<span class="badge blue" style="font-size:9px">⚡ PPOB</span>':'';
+    const isPPOB=b.kategori==='ppob';
+    const stokColor=isPPOB?'var(--blue)':b.stok===0?'var(--red)':b.stok<=5?'var(--amber)':'var(--green)';
+    const stokPct=isPPOB?100:Math.min(100,Math.round(b.stok/maxStok*100));
     const margin=b.harga_beli>0?Math.round((b.harga-b.harga_beli)/b.harga_beli*100):0;
     const marginColor=margin<0?'var(--red)':margin<10?'var(--amber)':'var(--green-dark)';
     const hppStok=bat.reduce((s,x)=>s+x.qty_sisa*x.harga_beli,0);
@@ -2300,8 +2306,9 @@ function renderStok(){
             <span style="font-weight:700;font-size:13px">${b.nama}</span>
             ${bat.length?`<span class="fifo-tag">${bat.length} batch</span>`:''}
             ${dT}
-            ${b.stok===0?'<span class="badge red">Habis</span>':b.stok<=5?'<span class="badge low">Hampir habis</span>':''}
+            ${isPPOB?'<span class="badge blue">∞ Unlimited</span>':b.stok===0?'<span class="badge red">Habis</span>':b.stok<=5?'<span class="badge low">Hampir habis</span>':''}
             ${bcTxt}
+            ${ppobTxt}
           </div>
           <div class="stok-bar"><div class="stok-bar-fill" style="width:${stokPct}%;background:${stokColor}"></div></div>
         </div>
@@ -3451,11 +3458,47 @@ function initPPOBForm(){
     if(k){info.style.display='block';document.getElementById('ppob-kas-saldo-txt').textContent=fmt(k.saldo);}
     else info.style.display='none';
   };
-  // Isi dropdown produk PPOB dari tabel barang kategori ppob + master list
+  // Isi dropdown produk PPOB dari tabel barang kategori ppob
   const ps=document.getElementById('ppob-produk-select');
-  const produkDB=aB.filter(b=>b.kategori==='ppob').map(b=>b.nama);
-  const allProduk=[...new Set([...produkDB,...PPOB_PRODUK])].sort();
-  ps.innerHTML='<option value="">Pilih produk/layanan...</option>'+allProduk.map(p=>`<option value="${p}">${p}</option>`).join('');
+  const produkDB=aB.filter(b=>b.kategori==='ppob');
+  // Group by kategori berdasarkan nama produk
+  const groups={
+    'Pulsa & Paket Data': produkDB.filter(b=>b.nama.toLowerCase().includes('pulsa')||b.nama.toLowerCase().includes('paket data')||b.nama.toLowerCase().includes('pascabayar')),
+    'Listrik PLN': produkDB.filter(b=>b.nama.toLowerCase().includes('listrik')||b.nama.toLowerCase().includes('token')||b.nama.toLowerCase().includes('pln')||b.nama.toLowerCase().includes('taglis')),
+    'Air (PDAM/PAM)': produkDB.filter(b=>b.nama.toLowerCase().includes('pdam')||b.nama.toLowerCase().includes('pam')),
+    'Internet & TV': produkDB.filter(b=>b.nama.toLowerCase().includes('indihome')||b.nama.toLowerCase().includes('internet')||b.nama.toLowerCase().includes('first media')||b.nama.toLowerCase().includes('mnc')||b.nama.toLowerCase().includes('myrepublic')||b.nama.toLowerCase().includes('biznet')||b.nama.toLowerCase().includes('cbn')||b.nama.toLowerCase().includes('telkom')),
+    'BPJS': produkDB.filter(b=>b.nama.toLowerCase().includes('bpjs')),
+    'E-Wallet & Top Up': produkDB.filter(b=>b.nama.toLowerCase().includes('top up')||b.nama.toLowerCase().includes('gopay')||b.nama.toLowerCase().includes('ovo')||b.nama.toLowerCase().includes('dana')||b.nama.toLowerCase().includes('shopee')||b.nama.toLowerCase().includes('linkaja')||b.nama.toLowerCase().includes('jago')),
+    'Transfer & VA': produkDB.filter(b=>b.nama.toLowerCase().includes('transfer')||b.nama.toLowerCase().includes('virtual account')),
+    'Cicilan & Pinjaman': produkDB.filter(b=>b.nama.toLowerCase().includes('angsuran')||b.nama.toLowerCase().includes('cicilan')||b.nama.toLowerCase().includes('kredit')||b.nama.toLowerCase().includes('finance')),
+    'Pajak & SAMSAT': produkDB.filter(b=>b.nama.toLowerCase().includes('pajak')||b.nama.toLowerCase().includes('samsat')||b.nama.toLowerCase().includes('pbb')||b.nama.toLowerCase().includes('retribusi')),
+    'Game & Voucher': produkDB.filter(b=>b.nama.toLowerCase().includes('voucher')||b.nama.toLowerCase().includes('diamond')||b.nama.toLowerCase().includes('pubg')||b.nama.toLowerCase().includes('game')||b.nama.toLowerCase().includes('steam')||b.nama.toLowerCase().includes('itunes')||b.nama.toLowerCase().includes('google play')),
+    'Tiket & Travel': produkDB.filter(b=>b.nama.toLowerCase().includes('tiket')||b.nama.toLowerCase().includes('travel')),
+    'Lainnya': produkDB.filter(b=>b.nama.toLowerCase().includes('donasi')||b.nama.toLowerCase().includes('infaq')||b.nama.toLowerCase().includes('lain')||b.nama.toLowerCase().includes('umum')),
+  };
+  // Build grouped options
+  let optHtml='<option value="">-- Pilih produk/layanan --</option>';
+  const used=new Set();
+  Object.entries(groups).forEach(([grp,items])=>{
+    const uniq=items.filter(b=>!used.has(b.id));
+    if(uniq.length){
+      optHtml+=`<optgroup label="${grp}">`;
+      uniq.forEach(b=>{used.add(b.id);optHtml+=`<option value="${b.nama}">${b.nama}</option>`;});
+      optHtml+='</optgroup>';
+    }
+  });
+  // Produk yang tidak masuk grup manapun
+  const remaining=produkDB.filter(b=>!used.has(b.id));
+  if(remaining.length){
+    optHtml+='<optgroup label="Lainnya">';
+    remaining.forEach(b=>optHtml+=`<option value="${b.nama}">${b.nama}</option>`);
+    optHtml+='</optgroup>';
+  }
+  if(produkDB.length===0){
+    // Fallback ke master list jika DB kosong
+    optHtml='<option value="">-- Pilih produk/layanan --</option>'+PPOB_PRODUK.map(p=>`<option value="${p}">${p}</option>`).join('');
+  }
+  ps.innerHTML=optHtml;
 }
 
 function pilihProdukPPOB(){
