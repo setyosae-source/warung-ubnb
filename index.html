@@ -678,9 +678,13 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 
       <!-- PAGE: STOK -->
       <div id="page-stok" class="page">
+        <div class="tabs">
+          <button class="tab active" onclick="setKategoriStok('warung',this)">🏪 Produk Warung</button>
+          <button class="tab" onclick="setKategoriStok('ppob',this)">⚡ Produk PPOB</button>
+        </div>
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Stok Barang</div>
+            <div class="card-title" id="stok-kategori-title">Stok Barang Warung</div>
             <div style="display:flex;gap:6px;align-items:center">
               <input type="text" id="stok-search" placeholder="Cari..." oninput="renderStok()" style="height:30px;font-size:12px;width:120px;flex:none"/>
               <button class="btn primary sm" onclick="openModalBarang()">＋ Tambah</button>
@@ -946,12 +950,12 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
           <!-- Form -->
           <div class="irow"><label>Tanggal</label><input type="date" id="ppob-tgl"/></div>
-          <div class="irow"><label>Pelanggan (dari data)</label>
+          <div class="irow"><label>Pelanggan</label>
             <div style="position:relative">
-              <input type="text" id="ppob-pel-search" placeholder="Ketik nama pelanggan..." autocomplete="off"
+              <input type="text" id="ppob-pel-search" placeholder="🔍 Cari nama / No. HP..." autocomplete="off"
                 oninput="searchPelPPOB(this.value)" onfocus="searchPelPPOB(this.value)"
-                style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-size:13px;font-family:inherit;outline:none;background:var(--bg)"/>
-              <div id="ppob-pel-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,0.1)"></div>
+                style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-size:13px;font-family:inherit;outline:none;background:white"/>
+              <div id="ppob-pel-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--green);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,0.15)"></div>
             </div>
           </div>
           <div class="irow"><label>Nama Manual</label><input type="text" id="ppob-nama-manual" placeholder="Atau ketik nama/no. HP langsung"/></div>
@@ -973,8 +977,8 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
           <div class="irow"><label>Status Bayar</label>
             <select id="ppob-status">
-              <option value="lunas">✅ Lunas</option>
               <option value="belum">⏳ Bayar Nanti</option>
+              <option value="lunas">✅ Lunas</option>
             </select>
           </div>
           <button class="btn primary" onclick="simpanPPOB()" style="width:100%;height:44px;font-size:14px;margin-top:4px">💾 Simpan Transaksi PPOB</button>
@@ -1390,6 +1394,12 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">DISKON ITEM (opsional)</div>
     <div class="irow"><label>Tipe</label><select id="b-dtipe" style="flex:1"><option value="">Tidak ada</option><option value="persen">Persen (%)</option><option value="nominal">Nominal (Rp)</option></select></div>
     <div class="irow"><label>Nilai</label><input type="number" id="b-dnilai" placeholder="0"/></div>
+    <div class="irow"><label>Kategori</label>
+      <select id="b-kategori">
+        <option value="warung">🏪 Produk Warung</option>
+        <option value="ppob">⚡ Produk PPOB</option>
+      </select>
+    </div>
     <div class="sep"></div>
     <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">BARCODE / SKU</div>
     <div class="irow">
@@ -1493,14 +1503,14 @@ function filterSD(k){
     const f=items.filter(i=>i.label.toLowerCase().includes(q)||(i.sub&&i.sub.includes(q)));
     el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("ppob-pel",${JSON.stringify({id:i.id,label:i.label})})'><div class="opt-label">${i.label}</div><div class="opt-sub">${i.sub}</div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }else if(k==='prod'){
-    const f=aB.filter(b=>b.nama.toLowerCase().includes(q));
+    const f=aB.filter(b=>(!b.kategori||b.kategori==='warung')&&b.nama.toLowerCase().includes(q));
     el.innerHTML=f.map(b=>{const d=b.diskon_tipe?` [-${b.diskon_nilai}${b.diskon_tipe==='persen'?'%':'Rp'}]`:'';return `<div class="sd-option" onclick='selSD("prod",${JSON.stringify({id:b.id,label:b.nama,harga:b.harga,stok:b.stok})})'><div><div>${b.nama}${d}</div><div class="opt-sub">${fmt(b.harga)} · Stok: ${b.stok}</div></div></div>`;}).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }else if(k==='sup'){
     const items=[{id:null,label:'Tanpa supplier',sub:''},...aSup.map(s=>({id:s.id,label:s.nama,sub:s.telp||''}))];
     const f=items.filter(i=>i.label.toLowerCase().includes(q));
     el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("sup",${JSON.stringify({id:i.id,label:i.label})})'><div><div>${i.label}</div><div class="opt-sub">${i.sub}</div></div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }else if(k==='bprod'){
-    const f=aB.filter(b=>b.nama.toLowerCase().includes(q));
+    const f=aB.filter(b=>(!b.kategori||b.kategori==='warung')&&b.nama.toLowerCase().includes(q));
     el.innerHTML=f.map(b=>`<div class="sd-option" onclick='selSD("bprod",${JSON.stringify({id:b.id,label:b.nama,harga:b.harga,hb:b.harga_beli||0})})'><div><div>${b.nama}</div><div class="opt-sub">Jual: ${fmt(b.harga)} · Beli: ${fmt(b.harga_beli||0)}</div></div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }
 }
@@ -2252,11 +2262,19 @@ function setSort(field,dir,btn){
   btn.classList.add('active');
   renderStok();
 }
+let stokKategori='warung';
+function setKategoriStok(kat,btn){
+  stokKategori=kat;
+  document.querySelectorAll('#page-stok .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('stok-kategori-title').textContent=kat==='warung'?'Stok Barang Warung':'Produk PPOB';
+  renderStok();
+}
 function renderStok(){
   const el=document.getElementById('stok-list');
   const q=(document.getElementById('stok-search')?.value||'').toLowerCase();
   if(!aB.length){el.innerHTML='<div class="empty"><div class="ei">📦</div>Belum ada barang<br><button class="btn primary sm" onclick="openModalBarang()" style="margin-top:10px">＋ Tambah Barang</button></div>';return;}
-  let list=[...aB];
+  let list=aB.filter(b=>stokKategori==='ppob'?(b.kategori==='ppob'):(b.kategori==='warung'||!b.kategori));
   if(q)list=list.filter(b=>b.nama.toLowerCase().includes(q));
   list.sort((a,b)=>{
     let va=a[sortField]||0,vb=b[sortField]||0;
@@ -2366,12 +2384,14 @@ function openModalBarang(id, prefillBarcode=''){
     document.getElementById('b-dtipe').value=b.diskon_tipe||'';
     document.getElementById('b-dnilai').value=b.diskon_nilai||0;
     document.getElementById('b-barcode').value=b.barcode||'';
+    document.getElementById('b-kategori').value=b.kategori||'warung';
     document.getElementById('modal-barang-title').textContent='Edit Barang';
     document.getElementById('btn-simpan-barang').textContent='Update';
   } else {
     ['b-id','b-nama','b-harga','b-stok','b-hb','b-satuan','b-dnilai'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('b-dtipe').value='';
     document.getElementById('b-barcode').value=prefillBarcode;
+    document.getElementById('b-kategori').value=stokKategori||'warung';
     document.getElementById('modal-barang-title').textContent='Tambah Barang';
     document.getElementById('btn-simpan-barang').textContent='Simpan';
   }
@@ -2381,9 +2401,10 @@ async function simpanBarang(){
   const nama=document.getElementById('b-nama').value.trim(),harga=parseInt(document.getElementById('b-harga').value)||0,stok=parseInt(document.getElementById('b-stok').value)||0,hb=parseInt(document.getElementById('b-hb').value)||0,dTipe=document.getElementById('b-dtipe').value,dNilai=parseInt(document.getElementById('b-dnilai').value)||0;
   if(!nama||harga<=0){toast('Nama dan harga wajib diisi',true);return;}
   const barcode=document.getElementById('b-barcode').value.trim();
+  const kategori=document.getElementById('b-kategori').value||'warung';
   const id=document.getElementById('b-id').value;
-  if(id){await sb.from('barang').update({nama,harga,stok,harga_beli:hb,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode}).eq('id',parseInt(id));toast('Barang diperbarui');}
-  else{const{data:nb}=await sb.from('barang').insert([{nama,harga,stok,harga_beli:hb,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode}]).select().single();if(stok>0&&hb>0&&nb)await sb.from('stok_batch').insert([{barang_id:nb.id,qty_awal:stok,qty_sisa:stok,harga_beli:hb,harga_jual:harga}]);toast('Barang ditambahkan');}
+  if(id){await sb.from('barang').update({nama,harga,stok,harga_beli:hb,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori}).eq('id',parseInt(id));toast('Barang diperbarui');}
+  else{const{data:nb}=await sb.from('barang').insert([{nama,harga,stok,harga_beli:hb,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori}]).select().single();if(stok>0&&hb>0&&nb)await sb.from('stok_batch').insert([{barang_id:nb.id,qty_awal:stok,qty_sisa:stok,harga_beli:hb,harga_jual:harga}]);toast('Barang ditambahkan');}
   closeModal('modal-barang');await lB();await lBatch();renderStok();filterSD('prod');filterSD('bprod');renderPaketBuilder();
 }
 async function hapusBarang(id){if(!confirm('Hapus barang?'))return;await sb.from('barang').delete().eq('id',id);await sb.from('stok_batch').delete().eq('barang_id',id);await lB();await lBatch();renderStok();filterSD('prod');toast('Dihapus');}
@@ -3391,10 +3412,17 @@ async function lPPOB(){
 let ppobPelId = null;
 function searchPelPPOB(q){
   const dd=document.getElementById('ppob-pel-dd');
-  const filtered=aPel.filter(p=>p.nama.toLowerCase().includes(q.toLowerCase())||(p.telp&&p.telp.includes(q)));
-  if(!q||!filtered.length){dd.style.display='none';if(!q)ppobPelId=null;return;}
+  if(!dd)return;
+  // Saat fokus tanpa query, tampilkan semua (max 8)
+  const filtered=q
+    ?aPel.filter(p=>p.nama.toLowerCase().includes(q.toLowerCase())||(p.telp&&p.telp.includes(q)))
+    :aPel.slice(0,8);
+  if(!filtered.length){dd.style.display='none';return;}
   dd.style.display='block';
-  dd.innerHTML=filtered.slice(0,8).map(p=>`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmousedown="pilihPelPPOB(${p.id},'${p.nama.replace(/'/g,"\'")}')"><div style="font-weight:600">${p.nama}</div><div style="font-size:11px;color:var(--text-muted)">${p.telp||''}</div></div>`).join('');
+  dd.innerHTML=filtered.map(p=>`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--green-light)'" onmouseout="this.style.background=''" onmousedown="pilihPelPPOB(${p.id},'${p.nama.replace(/'/g,"\'").replace(/"/g,'\"')}')">
+    <div style="font-weight:600">${p.nama}</div>
+    <div style="font-size:11px;color:var(--text-muted)">${p.telp||''}${p.kelompok?' · '+p.kelompok:''}</div>
+  </div>`).join('');
 }
 function pilihPelPPOB(id,nama){
   ppobPelId=id;
@@ -3412,19 +3440,22 @@ document.addEventListener('click',e=>{
 
 function initPPOBForm(){
   // Set tanggal hari ini
-  document.getElementById('ppob-tgl').value=nowISO().slice(0,10);
-  // Isi dropdown kas
+  document.getElementById('ppob-tgl').value=new Date().toISOString().slice(0,10);
+  // Isi dropdown kas - hanya Bukalapak & Indogrosir
   const sel=document.getElementById('ppob-kas');
-  sel.innerHTML='<option value="">Pilih Kas...</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama} (${fmt(k.saldo)})</option>`).join('');
+  const kasFilter=aKas.filter(k=>k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir'));
+  sel.innerHTML='<option value="">Pilih Kas...</option>'+(kasFilter.length?kasFilter:aKas).map(k=>`<option value="${k.id}">${k.nama} (${fmt(k.saldo)})</option>`).join('');
   sel.onchange=()=>{
     const k=aKas.find(x=>x.id===parseInt(sel.value));
     const info=document.getElementById('ppob-kas-saldo');
     if(k){info.style.display='block';document.getElementById('ppob-kas-saldo-txt').textContent=fmt(k.saldo);}
     else info.style.display='none';
   };
-  // Isi dropdown produk PPOB
+  // Isi dropdown produk PPOB dari tabel barang kategori ppob + master list
   const ps=document.getElementById('ppob-produk-select');
-  ps.innerHTML='<option value="">Pilih produk...</option>'+PPOB_PRODUK.map(p=>`<option value="${p}">${p}</option>`).join('');
+  const produkDB=aB.filter(b=>b.kategori==='ppob').map(b=>b.nama);
+  const allProduk=[...new Set([...produkDB,...PPOB_PRODUK])].sort();
+  ps.innerHTML='<option value="">Pilih produk/layanan...</option>'+allProduk.map(p=>`<option value="${p}">${p}</option>`).join('');
 }
 
 function pilihProdukPPOB(){
@@ -3496,7 +3527,7 @@ async function simpanPPOB(){
   // Reset form
   ['ppob-nama-manual','ppob-produk-manual','ppob-catatan','ppob-hbeli','ppob-hjual'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ppob-produk-select').value='';
-  document.getElementById('ppob-status').value='lunas';
+  document.getElementById('ppob-status').value='belum';
   ppobPelId=null;document.getElementById('ppob-pel-search').value='';
   document.getElementById('ppob-keuntungan-info').style.display='none';
   document.getElementById('ppob-kas-saldo').style.display='none';
