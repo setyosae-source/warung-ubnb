@@ -452,6 +452,14 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         </div>
         <!-- Alert -->
         <div id="dash-alerts"></div>
+        <!-- Saldo Kas -->
+        <div class="card" id="dash-kas-card">
+          <div class="card-header">
+            <div class="card-title">💰 Saldo Kas</div>
+            <button class="btn sm teal" onclick="goToPage('kas')">Kelola →</button>
+          </div>
+          <div id="dash-kas-list"></div>
+        </div>
         <!-- Shortcut -->
         <div class="card">
           <div class="card-title">Menu Cepat</div>
@@ -1053,6 +1061,21 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
             <button class="btn sm primary" onclick="openModalKas()">＋ Tambah Kas</button>
           </div>
           <div id="kas-list"></div>
+        </div>
+        <!-- Ringkasan saldo -->
+        <div class="card">
+          <div class="card-title">📊 Ringkasan Saldo Kas</div>
+          <div id="kas-summary"></div>
+        </div>
+        <!-- Riwayat mutasi -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔄 Riwayat Mutasi Kas</div>
+            <select id="kas-filter-id" onchange="renderKasMutasi()" style="height:32px;font-size:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;font-family:inherit">
+              <option value="">Semua Kas</option>
+            </select>
+          </div>
+          <div id="kas-mutasi-list"></div>
         </div>
         <div class="card role-pemilik-only">
           <div class="card-title">📥 Import Data PPOB</div>
@@ -3119,6 +3142,32 @@ function renderDashboard(){
 
   // Transaksi terakhir
   renderDashTxLast();
+  renderDashKas();
+}
+
+function renderDashKas(){
+  const el=document.getElementById('dash-kas-list');
+  if(!el||!aKas.length){if(el)el.innerHTML='<div style="font-size:13px;color:var(--text-muted);padding:8px 0">Belum ada kas terdaftar</div>';return;}
+  const totalSaldo=aKas.reduce((s,k)=>s+k.saldo,0);
+  el.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">
+    ${aKas.map(k=>{
+      const isPPOB=k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir')||k.nama.toLowerCase().includes('ppob');
+      const isUtama=k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara')||k.nama.toLowerCase().includes('buku');
+      const color=isPPOB?'var(--blue)':isUtama?'var(--green)':'var(--amber)';
+      const icon=isPPOB?'⚡':isUtama?'🏦':'📒';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border-left:3px solid ${color}">
+        <div>
+          <div style="font-size:12px;font-weight:600">${icon} ${k.nama}</div>
+          ${k.keterangan?`<div style="font-size:10px;color:var(--text-muted)">${k.keterangan}</div>`:''}
+        </div>
+        <div style="font-weight:800;font-family:'Courier New',monospace;color:${k.saldo<0?'var(--red)':color};font-size:14px">${fmt(k.saldo)}</div>
+      </div>`;
+    }).join('')}
+    <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--green-light);border-radius:var(--radius-sm);border-left:3px solid var(--green)">
+      <div style="font-size:12px;font-weight:700;color:var(--green-dark)">Total Semua Kas</div>
+      <div style="font-weight:800;font-family:'Courier New',monospace;color:var(--green-dark);font-size:14px">${fmt(totalSaldo)}</div>
+    </div>
+  </div>`;
 }
 
 function renderDashChart(){
@@ -3767,6 +3816,11 @@ async function exportPPOB(){
 /* KAS */
 function renderKas(){
   const el=document.getElementById('kas-list');if(!el)return;
+  // Update filter dropdown
+  const filterEl=document.getElementById('kas-filter-id');
+  if(filterEl){filterEl.innerHTML='<option value="">Semua Kas</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');}
+  renderKasSummary();
+  renderKasMutasi();
   if(!aKas.length){el.innerHTML='<div class="empty"><div class="ei">💰</div>Belum ada kas</div>';return;}
   el.innerHTML=aKas.map(k=>`
     <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1.5px solid var(--border)">
@@ -3783,6 +3837,65 @@ function renderKas(){
         <button class="btn sm danger" onclick="hapusKas(${k.id})">🗑️</button>
       </div>
     </div>`).join('');
+}
+
+async function renderKasMutasi(){
+  const kasId=document.getElementById('kas-filter-id')?.value;
+  let query=sb.from('kas_mutasi').select('*').order('created_at',{ascending:false}).limit(50);
+  if(kasId)query=query.eq('kas_id',parseInt(kasId));
+  const{data}=await query;
+  const el=document.getElementById('kas-mutasi-list');
+  if(!el)return;
+  if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
+  el.innerHTML=data.map(m=>{
+    const kas=aKas.find(k=>k.id===m.kas_id);
+    const tgl=new Date(m.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+    const jam=new Date(m.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${m.keterangan||'-'}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${tgl} ${jam} · ${kas?.nama||'-'} · ${m.operator||'-'}</div>
+      </div>
+      <div style="font-weight:800;font-family:'Courier New',monospace;font-size:14px;flex-shrink:0;margin-left:10px;color:${m.tipe==='masuk'?'var(--green)':'var(--red)'}">
+        ${m.tipe==='masuk'?'+':'-'}${fmt(m.jumlah)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderKasSummary(){
+  const el=document.getElementById('kas-summary');
+  if(!el||!aKas.length)return;
+  const totalSaldo=aKas.reduce((s,k)=>s+k.saldo,0);
+  el.innerHTML=`
+    <div class="stat-grid" style="margin-bottom:10px">
+      <div class="stat-card" style="border-left:4px solid var(--green)">
+        <div class="stat-label">Total Saldo</div>
+        <div class="stat-value green">${fmt(totalSaldo)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${aKas.length} akun kas</div>
+      </div>
+      <div class="stat-card" style="border-left:4px solid var(--blue)">
+        <div class="stat-label">Kas PPOB</div>
+        <div class="stat-value" style="color:var(--blue)">${fmt(aKas.filter(k=>k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir')).reduce((s,k)=>s+k.saldo,0))}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Bukalapak + Indogrosir</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${aKas.map(k=>{
+        const isPPOB=k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir');
+        const color=isPPOB?'var(--blue)':'var(--green)';
+        const pct=totalSaldo>0?Math.round(k.saldo/totalSaldo*100):0;
+        return `<div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:600">${k.nama}</span>
+            <span style="font-size:12px;font-weight:700;font-family:'Courier New',monospace;color:${k.saldo<0?'var(--red)':color}">${fmt(k.saldo)}</span>
+          </div>
+          <div style="height:6px;background:#eee;border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${Math.max(pct,0)}%;background:${color};border-radius:99px;transition:width 0.4s"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function openModalKas(id){
