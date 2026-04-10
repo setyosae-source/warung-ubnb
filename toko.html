@@ -322,8 +322,7 @@ const fD=d=>new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',
 const fJ=d=>new Date(d).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
 
 function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.style.background=e?'#E24B4A':'#1a1a1a';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
-function openModal(id){document.getElementById(id).classList.add('open');}
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+// openModal & closeModal defined below with history support
 
 /* INIT */
 async function init(){
@@ -359,6 +358,7 @@ function showTokoView(){
   document.getElementById('profile-view').style.display='none';
   document.getElementById('btn-cart').style.display=CU?'flex':'none';
   renderProduk(aP);
+  if(history.state?.view!=='toko') history.pushState({view:'toko'},'','#toko');
 }
 function showAuthView(mode){
   document.getElementById('toko-view').style.display='none';
@@ -366,6 +366,7 @@ function showAuthView(mode){
   document.getElementById('profile-view').style.display='none';
   document.getElementById('cart-bar').style.display='none';
   renderAuthView(mode);
+  if(history.state?.view!==('auth-'+mode)) history.pushState({view:'auth-'+mode},'','#'+mode);
 }
 function showProfileView(){
   document.getElementById('toko-view').style.display='none';
@@ -373,6 +374,7 @@ function showProfileView(){
   document.getElementById('profile-view').style.display='block';
   document.getElementById('cart-bar').style.display='none';
   renderProfileView();
+  if(history.state?.view!=='profile') history.pushState({view:'profile'},'','#profil');
 }
 
 /* RENDER AUTH */
@@ -787,6 +789,55 @@ function kirimWA(){
   window.open('https://wa.me/'+waCenter+'?text='+encodeURIComponent(msg),'_blank');
 }
 function belanjaLagi(){closeModal('modal-success');window.scrollTo({top:0,behavior:'smooth'});}
+
+// Tombol Back HP
+window.addEventListener('popstate', e=>{
+  const view = e.state?.view || 'toko';
+  // Close any open modals first
+  document.querySelectorAll('.overlay.open').forEach(m=>{
+    m.classList.remove('open');
+    // Stop scanner if open
+    if(m.id==='modal-scanner' && typeof stopScanner==='function') stopScanner();
+  });
+  // If modal was open, just closing it is enough
+  const wasModalOpen = document.querySelectorAll('.overlay.open').length > 0;
+  if(wasModalOpen) return;
+  // Navigate to correct view
+  if(view==='toko'||view===''){
+    document.getElementById('toko-view').style.display='block';
+    document.getElementById('auth-view').style.display='none';
+    document.getElementById('profile-view').style.display='none';
+    document.getElementById('btn-cart').style.display=CU?'flex':'none';
+    updateCartUI();
+  } else if(view.startsWith('auth-')){
+    const mode=view.replace('auth-','');
+    document.getElementById('toko-view').style.display='none';
+    document.getElementById('auth-view').style.display='block';
+    document.getElementById('profile-view').style.display='none';
+    document.getElementById('cart-bar').style.display='none';
+    renderAuthView(mode);
+  } else if(view==='profile'){
+    document.getElementById('toko-view').style.display='none';
+    document.getElementById('auth-view').style.display='none';
+    document.getElementById('profile-view').style.display='block';
+    document.getElementById('cart-bar').style.display='none';
+    renderProfileView();
+  }
+});
+
+// Push initial state so first back doesn't close app
+window.addEventListener('load',()=>{
+  history.replaceState({view:'toko'},'','#toko');
+});
+
+// Also push state when modals open so back closes modal
+function openModal(id){
+  document.getElementById(id).classList.add('open');
+  history.pushState({view:history.state?.view||'toko',modal:id},'','#'+id);
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+}
 
 init();
 </script>
