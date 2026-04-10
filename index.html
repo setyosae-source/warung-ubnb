@@ -958,7 +958,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
               <div id="ppob-pel-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--green);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,0.15)"></div>
             </div>
           </div>
-          <div class="irow"><label>Nama Manual</label><input type="text" id="ppob-nama-manual" placeholder="Atau ketik nama/no. HP langsung"/></div>
+
           <div class="irow"><label>Produk / Layanan</label>
             <div style="display:flex;gap:6px">
               <select id="ppob-produk-select" onchange="pilihProdukPPOB()" style="flex:1">
@@ -3420,23 +3420,39 @@ let ppobPelId = null;
 function searchPelPPOB(q){
   const dd=document.getElementById('ppob-pel-dd');
   if(!dd)return;
-  // Saat fokus tanpa query, tampilkan semua (max 8)
   const filtered=q
     ?aPel.filter(p=>p.nama.toLowerCase().includes(q.toLowerCase())||(p.telp&&p.telp.includes(q)))
     :aPel.slice(0,8);
-  if(!filtered.length){dd.style.display='none';return;}
   dd.style.display='block';
-  dd.innerHTML=filtered.map(p=>`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--green-light)'" onmouseout="this.style.background=''" onmousedown="pilihPelPPOB(${p.id},'${p.nama.replace(/'/g,"\'").replace(/"/g,'\"')}')">
+  // Tambah Pelanggan Baru selalu di paling atas
+  const addBtn=`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:2px solid var(--border);background:var(--green-light);display:flex;align-items:center;gap:8px" onmousedown="tambahPelPPOB('${(q||'').replace(/'/g,"\'")}')" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+    <span style="font-size:16px">＋</span>
+    <div><div style="font-weight:700;color:var(--green-dark)">Tambah Pelanggan Baru</div>
+    <div style="font-size:11px;color:var(--green-dark)">${q?'Nama: "'+q+'"':'Ketik nama untuk isi otomatis'}</div></div>
+  </div>`;
+  const rows=filtered.map(p=>`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--green-light)'" onmouseout="this.style.background=''" onmousedown="pilihPelPPOB(${p.id},'${p.nama.replace(/'/g,"\'").replace(/"/g,'\"')}')">
     <div style="font-weight:600">${p.nama}</div>
     <div style="font-size:11px;color:var(--text-muted)">${p.telp||''}${p.kelompok?' · '+p.kelompok:''}</div>
   </div>`).join('');
+  dd.innerHTML=addBtn+(rows||'<div style="padding:10px 12px;font-size:13px;color:var(--text-muted)">Tidak ditemukan</div>');
 }
 function pilihPelPPOB(id,nama){
   ppobPelId=id;
   document.getElementById('ppob-pel-search').value=nama;
   document.getElementById('ppob-pel-dd').style.display='none';
-  // Clear nama manual
-  document.getElementById('ppob-nama-manual').value='';
+}
+function tambahPelPPOB(namaPrefill){
+  document.getElementById('ppob-pel-dd').style.display='none';
+  // Buka modal tambah pelanggan dengan nama pre-filled
+  openModalPel();
+  if(namaPrefill){
+    setTimeout(()=>{
+      const el=document.getElementById('pel-nama');
+      if(el){el.value=namaPrefill;}
+    },200);
+  }
+  // Set callback: setelah simpan pelanggan, pilih otomatis di PPOB
+  window._ppobAfterAddPel=true;
 }
 // Close dropdown on outside click
 document.addEventListener('click',e=>{
@@ -3530,11 +3546,10 @@ async function simpanPPOB(){
   const status=document.getElementById('ppob-status').value;
   const catatan=document.getElementById('ppob-catatan').value.trim();
   
-  // Nama pelanggan - dari search atau manual
-  const namaManual=document.getElementById('ppob-nama-manual').value.trim();
+  // Nama pelanggan - dari search
   const namaDariSearch=document.getElementById('ppob-pel-search').value.trim();
-  const nama=namaManual||(ppobPelId?namaDariSearch:'') || namaDariSearch;
-  const pelId=namaManual?null:(ppobPelId||null);
+  const nama=namaDariSearch;
+  const pelId=ppobPelId||null;
   
   if(!tgl){toast('Pilih tanggal',true);return;}
   if(!produk){toast('Pilih atau ketik produk/layanan',true);return;}
@@ -3568,10 +3583,11 @@ async function simpanPPOB(){
   await lKas();await lPPOB();await lH();
   renderHutang();renderKas();initPPOBForm();
   // Reset form
-  ['ppob-nama-manual','ppob-produk-manual','ppob-catatan','ppob-hbeli','ppob-hjual'].forEach(id=>document.getElementById(id).value='');
+  ['ppob-produk-manual','ppob-catatan','ppob-hbeli','ppob-hjual'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ppob-produk-select').value='';
   document.getElementById('ppob-status').value='belum';
-  ppobPelId=null;document.getElementById('ppob-pel-search').value='';
+  ppobPelId=null;
+  document.getElementById('ppob-pel-search').value='';
   document.getElementById('ppob-keuntungan-info').style.display='none';
   document.getElementById('ppob-kas-saldo').style.display='none';
   toast('Transaksi PPOB berhasil disimpan!');
