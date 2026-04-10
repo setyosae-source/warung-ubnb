@@ -325,7 +325,7 @@ function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.s
 // openModal & closeModal defined below with history support
 
 /* INIT */
-async function init(){
+async async function init(){
   const{data:s}=await sb.from('setting_toko').select('*');
   if(s)s.forEach(r=>settings[r.key]=r.value);
   waCenter=settings.wa_center||'6281234567890';
@@ -336,7 +336,12 @@ async function init(){
   const saved=localStorage.getItem('toko_user');
   if(saved){try{CU=JSON.parse(saved);updateAuthUI();}catch(e){}}
   document.getElementById('loading').style.display='none';
-  showTokoView();
+  // Tampilkan toko tanpa push history (sudah ada replaceState di atas)
+  document.getElementById('toko-view').style.display='block';
+  document.getElementById('auth-view').style.display='none';
+  document.getElementById('profile-view').style.display='none';
+  document.getElementById('btn-cart').style.display=CU?'flex':'none';
+  renderProduk(aP);
 }
 
 /* AUTH UI */
@@ -358,7 +363,7 @@ function showTokoView(){
   document.getElementById('profile-view').style.display='none';
   document.getElementById('btn-cart').style.display=CU?'flex':'none';
   renderProduk(aP);
-  if(history.state?.view!=='toko') history.pushState({view:'toko'},'','#toko');
+  history.pushState({view:'toko',modal:null},'');
 }
 function showAuthView(mode){
   document.getElementById('toko-view').style.display='none';
@@ -366,7 +371,7 @@ function showAuthView(mode){
   document.getElementById('profile-view').style.display='none';
   document.getElementById('cart-bar').style.display='none';
   renderAuthView(mode);
-  if(history.state?.view!==('auth-'+mode)) history.pushState({view:'auth-'+mode},'','#'+mode);
+  history.pushState({view:'auth-'+mode,modal:null},'');
 }
 function showProfileView(){
   document.getElementById('toko-view').style.display='none';
@@ -374,7 +379,7 @@ function showProfileView(){
   document.getElementById('profile-view').style.display='block';
   document.getElementById('cart-bar').style.display='none';
   renderProfileView();
-  if(history.state?.view!=='profile') history.pushState({view:'profile'},'','#profil');
+  history.pushState({view:'profile',modal:null},'');
 }
 
 /* RENDER AUTH */
@@ -790,20 +795,39 @@ function kirimWA(){
 }
 function belanjaLagi(){closeModal('modal-success');window.scrollTo({top:0,behavior:'smooth'});}
 
-// Tombol Back HP
+// ===== HISTORY / TOMBOL BACK HP =====
+// Set initial state sebelum apapun
+history.replaceState({view:'toko',modal:null},'','#toko');
+
+function openModal(id){
+  document.getElementById(id).classList.add('open');
+  history.pushState({view:currentView(),modal:id},'');
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+}
+function currentView(){
+  if(document.getElementById('profile-view').style.display==='block') return 'profile';
+  if(document.getElementById('auth-view').style.display==='block'){
+    // Check which auth mode
+    const el=document.getElementById('auth-view');
+    if(el.innerHTML.includes('Daftar Akun')) return 'auth-daftar';
+    return 'auth-login';
+  }
+  return 'toko';
+}
+
 window.addEventListener('popstate', e=>{
-  const view = e.state?.view || 'toko';
-  // Close any open modals first
-  document.querySelectorAll('.overlay.open').forEach(m=>{
-    m.classList.remove('open');
-    // Stop scanner if open
-    if(m.id==='modal-scanner' && typeof stopScanner==='function') stopScanner();
-  });
-  // If modal was open, just closing it is enough
-  const wasModalOpen = document.querySelectorAll('.overlay.open').length > 0;
-  if(wasModalOpen) return;
-  // Navigate to correct view
-  if(view==='toko'||view===''){
+  const state = e.state || {view:'toko', modal:null};
+  // Jika ada modal terbuka, tutup dulu
+  const openModals=[...document.querySelectorAll('.overlay.open')];
+  if(openModals.length>0){
+    openModals.forEach(m=>m.classList.remove('open'));
+    return;
+  }
+  // Navigasi ke view
+  const view = state.view || 'toko';
+  if(view==='toko'){
     document.getElementById('toko-view').style.display='block';
     document.getElementById('auth-view').style.display='none';
     document.getElementById('profile-view').style.display='none';
@@ -822,22 +846,11 @@ window.addEventListener('popstate', e=>{
     document.getElementById('profile-view').style.display='block';
     document.getElementById('cart-bar').style.display='none';
     renderProfileView();
+  } else {
+    // Fallback ke toko
+    showTokoView();
   }
 });
-
-// Push initial state so first back doesn't close app
-window.addEventListener('load',()=>{
-  history.replaceState({view:'toko'},'','#toko');
-});
-
-// Also push state when modals open so back closes modal
-function openModal(id){
-  document.getElementById(id).classList.add('open');
-  history.pushState({view:history.state?.view||'toko',modal:id},'','#'+id);
-}
-function closeModal(id){
-  document.getElementById(id).classList.remove('open');
-}
 
 init();
 </script>
