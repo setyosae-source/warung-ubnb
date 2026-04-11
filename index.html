@@ -23,7 +23,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .btn-login{width:100%;height:46px;background:var(--green);color:white;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:0.3px;}
 .login-error{background:var(--red-light);color:var(--red);font-size:13px;padding:10px 14px;border-radius:var(--radius-sm);margin-top:12px;text-align:center;display:none;}
 /* APP */
-.app{display:none;min-height:100vh;flex-direction:column;}
+.app{display:none;height:100vh;flex-direction:column;overflow:hidden;}
 .topbar{background:var(--green);color:white;padding:0 16px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:300;box-shadow:0 2px 12px rgba(15,110,86,0.3);}
 .topbar-left{display:flex;align-items:center;gap:12px;}
 .burger{background:none;border:none;color:white;cursor:pointer;padding:6px;border-radius:8px;display:flex;flex-direction:column;gap:5px;}
@@ -32,9 +32,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .topbar-right{display:flex;align-items:center;gap:8px;}
 .user-badge{background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:99px;font-size:12px;font-weight:500;}
 .btn-logout{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:white;padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;font-family:inherit;}
-.app-body{display:flex;flex:1;position:relative;overflow-x:hidden;width:100%;}
+.app-body{display:flex;flex:1;position:relative;overflow:hidden;width:100%;min-height:0;}
 /* SIDEBAR */
-.sidebar{width:var(--sidebar-w);min-height:calc(100vh - 54px);background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;left:0;top:54px;bottom:0;transform:translateX(-100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);z-index:250;box-shadow:4px 0 20px rgba(0,0,0,0.08);}
+.sidebar{width:var(--sidebar-w);height:100%;overflow-y:auto;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;left:0;top:54px;bottom:0;transform:translateX(-100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);z-index:250;box-shadow:4px 0 20px rgba(0,0,0,0.08);}
 .sidebar.open{transform:translateX(0);}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:240;top:54px;}
 .sidebar-overlay.open{display:block;}
@@ -54,7 +54,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .nav-group-items{overflow:hidden;transition:max-height 0.3s ease,opacity 0.2s;max-height:300px;opacity:1;}
 .nav-group-items.closed{max-height:0;opacity:0;}
 .sidebar-footer{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);text-align:center;}
-.main{flex:1;padding:16px;padding-bottom:80px;min-height:calc(100vh - 54px);max-width:100%;overflow-x:hidden;}
+.main{flex:1;padding:16px;padding-bottom:80px;overflow-y:auto;overflow-x:hidden;max-width:100%;}
 @media(min-width:900px){.sidebar{transform:translateX(0)!important;position:sticky;top:54px;height:calc(100vh - 54px);box-shadow:none;}.sidebar-overlay{display:none!important;}.main{margin-left:var(--sidebar-w);}.burger{display:none;}}
 /* CARDS */
 .card{background:#fff;border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06);}
@@ -1559,6 +1559,14 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   </div>
 </div>
 
+<!-- MODAL AKSES USER -->
+<div class="modal-overlay" id="modal-akses">
+  <div class="modal" style="max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div id="modal-akses-content"></div>
+  </div>
+</div>
+
 <!-- MODAL USER -->
 <div class="modal-overlay" id="modal-user">
   <div class="modal">
@@ -1687,6 +1695,8 @@ function loginOK(data){
   document.getElementById('sb-user').textContent=data.username+' ('+data.role+')';
   document.getElementById('sb-date').textContent=new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   if(data.role==='pemilik')document.body.classList.add('pemilik');
+  await loadAkses();
+  applyAkses();
   restoreNavGroups();
   // Set initial history state
   const initPage = localStorage.getItem('wu_page') || 'jual';
@@ -1769,6 +1779,14 @@ async function lPel(){const{data}=await sb.from('pelanggan').select('*').order('
 async function lSup(){const{data}=await sb.from('supplier').select('*').order('nama');aSup=data||[];}
 
 function showPage(id,btn){
+  // Check ACL - find menu for this page
+  if(CU&&CU.role!=='pemilik'){
+    const menu=MENU_DEF.find(m=>m.page===id);
+    if(menu&&!bisaLihat(menu.id)){
+      toast('Anda tidak memiliki akses ke halaman ini',true);
+      return;
+    }
+  }
   // Auto-expand the group containing this button
   const grp = btn?.closest('.nav-group');
   if(grp){
@@ -3682,6 +3700,79 @@ function copyLinkToko(){
 const PPOB_PRODUK = ['Pulsa','Token Listrik','Tagihan Listrik','PDAM','PAM','BPJS','Internet','IndiHome','Telkom/Indihome','First Media','Freedom Internet','GoPay','OVO','Dana','Shopee Pay','PULSA PASCABAYAR','Paket Data','Lainnya'];
 let aKas=[], aPPOB=[], ppobFilter='semua', ppobLapMode='bulan';
 
+/* ACL - ACCESS CONTROL */
+const MENU_DEF = [
+  {id:'warung_jual',    label:'Penjualan',       modul:'🏪 Warung',      page:'jual'},
+  {id:'warung_riwayat_jual', label:'Riwayat Jual', modul:'🏪 Warung',   page:'riwayat'},
+  {id:'warung_beli',    label:'Pembelian',        modul:'🏪 Warung',      page:'beli'},
+  {id:'warung_riwayat_beli', label:'Riwayat Beli', modul:'🏪 Warung',   page:'riwayat-beli'},
+  {id:'warung_stok',    label:'Stok Barang',      modul:'🏪 Warung',      page:'stok'},
+  {id:'warung_paket',   label:'Paket & Bundling', modul:'🏪 Warung',      page:'paket'},
+  {id:'warung_opname',  label:'Stock Opname',     modul:'🏪 Warung',      page:'opname'},
+  {id:'ppob_transaksi', label:'Transaksi PPOB',   modul:'⚡ PPOB',        page:'ppob'},
+  {id:'ppob_riwayat',   label:'Riwayat PPOB',     modul:'⚡ PPOB',        page:'ppob-riwayat'},
+  {id:'ppob_laporan',   label:'Laporan PPOB',     modul:'⚡ PPOB',        page:'ppob-laporan'},
+  {id:'toko_pesanan',   label:'Pesanan Online',   modul:'🛒 Toko Online', page:'pesanan'},
+  {id:'toko_setting',   label:'Setting Toko',     modul:'🛒 Toko Online', page:'setting-toko'},
+  {id:'keu_hutang',     label:'Hutang & Piutang', modul:'💰 Keuangan',    page:'hutang'},
+  {id:'keu_laporan',    label:'Laporan Warung',   modul:'💰 Keuangan',    page:'laporan'},
+  {id:'keu_kas',        label:'Manajemen Kas',    modul:'💰 Keuangan',    page:'kas'},
+  {id:'relasi_pelanggan',label:'Pelanggan',       modul:'👥 Relasi',      page:'pelanggan'},
+  {id:'relasi_supplier', label:'Supplier',        modul:'👥 Relasi',      page:'supplier'},
+  {id:'relasi_voucher',  label:'Voucher & Promo', modul:'👥 Relasi',      page:'voucher'},
+];
+
+let userAkses = {}; // {menu_id: 'tidak'|'lihat'|'edit'}
+
+async function loadAkses(){
+  if(!CU) return;
+  // Pemilik dapat akses penuh ke semua menu
+  if(CU.role==='pemilik'){
+    MENU_DEF.forEach(m=>userAkses[m.id]='edit');
+    return;
+  }
+  const{data}=await sb.from('user_akses').select('*').eq('user_id',CU.id);
+  userAkses={};
+  if(data) data.forEach(a=>userAkses[a.menu]=a.akses);
+  // Default semua tidak ada akses jika tidak terdaftar
+  MENU_DEF.forEach(m=>{ if(!userAkses[m.id]) userAkses[m.id]='tidak'; });
+}
+
+function getAkses(menuId){
+  if(CU?.role==='pemilik') return 'edit';
+  return userAkses[menuId]||'tidak';
+}
+
+function bisaLihat(menuId){ return ['lihat','edit'].includes(getAkses(menuId)); }
+function bisaEdit(menuId){ return getAkses(menuId)==='edit'; }
+
+function applyAkses(){
+  // Update sidebar nav items
+  MENU_DEF.forEach(m=>{
+    const akses=getAkses(m.id);
+    const btn=Array.from(document.querySelectorAll('.nav-item')).find(b=>b.onclick&&String(b.onclick).includes("'"+m.page+"'"));
+    if(btn){
+      if(akses==='tidak'){btn.style.display='none';}
+      else{btn.style.display='';if(akses==='lihat')btn.style.opacity='0.7';}
+    }
+  });
+  // Apply edit restrictions to pages
+  MENU_DEF.forEach(m=>{
+    const akses=getAkses(m.id);
+    if(akses==='lihat'){
+      // Hide add/edit/delete buttons on read-only pages
+      const page=document.getElementById('page-'+m.page);
+      if(page){
+        page.querySelectorAll('.btn.primary, .btn.danger, .btn.amber').forEach(btn=>{
+          if(!btn.onclick||(!String(btn.onclick).includes('showPage')&&!String(btn.onclick).includes('goToPage'))){
+            btn.style.display='none';
+          }
+        });
+      }
+    }
+  });
+}
+
 async function lKas(){
   const{data}=await sb.from('kas').select('*').order('id');
   aKas=data||[];
@@ -5042,32 +5133,114 @@ function exportHutang(){const rows=aH.map(h=>({'Nama':h.nama,'Tipe':h.tipe||'-',
 
 /* USERS */
 async function renderUsers(){
-  const{data}=await sb.from('users').select('*').order('username');
-  const el=document.getElementById('user-list');
-  if(!data?.length){el.innerHTML='<div class="empty">Tidak ada pengguna</div>';return;}
-  el.innerHTML=data.map(u=>`<div class="item-row"><div style="flex:1"><div class="item-name" style="display:flex;align-items:center;gap:8px">${u.username}${u.username===CU.username?'<span style="font-size:10px;background:var(--green-light);color:var(--green-dark);padding:2px 8px;border-radius:99px">Saya</span>':''}</div><div class="item-sub">Role: ${u.role}</div></div><div style="display:flex;gap:6px;align-items:center"><span class="badge ${u.role==='pemilik'?'red':'ok'}">${u.role}</span><button class="btn sm" onclick="openModalEditUser(${u.id})">✏️ Edit</button>${u.username!==CU.username?`<button class="btn danger sm" onclick="hapusUser(${u.id})">🗑️</button>`:''}</div></div>`).join('');
+  const el=document.getElementById('users-list');
+  if(!el)return;
+  el.innerHTML=aUsers.map(u=>`
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:13px 14px;margin-bottom:10px;border:1.5px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-weight:700;font-size:14px">${u.username} ${u.id===CU.id?'<span class="badge ok" style="font-size:10px">Anda</span>':''}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${u.role==='pemilik'?'👑 Pemilik (Akses Penuh)':'👤 Kasir'}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          ${u.role!=='pemilik'?`<button class="btn sm blue" onclick="bukaAkses(${u.id},'${u.username}')">🔐 Akses</button>`:''}
+          <button class="btn sm" onclick="editUser(${u.id})">✏️</button>
+          ${u.id!==CU.id?`<button class="btn sm danger" onclick="hapusUser(${u.id})">🗑️</button>`:''}
+        </div>
+      </div>
+    </div>`).join('');
 }
-async function gantiPassword(){
-  const lama=document.getElementById('pass-lama').value.trim();
-  const baru=document.getElementById('pass-baru').value.trim();
-  const konfirm=document.getElementById('pass-konfirm').value.trim();
-  if(!lama||!baru||!konfirm){toast('Semua field wajib diisi',true);return;}
-  if(baru!==konfirm){toast('Password baru tidak cocok',true);return;}
-  if(baru.length<4){toast('Password minimal 4 karakter',true);return;}
-  // Verify old password
-  const{data}=await sb.from('users').select('*').eq('id',CU.id).eq('password',lama).single();
-  if(!data){toast('Password lama salah',true);return;}
-  await sb.from('users').update({password:baru}).eq('id',CU.id);
-  // Update localStorage
-  CU.password=baru;localStorage.setItem('wu',JSON.stringify(CU));
-  ['pass-lama','pass-baru','pass-konfirm'].forEach(id=>document.getElementById(id).value='');
-  toast('Password berhasil diganti!');
-}
-function openModalUser(){['u-id','u-nama','u-pass'].forEach(i=>document.getElementById(i).value='');document.getElementById('u-role').value='kasir';document.getElementById('modal-user-title').textContent='Tambah Pengguna';openModal('modal-user');}
-async function openModalEditUser(id){const{data}=await sb.from('users').select('*').eq('id',id).single();if(!data)return;document.getElementById('u-id').value=id;document.getElementById('u-nama').value=data.username;document.getElementById('u-pass').value=data.password;document.getElementById('u-role').value=data.role;document.getElementById('modal-user-title').textContent='Edit Pengguna';openModal('modal-user');}
-async function simpanUser(){const nama=document.getElementById('u-nama').value.trim(),pass=document.getElementById('u-pass').value.trim(),role=document.getElementById('u-role').value;if(!nama||!pass){toast('Username & password wajib',true);return;}const id=document.getElementById('u-id').value;if(id){await sb.from('users').update({username:nama,password:pass,role}).eq('id',parseInt(id));toast('Diperbarui');}else{const{error}=await sb.from('users').insert([{username:nama,password:pass,role}]);if(error){toast('Username sudah dipakai',true);return;}toast('Ditambahkan');}closeModal('modal-user');renderUsers();}
-async function hapusUser(id){if(!confirm('Hapus pengguna?'))return;await sb.from('users').delete().eq('id',id);toast('Dihapus');renderUsers();}
 
-</script>
-</body>
-</html>
+async function bukaAkses(userId, userName){
+  // Load akses user ini
+  const{data}=await sb.from('user_akses').select('*').eq('user_id',userId);
+  const aksesMap={};
+  if(data) data.forEach(a=>aksesMap[a.menu]=a.akses);
+
+  // Build modal content
+  const moduls=[...new Set(MENU_DEF.map(m=>m.modul))];
+  let html=`<div style="font-size:14px;font-weight:700;margin-bottom:16px">🔐 Akses: <span style="color:var(--green)">${userName}</span></div>`;
+
+  // Legend
+  html+=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <span style="display:flex;align-items:center;gap:4px;font-size:12px"><span style="width:12px;height:12px;border-radius:50%;background:#eee;display:inline-block"></span> Tidak Tampil</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:12px"><span style="width:12px;height:12px;border-radius:50%;background:var(--amber);display:inline-block"></span> Lihat Saja</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:12px"><span style="width:12px;height:12px;border-radius:50%;background:var(--green);display:inline-block"></span> Lihat & Edit</span>
+  </div>`;
+
+  moduls.forEach(modul=>{
+    const items=MENU_DEF.filter(m=>m.modul===modul);
+    html+=`<div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${modul}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    items.forEach(m=>{
+      const ak=aksesMap[m.id]||'tidak';
+      html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg);border-radius:var(--radius-sm)">
+        <div style="font-size:13px;font-weight:600">${m.label}</div>
+        <div style="display:flex;gap:4px">
+          <button onclick="setAkseBtn(this,'tidak')" class="akses-btn ${ak==='tidak'?'active-tidak':''}" data-menu="${m.id}" data-val="tidak"
+            style="padding:4px 10px;border-radius:99px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:${ak==='tidak'?'#555':'white'};color:${ak==='tidak'?'white':'var(--text-muted)'}">
+            ✕ Tidak
+          </button>
+          <button onclick="setAkseBtn(this,'lihat')" class="akses-btn ${ak==='lihat'?'active-lihat':''}" data-menu="${m.id}" data-val="lihat"
+            style="padding:4px 10px;border-radius:99px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:${ak==='lihat'?'var(--amber)':'white'};color:${ak==='lihat'?'white':'var(--text-muted)'}">
+            👁 Lihat
+          </button>
+          <button onclick="setAkseBtn(this,'edit')" class="akses-btn ${ak==='edit'?'active-edit':''}" data-menu="${m.id}" data-val="edit"
+            style="padding:4px 10px;border-radius:99px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:${ak==='edit'?'var(--green)':'white'};color:${ak==='edit'?'white':'var(--text-muted)'}">
+            ✅ Edit
+          </button>
+        </div>
+      </div>`;
+    });
+    html+=`</div></div>`;
+  });
+
+  html+=`<div style="display:flex;gap:8px;margin-top:8px">
+    <button class="btn" onclick="closeModal('modal-akses')" style="flex:1">Batal</button>
+    <button class="btn primary" onclick="simpanAkses(${userId})" style="flex:2">💾 Simpan Akses</button>
+  </div>`;
+
+  document.getElementById('modal-akses-content').innerHTML=html;
+  openModal('modal-akses');
+}
+
+function setAkseBtn(btn, val){
+  const menuId=btn.getAttribute('data-menu');
+  // Reset all buttons for this menu
+  document.querySelectorAll(`.akses-btn[data-menu="${menuId}"]`).forEach(b=>{
+    const bval=b.getAttribute('data-val');
+    b.style.background='white';
+    b.style.color='var(--text-muted)';
+    b.style.borderColor='var(--border)';
+  });
+  // Activate selected
+  const colors={tidak:'#555',lihat:'var(--amber)',edit:'var(--green)'};
+  btn.style.background=colors[val];
+  btn.style.color='white';
+}
+
+async function simpanAkses(userId){
+  // Collect all akses settings
+  const aksesData=[];
+  const done=new Set();
+  document.querySelectorAll('.akses-btn').forEach(btn=>{
+    const menuId=btn.getAttribute('data-menu');
+    if(done.has(menuId))return;
+    // Find which button is active (non-white background)
+    const btns=document.querySelectorAll(`.akses-btn[data-menu="${menuId}"]`);
+    let val='tidak';
+    btns.forEach(b=>{if(b.style.background!=='white'&&b.style.background!=='')val=b.getAttribute('data-val');});
+    aksesData.push({user_id:userId,menu:menuId,akses:val});
+    done.add(menuId);
+  });
+
+  // Delete existing and insert new
+  await sb.from('user_akses').delete().eq('user_id',userId);
+  if(aksesData.length) await sb.from('user_akses').insert(aksesData);
+
+  closeModal('modal-akses');
+  toast('Akses berhasil disimpan!');
+}
+
+>
