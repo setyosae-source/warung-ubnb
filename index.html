@@ -3681,17 +3681,36 @@ async function simpanPPOB(){
   }]);
   if(error){toast('Gagal simpan: '+error.message,true);return;}
   
-  // Kurangi saldo kas jika lunas (modal keluar)
+  // Harga beli SELALU keluar dari kas PPOB (modal)
+  const kasPPOB=aKas.find(k=>k.id===parseInt(kasId));
+  if(kasPPOB){
+    await sb.from('kas').update({saldo:kasPPOB.saldo-hb}).eq('id',kasPPOB.id);
+    await sb.from('kas_mutasi').insert([{
+      kas_id:kasPPOB.id,tipe:'keluar',kategori:'keluar',
+      jumlah:hb,tanggal:tgl,
+      keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
+      operator:CU.username
+    }]);
+  }
+
+  // Harga jual masuk ke Kas Utama jika sudah lunas
   if(status==='lunas'){
-    const kas=aKas.find(k=>k.id===parseInt(kasId));
-    if(kas){
-      const newSaldo=kas.saldo-hb;
-      await sb.from('kas').update({saldo:newSaldo}).eq('id',kas.id);
-      await sb.from('kas_mutasi').insert([{kas_id:kas.id,tipe:'keluar',jumlah:hb,keterangan:'PPOB: '+produk+' - '+nama,operator:CU.username}]);
+    const kasUtama=aKas.find(k=>{
+      const m=k.modul||'warung,ppob';
+      return m.includes('warung')&&!m.includes('ppob');
+    })||aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
+    if(kasUtama){
+      await sb.from('kas').update({saldo:kasUtama.saldo+hj}).eq('id',kasUtama.id);
+      await sb.from('kas_mutasi').insert([{
+        kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
+        jumlah:hj,tanggal:tgl,
+        keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
+        operator:CU.username
+      }]);
     }
   }
-  
-  // Jika belum bayar, catat ke hutang
+
+  // Jika belum bayar, catat ke hutang/piutang
   if(status==='belum'){
     await sb.from('hutang').insert([{nama,jml:hj,ket:'PPOB: '+produk+(catatan?' - '+catatan:''),tipe:'piutang',tgl,lunas:false}]);
   }
@@ -3788,14 +3807,23 @@ function bukaPPOBDetail(id){
 async function lunasiPPOB(id){
   const p=aPPOB.find(x=>x.id===id);if(!p)return;
   await sb.from('ppob').update({status_bayar:'lunas'}).eq('id',id);
-  // Kurangi saldo kas
-  const kas=aKas.find(k=>k.id===p.kas_id);
-  if(kas){
-    await sb.from('kas').update({saldo:kas.saldo-p.harga_beli}).eq('id',kas.id);
-    await sb.from('kas_mutasi').insert([{kas_id:kas.id,tipe:'keluar',jumlah:p.harga_beli,keterangan:'Lunas PPOB: '+p.produk,operator:CU.username}]);
+  // Harga jual masuk ke Kas Utama (pelanggan bayar)
+  const kasUtama=aKas.find(k=>{
+    const m=k.modul||'warung,ppob';
+    return m.includes('warung')&&!m.includes('ppob');
+  })||aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
+  if(kasUtama){
+    await sb.from('kas').update({saldo:kasUtama.saldo+p.harga_jual}).eq('id',kasUtama.id);
+    await sb.from('kas_mutasi').insert([{
+      kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
+      jumlah:p.harga_jual,tanggal:p.tanggal,
+      keterangan:'Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:''),
+      operator:CU.username
+    }]);
   }
-  await lKas();await lPPOB();renderPPOBRiwayat();renderKas();
-  toast('PPOB ditandai lunas');
+  await lKas();await lPPOB();await lH();
+  renderPPOBRiwayat();renderKas();renderHutang();renderDashKas();
+  toast('PPOB ditandai lunas — pembayaran masuk Kas Utama');
 }
 
 async function hapusPPOB(id){
