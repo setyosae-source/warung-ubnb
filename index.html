@@ -1039,15 +1039,26 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         </div>
         <div class="card">
           <div class="card-header">
-            <div>
-              <div class="card-title">Riwayat PPOB</div>
-              <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-                <input type="date" id="ppob-dari" style="height:32px;font-size:12px"/>
-                <input type="date" id="ppob-sampai" style="height:32px;font-size:12px"/>
-                <button class="btn sm primary" onclick="renderPPOBRiwayat()">Filter</button>
-              </div>
-            </div>
+            <div class="card-title">Riwayat PPOB</div>
             <button class="btn sm teal" onclick="lPPOB().then(()=>renderPPOBRiwayat())" title="Refresh data">🔄</button>
+          </div>
+          <!-- Filter -->
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm)">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input type="date" id="ppob-dari" style="height:34px;font-size:12px;flex:1;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;font-family:inherit;outline:none" placeholder="Dari"/>
+              <span style="display:flex;align-items:center;font-size:12px;color:var(--text-muted)">s/d</span>
+              <input type="date" id="ppob-sampai" style="height:34px;font-size:12px;flex:1;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;font-family:inherit;outline:none"/>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input type="text" id="ppob-filter-nama" placeholder="🔍 Cari nama pelanggan..." style="height:34px;font-size:12px;flex:2;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-family:inherit;outline:none" oninput="renderPPOBRiwayat()"/>
+              <select id="ppob-filter-status" onchange="renderPPOBRiwayat()" style="height:34px;font-size:12px;flex:1;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;font-family:inherit;outline:none">
+                <option value="">Semua Status</option>
+                <option value="lunas">✅ Lunas</option>
+                <option value="belum">⏳ Belum Bayar</option>
+              </select>
+              <button class="btn sm primary" onclick="renderPPOBRiwayat()" style="flex-shrink:0">Filter</button>
+              <button class="btn sm" onclick="resetFilterPPOB()" style="flex-shrink:0">Reset</button>
+            </div>
           </div>
           <!-- Summary -->
           <div class="stat-grid" style="margin-bottom:10px" id="ppob-riwayat-summary"></div>
@@ -1332,6 +1343,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       </select>
     </div>
     <div class="btn-row">
+      <button class="btn danger" onclick="hapusDariEditPPOB()" style="flex:1">🗑️ Hapus</button>
       <button class="btn" onclick="closeModal('modal-edit-ppob')" style="flex:1">Batal</button>
       <button class="btn primary" onclick="simpanEditPPOB()" style="flex:2">💾 Simpan</button>
     </div>
@@ -3788,6 +3800,13 @@ async function recalcSaldo(kasId){
 }
 
 // Recalc semua kas
+function infoPPOBMutasi(){
+  if(confirm('ℹ️ Mutasi ini berasal dari transaksi PPOB.\n\nUntuk mengubah atau menghapus, gunakan menu:\n⚡ PPOB → Riwayat PPOB → tombol ✏️ Edit\n\nBuka Riwayat PPOB sekarang?')){
+    const btn=Array.from(document.querySelectorAll('.nav-item')).find(b=>b.onclick&&String(b.onclick).includes("'ppob-riwayat'"));
+    if(btn) showPage('ppob-riwayat',btn);
+  }
+}
+
 async function recalcAllSaldo(){
   for(const k of aKas){
     await recalcSaldo(k.id);
@@ -4145,6 +4164,17 @@ async function simpanPPOB(){
 }
 
 /* PPOB RIWAYAT */
+function resetFilterPPOB(){
+  document.getElementById('ppob-dari').value='';
+  document.getElementById('ppob-sampai').value='';
+  document.getElementById('ppob-filter-nama').value='';
+  document.getElementById('ppob-filter-status').value='';
+  document.querySelectorAll('#page-ppob-riwayat .tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#page-ppob-riwayat .tab')[0]?.classList.add('active');
+  ppobFilter='semua';
+  renderPPOBRiwayat();
+}
+
 function setPPOBFilter(f,btn){
   ppobFilter=f;
   document.querySelectorAll('#page-ppob-riwayat .tab').forEach(b=>b.classList.remove('active'));
@@ -4155,11 +4185,15 @@ function setPPOBFilter(f,btn){
 function renderPPOBRiwayat(){
   const dari=document.getElementById('ppob-dari').value;
   const sampai=document.getElementById('ppob-sampai').value;
+  const filterNama=(document.getElementById('ppob-filter-nama')?.value||'').toLowerCase();
+  const filterStatus=document.getElementById('ppob-filter-status')?.value||'';
   let data=[...aPPOB];
   if(dari)data=data.filter(p=>p.tanggal>=dari);
   if(sampai)data=data.filter(p=>p.tanggal<=sampai);
-  if(ppobFilter==='lunas')data=data.filter(p=>p.status_bayar==='lunas');
-  if(ppobFilter==='belum')data=data.filter(p=>p.status_bayar==='belum');
+  if(filterNama)data=data.filter(p=>(p.nama||'').toLowerCase().includes(filterNama)||(p.produk||'').toLowerCase().includes(filterNama));
+  if(filterStatus)data=data.filter(p=>p.status_bayar===filterStatus);
+  else if(ppobFilter==='lunas')data=data.filter(p=>p.status_bayar==='lunas');
+  else if(ppobFilter==='belum')data=data.filter(p=>p.status_bayar==='belum');
 
   // Summary
   const totalBeli=data.reduce((s,p)=>s+p.harga_beli,0);
@@ -4339,11 +4373,42 @@ async function simpanEditPPOB(){
   toast('Transaksi PPOB berhasil diperbarui!');
 }
 
+async function hapusDariEditPPOB(){
+  const id=parseInt(document.getElementById('ep-id').value);
+  if(!id){toast('ID tidak ditemukan',true);return;}
+  if(!confirm('Hapus transaksi PPOB ini?\nMutasi kas terkait juga akan dihapus.'))return;
+  closeModal('modal-edit-ppob');
+  await hapusPPOB(id);
+}
+
 async function hapusPPOB(id){
-  if(!confirm('Hapus transaksi PPOB ini?'))return;
+  if(arguments.length===0||!id)return;
+  // Load data dulu untuk tahu kas_id
+  const p=aPPOB.find(x=>x.id===id);
+  // Hapus mutasi kas terkait (Modal PPOB)
+  if(p?.kas_id){
+    await sb.from('kas_mutasi').delete()
+      .eq('kas_id',p.kas_id)
+      .like('keterangan','Modal PPOB:%');
+  }
+  // Hapus mutasi bayar di kas utama jika lunas
+  if(p?.status_bayar==='lunas'){
+    const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');});
+    if(kasUtama){
+      await sb.from('kas_mutasi').delete()
+        .eq('kas_id',kasUtama.id)
+        .like('keterangan','Bayar PPOB:%');
+    }
+  }
+  // Hapus transaksi
   await sb.from('ppob').delete().eq('id',id);
-  await lPPOB();renderPPOBRiwayat();
-  toast('Transaksi dihapus');
+  // Recalc saldo semua kas terdampak
+  const kasIds=[...new Set([p?.kas_id].filter(Boolean))];
+  for(const kid of kasIds) await recalcSaldo(kid);
+  await lKas();await lPPOB();
+  renderPPOBRiwayat();renderKas();
+  if(document.getElementById('page-dashboard')?.classList.contains('active'))renderDashboard();
+  toast('Transaksi PPOB dihapus!');
 }
 
 /* PPOB LAPORAN */
@@ -4579,7 +4644,8 @@ async function renderKasMutasi(){
           const kat=m.kategori||m.tipe;
           const katColor=kat==='komisi'?'var(--amber)':isMasuk?'var(--green)':'var(--red)';
           const katIcon=kat==='komisi'?'🎁':isMasuk?'➕':'➖';
-          const isManual=true; // Semua mutasi bisa diedit
+          // Mutasi dari PPOB tidak bisa diedit di sini - harus lewat Riwayat PPOB
+    const isManual=false; // Semua mutasi dikelola lewat sumber datanya
           html+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px">
             <div style="color:${katColor};font-size:14px;flex-shrink:0">${katIcon}</div>
             <div style="flex:1;min-width:0">
@@ -4589,10 +4655,7 @@ async function renderKasMutasi(){
             <div style="font-weight:700;font-family:\'Courier New\',monospace;color:${isMasuk?'var(--green)':'var(--red)'};flex-shrink:0">
               ${isMasuk?'+':'-'}${fmt(m.jumlah)}
             </div>
-            ${isManual?`<div style="display:flex;gap:3px;flex-shrink:0">
-              <button class="btn xs" onclick="editMutasi(${m.id})" title="Edit">✏️</button>
-              <button class="btn xs danger" onclick="hapusMutasi(${m.id})" title="Hapus">🗑️</button>
-            </div>`:'<div style="width:52px"></div>'}
+            <div style="width:52px"></div>
           </div>`;
         });
         // Saldo akhir hari
