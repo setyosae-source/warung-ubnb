@@ -1821,7 +1821,7 @@ function showPage(id,btn){
     history.pushState({page:id}, '', '#'+id);
   }
   if(id==='laporan')renderLaporan();
-  if(id==='users')renderUsers();
+  if(id==='users'){lUsers().then(()=>renderUsers());}
   if(id==='riwayat'){setDefaultDates('rj');renderRiwayatJual();}
   if(id==='riwayat-beli'){setDefaultDates('rb');renderRiwayatBeli();}
   if(id==='opname')renderOpnameRiwayat();
@@ -5195,8 +5195,59 @@ function exportStok(){const rows=aB.map(b=>{const bat=aBatch.filter(x=>x.barang_
 function exportHutang(){const rows=aH.map(h=>({'Nama':h.nama,'Tipe':h.tipe||'-','Keterangan':h.ket||'-','Jumlah':h.jml,'Status':h.lunas?'Lunas':'Belum Lunas','Tanggal':fD(h.tgl||h.created_at||new Date())}));if(!rows.length){toast('Belum ada data',true);return;}const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Hutang');XLSX.writeFile(wb,'UBNB_Hutang_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Export berhasil!');}
 
 /* USERS */
-async function renderUsers(){
-  const el=document.getElementById('users-list');
+async let aUsers=[];
+async function lUsers(){
+  const{data}=await sb.from('users').select('id,username,role').order('id');
+  aUsers=data||[];
+}
+
+function openModalUser(id){
+  const u=id?aUsers.find(x=>x.id===id):null;
+  document.getElementById('modal-user-title').textContent=id?'Edit Pengguna':'Tambah Pengguna';
+  document.getElementById('u-id').value=id||'';
+  document.getElementById('u-nama').value=u?.username||'';
+  document.getElementById('u-role').value=u?.role||'kasir';
+  document.getElementById('u-pass').value='';
+  document.getElementById('u-pass').placeholder=id?'Kosongkan jika tidak diubah':'Password baru';
+  openModal('modal-user');
+}
+
+function editUser(id){ openModalUser(id); }
+
+async function simpanUser(){
+  const id=document.getElementById('u-id').value;
+  const username=document.getElementById('u-nama').value.trim();
+  const role=document.getElementById('u-role').value;
+  const pass=document.getElementById('u-pass').value;
+  if(!username){toast('Username wajib diisi',true);return;}
+  if(!id&&!pass){toast('Password wajib diisi untuk user baru',true);return;}
+  const upd={username,role};
+  if(pass) upd.password=pass;
+  if(id){
+    await sb.from('users').update(upd).eq('id',parseInt(id));
+  } else {
+    await sb.from('users').insert([{...upd,password:pass}]);
+  }
+  closeModal('modal-user');
+  await lUsers();renderUsers();
+  toast(id?'Pengguna diperbarui!':'Pengguna ditambahkan!');
+}
+
+async function hapusUser(id){
+  if(!confirm('Hapus pengguna ini?'))return;
+  await sb.from('users').delete().eq('id',id);
+  await sb.from('user_akses').delete().eq('user_id',id);
+  await lUsers();renderUsers();
+  toast('Pengguna dihapus!');
+}
+
+
+  const{data}=await sb.from('users').select('id,username,role').order('id');
+  aUsers=data||[];
+}
+
+function renderUsers(){
+  const el=document.getElementById('user-list');
   if(!el)return;
   el.innerHTML=aUsers.map(u=>`
     <div style="background:var(--bg);border-radius:var(--radius-sm);padding:13px 14px;margin-bottom:10px;border:1.5px solid var(--border)">
