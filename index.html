@@ -1569,6 +1569,40 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   </div>
 </div>
 
+<!-- MODAL EDIT BELI -->
+<div class="modal-overlay" id="modal-edit-beli">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Transaksi Pembelian</div>
+    <input type="hidden" id="edit-beli-id"/>
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px">
+      <div style="color:var(--text-muted)">Items:</div>
+      <div id="edit-beli-items" style="font-weight:600;margin-top:2px"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px">
+        <span style="color:var(--text-muted)">Total:</span>
+        <span id="edit-beli-total" style="font-weight:700;color:var(--amber)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:2px">
+        <span style="color:var(--text-muted)">Supplier:</span>
+        <span id="edit-beli-supplier" style="font-weight:600"></span>
+      </div>
+    </div>
+    <div class="irow"><label>Tanggal</label><input type="date" id="edit-beli-tgl"/></div>
+    <div class="irow"><label>Status Bayar</label>
+      <select id="edit-beli-status">
+        <option value="lunas">✅ Lunas</option>
+        <option value="belum">⏳ Belum Bayar</option>
+      </select>
+    </div>
+    <div class="irow"><label>Catatan</label><input type="text" id="edit-beli-catatan" placeholder="Catatan..."/></div>
+    <div class="btn-row">
+      <button class="btn danger" onclick="hapusRiwayatBeli(parseInt(document.getElementById('edit-beli-id').value));closeModal('modal-edit-beli')" style="flex:1">🗑️</button>
+      <button class="btn" onclick="closeModal('modal-edit-beli')" style="flex:1">Batal</button>
+      <button class="btn primary" onclick="simpanEditBeli()" style="flex:2">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL AKSES USER -->
 <div class="modal-overlay" id="modal-akses">
   <div class="modal" style="max-height:90vh;overflow-y:auto">
@@ -1587,6 +1621,40 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <div class="irow"><label>Password</label><input type="text" id="u-pass" placeholder="Password"/></div>
     <div class="irow"><label>Role</label><select id="u-role" style="flex:1"><option value="kasir">Kasir</option><option value="pemilik">Pemilik</option></select></div>
     <div class="btn-row"><button class="btn" onclick="closeModal('modal-user')" style="flex:1">Batal</button><button class="btn primary" onclick="simpanUser()" style="flex:2">Simpan</button></div>
+  </div>
+</div>
+
+<!-- MODAL EDIT JUAL -->
+<div class="modal-overlay" id="modal-edit-jual">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Transaksi Penjualan</div>
+    <input type="hidden" id="edit-jual-id"/>
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px">
+      <div style="color:var(--text-muted)">Items:</div>
+      <div id="edit-jual-items" style="font-weight:600;margin-top:2px"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px">
+        <span style="color:var(--text-muted)">Total:</span>
+        <span id="edit-jual-total" style="font-weight:700;color:var(--green)"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:2px">
+        <span style="color:var(--text-muted)">Kasir:</span>
+        <span id="edit-jual-kasir" style="font-weight:600"></span>
+      </div>
+    </div>
+    <div class="irow"><label>Tanggal</label><input type="date" id="edit-jual-tgl"/></div>
+    <div class="irow"><label>Status Bayar</label>
+      <select id="edit-jual-status">
+        <option value="lunas">✅ Lunas</option>
+        <option value="belum">⏳ Belum Bayar</option>
+      </select>
+    </div>
+    <div class="irow"><label>Jumlah Bayar</label><input type="number" id="edit-jual-bayar" placeholder="0"/></div>
+    <div class="btn-row">
+      <button class="btn danger" onclick="hapusTransaksiJual(parseInt(document.getElementById('edit-jual-id').value));closeModal('modal-edit-jual')" style="flex:1">🗑️</button>
+      <button class="btn" onclick="closeModal('modal-edit-jual')" style="flex:1">Batal</button>
+      <button class="btn primary" onclick="simpanEditJual()" style="flex:2">💾 Simpan</button>
+    </div>
   </div>
 </div>
 
@@ -1986,7 +2054,7 @@ async function bayar(){
   if(metodeBayar==='belum'){
     const pelNamaH=pelNama&&pelNama!=='Umum'?pelNama:'Pelanggan Umum';
     const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,60);
-    await sb.from('hutang').insert([{nama:pelNamaH,jml:total,ket:'Penjualan: '+itemNames,lunas:false,tipe:'piutang'}]);
+    await sb.from('hutang').insert([{nama:pelNamaH,jml:total,ket:'Penjualan: '+itemNames,lunas:false,tipe:'piutang',ref_id:data.id,ref_type:'transaksi'}]);
   }
   await lB();await lT();await lBatch();await lPel();await lH();
   resetJual();tampilStruk(data);toast('Transaksi berhasil!');
@@ -2021,9 +2089,61 @@ function renderRiwayatJual(){
     const pel=t.pelanggan&&t.pelanggan!=='Umum'?`<span class="badge blue">${t.pelanggan}</span>`:'';
     const st=t.status_bayar==='belum'?'<span class="badge belum">Belum bayar</span>':'<span class="badge lunas">Lunas</span>';
     const dT=t.diskon_nominal>0?` <span style="color:var(--red);font-size:10px">-${fmt(t.diskon_nominal)}</span>`:'';
-    return `<div class="tx-row" style="flex-wrap:wrap"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ')}</div><div style="font-size:11px;color:var(--text-muted);display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${tgl} ${jam} ${pel} ${st}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="color:var(--green);font-weight:700;font-family:\'Courier New\',monospace">${fmt(t.total)}${dT}</span><button class="btn teal sm" onclick="_showStruk(t.id)">Struk</button>${t.status_bayar==='belum'?`<button class="btn primary sm" onclick="lunasTransaksi(${t.id})">Lunasi</button>`:''}</div></div>`;
+    return `<div style="background:white;border-radius:var(--radius-sm);border:1.5px solid var(--border);padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ')}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${tgl} ${jam} ${pel} ${st}</div>
+        </div>
+        <div style="font-weight:800;font-family:\'Courier New\',monospace;color:var(--green);flex-shrink:0;margin-left:8px">${fmt(t.total)}${dT}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn sm teal" onclick="_showStruk(${t.id})" style="flex:1">🧾 Struk</button>
+        ${t.status_bayar==='belum'?`<button class="btn sm primary" onclick="lunasTransaksi(${t.id})" style="flex:1">✓ Lunas</button>`:''}
+        <button class="btn sm" onclick="editTransaksiJual(${t.id})" style="flex:1">✏️ Edit</button>
+        <button class="btn sm danger" onclick="hapusTransaksiJual(${t.id})">🗑️</button>
+      </div>
+    </div>`;
   }).join('');
 }
+async function editTransaksiJual(id){
+  const t=aT.find(x=>x.id===id);if(!t)return;
+  // Build modal content
+  const tgl=t.tgl_transaksi||new Date(t.waktu).toISOString().slice(0,10);
+  document.getElementById('edit-jual-id').value=id;
+  document.getElementById('edit-jual-tgl').value=tgl;
+  document.getElementById('edit-jual-bayar').value=t.bayar||t.total;
+  document.getElementById('edit-jual-status').value=t.status_bayar||'lunas';
+  document.getElementById('edit-jual-kasir').textContent=t.kasir||'-';
+  document.getElementById('edit-jual-items').textContent=t.items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ');
+  document.getElementById('edit-jual-total').textContent=fmt(t.total);
+  openModal('modal-edit-jual');
+}
+
+async function simpanEditJual(){
+  const id=parseInt(document.getElementById('edit-jual-id').value);
+  const tgl=document.getElementById('edit-jual-tgl').value;
+  const status=document.getElementById('edit-jual-status').value;
+  const bayar=parseFloat(document.getElementById('edit-jual-bayar').value)||0;
+  await sb.from('transaksi').update({tgl_transaksi:tgl,status_bayar:status,bayar}).eq('id',id);
+  // Update hutang terkait jika status berubah
+  if(status==='lunas'){
+    await sb.from('hutang').update({lunas:true}).eq('ref_id',id).eq('ref_type','transaksi');
+  }
+  await lT();await lH();renderRiwayatJual();renderHutang();
+  closeModal('modal-edit-jual');
+  toast('Transaksi berhasil diperbarui!');
+}
+
+async function hapusTransaksiJual(id){
+  if(!confirm('Hapus transaksi penjualan ini?\nHutang/piutang terkait juga akan dihapus.'))return;
+  // Hapus hutang terkait
+  await sb.from('hutang').delete().eq('ref_id',id).eq('ref_type','transaksi');
+  await sb.from('transaksi').delete().eq('id',id);
+  await lT();await lH();renderRiwayatJual();renderHutang();
+  toast('Transaksi dihapus!');
+}
+
 async function lunasTransaksi(id){await sb.from('transaksi').update({status_bayar:'lunas'}).eq('id',id);await lT();renderRiwayatJual();toast('Dilunasi!');}
 
 /* STRUK */
@@ -2144,7 +2264,7 @@ function renderRiwayatBeli(){
     const sup=p.supplier_nama?`<span class="badge blue">${p.supplier_nama}</span>`:'';
     const st=p.status_bayar==='belum'?'<span class="badge belum">Belum lunas</span>':p.status_bayar==='sebagian'?'<span class="badge sebagian">Sebagian</span>':'<span class="badge lunas">Lunas</span>';
     const totalItem=p.items.length>1?`<span class="badge blue">${p.items.length} item</span>`:'';const hasStruk=p.struk_url?'<span class="badge ok">📎 Struk</span>':'';
-    return `<div class="tx-row" style="flex-wrap:wrap"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${p.items.map(i=>`${i.nama} x${i.qty}`).join(', ')}</div><div style="font-size:11px;color:var(--text-muted);display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${tgl} ${jam} ${sup} ${st} ${totalItem} ${hasStruk}</div>${p.catatan?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">📝 ${p.catatan}</div>`:''}</div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="color:var(--amber);font-weight:700;font-family:\'Courier New\',monospace">${fmt(p.total)}</span><button class="btn sm teal" onclick="_showDetailBeli(${p.id})">Detail</button><button class="btn sm" onclick="uploadStrukBeli(${p.id})" title="Upload Struk">📎</button>${p.status_bayar!=='lunas'?`<button class="btn primary sm" onclick="lunasiBeli(${p.id})">Lunasi</button>`:''}</div></div>`;
+    return `<div class="tx-row" style="flex-wrap:wrap"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${p.items.map(i=>`${i.nama} x${i.qty}`).join(', ')}</div><div style="font-size:11px;color:var(--text-muted);display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${tgl} ${jam} ${sup} ${st} ${totalItem} ${hasStruk}</div>${p.catatan?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">📝 ${p.catatan}</div>`:''}</div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="color:var(--amber);font-weight:700;font-family:\'Courier New\',monospace">${fmt(p.total)}</span><button class="btn sm teal" onclick="_showDetailBeli(${p.id})">Detail</button><button class="btn sm" onclick="uploadStrukBeli(${p.id})" title="Upload Struk">📎</button>${p.status_bayar!=='lunas'?`<button class="btn primary sm" onclick="lunasiBeli(${p.id})">Lunasi</button>`:''}<button class="btn sm" onclick="editRiwayatBeli(${p.id})">✏️</button><button class="btn sm danger" onclick="hapusRiwayatBeli(${p.id})">🗑️</button></div></div>`;
   }).join('');
 }
 let beliStrukFile = null;
@@ -2196,7 +2316,7 @@ async function simpanBeli(){
   // Build items array
   const items=KB.map(k=>({barang_id:k.id,nama:k.nama,qty:k.qty,harga_beli:k.hb,harga_jual:k.hjf}));
   // Save pembelian
-  await sb.from('pembelian').insert([{items,total:totalBeli,operator:CU.username,supplier_id:supSel?.id||null,supplier_nama:supSel?.label||'',status_bayar:beliStatus,catatan,tgl_beli:tglBeli,waktu:tglBeli}]);
+  const{data:beliData}=await sb.from('pembelian').insert([{items,total:totalBeli,operator:CU.username,supplier_id:supSel?.id||null,supplier_nama:supSel?.label||'',status_bayar:beliStatus,catatan,tgl_beli:tglBeli,waktu:tglBeli}]).select().single();
   // Update each barang stock and batch
   for(const k of KB){
     const b=aB.find(x=>x.id===k.id);if(!b)continue;
@@ -2208,7 +2328,7 @@ async function simpanBeli(){
     const sisa=totalBeli-dp;
     const supNamaH=supSel?.label&&supSel.label!=='Tanpa supplier'?supSel.label:'Supplier';
     const namaItem=KB.map(k=>k.nama+(k.qty>1?' x'+k.qty:'')).join(', ').slice(0,60);
-    await sb.from('hutang').insert([{nama:supNamaH,jml:sisa,ket:'Pembelian: '+namaItem,lunas:false,tipe:'hutang'}]);
+    await sb.from('hutang').insert([{nama:supNamaH,jml:sisa,ket:'Pembelian: '+namaItem,lunas:false,tipe:'hutang',ref_id:beliData?.id,ref_type:'pembelian'}]);
   }
   // Upload struk jika ada
   if(beliStrukFile){
@@ -2228,6 +2348,41 @@ async function simpanBeli(){
   toast(`Pembelian ${KB.length} item berhasil disimpan (${met})!`);
   resetKeranjangBeli();
 }
+async function editRiwayatBeli(id){
+  const p=aBeli.find(x=>x.id===id);if(!p)return;
+  document.getElementById('edit-beli-id').value=id;
+  document.getElementById('edit-beli-tgl').value=p.tgl_beli||new Date(p.waktu).toISOString().slice(0,10);
+  document.getElementById('edit-beli-status').value=p.status_bayar||'belum';
+  document.getElementById('edit-beli-catatan').value=p.catatan||'';
+  document.getElementById('edit-beli-supplier').textContent=p.supplier_nama||'-';
+  document.getElementById('edit-beli-items').textContent=p.items.map(i=>i.nama+' x'+i.qty).join(', ');
+  document.getElementById('edit-beli-total').textContent=fmt(p.total);
+  openModal('modal-edit-beli');
+}
+
+async function simpanEditBeli(){
+  const id=parseInt(document.getElementById('edit-beli-id').value);
+  const tgl=document.getElementById('edit-beli-tgl').value;
+  const status=document.getElementById('edit-beli-status').value;
+  const catatan=document.getElementById('edit-beli-catatan').value.trim();
+  await sb.from('pembelian').update({tgl_beli:tgl,status_bayar:status,catatan}).eq('id',id);
+  // Update hutang terkait jika lunas
+  if(status==='lunas'){
+    await sb.from('hutang').update({lunas:true}).eq('ref_id',id).eq('ref_type','pembelian');
+  }
+  await lBeli();await lH();renderRiwayatBeli();renderHutang();
+  closeModal('modal-edit-beli');
+  toast('Pembelian berhasil diperbarui!');
+}
+
+async function hapusRiwayatBeli(id){
+  if(!confirm('Hapus transaksi pembelian ini?\nHutang terkait juga akan dihapus.'))return;
+  await sb.from('hutang').delete().eq('ref_id',id).eq('ref_type','pembelian');
+  await sb.from('pembelian').delete().eq('id',id);
+  await lBeli();await lH();renderRiwayatBeli();renderHutang();
+  toast('Pembelian dihapus!');
+}
+
 async function lunasiBeli(id){await sb.from('pembelian').update({status_bayar:'lunas'}).eq('id',id);await lBeli();renderRiwayatBeli();toast('Pembelian dilunasi');}
 
 function tampilDetailBeli(p){
@@ -2646,6 +2801,22 @@ function renderVoucherList(){const el=document.getElementById('voucher-list');if
 /* HUTANG */
 function openModalHutang(){['h-id','h-nama','h-jml','h-ket'].forEach(i=>document.getElementById(i).value='');openModal('modal-hutang-form');}
 async function simpanHutang(){const tipe=document.getElementById('h-tipe').value,nama=document.getElementById('h-nama').value.trim(),jml=parseInt(document.getElementById('h-jml').value)||0,ket=document.getElementById('h-ket').value.trim();if(!nama||jml<=0){toast('Nama dan jumlah wajib',true);return;}await sb.from('hutang').insert([{nama,jml,ket,lunas:false,tipe}]);closeModal('modal-hutang-form');await lH();renderHutang();toast('Dicatat');}
+async function lihatSumberHutang(refType, refId){
+  if(refType==='transaksi'){
+    const btn=Array.from(document.querySelectorAll('.nav-item')).find(b=>b.onclick&&String(b.onclick).includes("'riwayat'"));
+    if(btn) showPage('riwayat',btn);
+    toast('Gunakan menu Riwayat Jual untuk edit/hapus');
+  } else if(refType==='pembelian'){
+    const btn=Array.from(document.querySelectorAll('.nav-item')).find(b=>b.onclick&&String(b.onclick).includes("'riwayat-beli'"));
+    if(btn) showPage('riwayat-beli',btn);
+    toast('Gunakan menu Riwayat Beli untuk edit/hapus');
+  } else if(refType==='ppob'){
+    const btn=Array.from(document.querySelectorAll('.nav-item')).find(b=>b.onclick&&String(b.onclick).includes("'ppob-riwayat'"));
+    if(btn) showPage('ppob-riwayat',btn);
+    toast('Gunakan menu Riwayat PPOB untuk edit/hapus');
+  }
+}
+
 async function lunasinHutang(id){await sb.from('hutang').update({lunas:true}).eq('id',id);await lH();renderHutang();toast('Dilunasi');}
 async function hapusHutang(id){if(!confirm('Hapus?'))return;await sb.from('hutang').delete().eq('id',id);await lH();renderHutang();toast('Dihapus');}
 function setHutangFilter(f,btn){hutangFilter=f;document.querySelectorAll('#page-hutang .tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderHutang();}
@@ -2685,10 +2856,19 @@ function renderHutang(){
           <span class="badge ${h.lunas?'lunas':'belum'}">${h.lunas?'✓ Lunas':'● Belum Lunas'}</span>
         </div>
       </div>
-      ${!h.lunas?`<div style="display:flex;gap:6px">
-        <button class="btn sm primary" style="flex:1" onclick="lunasinHutang(${h.id})">✓ Tandai Lunas</button>
-        <button class="btn sm danger" onclick="hapusHutang(${h.id})">🗑️</button>
-      </div>`:`<button class="btn sm danger" onclick="hapusHutang(${h.id})">🗑️ Hapus</button>`}
+      <div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap">
+        ${h.ref_type==='transaksi'?'<span class="badge blue" style="font-size:10px">🧾 Penjualan</span>':''}
+        ${h.ref_type==='pembelian'?'<span class="badge amber" style="font-size:10px">📦 Pembelian</span>':''}
+        ${h.ref_type==='ppob'?'<span class="badge blue" style="font-size:10px">⚡ PPOB</span>':''}
+        ${!h.ref_type?'<span class="badge" style="font-size:10px">📝 Manual</span>':''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${!h.lunas?`<button class="btn sm primary" style="flex:1" onclick="lunasinHutang(${h.id})">✓ Tandai Lunas</button>`:''}
+        ${h.ref_type?
+          `<button class="btn sm teal" style="flex:1" onclick="lihatSumberHutang('${h.ref_type}',${h.ref_id||0})">🔗 Lihat Sumber</button>`
+          :`<button class="btn sm danger" onclick="hapusHutang(${h.id})">🗑️</button>`
+        }
+      </div>
     </div>`;
   }).join('');
 }
@@ -4045,7 +4225,7 @@ async function simpanPPOBTeks(){
       if(status==='belum'){
         await sb.from('hutang').insert([{
           nama:item.nama,jml:item.hjual,
-          ket:'PPOB: '+item.produk,tipe:'piutang',tgl,lunas:false
+          ket:'PPOB: '+item.produk,tipe:'piutang',tgl,lunas:false,ref_type:'ppob'
         }]);
       }
       sukses++;
@@ -4145,7 +4325,7 @@ async function simpanPPOB(){
 
   // Jika belum bayar, catat ke hutang/piutang
   if(status==='belum'){
-    await sb.from('hutang').insert([{nama,jml:hj,ket:'PPOB: '+produk+(catatan?' - '+catatan:''),tipe:'piutang',tgl,lunas:false}]);
+    await sb.from('hutang').insert([{nama,jml:hj,ket:'PPOB: '+produk+(catatan?' - '+catatan:''),tipe:'piutang',tgl,lunas:false,ref_type:'ppob'}]);
   }
   
   await lKas();await lPPOB();await lH();
@@ -4367,8 +4547,13 @@ async function simpanEditPPOB(){
   const kasIds=[...new Set([oldKasId,newKasId,kasUtama?.id].filter(Boolean))];
   for(const kid of kasIds) await recalcSaldo(kid);
 
-  await lKas();await lPPOB();
-  renderPPOBRiwayat();renderKas();
+  // Sync hutang status
+  if(status==='lunas'){
+    await sb.from('hutang').update({lunas:true})
+      .eq('ref_type','ppob').eq('lunas',false);
+  }
+  await lKas();await lPPOB();await lH();
+  renderPPOBRiwayat();renderKas();renderHutang();
   closeModal('modal-edit-ppob');
   toast('Transaksi PPOB berhasil diperbarui!');
 }
@@ -4405,13 +4590,16 @@ async function hapusPPOB(id){
         .eq('tanggal',p.tanggal);
     }
   }
+  // Hapus hutang/piutang terkait PPOB
+  const ketHutang='PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
+  await sb.from('hutang').delete().eq('ref_type','ppob').eq('ket',ketHutang);
   // Hapus transaksi
   await sb.from('ppob').delete().eq('id',id);
   // Recalc saldo semua kas terdampak
   const kasIds=[...new Set([p?.kas_id].filter(Boolean))];
   for(const kid of kasIds) await recalcSaldo(kid);
-  await lKas();await lPPOB();
-  renderPPOBRiwayat();renderKas();
+  await lKas();await lPPOB();await lH();
+  renderPPOBRiwayat();renderKas();renderHutang();
   if(document.getElementById('page-dashboard')?.classList.contains('active'))renderDashboard();
   toast('Transaksi PPOB dihapus!');
 }
