@@ -430,7 +430,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div id="dash-chart-ppob-labels" style="display:flex;gap:4px;margin-top:4px"></div>
         </div>
         <!-- SALDO KAS -->
-        <div class="card" id="dash-kas-card">
+        <div class="card role-pemilik-only" id="dash-kas-card">
           <div class="card-header"><div class="card-title">💰 Saldo Kas</div><button class="btn sm teal" onclick="goToPage('kas')">Kelola →</button></div>
           <div id="dash-kas-list"></div>
         </div>
@@ -3915,7 +3915,8 @@ function renderKas(){
   const filterEl=document.getElementById('kas-filter-id');
   if(filterEl){filterEl.innerHTML='<option value="">Semua Kas</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');}
   renderKasSummary();
-  renderKasMutasi();
+  if(CU&&CU.role==='pemilik')renderKasMutasi();
+  else{const el=document.getElementById('kas-mutasi-list');if(el)el.innerHTML='<div class="empty"><div class="ei">🔒</div>Riwayat mutasi hanya untuk pemilik</div>';}
   if(!aKas.length){el.innerHTML='<div class="empty"><div class="ei">💰</div>Belum ada kas</div>';return;}
   el.innerHTML=aKas.map(k=>`
     <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1.5px solid var(--border)">
@@ -3931,10 +3932,12 @@ function renderKas(){
         <div style="font-size:20px;font-weight:800;font-family:'Courier New',monospace;color:${k.saldo>=0?'var(--green)':'var(--red)'}">${fmt(k.saldo)}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${CU&&CU.role==='pemilik'?`
         <button class="btn sm primary" onclick="openModalTopUp(${k.id})" style="flex:1">💰 Mutasi</button>
         <button class="btn sm amber" onclick="openModalKomisi(${k.id})" style="flex:1">🎁 Komisi</button>
         <button class="btn sm" onclick="openModalKas(${k.id})">✏️</button>
         <button class="btn sm danger" onclick="hapusKas(${k.id})">🗑️</button>
+        `:'<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Hanya pemilik yang dapat mengelola kas</div>'}
       </div>
     </div>`).join('');
 }
@@ -4030,6 +4033,7 @@ function openModalKas(id){
 }
 
 async function simpanKas(){
+  if(!CU||CU.role!=='pemilik'){toast('Hanya pemilik yang dapat mengelola kas',true);return;}
   const id=document.getElementById('kas-id').value;
   const nama=document.getElementById('kas-nama').value.trim();
   const saldo=parseFloat(document.getElementById('kas-saldo').value)||0;
@@ -4056,6 +4060,7 @@ function openModalKomisi(kasId){
 }
 
 async function hapusKas(id){
+  if(!CU||CU.role!=='pemilik'){toast('Hanya pemilik yang dapat menghapus kas',true);return;}
   if(!confirm('Hapus akun kas ini?'))return;
   await sb.from('kas').delete().eq('id',id);
   await lKas();renderKas();toast('Kas dihapus');
@@ -4096,6 +4101,7 @@ function updateTopupUI(){
 }
 
 async function simpanTopUp(){
+  if(!CU||CU.role!=='pemilik'){toast('Hanya pemilik yang dapat melakukan mutasi kas',true);return;}
   const kasId=parseInt(document.getElementById('topup-kas-id').value);
   const tipe=document.getElementById('topup-tipe').value;
   const jumlah=parseFloat(document.getElementById('topup-jumlah').value)||0;
