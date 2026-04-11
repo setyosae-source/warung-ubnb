@@ -3967,7 +3967,11 @@ function renderKas(){
   const el=document.getElementById('kas-list');if(!el)return;
   // Update filter dropdown
   const filterEl=document.getElementById('kas-filter-id');
-  if(filterEl){filterEl.innerHTML='<option value="">Semua Kas</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');}
+  if(filterEl){
+    const prevVal=filterEl.value;
+    filterEl.innerHTML='<option value="">-- Pilih Kas --</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+    if(prevVal)filterEl.value=prevVal;
+  }
   renderKasSummary();
   if(CU&&CU.role==='pemilik')renderKasMutasi();
   else{const el=document.getElementById('kas-mutasi-list');if(el)el.innerHTML='<div class="empty"><div class="ei">🔒</div>Riwayat mutasi hanya untuk pemilik</div>';}
@@ -3998,45 +4002,172 @@ function renderKas(){
 
 async function renderKasMutasi(){
   const kasId=document.getElementById('kas-filter-id')?.value;
-  let query=sb.from('kas_mutasi').select('*').order('created_at',{ascending:false}).limit(50);
-  if(kasId)query=query.eq('kas_id',parseInt(kasId));
-  const{data}=await query;
+  if(!kasId){
+    const el=document.getElementById('kas-mutasi-list');
+    if(el)el.innerHTML='<div class="empty"><div class="ei">💳</div>Pilih kas untuk lihat cashflow</div>';
+    return;
+  }
+  // Load semua mutasi kas yang dipilih
+  const{data}=await sb.from('kas_mutasi').select('*')
+    .eq('kas_id',parseInt(kasId))
+    .order('tanggal',{ascending:true})
+    .order('created_at',{ascending:true});
   const el=document.getElementById('kas-mutasi-list');
   if(!el)return;
-  if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
-  el.innerHTML=data.map(m=>{
-    const kas=aKas.find(k=>k.id===m.kas_id);
-    const tglSrc=m.tanggal?new Date(m.tanggal+'T00:00:00'):new Date(m.created_at);
-    const tgl=tglSrc.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
-    const kat=m.kategori||m.tipe;
-    const katBadge=kat==='komisi'?'<span class="badge amber" style="font-size:10px">🎁 Komisi</span>':
-      m.tipe==='masuk'?'<span class="badge ok" style="font-size:10px">➕ Masuk</span>':
-      '<span class="badge red" style="font-size:10px">➖ Keluar</span>';
+  if(!data||!data.length){
+    el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';
+    return;
+  }
+
+  // Group by tahun -> bulan -> hari
+  const byTahun={};
+  data.forEach(m=>{
+    const tgl=m.tanggal?new Date(m.tanggal+'T00:00:00'):new Date(m.created_at);
+    const thn=tgl.getFullYear();
+    const bln=tgl.getMonth(); // 0-11
+    const blnKey=thn+'-'+String(bln+1).padStart(2,'0');
+    const hariKey=m.tanggal||new Date(m.created_at).toISOString().slice(0,10);
+    if(!byTahun[thn])byTahun[thn]={thn,masuk:0,keluar:0,byBulan:{}};
+    if(!byTahun[thn].byBulan[blnKey])byTahun[thn].byBulan[blnKey]={thn,bln,blnKey,masuk:0,keluar:0,byHari:{}};
+    if(!byTahun[thn].byBulan[blnKey].byHari[hariKey])byTahun[thn].byBulan[blnKey].byHari[hariKey]={tgl:hariKey,items:[],masuk:0,keluar:0};
     const isMasuk=m.tipe==='masuk';
-    // Hanya mutasi manual (bukan dari transaksi PPOB/import) yang bisa diedit
-    const isManual=m.operator!=='import'&&(m.kategori==='masuk'||m.kategori==='keluar'||m.kategori==='komisi')&&!m.keterangan?.startsWith('Modal PPOB')&&!m.keterangan?.startsWith('Bayar PPOB');
-    return `<div style="background:white;border-radius:var(--radius-sm);border:1.5px solid var(--border);padding:10px 14px;margin-bottom:6px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;margin-bottom:3px">${m.keterangan||'-'}</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-            ${katBadge}
-            <span style="font-size:11px;color:var(--text-muted)">${tgl} · ${kas?.nama||'-'} · ${m.operator||'-'}</span>
+    byTahun[thn].masuk+=(isMasuk?m.jumlah:0);
+    byTahun[thn].keluar+=(!isMasuk?m.jumlah:0);
+    byTahun[thn].byBulan[blnKey].masuk+=(isMasuk?m.jumlah:0);
+    byTahun[thn].byBulan[blnKey].keluar+=(!isMasuk?m.jumlah:0);
+    byTahun[thn].byBulan[blnKey].byHari[hariKey].masuk+=(isMasuk?m.jumlah:0);
+    byTahun[thn].byBulan[blnKey].byHari[hariKey].keluar+=(!isMasuk?m.jumlah:0);
+    byTahun[thn].byBulan[blnKey].byHari[hariKey].items.push(m);
+  });
+
+  // Hitung saldo berjalan
+  let saldoBerjalan=0;
+  const thnKeys=Object.keys(byTahun).sort();
+  
+  // Render per tahun
+  let html='';
+  thnKeys.forEach(thn=>{
+    const thnData=byTahun[thn];
+    const saldoAwalThn=saldoBerjalan;
+    const saldoAkhirThn=saldoAwalThn+thnData.masuk-thnData.keluar;
+    const thnId='thn-'+thn;
+    
+    html+=`<div style="border:1.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden">
+      <!-- Header Tahun -->
+      <div style="background:var(--green);color:white;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleCashflow('${thnId}')">
+        <div>
+          <div style="font-weight:800;font-size:15px">📅 Tahun ${thn}</div>
+          <div style="font-size:11px;opacity:0.85;margin-top:2px">
+            Saldo Awal: ${fmt(saldoAwalThn)} &nbsp;|&nbsp;
+            ▲ ${fmt(thnData.masuk)} &nbsp;|&nbsp;
+            ▼ ${fmt(thnData.keluar)}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div style="font-weight:800;font-family:'Courier New',monospace;font-size:15px;color:${isMasuk?'var(--green)':'var(--red)'}">
-            ${isMasuk?'+':'-'}${fmt(m.jumlah)}
-          </div>
-          ${isManual?`<div style="display:flex;gap:4px;justify-content:flex-end;margin-top:6px">
-            <button class="btn xs" onclick="editMutasi(${m.id})">✏️</button>
-            <button class="btn xs danger" onclick="hapusMutasi(${m.id})">🗑️</button>
-          </div>`:''}
+          <div style="font-size:13px;opacity:0.85">Saldo Akhir</div>
+          <div style="font-weight:800;font-size:16px;font-family:'Courier New',monospace">${fmt(saldoAkhirThn)}</div>
+          <div style="font-size:14px;margin-top:2px" id="arr-${thnId}">▾</div>
         </div>
       </div>
-    </div>`;
-  }).join('');
+      <div id="${thnId}" style="display:none">`;
+
+    // Bulan
+    let saldoBulanBerjalan=saldoAwalThn;
+    const blnKeys=Object.keys(thnData.byBulan).sort();
+    blnKeys.forEach(blnKey=>{
+      const blnData=thnData.byBulan[blnKey];
+      const saldoAwalBln=saldoBulanBerjalan;
+      const saldoAkhirBln=saldoAwalBln+blnData.masuk-blnData.keluar;
+      const blnId='bln-'+blnKey;
+      const namaBln=new Date(blnData.thn,blnData.bln,1).toLocaleDateString('id-ID',{month:'long',year:'numeric'});
+
+      html+=`<div style="border-top:1px solid var(--border)">
+        <!-- Header Bulan -->
+        <div style="background:var(--green-light);padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleCashflow('${blnId}')">
+          <div>
+            <div style="font-weight:700;font-size:13px;color:var(--green-dark)">📆 ${namaBln}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:1px">
+              Saldo Awal: ${fmt(saldoAwalBln)} &nbsp;|&nbsp;
+              ▲ ${fmt(blnData.masuk)} &nbsp;|&nbsp;
+              ▼ ${fmt(blnData.keluar)}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:11px;color:var(--text-muted)">Saldo Akhir</div>
+            <div style="font-weight:800;font-size:14px;color:var(--green-dark);font-family:'Courier New',monospace">${fmt(saldoAkhirBln)}</div>
+            <div style="font-size:12px;color:var(--text-muted)" id="arr-${blnId}">▾</div>
+          </div>
+        </div>
+        <div id="${blnId}" style="display:none">
+          <!-- Saldo Awal Bulan -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#f8f8f8;border-top:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--text-muted);font-style:italic">🔹 Saldo Awal ${namaBln}</div>
+            <div style="font-weight:700;font-family:'Courier New',monospace;font-size:13px;color:var(--green-dark)">${fmt(saldoAwalBln)}</div>
+          </div>`;
+
+      // Hari (ascending)
+      let saldoHariBerjalan=saldoAwalBln;
+      const hariKeys=Object.keys(blnData.byHari).sort();
+      hariKeys.forEach(hariKey=>{
+        const hariData=blnData.byHari[hariKey];
+        const saldoAkhirHari=saldoHariBerjalan+hariData.masuk-hariData.keluar;
+        const tglFmt=new Date(hariKey+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'});
+
+        html+=`<div style="border-top:1px solid var(--border)">`;
+        // Items per hari
+        hariData.items.forEach(m=>{
+          const isMasuk=m.tipe==='masuk';
+          const kat=m.kategori||m.tipe;
+          const katColor=kat==='komisi'?'var(--amber)':isMasuk?'var(--green)':'var(--red)';
+          const katIcon=kat==='komisi'?'🎁':isMasuk?'➕':'➖';
+          const isManual=m.operator!=='import'&&!m.keterangan?.startsWith('Modal PPOB')&&!m.keterangan?.startsWith('Bayar PPOB');
+          html+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px">
+            <div style="color:${katColor};font-size:14px;flex-shrink:0">${katIcon}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600">${m.keterangan||'-'}</div>
+              <div style="color:var(--text-muted);font-size:11px">${tglFmt} · ${m.operator||'-'}</div>
+            </div>
+            <div style="font-weight:700;font-family:'Courier New',monospace;color:${isMasuk?'var(--green)':'var(--red)'};flex-shrink:0">
+              ${isMasuk?'+':'-'}${fmt(m.jumlah)}
+            </div>
+            ${isManual?`<div style="display:flex;gap:3px;flex-shrink:0">
+              <button class="btn xs" onclick="editMutasi(${m.id})" title="Edit">✏️</button>
+              <button class="btn xs danger" onclick="hapusMutasi(${m.id})" title="Hapus">🗑️</button>
+            </div>`:'<div style="width:52px"></div>'}
+          </div>`;
+        });
+        // Saldo akhir hari
+        html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 14px;background:#f0f9f5;border-top:1px dashed var(--border)">
+          <div style="font-size:11px;color:var(--text-muted)">Saldo akhir ${tglFmt}</div>
+          <div style="font-weight:800;font-family:'Courier New',monospace;font-size:13px;color:${saldoAkhirHari>=0?'var(--green-dark)':'var(--red)'}">${fmt(saldoAkhirHari)}</div>
+        </div></div>`;
+        saldoHariBerjalan=saldoAkhirHari;
+      });
+      html+=`</div></div>`;
+      saldoBulanBerjalan=saldoAkhirBln;
+    });
+    html+=`</div></div>`;
+    saldoBerjalan=saldoAkhirThn;
+  });
+
+  // Saldo akhir total
+  html+=`<div style="background:var(--green);color:white;border-radius:var(--radius-sm);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+    <div style="font-weight:700">💰 Saldo Akhir (Total)</div>
+    <div style="font-weight:800;font-size:18px;font-family:'Courier New',monospace">${fmt(saldoBerjalan)}</div>
+  </div>`;
+
+  el.innerHTML=html;
 }
+
+function toggleCashflow(id){
+  const el=document.getElementById(id);
+  const arr=document.getElementById('arr-'+id);
+  if(!el)return;
+  const isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  if(arr)arr.textContent=isOpen?'▾':'▴';
+}
+
 
 function renderKasSummary(){
   const el=document.getElementById('kas-summary');
