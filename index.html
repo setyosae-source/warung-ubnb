@@ -3280,6 +3280,30 @@ function setDashTxTab(tab,btn){
 }
 
 
+function renderDashKas(){
+  const el=document.getElementById('dash-kas-list');
+  if(!el||!aKas.length){if(el)el.innerHTML='<div style="font-size:13px;color:var(--text-muted);padding:8px 0">Belum ada kas terdaftar</div>';return;}
+  const totalSaldo=aKas.reduce((s,k)=>s+k.saldo,0);
+  el.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'
+    +aKas.map(k=>{
+      const modul=k.modul||'warung,ppob';
+      const isBoth=modul.includes('ppob')&&modul.includes('warung');
+      const isPPOB=modul.includes('ppob')&&!modul.includes('warung');
+      const color=isBoth?'var(--purple)':isPPOB?'var(--blue)':'var(--green)';
+      const icon=isBoth?'🔄':isPPOB?'⚡':'🏦';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border-left:3px solid '+color+'">'
+        +'<div><div style="font-size:12px;font-weight:600">'+icon+' '+k.nama+'</div>'
+        +(k.keterangan?'<div style="font-size:10px;color:var(--text-muted)">'+k.keterangan+'</div>':'')
+        +'</div>'
+        +'<div style="font-weight:800;font-family:'Courier New',monospace;color:'+(k.saldo<0?'var(--red)':color)+';font-size:14px">'+fmt(k.saldo)+'</div>'
+        +'</div>';
+    }).join('')
+    +'<div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--green-light);border-radius:var(--radius-sm);border-left:3px solid var(--green)">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--green-dark)">Total Semua Kas</div>'
+    +'<div style="font-weight:800;font-family:'Courier New',monospace;color:var(--green-dark);font-size:14px">'+fmt(totalSaldo)+'</div>'
+    +'</div></div>';
+}
+
 function renderDashChart(){
   // Warung chart
   const chart=document.getElementById('dash-chart');
@@ -3615,7 +3639,11 @@ async function recalcAllSaldo(){
   }
   await lKas();
   renderKas();
-  renderDashKas();
+  // Refresh dashboard jika sedang aktif
+  if(document.getElementById('page-dashboard')?.classList.contains('active')){
+    renderDashboard();
+  }
+  toast('Saldo semua kas berhasil dihitung ulang!');
 }
 async function lPPOB(){
   const{data}=await sb.from('ppob').select('*').order('tanggal',{ascending:false});
