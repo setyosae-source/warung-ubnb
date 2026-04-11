@@ -456,6 +456,11 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div id="dash-tx-last"></div>
         </div>
       </div>
+
+      <!-- EXPIRED WIDGET -->
+      <div id="dash-expired" class="card" style="display:none;border-left:4px solid var(--red)">
+      </div>
+
 <!-- PAGE: JUAL -->
       <div id="page-jual" class="page active">
         <div class="card">
@@ -1565,6 +1570,20 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       <input type="text" id="b-barcode" placeholder="Scan atau ketik kode barcode"/>
       <button class="btn sm" onclick="bukaScanner('barang')" style="flex-shrink:0;padding:0 10px" title="Scan">📷</button>
     </div>
+    <div class="sep"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">FOTO & EXPIRED</div>
+    <div class="irow"><label>Expired Date</label><input type="date" id="b-expired" placeholder="Tanggal expired (opsional)"/></div>
+    <div class="irow" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <label>Foto Barang</label>
+      <div style="display:flex;gap:8px;align-items:center;width:100%">
+        <input type="file" id="b-foto-file" accept="image/*" onchange="previewFotoBarang(this)" style="flex:1;font-size:12px;padding:6px;border:2px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)"/>
+      </div>
+      <div id="b-foto-preview" style="display:none;margin-top:4px">
+        <img id="b-foto-img" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;border:2px solid var(--border);background:#f8f8f8"/>
+        <button onclick="hapusFotoBarang()" style="margin-top:4px;font-size:11px;color:var(--red);background:none;border:none;cursor:pointer">🗑️ Hapus foto</button>
+      </div>
+      <input type="hidden" id="b-foto-url">
+    </div>
     <div class="btn-row"><button class="btn" onclick="closeModal('modal-barang')" style="flex:1">Batal</button><button class="btn primary" onclick="simpanBarang()" style="flex:2" id="btn-simpan-barang">Simpan</button></div>
   </div>
 </div>
@@ -1904,6 +1923,8 @@ function showPage(id,btn){
     if(!CU||CU.role!=='pemilik'){toast('Halaman ini hanya untuk pemilik',true);goToPage('dashboard');return;}
     lKas().then(()=>renderKas());
   }
+  // Show expired warning on all pages
+  if(aB.length)setTimeout(()=>renderExpiredWarningBar(id),150);
 }
 function restorePage(){
   const lastPage=localStorage.getItem('wu_page');
@@ -2611,6 +2632,53 @@ function setKategoriStok(kat,btn){
   document.getElementById('stok-kategori-title').textContent=kat==='warung'?'Stok Barang Warung':'Produk PPOB';
   renderStok();
 }
+// ===== EXPIRED HELPERS =====
+function getExpiredWarnings(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const in90=new Date(today);in90.setDate(in90.getDate()+90);
+  return aB.filter(b=>{
+    if(!b.expired||b.stok<=0)return false;
+    const exp=new Date(b.expired);exp.setHours(0,0,0,0);
+    return exp<=in90;
+  }).map(b=>{
+    const exp=new Date(b.expired);exp.setHours(0,0,0,0);
+    const diff=Math.round((exp-today)/(1000*60*60*24));
+    return{...b,diffDays:diff,isExpired:diff<0};
+  }).sort((a,b)=>a.diffDays-b.diffDays);
+}
+
+function renderExpiredWarningBar(pageId){
+  const warnings=getExpiredWarnings();
+  const barId='expired-bar-'+pageId;
+  let el=document.getElementById(barId);
+  if(!warnings.length){if(el)el.remove();return;}
+  const expired=warnings.filter(w=>w.isExpired);
+  const soon=warnings.filter(w=>!w.isExpired);
+  const msg=[];
+  if(expired.length)msg.push(`<span style="color:#b91c1c;font-weight:700">⚠️ ${expired.length} barang EXPIRED</span>`);
+  if(soon.length)msg.push(`<span style="color:#c2410c">⏰ ${soon.length} barang exp &lt;3 bln</span>`);
+  const names=warnings.slice(0,3).map(w=>`<span onclick="lihatExpiredDetail(${w.id})" style="cursor:pointer;text-decoration:underline;color:${w.isExpired?'#b91c1c':'#c2410c'}">${w.nama}</span>`).join(', ');
+  const html=`<div id="${barId}" style="background:#fff7ed;border-bottom:2px solid #fed7aa;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      ${msg.join(' · ')} &nbsp;→&nbsp; ${names}${warnings.length>3?` <span style="color:#888">+${warnings.length-3} lainnya</span>`:''}
+    </div>
+    <button onclick="showPage('stok',document.querySelector('[onclick*=stok]'))" style="background:#c2410c;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">Lihat Semua →</button>
+  </div>`;
+  if(el){el.outerHTML=html;}
+  else{
+    const mainEl=document.querySelector('.main');
+    if(mainEl)mainEl.insertAdjacentHTML('afterbegin',html);
+  }
+}
+
+function lihatExpiredDetail(id){
+  showPage('stok',document.querySelector('[onclick*=stok]'));
+  setTimeout(()=>{
+    const el=document.getElementById('sc-'+id);
+    if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='3px solid var(--amber)';setTimeout(()=>el.style.outline='',2000);}
+  },200);
+}
+
 function renderStok(){
   const el=document.getElementById('stok-list');
   const q=(document.getElementById('stok-search')?.value||'').toLowerCase();
@@ -2636,6 +2704,17 @@ function renderStok(){
     const margin=b.harga_beli>0?Math.round((b.harga-b.harga_beli)/b.harga_beli*100):0;
     const marginColor=margin<0?'var(--red)':margin<10?'var(--amber)':'var(--green-dark)';
     const hppStok=bat.reduce((s,x)=>s+x.qty_sisa*x.harga_beli,0);
+    // Expired logic
+    const expiredBadge=(()=>{
+      if(!b.expired)return '';
+      const today=new Date();today.setHours(0,0,0,0);
+      const exp=new Date(b.expired);exp.setHours(0,0,0,0);
+      const diffDays=Math.round((exp-today)/(1000*60*60*24));
+      const expStr=exp.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+      if(diffDays<0)return `<span class="badge" style="background:#fee2e2;color:#b91c1c;font-size:9px">⚠️ EXPIRED ${expStr}</span>`;
+      if(diffDays<=90)return `<span class="badge" style="background:#fff7ed;color:#c2410c;font-size:9px">⏰ Exp ${expStr} (${diffDays}h lagi)</span>`;
+      return `<span class="badge" style="background:#f0fdf4;color:#166534;font-size:9px">📅 Exp ${expStr}</span>`;
+    })();
     return `<div class="stok-card" id="sc-${b.id}" onclick="toggleStokCard(${b.id})">
       <div class="stok-card-header">
         <div style="flex:1;min-width:0">
@@ -2646,12 +2725,16 @@ function renderStok(){
             ${isPPOB?'<span class="badge blue">∞ Unlimited</span>':b.stok===0?'<span class="badge red">Habis</span>':b.stok<=5?'<span class="badge low">Hampir habis</span>':''}
             ${bcTxt}
             ${ppobTxt}
+            ${expiredBadge}
           </div>
           <div class="stok-bar"><div class="stok-bar-fill" style="width:${stokPct}%;background:${stokColor}"></div></div>
         </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:10px">
-          <div style="font-size:18px;font-weight:800;color:${stokColor};font-family:\'Courier New\',monospace">${b.stok}</div>
-          <div style="font-size:10px;color:var(--text-muted)">${b.satuan||'pcs'}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:10px">
+          ${b.foto_url?`<img src="${b.foto_url}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1.5px solid var(--border);background:#f8f8f8" onerror="this.style.display='none'">`:'' }
+          <div style="text-align:right">
+            <div style="font-size:18px;font-weight:800;color:${stokColor};font-family:\'Courier New\',monospace">${b.stok}</div>
+            <div style="font-size:10px;color:var(--text-muted)">${b.satuan||'pcs'}</div>
+          </div>
         </div>
       </div>
       <div class="stok-card-body">
@@ -2729,26 +2812,80 @@ function openModalBarang(id, prefillBarcode=''){
     document.getElementById('b-dnilai').value=b.diskon_nilai||0;
     document.getElementById('b-barcode').value=b.barcode||'';
     document.getElementById('b-kategori').value=b.kategori||'warung';
+    document.getElementById('b-expired').value=b.expired||'';
+    document.getElementById('b-foto-url').value=b.foto_url||'';
+    if(b.foto_url){
+      document.getElementById('b-foto-img').src=b.foto_url;
+      document.getElementById('b-foto-preview').style.display='block';
+    } else {
+      document.getElementById('b-foto-preview').style.display='none';
+      document.getElementById('b-foto-img').src='';
+    }
     document.getElementById('modal-barang-title').textContent='Edit Barang';
     document.getElementById('btn-simpan-barang').textContent='Update';
   } else {
-    ['b-id','b-nama','b-harga','b-stok','b-hb','b-satuan','b-dnilai'].forEach(i=>document.getElementById(i).value='');
+    ['b-id','b-nama','b-harga','b-stok','b-hb','b-satuan','b-dnilai','b-expired'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('b-dtipe').value='';
     document.getElementById('b-barcode').value=prefillBarcode;
     document.getElementById('b-kategori').value=stokKategori||'warung';
+    document.getElementById('b-foto-url').value='';
+    document.getElementById('b-foto-file').value='';
+    document.getElementById('b-foto-preview').style.display='none';
+    document.getElementById('b-foto-img').src='';
     document.getElementById('modal-barang-title').textContent='Tambah Barang';
     document.getElementById('btn-simpan-barang').textContent='Simpan';
   }
   openModal('modal-barang');
 }
+async function previewFotoBarang(input){
+  if(!input.files||!input.files[0])return;
+  const file=input.files[0];
+  if(file.size>2*1024*1024){toast('Ukuran foto max 2MB',true);input.value='';return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('b-foto-img').src=e.target.result;
+    document.getElementById('b-foto-preview').style.display='block';
+    document.getElementById('b-foto-url').value=''; // will be set after upload
+  };
+  reader.readAsDataURL(file);
+}
+
+function hapusFotoBarang(){
+  document.getElementById('b-foto-file').value='';
+  document.getElementById('b-foto-img').src='';
+  document.getElementById('b-foto-preview').style.display='none';
+  document.getElementById('b-foto-url').value='';
+}
+
+async function uploadFotoBarang(file){
+  if(!file)return null;
+  const ext=file.name.split('.').pop();
+  const fname='barang/'+Date.now()+'.'+ext;
+  const{data,error}=await sb.storage.from('warung-assets').upload(fname,file,{upsert:true});
+  if(error){toast('Upload foto gagal: '+error.message,true);return null;}
+  const{data:urlData}=sb.storage.from('warung-assets').getPublicUrl(fname);
+  return urlData?.publicUrl||null;
+}
+
 async function simpanBarang(){
   const nama=document.getElementById('b-nama').value.trim(),harga=parseInt(document.getElementById('b-harga').value)||0,stok=parseInt(document.getElementById('b-stok').value)||0,hb=parseInt(document.getElementById('b-hb').value)||0,dTipe=document.getElementById('b-dtipe').value,dNilai=parseInt(document.getElementById('b-dnilai').value)||0;
   if(!nama||harga<=0){toast('Nama dan harga wajib diisi',true);return;}
   const barcode=document.getElementById('b-barcode').value.trim();
   const kategori=document.getElementById('b-kategori').value||'warung';
+  const expired=document.getElementById('b-expired').value||null;
   const id=document.getElementById('b-id').value;
-  if(id){await sb.from('barang').update({nama,harga,stok,harga_beli:hb,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori}).eq('id',parseInt(id));toast('Barang diperbarui');}
-  else{const{data:nb}=await sb.from('barang').insert([{nama,harga,stok,harga_beli:hb,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori}]).select().single();if(stok>0&&hb>0&&nb)await sb.from('stok_batch').insert([{barang_id:nb.id,qty_awal:stok,qty_sisa:stok,harga_beli:hb,harga_jual:harga}]);toast('Barang ditambahkan');}
+  // Upload foto jika ada file baru
+  const fotoFile=document.getElementById('b-foto-file').files[0];
+  let fotoUrl=document.getElementById('b-foto-url').value||null;
+  if(fotoFile){
+    const btn=document.getElementById('btn-simpan-barang');
+    btn.disabled=true;btn.textContent='Mengupload...';
+    fotoUrl=await uploadFotoBarang(fotoFile);
+    btn.disabled=false;btn.textContent='Simpan';
+  }
+  const satuan=document.getElementById('b-satuan').value.trim();
+  if(id){await sb.from('barang').update({nama,harga,stok,harga_beli:hb,satuan,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori,expired:expired||null,foto_url:fotoUrl||null}).eq('id',parseInt(id));toast('Barang diperbarui');}
+  else{const{data:nb}=await sb.from('barang').insert([{nama,harga,stok,harga_beli:hb,satuan,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori,expired:expired||null,foto_url:fotoUrl||null}]).select().single();if(stok>0&&hb>0&&nb)await sb.from('stok_batch').insert([{barang_id:nb.id,qty_awal:stok,qty_sisa:stok,harga_beli:hb,harga_jual:harga}]);toast('Barang ditambahkan');}
   closeModal('modal-barang');await lB();await lBatch();renderStok();filterSD('prod');filterSD('bprod');renderPaketBuilder();
 }
 async function hapusBarang(id){if(!confirm('Hapus barang?'))return;await sb.from('barang').delete().eq('id',id);await sb.from('stok_batch').delete().eq('barang_id',id);await lB();await lBatch();renderStok();filterSD('prod');toast('Dihapus');}
@@ -3541,6 +3678,58 @@ function renderDashboard(){
   renderDashAlerts();
   renderDashKas();
   renderDashTxLast();
+  renderDashExpired();
+}
+
+function renderDashExpired(){
+  const el=document.getElementById('dash-expired');
+  if(!el)return;
+  const warnings=getExpiredWarnings();
+  if(!warnings.length){el.style.display='none';return;}
+  el.style.display='block';
+  const expired=warnings.filter(w=>w.isExpired);
+  const soon=warnings.filter(w=>!w.isExpired);
+  const rows=warnings.map(w=>{
+    const diffStr=w.isExpired?`<span style="color:var(--red);font-weight:700">Sudah expired ${Math.abs(w.diffDays)}h lalu</span>`:
+      w.diffDays<=30?`<span style="color:var(--red)">${w.diffDays} hari lagi</span>`:
+      `<span style="color:var(--amber)">${w.diffDays} hari lagi</span>`;
+    const expStr=new Date(w.expired).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+    const hasPaket=aB.some(b=>b.kategori==='warung'&&b.id!==w.id);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      ${w.foto_url?`<img src="${w.foto_url}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'">`:'<div style="width:36px;height:36px;background:#f3f4f6;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>'}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;cursor:pointer" onclick="lihatExpiredDetail(${w.id})">${w.nama}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Exp: ${expStr} · Stok: ${w.stok} ${w.satuan||'pcs'} · ${diffStr}</div>
+      </div>
+      ${hasPaket?`<button onclick="buatPaketDariBarang(${w.id})" style="background:var(--amber);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">📦 Buat Paket</button>`:''}
+    </div>`;
+  }).join('');
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-weight:700;font-size:14px;color:var(--red)">
+        ⚠️ Barang Mendekati / Sudah Expired
+      </div>
+      <div style="font-size:11px;color:var(--text-muted)">${warnings.length} barang</div>
+    </div>
+    ${expired.length?`<div style="background:#fee2e2;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:12px;color:#b91c1c;font-weight:600">🔴 ${expired.length} barang sudah expired — segera cek stok!</div>`:''}
+    ${soon.length&&soon.filter(w=>w.diffDays<=30).length?`<div style="background:#fff7ed;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:12px;color:#c2410c">🟡 ${soon.filter(w=>w.diffDays<=30).length} barang expired dalam 30 hari</div>`:''}
+    <div>${rows}</div>
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);background:#fffbeb;border-radius:6px;padding:8px 10px;font-size:12px;color:#92400e">
+      💡 <strong>Tips:</strong> Buat paket bundling untuk barang mendekati expired agar cepat terjual.
+      <button onclick="showPage('paket',document.querySelector('[onclick*=paket]'))" style="margin-left:6px;background:var(--amber);color:white;border:none;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">Kelola Paket →</button>
+    </div>`;
+}
+
+function buatPaketDariBarang(barangId){
+  const b=aB.find(x=>x.id===barangId);if(!b)return;
+  showPage('paket',document.querySelector('[onclick*=paket]'));
+  setTimeout(()=>{
+    openModalPaket();
+    setTimeout(()=>{
+      const search=document.getElementById('paket-search-item');
+      if(search){search.value=b.nama;cariItemPaket();}
+    },300);
+  },200);
 }
 
 let dashTxTab='warung';
