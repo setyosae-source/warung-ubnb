@@ -4334,11 +4334,13 @@ async function simpanEditPPOB(){
   }).eq('id',id);
 
   // Koreksi mutasi kas - hapus mutasi lama lalu buat yang baru
-  // Hapus mutasi modal lama dari kas PPOB lama
+  // Hapus mutasi modal lama - spesifik berdasarkan keterangan & tanggal lama
+  const oldP=aPPOB.find(x=>x.id===id);
+  const oldKet='Modal PPOB: '+oldP?.produk+(oldP?.nama?' - '+oldP?.nama:'');
   if(oldKasId){
     await sb.from('kas_mutasi').delete()
       .eq('kas_id',oldKasId)
-      .like('keterangan','Modal PPOB:%')
+      .eq('keterangan',oldKet)
       .eq('tipe','keluar');
     // Insert mutasi modal baru
     if(newKasId){
@@ -4383,21 +4385,26 @@ async function hapusDariEditPPOB(){
 
 async function hapusPPOB(id){
   if(arguments.length===0||!id)return;
-  // Load data dulu untuk tahu kas_id
   const p=aPPOB.find(x=>x.id===id);
-  // Hapus mutasi kas terkait (Modal PPOB)
-  if(p?.kas_id){
+  if(!p)return;
+  // Buat keterangan spesifik untuk cari mutasi yang tepat
+  const ketModal='Modal PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
+  const ketBayar='Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
+  // Hapus mutasi modal dari kas PPOB (spesifik per tanggal & keterangan)
+  if(p.kas_id){
     await sb.from('kas_mutasi').delete()
       .eq('kas_id',p.kas_id)
-      .like('keterangan','Modal PPOB:%');
+      .eq('keterangan',ketModal)
+      .eq('tanggal',p.tanggal);
   }
-  // Hapus mutasi bayar di kas utama jika lunas
-  if(p?.status_bayar==='lunas'){
+  // Hapus mutasi bayar dari kas utama jika lunas
+  if(p.status_bayar==='lunas'){
     const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');});
     if(kasUtama){
       await sb.from('kas_mutasi').delete()
         .eq('kas_id',kasUtama.id)
-        .like('keterangan','Bayar PPOB:%');
+        .eq('keterangan',ketBayar)
+        .eq('tanggal',p.tanggal);
     }
   }
   // Hapus transaksi
