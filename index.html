@@ -1205,6 +1205,33 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   </div>
 </div>
 
+<!-- MODAL EDIT MUTASI -->
+<div class="modal-overlay" id="modal-edit-mutasi">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Mutasi Kas</div>
+    <input type="hidden" id="edit-mutasi-id"/>
+    <input type="hidden" id="edit-mutasi-kas-id"/>
+    <input type="hidden" id="edit-mutasi-old-jumlah"/>
+    <input type="hidden" id="edit-mutasi-old-tipe"/>
+    <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;color:var(--green-dark)" id="edit-mutasi-kas-info"></div>
+    <div class="irow"><label>Tanggal</label><input type="date" id="edit-mutasi-tgl"/></div>
+    <div class="irow"><label>Tipe</label>
+      <select id="edit-mutasi-tipe">
+        <option value="masuk">➕ Top Up Saldo</option>
+        <option value="komisi">🎁 Komisi</option>
+        <option value="keluar">➖ Koreksi / Pengeluaran</option>
+      </select>
+    </div>
+    <div class="irow"><label>Jumlah</label><input type="number" id="edit-mutasi-jumlah" placeholder="0"/></div>
+    <div class="irow"><label>Keterangan</label><input type="text" id="edit-mutasi-ket" placeholder="Keterangan..."/></div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal('modal-edit-mutasi')" style="flex:1">Batal</button>
+      <button class="btn primary" onclick="simpanEditMutasi()" style="flex:2">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL DETAIL PPOB -->
 <div class="modal-overlay" id="modal-ppob-detail">
   <div class="modal">
@@ -1664,11 +1691,17 @@ function showPage(id,btn){
   if(id==='opname')renderOpnameRiwayat();
   if(id==='dashboard')renderDashboard();
   if(id==='pesanan')loadPesanan();
-  if(id==='setting-toko')loadSettingToko();
+  if(id==='setting-toko'){
+    if(!CU||CU.role!=='pemilik'){toast('Halaman ini hanya untuk pemilik',true);goToPage('dashboard');return;}
+    loadSettingToko();
+  }
   if(id==='ppob'){initPPOBForm();}
   if(id==='ppob-riwayat')renderPPOBRiwayat();
   if(id==='ppob-laporan')renderPPOBLaporan();
-  if(id==='kas')renderKas();
+  if(id==='kas'){
+    if(!CU||CU.role!=='pemilik'){toast('Halaman ini hanya untuk pemilik',true);goToPage('dashboard');return;}
+    renderKas();
+  }
 }
 function restorePage(){
   const lastPage=localStorage.getItem('wu_page');
@@ -3959,16 +3992,26 @@ async function renderKasMutasi(){
       m.tipe==='masuk'?'<span class="badge ok" style="font-size:10px">➕ Masuk</span>':
       '<span class="badge red" style="font-size:10px">➖ Keluar</span>';
     const isMasuk=m.tipe==='masuk';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${m.keterangan||'-'}</div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-          ${katBadge}
-          <span style="font-size:11px;color:var(--text-muted)">${tgl} · ${kas?.nama||'-'} · ${m.operator||'-'}</span>
+    // Hanya mutasi manual (bukan dari transaksi PPOB/import) yang bisa diedit
+    const isManual=m.operator!=='import'&&(m.kategori==='masuk'||m.kategori==='keluar'||m.kategori==='komisi')&&!m.keterangan?.startsWith('Modal PPOB')&&!m.keterangan?.startsWith('Bayar PPOB');
+    return `<div style="background:white;border-radius:var(--radius-sm);border:1.5px solid var(--border);padding:10px 14px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;margin-bottom:3px">${m.keterangan||'-'}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            ${katBadge}
+            <span style="font-size:11px;color:var(--text-muted)">${tgl} · ${kas?.nama||'-'} · ${m.operator||'-'}</span>
+          </div>
         </div>
-      </div>
-      <div style="font-weight:800;font-family:'Courier New',monospace;font-size:15px;flex-shrink:0;color:${isMasuk?'var(--green)':'var(--red)'}">
-        ${isMasuk?'+':'-'}${fmt(m.jumlah)}
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-weight:800;font-family:'Courier New',monospace;font-size:15px;color:${isMasuk?'var(--green)':'var(--red)'}">
+            ${isMasuk?'+':'-'}${fmt(m.jumlah)}
+          </div>
+          ${isManual?`<div style="display:flex;gap:4px;justify-content:flex-end;margin-top:6px">
+            <button class="btn xs" onclick="editMutasi(${m.id})">✏️</button>
+            <button class="btn xs danger" onclick="hapusMutasi(${m.id})">🗑️</button>
+          </div>`:''}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -4080,6 +4123,71 @@ function openModalTopUp(kasId){
   const sumberIrow=document.getElementById('topup-sumber')?.closest('.irow');
   if(sumberIrow)sumberIrow.style.display='none';
   openModal('modal-topup-kas');
+}
+
+async function editMutasi(id){
+  // Load mutasi data
+  const{data:m}=await sb.from('kas_mutasi').select('*').eq('id',id).single();
+  if(!m){toast('Data tidak ditemukan',true);return;}
+  const kas=aKas.find(k=>k.id===m.kas_id);
+  document.getElementById('edit-mutasi-id').value=id;
+  document.getElementById('edit-mutasi-kas-id').value=m.kas_id;
+  document.getElementById('edit-mutasi-old-jumlah').value=m.jumlah;
+  document.getElementById('edit-mutasi-old-tipe').value=m.tipe;
+  document.getElementById('edit-mutasi-kas-info').innerHTML=`<span style="font-weight:700">${kas?.nama||'-'}</span><br>Saldo saat ini: <span style="color:var(--green-dark)">${fmt(kas?.saldo||0)}</span>`;
+  document.getElementById('edit-mutasi-tgl').value=m.tanggal||new Date(m.created_at).toISOString().slice(0,10);
+  document.getElementById('edit-mutasi-tipe').value=m.kategori||m.tipe;
+  document.getElementById('edit-mutasi-jumlah').value=m.jumlah;
+  document.getElementById('edit-mutasi-ket').value=m.keterangan||'';
+  openModal('modal-edit-mutasi');
+}
+
+async function simpanEditMutasi(){
+  const id=parseInt(document.getElementById('edit-mutasi-id').value);
+  const kasId=parseInt(document.getElementById('edit-mutasi-kas-id').value);
+  const oldJumlah=parseFloat(document.getElementById('edit-mutasi-old-jumlah').value)||0;
+  const oldTipe=document.getElementById('edit-mutasi-old-tipe').value;
+  const tipe=document.getElementById('edit-mutasi-tipe').value;
+  const jumlah=parseFloat(document.getElementById('edit-mutasi-jumlah').value)||0;
+  const ket=document.getElementById('edit-mutasi-ket').value.trim();
+  const tgl=document.getElementById('edit-mutasi-tgl').value;
+  if(!jumlah){toast('Masukkan jumlah',true);return;}
+  const isMasukNew=tipe==='masuk'||tipe==='komisi';
+  const isMasukOld=oldTipe==='masuk';
+  // Update mutasi record
+  await sb.from('kas_mutasi').update({
+    tipe:isMasukNew?'masuk':'keluar',
+    kategori:tipe,
+    jumlah,keterangan:ket,tanggal:tgl
+  }).eq('id',id);
+  // Koreksi saldo kas
+  const kas=aKas.find(k=>k.id===kasId);
+  if(kas){
+    // Balik efek lama
+    let newSaldo=kas.saldo;
+    if(isMasukOld)newSaldo-=oldJumlah; else newSaldo+=oldJumlah;
+    // Terapkan efek baru
+    if(isMasukNew)newSaldo+=jumlah; else newSaldo-=jumlah;
+    await sb.from('kas').update({saldo:newSaldo}).eq('id',kasId);
+  }
+  await lKas();renderKas();closeModal('modal-edit-mutasi');
+  toast('Mutasi berhasil diperbarui!');
+}
+
+async function hapusMutasi(id){
+  if(!confirm('Hapus mutasi ini? Saldo kas akan disesuaikan.'))return;
+  const{data:m}=await sb.from('kas_mutasi').select('*').eq('id',id).single();
+  if(!m){toast('Data tidak ditemukan',true);return;}
+  // Koreksi saldo kas
+  const kas=aKas.find(k=>k.id===m.kas_id);
+  if(kas){
+    const isMasuk=m.tipe==='masuk';
+    const newSaldo=isMasuk?kas.saldo-m.jumlah:kas.saldo+m.jumlah;
+    await sb.from('kas').update({saldo:newSaldo}).eq('id',m.kas_id);
+  }
+  await sb.from('kas_mutasi').delete().eq('id',id);
+  await lKas();renderKas();
+  toast('Mutasi dihapus & saldo disesuaikan');
 }
 
 function updateTopupUI(){
