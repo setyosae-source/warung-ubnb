@@ -1205,17 +1205,29 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 <div class="modal-overlay" id="modal-topup-kas">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">💰 Top Up Kas</div>
+    <div class="modal-title">💰 Mutasi Kas</div>
     <input type="hidden" id="topup-kas-id"/>
     <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;color:var(--green-dark)" id="topup-kas-info"></div>
-    <div class="irow"><label>Tipe</label>
-      <select id="topup-tipe">
-        <option value="masuk">➕ Tambah Saldo (Top Up)</option>
-        <option value="keluar">➖ Kurangi Saldo (Koreksi)</option>
+    <div class="irow"><label>Tanggal</label><input type="date" id="topup-tgl"/></div>
+    <div class="irow"><label>Tipe Mutasi</label>
+      <select id="topup-tipe" onchange="updateTopupUI()">
+        <option value="masuk">➕ Top Up Saldo</option>
+        <option value="komisi">🎁 Terima Komisi</option>
+        <option value="keluar">➖ Koreksi / Pengeluaran</option>
+      </select>
+    </div>
+    <div id="topup-komisi-info" style="display:none;background:var(--amber-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;font-size:12px;color:var(--amber)">
+      💡 Komisi dari BL/IG akan menambah saldo kas dan tercatat terpisah di laporan.
+    </div>
+    <div class="irow"><label>Sumber Komisi</label>
+      <select id="topup-sumber" style="display:none">
+        <option value="Bukalapak">Bukalapak (BL)</option>
+        <option value="Indogrosir">Indogrosir (IG)</option>
+        <option value="Lainnya">Lainnya</option>
       </select>
     </div>
     <div class="irow"><label>Jumlah</label><input type="number" id="topup-jumlah" placeholder="0"/></div>
-    <div class="irow"><label>Keterangan</label><input type="text" id="topup-ket" placeholder="Keterangan top up"/></div>
+    <div class="irow"><label>Keterangan</label><input type="text" id="topup-ket" placeholder="Keterangan..."/></div>
     <div class="btn-row">
       <button class="btn" onclick="closeModal('modal-topup-kas')" style="flex:1">Batal</button>
       <button class="btn primary" onclick="simpanTopUp()" style="flex:2">💾 Simpan</button>
@@ -3851,8 +3863,9 @@ function renderKas(){
         <div style="font-size:20px;font-weight:800;font-family:'Courier New',monospace;color:${k.saldo>=0?'var(--green)':'var(--red)'}">${fmt(k.saldo)}</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn sm primary" onclick="openModalTopUp(${k.id})" style="flex:1">💰 Top Up / Koreksi</button>
-        <button class="btn sm" onclick="openModalKas(${k.id})" style="flex:1">✏️ Edit</button>
+        <button class="btn sm primary" onclick="openModalTopUp(${k.id})" style="flex:1">💰 Mutasi</button>
+        <button class="btn sm amber" onclick="openModalKomisi(${k.id})" style="flex:1">🎁 Komisi</button>
+        <button class="btn sm" onclick="openModalKas(${k.id})">✏️</button>
         <button class="btn sm danger" onclick="hapusKas(${k.id})">🗑️</button>
       </div>
     </div>`).join('');
@@ -3868,15 +3881,23 @@ async function renderKasMutasi(){
   if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
   el.innerHTML=data.map(m=>{
     const kas=aKas.find(k=>k.id===m.kas_id);
-    const tgl=new Date(m.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
-    const jam=new Date(m.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+    const tglSrc=m.tanggal?new Date(m.tanggal+'T00:00:00'):new Date(m.created_at);
+    const tgl=tglSrc.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+    const kat=m.kategori||m.tipe;
+    const katBadge=kat==='komisi'?'<span class="badge amber" style="font-size:10px">🎁 Komisi</span>':
+      m.tipe==='masuk'?'<span class="badge ok" style="font-size:10px">➕ Masuk</span>':
+      '<span class="badge red" style="font-size:10px">➖ Keluar</span>';
+    const isMasuk=m.tipe==='masuk';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600">${m.keterangan||'-'}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${tgl} ${jam} · ${kas?.nama||'-'} · ${m.operator||'-'}</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${m.keterangan||'-'}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+          ${katBadge}
+          <span style="font-size:11px;color:var(--text-muted)">${tgl} · ${kas?.nama||'-'} · ${m.operator||'-'}</span>
+        </div>
       </div>
-      <div style="font-weight:800;font-family:'Courier New',monospace;font-size:14px;flex-shrink:0;margin-left:10px;color:${m.tipe==='masuk'?'var(--green)':'var(--red)'}">
-        ${m.tipe==='masuk'?'+':'-'}${fmt(m.jumlah)}
+      <div style="font-weight:800;font-family:'Courier New',monospace;font-size:15px;flex-shrink:0;color:${isMasuk?'var(--green)':'var(--red)'}">
+        ${isMasuk?'+':'-'}${fmt(m.jumlah)}
       </div>
     </div>`;
   }).join('');
@@ -3957,6 +3978,15 @@ async function simpanKas(){
   toast(id?'Kas diperbarui':'Kas ditambahkan');
 }
 
+function openModalKomisi(kasId){
+  // Buka modal top up langsung dengan tipe komisi
+  openModalTopUp(kasId);
+  setTimeout(()=>{
+    document.getElementById('topup-tipe').value='komisi';
+    updateTopupUI();
+  },100);
+}
+
 async function hapusKas(id){
   if(!confirm('Hapus akun kas ini?'))return;
   await sb.from('kas').delete().eq('id',id);
@@ -3966,11 +3996,35 @@ async function hapusKas(id){
 function openModalTopUp(kasId){
   const k=aKas.find(x=>x.id===kasId);if(!k)return;
   document.getElementById('topup-kas-id').value=kasId;
-  document.getElementById('topup-kas-info').textContent=k.nama+' — Saldo: '+fmt(k.saldo);
+  document.getElementById('topup-kas-info').innerHTML=`<span style="font-weight:700">${k.nama}</span><br>Saldo saat ini: <span style="color:var(--green-dark)">${fmt(k.saldo)}</span>`;
   document.getElementById('topup-jumlah').value='';
   document.getElementById('topup-ket').value='';
   document.getElementById('topup-tipe').value='masuk';
+  document.getElementById('topup-tgl').value=new Date().toISOString().slice(0,10);
+  // Reset UI
+  document.getElementById('topup-komisi-info').style.display='none';
+  document.getElementById('topup-sumber').style.display='none';
+  const sumberIrow=document.getElementById('topup-sumber')?.closest('.irow');
+  if(sumberIrow)sumberIrow.style.display='none';
   openModal('modal-topup-kas');
+}
+
+function updateTopupUI(){
+  const tipe=document.getElementById('topup-tipe').value;
+  const komisiInfo=document.getElementById('topup-komisi-info');
+  const sumberRow=document.getElementById('topup-sumber');
+  const sumberIrow=sumberRow?.closest('.irow');
+  if(tipe==='komisi'){
+    komisiInfo.style.display='block';
+    if(sumberIrow)sumberIrow.style.display='';
+    sumberRow.style.display='';
+    document.getElementById('topup-ket').placeholder='Keterangan komisi (opsional)';
+  } else {
+    komisiInfo.style.display='none';
+    if(sumberIrow)sumberIrow.style.display='none';
+    sumberRow.style.display='none';
+    document.getElementById('topup-ket').placeholder=tipe==='masuk'?'Keterangan top up':'Keterangan pengeluaran/koreksi';
+  }
 }
 
 async function simpanTopUp(){
@@ -3978,13 +4032,33 @@ async function simpanTopUp(){
   const tipe=document.getElementById('topup-tipe').value;
   const jumlah=parseFloat(document.getElementById('topup-jumlah').value)||0;
   const ket=document.getElementById('topup-ket').value.trim();
+  const tgl=document.getElementById('topup-tgl').value||new Date().toISOString().slice(0,10);
+  const sumber=tipe==='komisi'?document.getElementById('topup-sumber').value:'';
   if(!jumlah){toast('Masukkan jumlah',true);return;}
   const kas=aKas.find(k=>k.id===kasId);if(!kas)return;
-  const newSaldo=tipe==='masuk'?kas.saldo+jumlah:kas.saldo-jumlah;
+  // Komisi & top up = masuk, keluar = kurangi
+  const isMasuk=tipe==='masuk'||tipe==='komisi';
+  const newSaldo=isMasuk?kas.saldo+jumlah:kas.saldo-jumlah;
   await sb.from('kas').update({saldo:newSaldo}).eq('id',kasId);
-  await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe,jumlah,keterangan:ket||'Top Up',operator:CU.username}]);
+  // Keterangan otomatis untuk komisi
+  let keterangan=ket;
+  if(tipe==='komisi'){
+    keterangan=('Komisi '+(sumber||'')+(ket?' - '+ket:'')).trim();
+  } else if(!ket){
+    keterangan=tipe==='masuk'?'Top Up':'Koreksi/Pengeluaran';
+  }
+  await sb.from('kas_mutasi').insert([{
+    kas_id:kasId,
+    tipe:isMasuk?'masuk':'keluar',
+    kategori:tipe, // masuk/komisi/keluar
+    jumlah,
+    keterangan,
+    tanggal:tgl,
+    operator:CU.username
+  }]);
   await lKas();renderKas();closeModal('modal-topup-kas');
-  toast(tipe==='masuk'?'Saldo ditambahkan!':'Saldo dikurangi!');
+  const msg=tipe==='komisi'?'Komisi berhasil dicatat!':isMasuk?'Saldo ditambahkan!':'Saldo dikurangi!';
+  toast(msg);
 }
 
 /* IMPORT PPOB DATA */
