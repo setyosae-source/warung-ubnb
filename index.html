@@ -1235,6 +1235,45 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   </div>
 </div>
 
+<!-- MODAL EDIT PPOB -->
+<div class="modal-overlay" id="modal-edit-ppob">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Edit Transaksi PPOB</div>
+    <input type="hidden" id="ep-id"/>
+    <input type="hidden" id="ep-old-kas-id"/>
+    <input type="hidden" id="ep-old-hbeli"/>
+    <input type="hidden" id="ep-old-hjual"/>
+    <input type="hidden" id="ep-old-status"/>
+    <div class="irow"><label>Tanggal</label><input type="date" id="ep-tgl"/></div>
+    <div class="irow"><label>Kas</label>
+      <select id="ep-kas">
+        <option value="">Pilih Kas...</option>
+      </select>
+    </div>
+    <div class="irow"><label>Produk / Layanan</label><input type="text" id="ep-produk"/></div>
+    <div class="irow"><label>Nama Pelanggan</label><input type="text" id="ep-nama"/></div>
+    <div class="irow"><label>Catatan</label><input type="text" id="ep-catatan"/></div>
+    <div class="two-col">
+      <div class="irow"><label>Harga Beli</label><input type="number" id="ep-hbeli" oninput="hitungUntungEdit()"/></div>
+      <div class="irow"><label>Harga Jual</label><input type="number" id="ep-hjual" oninput="hitungUntungEdit()"/></div>
+    </div>
+    <div id="ep-untung-info" style="background:var(--green-light);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;margin-bottom:10px">
+      💵 Keuntungan: <strong id="ep-untung-txt" style="color:var(--green-dark)">-</strong>
+    </div>
+    <div class="irow"><label>Status Bayar</label>
+      <select id="ep-status">
+        <option value="belum">⏳ Belum Bayar</option>
+        <option value="lunas">✅ Lunas</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal('modal-edit-ppob')" style="flex:1">Batal</button>
+      <button class="btn primary" onclick="simpanEditPPOB()" style="flex:2">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL DETAIL PPOB -->
 <div class="modal-overlay" id="modal-ppob-detail">
   <div class="modal">
@@ -3798,7 +3837,7 @@ function renderPPOBRiwayat(){
   if(sampai)data=data.filter(p=>p.tanggal<=sampai);
   if(ppobFilter==='lunas')data=data.filter(p=>p.status_bayar==='lunas');
   if(ppobFilter==='belum')data=data.filter(p=>p.status_bayar==='belum');
-  
+
   // Summary
   const totalBeli=data.reduce((s,p)=>s+p.harga_beli,0);
   const totalJual=data.reduce((s,p)=>s+p.harga_jual,0);
@@ -3809,27 +3848,30 @@ function renderPPOBRiwayat(){
     <div class="stat-card" style="border-left:4px solid var(--amber)"><div class="stat-label">Total Modal</div><div class="stat-value amber">${fmt(totalBeli)}</div></div>
     <div class="stat-card" style="border-left:4px solid var(--purple)"><div class="stat-label">Keuntungan</div><div class="stat-value purple">${fmt(totalUntung)}</div></div>
     <div class="stat-card" style="border-left:4px solid var(--red)"><div class="stat-label">Belum Bayar</div><div class="stat-value red">${belum.length} tx</div></div>`;
-  
+
   const el=document.getElementById('ppob-riwayat-list');
   if(!data.length){el.innerHTML='<div class="empty"><div class="ei">⚡</div>Tidak ada data</div>';return;}
   el.innerHTML=data.map(p=>{
     const kas=aKas.find(k=>k.id===p.kas_id);
     const untung=p.harga_jual-p.harga_beli;
-    return `<div style="background:white;border-radius:var(--radius-sm);border:1.5px solid var(--border);padding:12px 14px;margin-bottom:8px;cursor:pointer" onclick="bukaPPOBDetail(${p.id})">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-        <div>
-          <div style="font-weight:700;font-size:14px">${p.produk}</div>
-          <div style="font-size:12px;color:var(--text-muted)">${p.tanggal} · ${p.nama||'-'}</div>
-          ${p.catatan?`<div style="font-size:11px;color:var(--text-muted)">📝 ${p.catatan}</div>`:''}
-          ${kas?`<div style="font-size:11px;color:var(--text-muted)">💰 ${kas.nama}</div>`:''}
-        </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:10px">
-          <div style="font-weight:800;font-family:'Courier New',monospace;color:var(--green)">${fmt(p.harga_jual)}</div>
-          <div style="font-size:11px;color:${untung>=0?'var(--purple)':'var(--red)'};font-weight:600">+${fmt(untung)}</div>
-          <span class="badge ${p.status_bayar==='lunas'?'lunas':'belum'}">${p.status_bayar==='lunas'?'Lunas':'Belum'}</span>
-        </div>
-      </div>
-    </div>`;
+    const isLunas=p.status_bayar==='lunas';
+    return '<div style="background:white;border-radius:var(--radius-sm);border:1.5px solid var(--border);padding:12px 14px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+      +'<div><div style="font-weight:700;font-size:14px">'+p.produk+'</div>'
+      +'<div style="font-size:12px;color:var(--text-muted)">'+p.tanggal+' · '+(p.nama||'-')+'</div>'
+      +(p.catatan?'<div style="font-size:11px;color:var(--text-muted)">📝 '+p.catatan+'</div>':'')
+      +(kas?'<div style="font-size:11px;color:var(--text-muted)">💰 '+kas.nama+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right;flex-shrink:0;margin-left:10px">'
+      +'<div style="font-weight:800;font-family:'Courier New',monospace;color:var(--green)">'+fmt(p.harga_jual)+'</div>'
+      +'<div style="font-size:11px;color:'+(untung>=0?'var(--purple)':'var(--red)')+';font-weight:600">+'+fmt(untung)+'</div>'
+      +'<span class="badge '+(isLunas?'lunas':'belum')+'">'+(isLunas?'Lunas':'Belum')+'</span>'
+      +'</div></div>'
+      +'<div style="display:flex;gap:6px;margin-top:8px">'
+      +(!isLunas?'<button class="btn sm primary" onclick="lunasiPPOB('+p.id+')" style="flex:1">✓ Lunas</button>':'')
+      +'<button class="btn sm" onclick="editPPOB('+p.id+')" style="flex:1">✏️ Edit</button>'
+      +'<button class="btn sm teal" onclick="bukaPPOBDetail('+p.id+')" style="flex:1">📋 Detail</button>'
+      +'</div></div>';
   }).join('');
 }
 
@@ -3878,6 +3920,100 @@ async function lunasiPPOB(id){
   await lKas();await lPPOB();await lH();
   renderPPOBRiwayat();renderKas();renderHutang();renderDashKas();
   toast('PPOB ditandai lunas — pembayaran masuk Kas Utama');
+}
+
+function editPPOB(id){
+  const p=aPPOB.find(x=>x.id===id);if(!p)return;
+  document.getElementById('ep-id').value=id;
+  document.getElementById('ep-old-kas-id').value=p.kas_id||'';
+  document.getElementById('ep-old-hbeli').value=p.harga_beli||0;
+  document.getElementById('ep-old-hjual').value=p.harga_jual||0;
+  document.getElementById('ep-old-status').value=p.status_bayar||'belum';
+  document.getElementById('ep-tgl').value=p.tanggal||'';
+  document.getElementById('ep-produk').value=p.produk||'';
+  document.getElementById('ep-nama').value=p.nama||'';
+  document.getElementById('ep-catatan').value=p.catatan||'';
+  document.getElementById('ep-hbeli').value=p.harga_beli||0;
+  document.getElementById('ep-hjual').value=p.harga_jual||0;
+  document.getElementById('ep-status').value=p.status_bayar||'belum';
+  // Fill kas dropdown
+  const sel=document.getElementById('ep-kas');
+  const kasFilter=aKas.filter(k=>{const m=k.modul||'warung,ppob';return m.includes('ppob');});
+  sel.innerHTML='<option value="">Pilih Kas...</option>'+(kasFilter.length?kasFilter:aKas).map(k=>`<option value="${k.id}"${k.id===p.kas_id?' selected':''}>${k.nama}</option>`).join('');
+  hitungUntungEdit();
+  openModal('modal-edit-ppob');
+}
+
+function hitungUntungEdit(){
+  const hb=parseFloat(document.getElementById('ep-hbeli').value)||0;
+  const hj=parseFloat(document.getElementById('ep-hjual').value)||0;
+  const untung=hj-hb;
+  const el=document.getElementById('ep-untung-txt');
+  el.textContent=fmt(untung);
+  el.style.color=untung>=0?'var(--green-dark)':'var(--red)';
+}
+
+async function simpanEditPPOB(){
+  const id=parseInt(document.getElementById('ep-id').value);
+  const oldKasId=parseInt(document.getElementById('ep-old-kas-id').value)||0;
+  const oldHbeli=parseFloat(document.getElementById('ep-old-hbeli').value)||0;
+  const oldHjual=parseFloat(document.getElementById('ep-old-hjual').value)||0;
+  const oldStatus=document.getElementById('ep-old-status').value;
+  const newKasId=parseInt(document.getElementById('ep-kas').value)||0;
+  const tgl=document.getElementById('ep-tgl').value;
+  const produk=document.getElementById('ep-produk').value.trim();
+  const nama=document.getElementById('ep-nama').value.trim();
+  const catatan=document.getElementById('ep-catatan').value.trim();
+  const hbeli=parseFloat(document.getElementById('ep-hbeli').value)||0;
+  const hjual=parseFloat(document.getElementById('ep-hjual').value)||0;
+  const status=document.getElementById('ep-status').value;
+  if(!produk){toast('Produk wajib diisi',true);return;}
+  if(!hbeli||!hjual){toast('Harga beli & jual wajib diisi',true);return;}
+
+  // Update PPOB record
+  await sb.from('ppob').update({
+    tanggal:tgl,kas_id:newKasId,produk,nama,catatan,
+    harga_beli:hbeli,harga_jual:hjual,status_bayar:status
+  }).eq('id',id);
+
+  // Koreksi mutasi kas - hapus mutasi lama lalu buat yang baru
+  // Hapus mutasi modal lama dari kas PPOB lama
+  if(oldKasId){
+    await sb.from('kas_mutasi').delete()
+      .eq('kas_id',oldKasId)
+      .like('keterangan','Modal PPOB:%')
+      .eq('tipe','keluar');
+    // Insert mutasi modal baru
+    if(newKasId){
+      await sb.from('kas_mutasi').insert([{
+        kas_id:newKasId,tipe:'keluar',kategori:'keluar',
+        jumlah:hbeli,tanggal:tgl,
+        keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
+        operator:CU.username
+      }]);
+    }
+  }
+
+  // Jika status berubah ke lunas, tambah mutasi ke kas utama
+  const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');})||
+    aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
+  if(status==='lunas'&&oldStatus==='belum'&&kasUtama){
+    await sb.from('kas_mutasi').insert([{
+      kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
+      jumlah:hjual,tanggal:tgl,
+      keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
+      operator:CU.username
+    }]);
+  }
+
+  // Recalc saldo semua kas yang terdampak
+  const kasIds=[...new Set([oldKasId,newKasId,kasUtama?.id].filter(Boolean))];
+  for(const kid of kasIds) await recalcSaldo(kid);
+
+  await lKas();await lPPOB();
+  renderPPOBRiwayat();renderKas();
+  closeModal('modal-edit-ppob');
+  toast('Transaksi PPOB berhasil diperbarui!');
 }
 
 async function hapusPPOB(id){
