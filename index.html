@@ -4478,26 +4478,27 @@ async function editMutasi(id){
 
 async function simpanEditMutasi(){
   const id=parseInt(document.getElementById('edit-mutasi-id').value);
-  const kasId=parseInt(document.getElementById('edit-mutasi-kas-id').value);
-  const oldJumlah=parseFloat(document.getElementById('edit-mutasi-old-jumlah').value)||0;
-  const oldTipe=document.getElementById('edit-mutasi-old-tipe').value;
+  const oldKasId=parseInt(document.getElementById('edit-mutasi-kas-id').value);
+  const newKasId=parseInt(document.getElementById('edit-mutasi-kas-select').value)||oldKasId;
   const tipe=document.getElementById('edit-mutasi-tipe').value;
   const jumlah=parseFloat(document.getElementById('edit-mutasi-jumlah').value)||0;
   const ket=document.getElementById('edit-mutasi-ket').value.trim();
   const tgl=document.getElementById('edit-mutasi-tgl').value;
   if(!jumlah){toast('Masukkan jumlah',true);return;}
-  const isMasukNew=tipe==='masuk'||tipe==='komisi';
-  const isMasukOld=oldTipe==='masuk';
-  // Update mutasi record
+  const isMasuk=tipe==='masuk'||tipe==='komisi';
+  // Update mutasi - termasuk pindah kas jika berubah
   await sb.from('kas_mutasi').update({
-    tipe:isMasukNew?'masuk':'keluar',
+    kas_id:newKasId,
+    tipe:isMasuk?'masuk':'keluar',
     kategori:tipe,
     jumlah,keterangan:ket,tanggal:tgl
   }).eq('id',id);
-  // Recalc saldo dari semua mutasi
-  await recalcSaldo(kasId);
-  await lKas();renderKas();closeModal('modal-edit-mutasi');
-  toast('Mutasi berhasil diperbarui!');
+  // Recalc saldo semua kas terdampak
+  const kasIds=[...new Set([oldKasId,newKasId].filter(Boolean))];
+  for(const kid of kasIds) await recalcSaldo(kid);
+  await lKas();renderKas();renderKasMutasi();closeModal('modal-edit-mutasi');
+  const kasNama=aKas.find(k=>k.id===newKasId)?.nama||'';
+  toast(oldKasId!==newKasId?'Mutasi dipindah ke '+kasNama+'!':'Mutasi berhasil diperbarui!');
 }
 
 async function hapusMutasi(id){
