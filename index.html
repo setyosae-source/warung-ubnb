@@ -381,7 +381,6 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
             <button class="nav-item" onclick="showPage('ppob',this)"><span class="ni">⚡</span>Transaksi PPOB</button>
             <button class="nav-item" onclick="showPage('ppob-riwayat',this)"><span class="ni">📋</span>Riwayat PPOB</button>
             <button class="nav-item" onclick="showPage('ppob-laporan',this)"><span class="ni">📊</span>Laporan PPOB</button>
-            <button class="nav-item role-pemilik-only" onclick="showPage('kas',this)"><span class="ni">💰</span>Manajemen Kas</button>
           </div>
         </div>
         <div class="nav-group">
@@ -391,6 +390,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div class="nav-group-items open">
             <button class="nav-item" onclick="showPage('hutang',this)"><span class="ni">📒</span>Hutang & Piutang</button>
             <button class="nav-item" onclick="showPage('laporan',this)"><span class="ni">📊</span>Laporan</button>
+            <button class="nav-item role-pemilik-only" onclick="showPage('kas',this)"><span class="ni">💰</span>Manajemen Kas</button>
           </div>
         </div>
 
@@ -1184,6 +1184,16 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <div class="irow"><label>Nama Kas</label><input type="text" id="kas-nama" placeholder="Nama akun kas"/></div>
     <div class="irow"><label>Saldo Awal</label><input type="number" id="kas-saldo" placeholder="0"/></div>
     <div class="irow"><label>Keterangan</label><input type="text" id="kas-ket" placeholder="Keterangan (opsional)"/></div>
+    <div class="irow"><label>Dipakai di Modul</label>
+      <div style="display:flex;gap:12px;padding:8px 0;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="kas-modul-warung" style="width:16px;height:16px;accent-color:var(--green)"/> 🏪 Warung
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="kas-modul-ppob" style="width:16px;height:16px;accent-color:var(--blue)"/> ⚡ PPOB
+        </label>
+      </div>
+    </div>
     <div class="btn-row">
       <button class="btn" onclick="closeModal('modal-kas')" style="flex:1">Batal</button>
       <button class="btn primary" onclick="simpanKas()" style="flex:2">💾 Simpan</button>
@@ -3151,10 +3161,11 @@ function renderDashKas(){
   const totalSaldo=aKas.reduce((s,k)=>s+k.saldo,0);
   el.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">
     ${aKas.map(k=>{
-      const isPPOB=k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir')||k.nama.toLowerCase().includes('ppob');
-      const isUtama=k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara')||k.nama.toLowerCase().includes('buku');
-      const color=isPPOB?'var(--blue)':isUtama?'var(--green)':'var(--amber)';
-      const icon=isPPOB?'⚡':isUtama?'🏦':'📒';
+      const modul=k.modul||'warung,ppob';
+      const isPPOB=modul.includes('ppob')&&!modul.includes('warung');
+      const isBoth=modul.includes('ppob')&&modul.includes('warung');
+      const color=isBoth?'var(--purple)':isPPOB?'var(--blue)':'var(--green)';
+      const icon=isBoth?'🔄':isPPOB?'⚡':'🏦';
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);border-left:3px solid ${color}">
         <div>
           <div style="font-size:12px;font-weight:600">${icon} ${k.nama}</div>
@@ -3515,7 +3526,11 @@ function initPPOBForm(){
   document.getElementById('ppob-tgl').value=new Date().toISOString().slice(0,10);
   // Isi dropdown kas - hanya Bukalapak & Indogrosir
   const sel=document.getElementById('ppob-kas');
-  const kasFilter=aKas.filter(k=>k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir'));
+  // Filter kas yang aktif untuk modul PPOB
+  const kasFilter=aKas.filter(k=>{
+    const modul=k.modul||'warung,ppob';
+    return modul.includes('ppob');
+  });
   sel.innerHTML='<option value="">Pilih Kas...</option>'+(kasFilter.length?kasFilter:aKas).map(k=>`<option value="${k.id}">${k.nama} (${fmt(k.saldo)})</option>`).join('');
   sel.onchange=()=>{
     const k=aKas.find(x=>x.id===parseInt(sel.value));
@@ -3828,6 +3843,10 @@ function renderKas(){
         <div>
           <div style="font-weight:700;font-size:15px">${k.nama}</div>
           ${k.keterangan?`<div style="font-size:12px;color:var(--text-muted)">${k.keterangan}</div>`:''}
+          <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
+            ${(k.modul||'warung,ppob').includes('warung')?'<span class="badge ok" style="font-size:10px">🏪 Warung</span>':''}
+            ${(k.modul||'warung,ppob').includes('ppob')?'<span class="badge blue" style="font-size:10px">⚡ PPOB</span>':''}
+          </div>
         </div>
         <div style="font-size:20px;font-weight:800;font-family:'Courier New',monospace;color:${k.saldo>=0?'var(--green)':'var(--red)'}">${fmt(k.saldo)}</div>
       </div>
@@ -3876,14 +3895,14 @@ function renderKasSummary(){
       </div>
       <div class="stat-card" style="border-left:4px solid var(--blue)">
         <div class="stat-label">Kas PPOB</div>
-        <div class="stat-value" style="color:var(--blue)">${fmt(aKas.filter(k=>k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir')).reduce((s,k)=>s+k.saldo,0))}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Bukalapak + Indogrosir</div>
+        <div class="stat-value" style="color:var(--blue)">${fmt(aKas.filter(k=>{const m=k.modul||'warung,ppob';return m.includes('ppob')&&!m.includes('warung');}).reduce((s,k)=>s+k.saldo,0))}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Kas khusus PPOB</div>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
       ${aKas.map(k=>{
-        const isPPOB=k.nama.toLowerCase().includes('bukalapak')||k.nama.toLowerCase().includes('indogrosir');
-        const color=isPPOB?'var(--blue)':'var(--green)';
+        const modul=k.modul||'warung,ppob';
+        const color=modul.includes('ppob')&&modul.includes('warung')?'var(--purple)':modul.includes('ppob')?'var(--blue)':'var(--green)';
         const pct=totalSaldo>0?Math.round(k.saldo/totalSaldo*100):0;
         return `<div>
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -3905,12 +3924,17 @@ function openModalKas(id){
     document.getElementById('kas-nama').value=k.nama;
     document.getElementById('kas-saldo').value=k.saldo;
     document.getElementById('kas-ket').value=k.keterangan||'';
+    const modul=k.modul||'warung,ppob';
+    document.getElementById('kas-modul-warung').checked=modul.includes('warung');
+    document.getElementById('kas-modul-ppob').checked=modul.includes('ppob');
     document.getElementById('modal-kas-title').textContent='Edit Kas';
   } else {
     document.getElementById('kas-id').value='';
     document.getElementById('kas-nama').value='';
     document.getElementById('kas-saldo').value='';
     document.getElementById('kas-ket').value='';
+    document.getElementById('kas-modul-warung').checked=true;
+    document.getElementById('kas-modul-ppob').checked=true;
     document.getElementById('modal-kas-title').textContent='Tambah Kas';
   }
   openModal('modal-kas');
@@ -3921,9 +3945,14 @@ async function simpanKas(){
   const nama=document.getElementById('kas-nama').value.trim();
   const saldo=parseFloat(document.getElementById('kas-saldo').value)||0;
   const ket=document.getElementById('kas-ket').value.trim();
+  const moduls=[];
+  if(document.getElementById('kas-modul-warung').checked)moduls.push('warung');
+  if(document.getElementById('kas-modul-ppob').checked)moduls.push('ppob');
+  const modul=moduls.join(',');
   if(!nama){toast('Nama kas wajib diisi',true);return;}
-  if(id){await sb.from('kas').update({nama,saldo,keterangan:ket}).eq('id',parseInt(id));}
-  else{await sb.from('kas').insert([{nama,saldo,keterangan:ket}]);}
+  if(!modul){toast('Pilih minimal 1 modul',true);return;}
+  if(id){await sb.from('kas').update({nama,saldo,keterangan:ket,modul}).eq('id',parseInt(id));}
+  else{await sb.from('kas').insert([{nama,saldo,keterangan:ket,modul}]);}
   await lKas();renderKas();closeModal('modal-kas');
   toast(id?'Kas diperbarui':'Kas ditambahkan');
 }
