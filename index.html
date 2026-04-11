@@ -1032,7 +1032,10 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         <div class="card">
           <div class="card-header">
             <div class="card-title">💰 Manajemen Kas</div>
-            <button class="btn sm primary" onclick="openModalKas()">＋ Tambah Kas</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn sm" onclick="recalcAllSaldo()" title="Hitung ulang semua saldo dari mutasi">🔄 Recalc</button>
+              <button class="btn sm primary" onclick="openModalKas()">＋ Tambah Kas</button>
+            </div>
           </div>
           <div id="kas-list"></div>
         </div>
@@ -3556,6 +3559,25 @@ async function lKas(){
   const{data}=await sb.from('kas').select('*').order('id');
   aKas=data||[];
 }
+
+// Hitung ulang saldo kas dari semua mutasi
+async function recalcSaldo(kasId){
+  const{data}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',kasId);
+  if(!data)return 0;
+  const saldo=data.reduce((s,m)=>m.tipe==='masuk'?s+m.jumlah:s-m.jumlah,0);
+  await sb.from('kas').update({saldo}).eq('id',kasId);
+  return saldo;
+}
+
+// Recalc semua kas
+async function recalcAllSaldo(){
+  for(const k of aKas){
+    await recalcSaldo(k.id);
+  }
+  await lKas();
+  renderKas();
+  renderDashKas();
+}
 async function lPPOB(){
   const{data}=await sb.from('ppob').select('*').order('tanggal',{ascending:false});
   aPPOB=data||[];
@@ -3715,16 +3737,15 @@ async function simpanPPOB(){
   if(error){toast('Gagal simpan: '+error.message,true);return;}
   
   // Harga beli SELALU keluar dari kas PPOB (modal)
-  const kasPPOB=aKas.find(k=>k.id===parseInt(kasId));
-  if(kasPPOB){
-    await sb.from('kas').update({saldo:kasPPOB.saldo-hb}).eq('id',kasPPOB.id);
-    await sb.from('kas_mutasi').insert([{
-      kas_id:kasPPOB.id,tipe:'keluar',kategori:'keluar',
-      jumlah:hb,tanggal:tgl,
-      keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
-      operator:CU.username
-    }]);
-  }
+  const kasPPOBid=parseInt(kasId);
+  // Insert mutasi keluar dari kas PPOB (modal)
+  await sb.from('kas_mutasi').insert([{
+    kas_id:kasPPOBid,tipe:'keluar',kategori:'keluar',
+    jumlah:hb,tanggal:tgl,
+    keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
+    operator:CU.username
+  }]);
+  await recalcSaldo(kasPPOBid);
 
   // Harga jual masuk ke Kas Utama jika sudah lunas
   if(status==='lunas'){
@@ -3733,13 +3754,13 @@ async function simpanPPOB(){
       return m.includes('warung')&&!m.includes('ppob');
     })||aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
     if(kasUtama){
-      await sb.from('kas').update({saldo:kasUtama.saldo+hj}).eq('id',kasUtama.id);
       await sb.from('kas_mutasi').insert([{
         kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
         jumlah:hj,tanggal:tgl,
         keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
         operator:CU.username
       }]);
+      await recalcSaldo(kasUtama.id);
     }
   }
 
@@ -3846,13 +3867,13 @@ async function lunasiPPOB(id){
     return m.includes('warung')&&!m.includes('ppob');
   })||aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
   if(kasUtama){
-    await sb.from('kas').update({saldo:kasUtama.saldo+p.harga_jual}).eq('id',kasUtama.id);
     await sb.from('kas_mutasi').insert([{
       kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
       jumlah:p.harga_jual,tanggal:p.tanggal,
       keterangan:'Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:''),
       operator:CU.username
     }]);
+    await recalcSaldo(kasUtama.id);
   }
   await lKas();await lPPOB();await lH();
   renderPPOBRiwayat();renderKas();renderHutang();renderDashKas();
@@ -4087,8 +4108,23 @@ async function simpanKas(){
   const modul=moduls.join(',');
   if(!nama){toast('Nama kas wajib diisi',true);return;}
   if(!modul){toast('Pilih minimal 1 modul',true);return;}
-  if(id){await sb.from('kas').update({nama,saldo,keterangan:ket,modul}).eq('id',parseInt(id));}
-  else{await sb.from('kas').insert([{nama,saldo,keterangan:ket,modul}]);}
+  if(id){
+    await sb.from('kas').update({nama,keterangan:ket,modul}).eq('id',parseInt(id));
+    // Recalc saldo dari mutasi
+    await recalcSaldo(parseInt(id));
+  } else {
+    // Kas baru - insert dulu
+    const{data:newKas}=await sb.from('kas').insert([{nama,saldo:0,keterangan:ket,modul}]).select().single();
+    // Jika ada saldo awal, buat mutasi saldo awal
+    if(saldo>0&&newKas){
+      await sb.from('kas_mutasi').insert([{
+        kas_id:newKas.id,tipe:'masuk',kategori:'masuk',
+        jumlah:saldo,tanggal:new Date().toISOString().slice(0,10),
+        keterangan:'Saldo Awal',operator:CU.username
+      }]);
+      await recalcSaldo(newKas.id);
+    }
+  }
   await lKas();renderKas();closeModal('modal-kas');
   toast(id?'Kas diperbarui':'Kas ditambahkan');
 }
@@ -4160,16 +4196,8 @@ async function simpanEditMutasi(){
     kategori:tipe,
     jumlah,keterangan:ket,tanggal:tgl
   }).eq('id',id);
-  // Koreksi saldo kas
-  const kas=aKas.find(k=>k.id===kasId);
-  if(kas){
-    // Balik efek lama
-    let newSaldo=kas.saldo;
-    if(isMasukOld)newSaldo-=oldJumlah; else newSaldo+=oldJumlah;
-    // Terapkan efek baru
-    if(isMasukNew)newSaldo+=jumlah; else newSaldo-=jumlah;
-    await sb.from('kas').update({saldo:newSaldo}).eq('id',kasId);
-  }
+  // Recalc saldo dari semua mutasi
+  await recalcSaldo(kasId);
   await lKas();renderKas();closeModal('modal-edit-mutasi');
   toast('Mutasi berhasil diperbarui!');
 }
@@ -4178,14 +4206,10 @@ async function hapusMutasi(id){
   if(!confirm('Hapus mutasi ini? Saldo kas akan disesuaikan.'))return;
   const{data:m}=await sb.from('kas_mutasi').select('*').eq('id',id).single();
   if(!m){toast('Data tidak ditemukan',true);return;}
-  // Koreksi saldo kas
-  const kas=aKas.find(k=>k.id===m.kas_id);
-  if(kas){
-    const isMasuk=m.tipe==='masuk';
-    const newSaldo=isMasuk?kas.saldo-m.jumlah:kas.saldo+m.jumlah;
-    await sb.from('kas').update({saldo:newSaldo}).eq('id',m.kas_id);
-  }
+  const kasId=m.kas_id;
   await sb.from('kas_mutasi').delete().eq('id',id);
+  // Recalc saldo dari semua mutasi
+  await recalcSaldo(kasId);
   await lKas();renderKas();
   toast('Mutasi dihapus & saldo disesuaikan');
 }
@@ -4220,8 +4244,6 @@ async function simpanTopUp(){
   const kas=aKas.find(k=>k.id===kasId);if(!kas)return;
   // Komisi & top up = masuk, keluar = kurangi
   const isMasuk=tipe==='masuk'||tipe==='komisi';
-  const newSaldo=isMasuk?kas.saldo+jumlah:kas.saldo-jumlah;
-  await sb.from('kas').update({saldo:newSaldo}).eq('id',kasId);
   // Keterangan otomatis untuk komisi
   let keterangan=ket;
   if(tipe==='komisi'){
