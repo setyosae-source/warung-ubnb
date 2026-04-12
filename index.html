@@ -983,6 +983,17 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div class="irow"><label>Konfirmasi</label><input type="password" id="pass-konfirm" placeholder="Ulangi password baru"/></div>
           <button class="btn primary" onclick="gantiPassword()" style="width:100%;margin-top:4px">🔒 Simpan Password Baru</button>
         </div>
+
+        <!-- TEMA WARNA — Step 4: UI Picker -->
+        <div class="card" style="margin-top:14px">
+          <div class="card-title">🎨 Tema Warna</div>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+            Pilih warna tampilan sesuai selera. Tersimpan otomatis per pengguna.
+          </p>
+          <div id="theme-picker-container" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px"></div>
+          <div id="tema-nama-aktif" style="font-size:12px;color:var(--text-muted);margin-top:6px"></div>
+        </div>
+
       </div>
 
       <!-- PAGE: STOCK OPNAME -->
@@ -1805,6 +1816,62 @@ const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const{createClient}=supabase;const sb=createClient(SURL,SKEY);
 let CU=null,KR=[],PIB=[];
+
+// ============================================================
+// TEMA WARNA — Step 1: Kamus tema
+// ============================================================
+const THEMES = {
+  hijau:  { nama:'🟢 Hijau',      vars:{'--green':'#1D9E75','--green-dark':'#0F6E56','--green-light':'#E1F5EE','--bg':'#F4F6F4','--surface':'#ffffff','--border':'rgba(0,0,0,0.08)','--text':'#1a1a1a','--text-muted':'#6b7280'} },
+  biru:   { nama:'🔵 Biru Laut',  vars:{'--green':'#2563eb','--green-dark':'#1d4ed8','--green-light':'#dbeafe','--bg':'#f0f4ff','--surface':'#ffffff','--border':'rgba(37,99,235,0.12)','--text':'#1e1b4b','--text-muted':'#6b7280'} },
+  ungu:   { nama:'🟣 Ungu',       vars:{'--green':'#7c3aed','--green-dark':'#6d28d9','--green-light':'#ede9fe','--bg':'#f5f3ff','--surface':'#ffffff','--border':'rgba(124,58,237,0.12)','--text':'#2e1065','--text-muted':'#6b7280'} },
+  oranye: { nama:'🟠 Oranye',     vars:{'--green':'#ea580c','--green-dark':'#c2410c','--green-light':'#ffedd5','--bg':'#fff7ed','--surface':'#ffffff','--border':'rgba(234,88,12,0.12)','--text':'#431407','--text-muted':'#78716c'} },
+  merah:  { nama:'🔴 Merah',      vars:{'--green':'#dc2626','--green-dark':'#b91c1c','--green-light':'#fee2e2','--bg':'#fff5f5','--surface':'#ffffff','--border':'rgba(220,38,38,0.12)','--text':'#450a0a','--text-muted':'#78716c'} },
+  gelap:  { nama:'⚫ Dark Mode',  vars:{'--green':'#10b981','--green-dark':'#059669','--green-light':'#064e3b','--bg':'#0f172a','--surface':'#1e293b','--border':'rgba(255,255,255,0.08)','--text':'#f1f5f9','--text-muted':'#94a3b8'} },
+};
+
+// Step 2: Apply tema ke CSS variables
+function applyTheme(themeId) {
+  const theme = THEMES[themeId] || THEMES['hijau'];
+  const root = document.documentElement;
+  Object.entries(theme.vars).forEach(([v, val]) => root.style.setProperty(v, val));
+  const key = 'wu_theme_' + (CU?.username || 'default');
+  localStorage.setItem(key, themeId);
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    const active = btn.dataset.theme === themeId;
+    btn.style.transform = active ? 'scale(1.25)' : 'scale(1)';
+    btn.style.outlineOffset = active ? '3px' : '0';
+    btn.style.outline = active ? '3px solid ' + theme.vars['--green'] : 'none';
+  });
+  const namaEl = document.getElementById('tema-nama-aktif');
+  if(namaEl) namaEl.textContent = 'Tema aktif: ' + theme.nama;
+}
+
+// Step 3: Load tema tersimpan saat login
+function loadUserTheme() {
+  const key = 'wu_theme_' + (CU?.username || 'default');
+  const saved = localStorage.getItem(key);
+  applyTheme(saved && THEMES[saved] ? saved : 'hijau');
+}
+
+// Step 4: Render UI picker lingkaran warna
+function renderThemePicker() {
+  const el = document.getElementById('theme-picker-container');
+  if(!el) return;
+  const key = 'wu_theme_' + (CU?.username || 'default');
+  const activeTheme = localStorage.getItem(key) || 'hijau';
+  const previewColors = {hijau:'#1D9E75',biru:'#2563eb',ungu:'#7c3aed',oranye:'#ea580c',merah:'#dc2626',gelap:'#0f172a'};
+  el.innerHTML = Object.entries(THEMES).map(([id, t]) => {
+    const active = id === activeTheme;
+    const col = previewColors[id];
+    return `<button class="theme-btn" data-theme="${id}" onclick="applyTheme('${id}');renderThemePicker()" title="${t.nama}"
+      style="width:38px;height:38px;border-radius:50%;background:${col};border:none;cursor:pointer;
+      transform:${active?'scale(1.25)':'scale(1)'};
+      outline:${active?'3px solid '+col:'none'};outline-offset:${active?'3px':'0'};
+      transition:transform 0.2s,outline 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.2)"></button>`;
+  }).join('');
+  const namaEl = document.getElementById('tema-nama-aktif');
+  if(namaEl) namaEl.textContent = 'Tema aktif: ' + (THEMES[activeTheme]?.nama || '');
+}
 let aB=[],aT=[],aH=[],aBeli=[],aBatch=[],aPaket=[],aVoucher=[],aPel=[],aSup=[];
 let lapMode='hari',hutangFilter='semua',rjStatus='semua',rbStatus='semua';
 let dMode='none',aVoucher_sel=null,dNominal=0,metodeBayar='tunai',beliStatus='lunas';
@@ -1915,6 +1982,7 @@ async function loginOK(data){
   history.replaceState({page: initPage}, '', '#'+initPage);
   document.getElementById('jual-tgl').value=nowISO();
   document.getElementById('beli-tgl').value=nowISO();
+  loadUserTheme();
   loadAll().then(()=>{
     renderProdukJual();
     if(aB.length)setTimeout(()=>renderExpiredWarningBar('jual'),300);
@@ -2024,7 +2092,7 @@ function showPage(id,btn){
     history.pushState({page:id}, '', '#'+id);
   }
   if(id==='laporan')renderLaporan();
-  if(id==='users'){lUsers().then(()=>renderUsers());}
+  if(id==='users'){lUsers().then(()=>{renderUsers();renderThemePicker();});}
   if(id==='riwayat'){setDefaultDates('rj');renderRiwayatJual();}
   if(id==='riwayat-beli'){setDefaultDates('rb');renderRiwayatBeli();}
   if(id==='opname')renderOpnameRiwayat();
