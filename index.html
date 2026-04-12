@@ -3295,8 +3295,24 @@ async function simpanBarang(){
     btn.disabled=false;btn.textContent='Simpan';
   }
   const satuan=document.getElementById('b-satuan').value.trim();
-  if(id){await sb.from('barang').update({nama,harga,stok,harga_beli:hb,satuan,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori,expired:expired||null,foto_url:fotoUrl||null}).eq('id',parseInt(id));toast('Barang diperbarui');}
-  else{const{data:nb}=await sb.from('barang').insert([{nama,harga,stok,harga_beli:hb,satuan,diskon_tipe:dTipe,diskon_nilai:dNilai,barcode,kategori,expired:expired||null,foto_url:fotoUrl||null}]).select().single();if(stok>0&&hb>0&&nb)await sb.from('stok_batch').insert([{barang_id:nb.id,qty_awal:stok,qty_sisa:stok,harga_beli:hb,harga_jual:harga}]);toast('Barang ditambahkan');}
+  // Buat payload - hanya kirim kolom yang ada nilainya
+  const payload = {nama,harga,stok:stok||0,harga_beli:hb||0,satuan:satuan||'',
+    diskon_tipe:dTipe||'',diskon_nilai:dNilai||0,barcode:barcode||'',kategori};
+  if(expired) payload.expired = expired;
+  if(fotoUrl) payload.foto_url = fotoUrl;
+
+  if(id){
+    const{error:eUpd}=await sb.from('barang').update(payload).eq('id',parseInt(id));
+    if(eUpd){toast('Gagal update: '+eUpd.message,true);console.error('Update error:',eUpd);return;}
+    toast('Barang diperbarui');
+  } else {
+    // Insert dulu tanpa select
+    const{data:nbArr,error:eIns}=await sb.from('barang').insert([payload]).select('id');
+    const nb=nbArr&&nbArr.length?nbArr[0]:null;
+    if(eIns){toast('Gagal simpan: '+eIns.message,true);console.error('Insert error:',eIns);return;}
+    if(stok>0&&hb>0&&nb)await sb.from('stok_batch').insert([{barang_id:nb.id,qty_awal:stok,qty_sisa:stok,harga_beli:hb,harga_jual:harga}]);
+    toast('Barang ditambahkan');
+  }
   closeModal('modal-barang');await lB();await lBatch();renderStok();filterSD('prod');filterSD('bprod');renderPaketBuilder();
 }
 async function hapusBarang(id){if(!confirm('Hapus barang?'))return;await sb.from('barang').delete().eq('id',id);await sb.from('stok_batch').delete().eq('barang_id',id);await lB();await lBatch();renderStok();filterSD('prod');toast('Dihapus');}
