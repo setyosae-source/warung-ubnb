@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formulir Pengajuan Pembiayaan - BMT UBNB PERWIRA</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--hijau:#1a5c3a;--hijau-muda:#2e7d52;--hijau-light:#e8f5e9;--emas:#c9a84c;--krem:#fdf8f0;--border:#e0dbd0;--text:#1c1c1c;--text-muted:#6b7280;--red:#dc2626;--radius:12px;--radius-sm:8px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Inter",sans-serif;background:var(--krem);color:var(--text);min-height:100vh;}
+
+/* HEADER */
+.header{background:var(--hijau);padding:16px;text-align:center;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.2);}
+.header h1{font-size:16px;font-weight:700;color:white;letter-spacing:0.3px;}
+.header p{font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px;}
+
+/* PROGRESS BAR */
+.progress-wrap{background:white;padding:14px 16px;border-bottom:1px solid var(--border);position:sticky;top:60px;z-index:49;}
+.progress-steps{display:flex;align-items:center;gap:0;}
+.step-item{display:flex;align-items:center;flex:1;}
+.step-circle{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;transition:all 0.3s;}
+.step-circle.done{background:var(--hijau);color:white;}
+.step-circle.active{background:var(--emas);color:white;}
+.step-circle.pending{background:#e5e7eb;color:#9ca3af;}
+.step-line{flex:1;height:2px;background:#e5e7eb;transition:background 0.3s;}
+.step-line.done{background:var(--hijau);}
+.step-label{font-size:9px;color:var(--text-muted);margin-top:3px;text-align:center;white-space:nowrap;}
+
+/* CONTENT */
+.content{max-width:560px;margin:0 auto;padding:16px;}
+
+/* SECTION CARD */
+.section-card{background:white;border-radius:var(--radius);padding:0;margin-bottom:16px;box-shadow:0 2px 12px rgba(26,92,58,0.07);overflow:hidden;display:none;}
+.section-card.active{display:block;}
+.section-header{background:var(--hijau);padding:12px 16px;}
+.section-header h2{font-size:14px;font-weight:700;color:white;}
+.section-body{padding:16px;}
+
+/* FORM FIELDS */
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--hijau);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+.field label span{color:var(--red);margin-left:2px;}
+.field input,.field select,.field textarea{width:100%;padding:12px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);background:var(--krem);transition:border-color 0.2s;}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--hijau);background:white;}
+.field textarea{resize:vertical;min-height:80px;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+/* RADIO GROUP */
+.radio-group{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+.radio-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all 0.2s;background:var(--krem);}
+.radio-item:hover{border-color:var(--hijau);background:var(--hijau-light);}
+.radio-item.selected{border-color:var(--hijau);background:var(--hijau-light);}
+.radio-item input[type=radio]{accent-color:var(--hijau);width:16px;height:16px;}
+.radio-item span{font-size:13px;font-weight:500;}
+
+/* INFO BOX */
+.info-box{background:var(--hijau-light);border:1px solid #a5d6a7;border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--hijau-muda);margin-bottom:14px;line-height:1.5;}
+
+/* PERNYATAAN */
+.pernyataan-box{background:#fffbeb;border:1px solid #fbbf24;border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;font-size:13px;color:#92400e;line-height:1.6;}
+.check-item{display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
+.check-item input[type=checkbox]{accent-color:var(--hijau);width:18px;height:18px;flex-shrink:0;margin-top:2px;}
+
+/* TOMBOL */
+.btn-row{display:flex;gap:10px;margin-top:18px;}
+.btn{flex:1;padding:13px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;}
+.btn.primary{background:var(--hijau);color:white;}
+.btn.primary:hover{background:var(--hijau-muda);}
+.btn.secondary{background:white;color:var(--hijau);border:2px solid var(--hijau);}
+.btn.secondary:hover{background:var(--hijau-light);}
+.btn:disabled{opacity:0.5;cursor:not-allowed;}
+
+/* SUKSES */
+.sukses-wrap{display:none;text-align:center;padding:40px 20px;}
+.sukses-wrap.show{display:block;}
+.sukses-icon{width:80px;height:80px;background:#4ade80;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;animation:popIn 0.4s ease;}
+@keyframes popIn{0%{transform:scale(0.5);opacity:0}70%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+.sukses-wrap h2{font-size:22px;font-weight:800;color:var(--hijau);margin-bottom:8px;}
+.sukses-wrap p{font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:24px;}
+.ref-code{background:var(--hijau-light);border:2px dashed var(--hijau);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;font-size:13px;color:var(--hijau);}
+.ref-code strong{font-size:18px;font-family:monospace;display:block;margin-top:4px;}
+
+/* ERROR */
+.field-err{font-size:11px;color:var(--red);margin-top:4px;display:none;}
+.field.has-err input,.field.has-err select,.field.has-err textarea{border-color:var(--red);}
+.field.has-err .field-err{display:block;}
+
+/* TOAST */
+.toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:999;}
+.toast{background:#1f2937;color:white;padding:10px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.2);animation:fadeUp 0.3s ease;}
+.toast.err{background:var(--red);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* SPINNER */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+@media(max-width:480px){.two-col{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📋 Formulir Pengajuan Pembiayaan</h1>
+  <p>BMT UBNB PERWIRA — UB Harapan Jaya</p>
+</div>
+
+<!-- PROGRESS -->
+<div class="progress-wrap">
+  <div class="progress-steps">
+    <div class="step-item">
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div class="step-circle active" id="sc1">1</div>
+        <div class="step-label">Data Diri</div>
+      </div>
+      <div class="step-line" id="sl1"></div>
+    </div>
+    <div class="step-item">
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div class="step-circle pending" id="sc2">2</div>
+        <div class="step-label">Pembiayaan</div>
+      </div>
+      <div class="step-line" id="sl2"></div>
+    </div>
+    <div class="step-item">
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div class="step-circle pending" id="sc3">3</div>
+        <div class="step-label">Sambung</div>
+      </div>
+      <div class="step-line" id="sl3"></div>
+    </div>
+    <div class="step-item" style="flex:0">
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div class="step-circle pending" id="sc4">4</div>
+        <div class="step-label">Persetujuan</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- STEP 1: DATA DIRI -->
+  <div class="section-card active" id="step1">
+    <div class="section-header"><h2>👤 Data Diri</h2></div>
+    <div class="section-body">
+      <div class="field" id="f-nama">
+        <label>Nama Lengkap<span>*</span></label>
+        <input type="text" id="nama" placeholder="Nama lengkap sesuai KTP">
+        <div class="field-err">Nama wajib diisi</div>
+      </div>
+      <div class="field" id="f-tgl-lahir">
+        <label>Tanggal Lahir<span>*</span></label>
+        <input type="date" id="tgl_lahir">
+        <div class="field-err">Tanggal lahir wajib diisi</div>
+      </div>
+      <div class="field" id="f-alamat">
+        <label>Alamat Rumah<span>*</span></label>
+        <textarea id="alamat" placeholder="Alamat lengkap"></textarea>
+        <div class="field-err">Alamat wajib diisi</div>
+      </div>
+      <div class="field" id="f-keluarga">
+        <label>Status Keluarga<span>*</span></label>
+        <div class="radio-group">
+          <label class="radio-item" onclick="selectRadio('keluarga','Belum menikah',this)"><input type="radio" name="keluarga" value="Belum menikah"><span>Belum menikah</span></label>
+          <label class="radio-item" onclick="selectRadio('keluarga','Sudah menikah anak 1',this)"><input type="radio" name="keluarga" value="Sudah menikah anak 1"><span>Sudah menikah, anak 1</span></label>
+          <label class="radio-item" onclick="selectRadio('keluarga','Sudah menikah anak 2',this)"><input type="radio" name="keluarga" value="Sudah menikah anak 2"><span>Sudah menikah, anak 2</span></label>
+          <label class="radio-item" onclick="selectRadio('keluarga','Sudah menikah anak 3',this)"><input type="radio" name="keluarga" value="Sudah menikah anak 3"><span>Sudah menikah, anak 3</span></label>
+          <label class="radio-item" onclick="selectRadio('keluarga','Sudah menikah anak lebih dari 3',this)"><input type="radio" name="keluarga" value="Sudah menikah anak lebih dari 3"><span>Sudah menikah, anak lebih dari 3</span></label>
+        </div>
+        <div class="field-err">Status keluarga wajib dipilih</div>
+      </div>
+      <div class="field" id="f-pekerjaan">
+        <label>Pekerjaan<span>*</span></label>
+        <input type="text" id="pekerjaan" placeholder="Contoh: Karyawan, Wiraswasta, Petani">
+        <div class="field-err">Pekerjaan wajib diisi</div>
+      </div>
+      <div class="two-col">
+        <div class="field" id="f-pendapatan">
+          <label>Pendapatan/Bulan (Rp)<span>*</span></label>
+          <input type="number" id="pendapatan" placeholder="0">
+          <div class="field-err">Wajib diisi</div>
+        </div>
+        <div class="field" id="f-pengeluaran">
+          <label>Pengeluaran/Bulan (Rp)<span>*</span></label>
+          <input type="number" id="pengeluaran" placeholder="0">
+          <div class="field-err">Wajib diisi</div>
+        </div>
+      </div>
+      <div class="field" id="f-no-hp">
+        <label>Nomor HP / WA<span>*</span></label>
+        <input type="tel" id="no_hp" placeholder="08xxxxxxxxxx">
+        <div class="field-err">No. HP wajib diisi</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="nextStep(1)">Berikutnya →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: INFORMASI PEMBIAYAAN -->
+  <div class="section-card" id="step2">
+    <div class="section-header"><h2>💰 Informasi Pembiayaan</h2></div>
+    <div class="section-body">
+      <div class="info-box">Mohon isi informasi pembiayaan yang Anda ajukan dengan jujur dan sesuai kebutuhan.</div>
+      <div class="field" id="f-objek">
+        <label>Barang / Jasa yang akan dibeli<span>*</span></label>
+        <input type="text" id="objek_pembiayaan" placeholder="Contoh: Motor, HP, Modal Usaha">
+        <div class="field-err">Wajib diisi</div>
+      </div>
+      <div class="field" id="f-harga">
+        <label>Estimasi Harga (Rp)<span>*</span></label>
+        <input type="number" id="estimasi_harga" placeholder="0">
+        <div class="field-err">Wajib diisi</div>
+      </div>
+      <div class="two-col">
+        <div class="field" id="f-tenor">
+          <label>Rencana Tenor (Bulan)<span>*</span></label>
+          <input type="number" id="rencana_tenor" placeholder="Contoh: 12">
+          <div class="field-err">Wajib diisi</div>
+        </div>
+        <div class="field" id="f-angsuran">
+          <label>Sanggup Angsur/Bulan (Rp)<span>*</span></label>
+          <input type="number" id="rencana_angsuran" placeholder="0">
+          <div class="field-err">Wajib diisi</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" onclick="prevStep(2)">← Kembali</button>
+        <button class="btn primary" onclick="nextStep(2)">Berikutnya →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: INFORMASI SAMBUNG -->
+  <div class="section-card" id="step3">
+    <div class="section-header"><h2>🤝 Informasi Sambung</h2></div>
+    <div class="section-body">
+      <div class="info-box">Sambung adalah referensi kelompok BMT tempat Anda bergabung atau akan bergabung.</div>
+      <div class="two-col">
+        <div class="field" id="f-sam-daerah">
+          <label>Lokasi Daerah<span>*</span></label>
+          <input type="text" id="sambung_daerah" placeholder="Contoh: Bekasi Timur">
+          <div class="field-err">Wajib diisi</div>
+        </div>
+        <div class="field" id="f-sam-desa">
+          <label>Lokasi Desa<span>*</span></label>
+          <input type="text" id="sambung_desa" placeholder="Contoh: Perwira">
+          <div class="field-err">Wajib diisi</div>
+        </div>
+      </div>
+      <div class="field" id="f-sam-kel">
+        <label>Lokasi Kelompok<span>*</span></label>
+        <input type="text" id="sambung_kelompok" placeholder="Contoh: Kelompok 4 / PW4">
+        <div class="field-err">Wajib diisi</div>
+      </div>
+      <div class="field" id="f-nama-ki">
+        <label>Nama Bp. KI Kelompok<span>*</span></label>
+        <input type="text" id="nama_ki" placeholder="Nama ketua/koordinator kelompok">
+        <div class="field-err">Wajib diisi</div>
+      </div>
+      <div class="field">
+        <label>No. WA/HP Bp. KI Kelompok</label>
+        <input type="tel" id="hp_ki" placeholder="08xxxxxxxxxx (opsional)">
+      </div>
+      <div class="field" id="f-ir">
+        <label>Ketertiban Isrun / IR / Infaq Rezeki<span>*</span></label>
+        <div class="radio-group">
+          <label class="radio-item" onclick="selectRadio('ir','Lancar',this)"><input type="radio" name="ir" value="Lancar"><span>✅ Lancar</span></label>
+          <label class="radio-item" onclick="selectRadio('ir','Kurang Lancar',this)"><input type="radio" name="ir" value="Kurang Lancar"><span>⚠️ Kurang Lancar</span></label>
+          <label class="radio-item" onclick="selectRadio('ir','Tidak Lancar',this)"><input type="radio" name="ir" value="Tidak Lancar"><span>❌ Tidak Lancar</span></label>
+        </div>
+        <div class="field-err">Wajib dipilih</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" onclick="prevStep(3)">← Kembali</button>
+        <button class="btn primary" onclick="nextStep(3)">Berikutnya →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4: PERSETUJUAN -->
+  <div class="section-card" id="step4">
+    <div class="section-header"><h2>✅ Persetujuan & Pernyataan</h2></div>
+    <div class="section-body">
+
+      <div class="field" id="f-setuju-ki">
+        <label>Apakah bersedia jika pihak UB NB Perwira menghubungi Bp. KI Kelompok untuk dimintakan rekomendasi?<span>*</span></label>
+        <div class="radio-group">
+          <label class="radio-item" onclick="selectRadio('setuju_ki','Ya',this)"><input type="radio" name="setuju_ki" value="Ya"><span>Ya, bersedia</span></label>
+          <label class="radio-item" onclick="selectRadio('setuju_ki','Tidak',this)"><input type="radio" name="setuju_ki" value="Tidak"><span>Tidak</span></label>
+          <label class="radio-item" onclick="selectRadio('setuju_ki','Tidak tahu',this)"><input type="radio" name="setuju_ki" value="Tidak tahu"><span>Tidak tahu</span></label>
+        </div>
+        <div class="field-err">Wajib dipilih</div>
+      </div>
+
+      <div class="pernyataan-box">
+        <strong style="display:block;margin-bottom:8px;color:#92400e">📜 Pernyataan:</strong>
+        Dengan ini saya menyatakan bahwa informasi yang disampaikan di formulir ini sudah sesuai dengan yang sebenar-benarnya dan saya bertanggung jawab atas kesalahan informasi yang diberikan.
+      </div>
+
+      <div class="field" id="f-pernyataan">
+        <label class="check-item" id="check-pernyataan" onclick="togglePernyataan()">
+          <input type="checkbox" id="pernyataan" style="pointer-events:none">
+          <span style="font-size:13px;line-height:1.5">Saya menyetujui pernyataan di atas dan menyatakan data yang saya isi adalah benar.</span>
+        </label>
+        <div class="field-err">Anda harus menyetujui pernyataan ini</div>
+      </div>
+
+      <div id="submit-alert" style="display:none;background:#fee2e2;border-radius:8px;padding:10px 14px;font-size:13px;color:#b91c1c;margin-bottom:12px"></div>
+
+      <div class="btn-row">
+        <button class="btn secondary" onclick="prevStep(4)">← Kembali</button>
+        <button class="btn primary" id="btn-kirim" onclick="kirimPengajuan()">📤 Kirim Pengajuan</button>
+      </div>
+
+      <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:12px;line-height:1.5">Data Anda akan diproses oleh tim BMT UBNB PERWIRA. Kami akan menghubungi Anda dalam 1-3 hari kerja.</p>
+    </div>
+  </div>
+
+  <!-- SUKSES -->
+  <div class="sukses-wrap" id="sukses-wrap">
+    <div class="sukses-icon">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2>Pengajuan Terkirim! 🎉</h2>
+    <p>Terima kasih telah mengajukan pembiayaan ke BMT UBNB PERWIRA. Tim kami akan segera meninjau pengajuan Anda.</p>
+    <div class="ref-code">
+      <span>Nomor Referensi Pengajuan Anda:</span>
+      <strong id="ref-code">-</strong>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Simpan nomor referensi ini untuk memudahkan pengecekan status pengajuan Anda.</p>
+    <button onclick="location.reload()" style="width:100%;padding:14px;background:var(--hijau);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+      ➕ Ajukan Lagi
+    </button>
+  </div>
+
+</div><!-- end content -->
+
+<div class="toast-wrap" id="toast-wrap" style="display:none">
+  <div class="toast" id="toast-msg"></div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SURL,SKEY);
+
+let currentStep=1;
+const radioVals={keluarga:'',ir:'',setuju_ki:''};
+
+// ===== UTILS =====
+function toast(msg,err=false){
+  const w=document.getElementById('toast-wrap');
+  const m=document.getElementById('toast-msg');
+  m.textContent=msg;m.className='toast'+(err?' err':'');
+  w.style.display='block';
+  setTimeout(()=>w.style.display='none',3000);
+}
+
+function selectRadio(name,val,el){
+  radioVals[name]=val;
+  document.querySelectorAll(`[name="${name}"]`).forEach(r=>{
+    r.closest('.radio-item').classList.remove('selected');
+  });
+  el.classList.add('selected');
+  // Clear error
+  const fMap={keluarga:'f-keluarga',ir:'f-ir',setuju_ki:'f-setuju-ki'};
+  if(fMap[name])document.getElementById(fMap[name]).classList.remove('has-err');
+}
+
+function togglePernyataan(){
+  const cb=document.getElementById('pernyataan');
+  cb.checked=!cb.checked;
+  document.getElementById('f-pernyataan').classList.remove('has-err');
+}
+
+// ===== PROGRESS =====
+function updateProgress(step){
+  for(let i=1;i<=4;i++){
+    const sc=document.getElementById('sc'+i);
+    if(i<step){sc.className='step-circle done';sc.innerHTML='✓';}
+    else if(i===step){sc.className='step-circle active';sc.textContent=i;}
+    else{sc.className='step-circle pending';sc.textContent=i;}
+    if(i<4){
+      const sl=document.getElementById('sl'+i);
+      sl.className='step-line'+(i<step?' done':'');
+    }
+  }
+}
+
+// ===== NAVIGATION =====
+function showStep(n){
+  document.querySelectorAll('.section-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById('step'+n).classList.add('active');
+  currentStep=n;
+  updateProgress(n);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function nextStep(from){
+  if(!validateStep(from))return;
+  showStep(from+1);
+}
+function prevStep(from){showStep(from-1);}
+
+// ===== VALIDASI =====
+function validateStep(step){
+  let ok=true;
+  const req=(id,fid)=>{
+    const el=document.getElementById(id);
+    const f=document.getElementById(fid);
+    if(!el||!el.value.trim()){if(f)f.classList.add('has-err');ok=false;}
+    else{if(f)f.classList.remove('has-err');}
+  };
+  const reqRadio=(name,fid)=>{
+    const f=document.getElementById(fid);
+    if(!radioVals[name]){if(f)f.classList.add('has-err');ok=false;}
+    else{if(f)f.classList.remove('has-err');}
+  };
+
+  if(step===1){
+    req('nama','f-nama');
+    req('tgl_lahir','f-tgl-lahir');
+    req('alamat','f-alamat');
+    reqRadio('keluarga','f-keluarga');
+    req('pekerjaan','f-pekerjaan');
+    req('pendapatan','f-pendapatan');
+    req('pengeluaran','f-pengeluaran');
+    req('no_hp','f-no-hp');
+  }
+  if(step===2){
+    req('objek_pembiayaan','f-objek');
+    req('estimasi_harga','f-harga');
+    req('rencana_tenor','f-tenor');
+    req('rencana_angsuran','f-angsuran');
+  }
+  if(step===3){
+    req('sambung_daerah','f-sam-daerah');
+    req('sambung_desa','f-sam-desa');
+    req('sambung_kelompok','f-sam-kel');
+    req('nama_ki','f-nama-ki');
+    reqRadio('ir','f-ir');
+  }
+  if(step===4){
+    reqRadio('setuju_ki','f-setuju-ki');
+    const cb=document.getElementById('pernyataan');
+    if(!cb.checked){document.getElementById('f-pernyataan').classList.add('has-err');ok=false;}
+  }
+  if(!ok)toast('Harap lengkapi semua field yang wajib diisi',true);
+  return ok;
+}
+
+// ===== KIRIM =====
+async function kirimPengajuan(){
+  if(!validateStep(4))return;
+  const btn=document.getElementById('btn-kirim');
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Mengirim...';
+
+  const refCode='PJY-'+Date.now().toString(36).toUpperCase();
+
+  const payload={
+    nama: document.getElementById('nama').value.trim(),
+    tgl_lahir: document.getElementById('tgl_lahir').value||null,
+    alamat: document.getElementById('alamat').value.trim(),
+    keluarga: radioVals.keluarga,
+    pekerjaan: document.getElementById('pekerjaan').value.trim(),
+    pendapatan: parseFloat(document.getElementById('pendapatan').value)||0,
+    pengeluaran: parseFloat(document.getElementById('pengeluaran').value)||0,
+    no_hp: document.getElementById('no_hp').value.trim(),
+    objek_pembiayaan: document.getElementById('objek_pembiayaan').value.trim(),
+    estimasi_harga: parseFloat(document.getElementById('estimasi_harga').value)||0,
+    rencana_tenor: parseInt(document.getElementById('rencana_tenor').value)||0,
+    rencana_angsuran: parseFloat(document.getElementById('rencana_angsuran').value)||0,
+    sambung_daerah: document.getElementById('sambung_daerah').value.trim(),
+    sambung_desa: document.getElementById('sambung_desa').value.trim(),
+    sambung_kelompok: document.getElementById('sambung_kelompok').value.trim(),
+    nama_ki: document.getElementById('nama_ki').value.trim(),
+    hp_ki: document.getElementById('hp_ki').value.trim()||null,
+    ketertiban_ir: radioVals.ir,
+    setuju_ki: radioVals.setuju_ki,
+    pernyataan: true,
+    status: 'Baru',
+    catatan_admin: refCode,
+  };
+
+  const{error}=await sb.from('bmt_pengajuan').insert([payload]);
+
+  btn.disabled=false;btn.innerHTML='📤 Kirim Pengajuan';
+
+  if(error){
+    document.getElementById('submit-alert').style.display='block';
+    document.getElementById('submit-alert').textContent='Gagal mengirim: '+error.message;
+    return;
+  }
+
+  // Tampil sukses
+  document.querySelectorAll('.section-card').forEach(c=>c.style.display='none');
+  document.getElementById('ref-code').textContent=refCode;
+  document.getElementById('sukses-wrap').classList.add('show');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>
