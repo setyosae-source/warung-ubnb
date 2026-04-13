@@ -235,6 +235,7 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
     <button class="nav-tab" onclick="showPage('baru',this)">➕ Pembiayaan Baru</button>
     <button class="nav-tab" onclick="showPage('angsuran',this)">💳 Angsuran</button>
     <button class="nav-tab" onclick="showPage('kartu',this)">📄 Kartu Kontrol</button>
+    <button class="nav-tab" onclick="showPage('pengajuan',this)">📥 Pengajuan</button>
   </div>
   <div class="main">
 
@@ -479,6 +480,34 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
       </div>
     </div>
 
+
+    <!-- PENGAJUAN -->
+    <div id="page-pengajuan" class="page">
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span>📥 Pengajuan Pembiayaan Masuk</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn emas sm" onclick="exportPengajuan()">⬇️ Excel</button>
+            <a href="pengajuan.html" target="_blank" class="btn sm primary" style="text-decoration:none">📋 Buka Form</a>
+          </div>
+        </div>
+        <!-- Filter status -->
+        <div class="filter-bar" style="margin-bottom:12px">
+          <select id="flt-pjy-status" onchange="renderPengajuan()" style="height:34px;font-size:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-family:inherit">
+            <option value="">Semua Status</option>
+            <option value="Baru">🆕 Baru</option>
+            <option value="Review">🔍 Review</option>
+            <option value="Disetujui">✅ Disetujui</option>
+            <option value="Ditolak">❌ Ditolak</option>
+          </select>
+          <input type="text" id="flt-pjy-cari" placeholder="🔍 Cari nama..." oninput="renderPengajuan()"
+            style="flex:1;height:34px;font-size:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-family:inherit">
+        </div>
+        <div id="pengajuan-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px"></div>
+        <div id="pengajuan-list"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 <div id="print-area" style="display:none"></div>
@@ -555,6 +584,7 @@ function showPage(id,btn){
   document.getElementById('page-'+id).classList.add('active');
   if(btn)btn.classList.add('active');
   if(id==='dashboard')renderDashboard();
+  if(id==='pengajuan'){loadPengajuan().then(()=>renderPengajuan());}
   window.scrollTo(0,0);
   if(id==='daftar')loadAll().then(renderDaftar);
   if(id==='angsuran')loadAll();
@@ -1440,6 +1470,159 @@ async function exportLaporan() {
     toast('Gagal export: '+e.message, true);
     console.error(e);
   }
+}
+
+
+// ===== PENGAJUAN BMT =====
+let aPengajuan = [];
+
+async function loadPengajuan(){
+  const{data}=await sb.from('bmt_pengajuan').select('*').order('created_at',{ascending:false});
+  aPengajuan=data||[];
+}
+
+function renderPengajuan(){
+  const el=document.getElementById('pengajuan-list');
+  const stats=document.getElementById('pengajuan-stats');
+  if(!el)return;
+
+  // Stats
+  const baru=aPengajuan.filter(p=>p.status==='Baru').length;
+  const review=aPengajuan.filter(p=>p.status==='Review').length;
+  const setuju=aPengajuan.filter(p=>p.status==='Disetujui').length;
+  const tolak=aPengajuan.filter(p=>p.status==='Ditolak').length;
+  if(stats)stats.innerHTML=`
+    <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:#1d4ed8">${baru}</div><div style="font-size:10px;color:#1d4ed8">🆕 Baru</div></div>
+    <div style="background:#fef3c7;border-radius:8px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--amber)">${review}</div><div style="font-size:10px;color:var(--amber)">🔍 Review</div></div>
+    <div style="background:var(--hijau-light);border-radius:8px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--hijau)">${setuju}</div><div style="font-size:10px;color:var(--hijau)">✅ Disetujui</div></div>
+    <div style="background:#fee2e2;border-radius:8px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:800;color:var(--red)">${tolak}</div><div style="font-size:10px;color:var(--red)">❌ Ditolak</div></div>`;
+
+  // Filter
+  const status=document.getElementById('flt-pjy-status')?.value||'';
+  const cari=(document.getElementById('flt-pjy-cari')?.value||'').toLowerCase();
+  let data=[...aPengajuan];
+  if(status)data=data.filter(p=>p.status===status);
+  if(cari)data=data.filter(p=>(p.nama||'').toLowerCase().includes(cari)||(p.objek_pembiayaan||'').toLowerCase().includes(cari));
+
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">📥</div>Belum ada pengajuan masuk</div>';return;}
+
+  const statusColor={Baru:'#1d4ed8',Review:'var(--amber)',Disetujui:'var(--hijau)',Ditolak:'var(--red)'};
+  const statusBg={Baru:'#dbeafe',Review:'#fef3c7',Disetujui:'var(--hijau-light)',Ditolak:'#fee2e2'};
+
+  el.innerHTML=data.map(p=>`
+    <div style="border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;cursor:pointer" onclick="lihatDetailPengajuan(${p.id})">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-weight:700;font-size:14px">${p.nama||'-'}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${p.no_hp||''} · ${p.pekerjaan||''}</div>
+        </div>
+        <span style="background:${statusBg[p.status]||'#f3f4f6'};color:${statusColor[p.status]||'#374151'};padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap">${p.status}</span>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
+        <span>🛒 ${p.objek_pembiayaan||'-'}</span>
+        <span>💰 ${rp(p.estimasi_harga)}</span>
+        <span>📅 ${p.rencana_tenor||0} bulan</span>
+        <span>👥 ${p.sambung_kelompok||'-'}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+        Diajukan: ${fmtTgl(p.created_at)}
+        ${p.catatan_admin?` · Ref: <strong>${p.catatan_admin}</strong>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function lihatDetailPengajuan(id){
+  const p=aPengajuan.find(x=>x.id===id);if(!p)return;
+  const statusOpts=['Baru','Review','Disetujui','Ditolak'].map(s=>`<option value="${s}"${p.status===s?' selected':''}>${s}</option>`).join('');
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:flex-end';
+  modal.innerHTML=`<div style="background:white;width:100%;border-radius:20px 20px 0 0;max-height:90vh;overflow-y:auto;padding:20px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-weight:700;font-size:16px">Detail Pengajuan</div>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:14px">
+      ${pRow('Nama',p.nama)}${pRow('Tgl Lahir',fmtTgl(p.tgl_lahir))}
+      ${pRow('Alamat',p.alamat,'full')}
+      ${pRow('Keluarga',p.keluarga)}${pRow('Pekerjaan',p.pekerjaan)}
+      ${pRow('Pendapatan/Bln',rp(p.pendapatan))}${pRow('Pengeluaran/Bln',rp(p.pengeluaran))}
+      ${pRow('No. HP',p.no_hp)}
+    </div>
+    <div style="background:var(--hijau);color:white;padding:8px 12px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">INFORMASI PEMBIAYAAN</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:14px">
+      ${pRow('Objek',p.objek_pembiayaan,'full')}
+      ${pRow('Est. Harga',rp(p.estimasi_harga))}${pRow('Tenor',p.rencana_tenor+' bulan')}
+      ${pRow('Sanggup Angsur',rp(p.rencana_angsuran))}
+    </div>
+    <div style="background:var(--hijau);color:white;padding:8px 12px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px">INFORMASI SAMBUNG</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:14px">
+      ${pRow('Daerah',p.sambung_daerah)}${pRow('Desa',p.sambung_desa)}
+      ${pRow('Kelompok',p.sambung_kelompok)}${pRow('Nama KI',p.nama_ki)}
+      ${pRow('HP KI',p.hp_ki)}${pRow('Ketertiban IR',p.ketertiban_ir)}
+      ${pRow('Setuju KI dihubungi',p.setuju_ki)}
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--hijau);margin-bottom:6px">Update Status</div>
+      <select id="pjy-status-${p.id}" style="width:100%;padding:10px;border:2px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px">${statusOpts}</select>
+      <textarea id="pjy-catatan-${p.id}" placeholder="Catatan admin (opsional)" rows="2"
+        style="width:100%;margin-top:8px;padding:10px;border:2px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;resize:none">${p.catatan_admin&&!p.catatan_admin.startsWith('PJY-')?p.catatan_admin:''}</textarea>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:12px;border:2px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;cursor:pointer;background:white">Tutup</button>
+      <button onclick="updateStatusPengajuan(${p.id})" style="flex:2;padding:12px;background:var(--hijau);color:white;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">💾 Simpan</button>
+    </div>
+    ${p.status==='Disetujui'?`<button onclick="konversiKeAkad(${p.id})" style="width:100%;margin-top:8px;padding:12px;background:var(--emas);color:white;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">🔄 Konversi ke Akad Pembiayaan</button>`:''}
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function pRow(lbl,val,full=''){
+  const col=full?'grid-column:1/-1':'';
+  return`<div style="${col}"><div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:600;margin-bottom:2px">${lbl}</div><div style="font-weight:600">${val||'-'}</div></div>`;
+}
+
+async function updateStatusPengajuan(id){
+  const status=document.getElementById('pjy-status-'+id)?.value;
+  const catatan=document.getElementById('pjy-catatan-'+id)?.value.trim();
+  await sb.from('bmt_pengajuan').update({status,catatan_admin:catatan||null}).eq('id',id);
+  await loadPengajuan();
+  renderPengajuan();
+  document.querySelector('[style*="position:fixed"][style*="inset:0"]')?.remove();
+  toast('Status diperbarui!');
+}
+
+function konversiKeAkad(id){
+  const p=aPengajuan.find(x=>x.id===id);if(!p)return;
+  // Pindah ke tab Pembiayaan Baru dan prefill data
+  document.querySelector('[style*="position:fixed"][style*="inset:0"]')?.remove();
+  showPage('baru',document.querySelectorAll('.nav-tab')[2]);
+  setTimeout(()=>{
+    document.getElementById('b-nama').value=p.nama||'';
+    document.getElementById('b-objek').value=p.objek_pembiayaan||'';
+    document.getElementById('b-jangka').value=p.rencana_tenor||'';
+    document.getElementById('b-tgl').value=new Date().toISOString().split('T')[0];
+    hitungBaru();
+    toast('Data pengajuan sudah dipindahkan ke form akad!');
+  },300);
+}
+
+async function exportPengajuan(){
+  toast('⏳ Menyiapkan export...');
+  await loadPengajuan();
+  const XLSX=window.XLSX;
+  if(!XLSX){toast('Library Excel tidak tersedia',true);return;}
+  const rows=[['Tgl Pengajuan','Nama','No HP','Pekerjaan','Pendapatan','Pengeluaran','Objek','Est. Harga','Tenor','Angsur/Bln','Kelompok','Nama KI','Ketertiban IR','Setuju KI','Status']];
+  aPengajuan.forEach(p=>rows.push([
+    p.created_at?new Date(p.created_at).toLocaleDateString('id-ID'):'',
+    p.nama,p.no_hp,p.pekerjaan,p.pendapatan,p.pengeluaran,
+    p.objek_pembiayaan,p.estimasi_harga,p.rencana_tenor,p.rencana_angsuran,
+    p.sambung_kelompok,p.nama_ki,p.ketertiban_ir,p.setuju_ki,p.status
+  ]));
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Pengajuan');
+  XLSX.writeFile(wb,'BMT_Pengajuan_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
+  toast('✅ Export berhasil!');
 }
 
 </script>
