@@ -38,6 +38,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--green);background:white;}
 .fg textarea{resize:vertical;min-height:70px;}
 /* PRODUK */
+.toko-tabs{display:flex;background:white;border-bottom:2px solid var(--border);position:sticky;top:60px;z-index:48;}
+.toko-tab{flex:1;padding:11px 8px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.toko-tab.active{color:var(--green);border-bottom-color:var(--green);}
+.toko-tab .tab-count{background:var(--green);color:white;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:700;}
+.toko-tab.ppob-tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+.toko-tab.ppob-tab .tab-count{background:var(--blue);}
 .produk-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
 @media(min-width:460px){.produk-grid{grid-template-columns:repeat(3,1fr);}}
 .produk-card{background:white;border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.06);cursor:pointer;transition:transform 0.15s;}
@@ -161,6 +167,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <!-- MAIN -->
 <div class="main" id="main">
+  <!-- TAB WARUNG / PPOB -->
+  <div class="toko-tabs" id="toko-tabs" style="display:none">
+    <button class="toko-tab active" id="tab-warung" onclick="setTokoTab('warung',this)">
+      🏪 Produk Warung <span class="tab-count" id="count-warung">0</span>
+    </button>
+    <button class="toko-tab ppob-tab" id="tab-ppob" onclick="setTokoTab('ppob',this)">
+      ⚡ PPOB <span class="tab-count" id="count-ppob" style="background:var(--blue)">0</span>
+    </button>
+  </div>
   <div id="loading" style="text-align:center;padding:60px 20px"><div style="font-size:48px">🛒</div><div style="font-weight:600;color:var(--green);margin-top:10px">Memuat...</div></div>
   <div id="toko-view" style="display:none"></div>
   <div id="auth-view" style="display:none"></div>
@@ -329,6 +344,7 @@ const{createClient}=supabase;
 const sb=createClient(SURL,SKEY);
 
 let aP=[],KR=[],CU=null,settings={},waCenter='6281234567890';
+let tokoTab='warung';
 let metode='pickup',customFoto=null,bulkExcelData=[],pesananKode='',pesananHp='';
 const fmt=n=>'Rp '+Math.round(n).toLocaleString('id-ID');
 const fN=n=>Math.round(n).toLocaleString('id-ID');
@@ -346,6 +362,16 @@ async function init(){
   if(settings.toko_nama)document.title=settings.toko_nama+' - Toko Online';
   const{data}=await sb.from('barang').select('*').order('nama');
   aP=data||[];
+  // Update tab counter
+  const countWarung = aP.filter(p=>p.kategori==='warung'||!p.kategori).length;
+  const countPPOB = aP.filter(p=>p.kategori==='ppob').length;
+  const cw=document.getElementById('count-warung');
+  const cp=document.getElementById('count-ppob');
+  const tabs=document.getElementById('toko-tabs');
+  if(cw)cw.textContent=countWarung;
+  if(cp)cp.textContent=countPPOB;
+  // Tampilkan tabs hanya jika ada produk PPOB
+  if(tabs)tabs.style.display=countPPOB>0?'flex':'none';
   // Check saved session
   const saved=localStorage.getItem('toko_user');
   if(saved){try{CU=JSON.parse(saved);updateAuthUI();}catch(e){}}
@@ -355,7 +381,7 @@ async function init(){
   document.getElementById('auth-view').style.display='none';
   document.getElementById('profile-view').style.display='none';
   document.getElementById('btn-cart').style.display=CU?'flex':'none';
-  renderProduk(aP);
+  filterProduk();
 }
 
 /* AUTH UI */
@@ -376,7 +402,7 @@ function showTokoView(){
   document.getElementById('auth-view').style.display='none';
   document.getElementById('profile-view').style.display='none';
   document.getElementById('btn-cart').style.display=CU?'flex':'none';
-  renderProduk(aP);
+  filterProduk();
   history.pushState({view:'toko',modal:null},'');
 }
 function showAuthView(mode){
@@ -555,9 +581,26 @@ function renderProduk(list){
     }).join('')}</div>`;
 }
 
+function setTokoTab(tab, btn){
+  tokoTab = tab;
+  // Update tab UI
+  document.querySelectorAll('.toko-tab').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  // Update search placeholder
+  const search = document.getElementById('search-input');
+  if(search) search.placeholder = tab==='ppob' ? '⚡ Cari produk PPOB...' : '🔍 Cari produk warung...';
+  filterProduk();
+}
+
 function filterProduk(){
   const q=document.getElementById('search-input').value.toLowerCase();
-  renderProduk(q?aP.filter(p=>p.nama.toLowerCase().includes(q)):aP);
+  // Filter berdasarkan tab yang aktif
+  let list = aP.filter(p => {
+    if(tokoTab === 'ppob') return p.kategori === 'ppob';
+    return p.kategori === 'warung' || !p.kategori; // default warung
+  });
+  if(q) list = list.filter(p => p.nama.toLowerCase().includes(q));
+  renderProduk(list);
 }
 
 function bukaProduk(id){
