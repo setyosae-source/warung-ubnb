@@ -304,7 +304,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
             <div style="font-size:22px;font-weight:800;color:var(--gold-dark)" id="trx-total-val">Rp 0</div>
           </div>
           <div class="irow"><label>Catatan</label><input type="text" id="trx-catatan" placeholder="Opsional"></div>
-          <div class="btn-row"><button class="btn gold" style="flex:1" onclick="simpanTrxBeli()">💹 Simpan</button></div>
+          <div class="btn-row">
+            <button class="btn gold" style="flex:2" onclick="simpanTrxBeli()">💹 Simpan</button>
+            <button class="btn danger" style="flex:1" onclick="undoTransaksiBeli()" id="btn-undo-beli" disabled title="Undo transaksi terakhir">↶ Undo</button>
+          </div>
         </div>
 
         <!-- Transfer -->
@@ -953,16 +956,45 @@ async function simpanTrxBeli(){
   // Gabung no. saham + catatan jika ada
   const keterangan=catatan?noSahamBaru+' - '+catatan:noSahamBaru;
 
-  const{error}=await sb.from('ubnb_saham_trx').insert([{saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:keterangan,operator:CU.username,harga_saham_saat_itu:harga}]);
+  const{data:newTrx,error}=await sb.from('ubnb_saham_trx').insert([{saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:keterangan,operator:CU.username,harga_saham_saat_itu:harga}]).select().single();
   if(error){toast('Gagal: '+error.message,true);return;}
+  
   const s=aSaham.find(x=>x.id===sahamId);
   await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+lembar}).eq('id',sahamId);
-  toast('Transaksi berhasil!');
+  
+  // Simpan info transaksi terakhir untuk undo
+  window.lastTransaction = {
+    id: newTrx.id,
+    saham_id: sahamId,
+    jumlah_lembar: lembar,
+    nama: s?.nama || 'Unknown',
+    timestamp: Date.now()
+  };
+  
+  // Enable tombol undo
+  const btnUndo = document.getElementById('btn-undo-beli');
+  if(btnUndo) {
+    btnUndo.disabled = false;
+    btnUndo.title = `Undo: ${s?.nama} - ${lembar} lembar`;
+  }
+  
+  toast('✅ Transaksi berhasil! (Bisa di-undo dalam 5 menit)');
   ['trx-ac-input','trx-catatan'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['trx-ac-id','trx-lembar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('trx-info').style.display='none';
   document.getElementById('trx-total-box').style.display='none';
   await loadAll();renderDashboard();loadRiwayatTrx();
+  
+  // Auto-disable undo setelah 5 menit
+  setTimeout(() => {
+    if(window.lastTransaction && window.lastTransaction.id === newTrx.id) {
+      window.lastTransaction = null;
+      if(btnUndo) {
+        btnUndo.disabled = true;
+        btnUndo.title = 'Undo transaksi terakhir';
+      }
+    }
+  }, 5 * 60 * 1000); // 5 menit
 }
 async function simpanTransfer(){
   const dariId=parseInt(document.getElementById('tf-dari-id').value);
@@ -997,7 +1029,7 @@ async function loadRiwayatTrx(){
   const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
   const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
   el.innerHTML=`<table class="tbl">
-    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th></tr></thead>
+    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th><th>Aksi</th></tr></thead>
     <tbody>${aTrx.map(t=>{
       const s=aSaham.find(x=>x.id===t.saham_id);
       return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
@@ -1005,8 +1037,141 @@ async function loadRiwayatTrx(){
         <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:11px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
         <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
         <td style="font-size:11px">${rp(t.total_nilai)}</td>
-        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td></tr>`;
+        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td>
+        <td style="white-space:nowrap"><button class="btn sm secondary" onclick="editTransaksi(${t.id})" style="padding:4px 8px;margin-right:4px">✏️</button><button class="btn sm danger" onclick="hapusTransaksi(${t.id})" style="padding:4px 8px">🗑️</button></td></tr>`;
     }).join('')}</tbody></table>`;
+}
+
+// ===== EDIT & HAPUS TRANSAKSI (ADMIN ONLY) =====
+async function editTransaksi(id){
+  const t=aTrx.find(x=>x.id===id);
+  if(!t){toast('Transaksi tidak ditemukan',true);return;}
+  
+  const s=aSaham.find(x=>x.id===t.saham_id);
+  const namaAnggota=s?.nama||'Unknown';
+  
+  const newLembar=prompt(`Edit Jumlah Lembar\nAnggota: ${namaAnggota}\nLembar saat ini: ${t.jumlah_lembar}`,t.jumlah_lembar);
+  if(newLembar===null)return;
+  
+  const lembar=parseInt(newLembar)||0;
+  if(lembar<=0){toast('Jumlah lembar harus > 0',true);return;}
+  
+  const newHarga=prompt(`Edit Harga per Lembar\nHarga saat ini: ${rp(t.harga_per_lembar)}`,t.harga_per_lembar);
+  if(newHarga===null)return;
+  
+  const harga=parseInt(newHarga)||0;
+  if(harga<=0){toast('Harga harus > 0',true);return;}
+  
+  const newTgl=prompt(`Edit Tanggal (YYYY-MM-DD)\nTanggal saat ini: ${t.tanggal}`,t.tanggal);
+  if(newTgl===null)return;
+  
+  const newCatatan=prompt(`Edit Catatan\nCatatan saat ini: ${t.catatan||'(kosong)'}`,t.catatan||'');
+  
+  // Hitung selisih lembar untuk update jumlah_lembar di tabel ubnb_saham
+  const selisih=lembar-(t.jumlah_lembar||0);
+  
+  // Update transaksi
+  const{error}=await sb.from('ubnb_saham_trx').update({
+    jumlah_lembar:lembar,
+    harga_per_lembar:harga,
+    total_nilai:lembar*harga,
+    tanggal:newTgl,
+    catatan:newCatatan||null
+  }).eq('id',id);
+  
+  if(error){toast('Gagal update: '+error.message,true);return;}
+  
+  // Update jumlah_lembar di tabel ubnb_saham (hanya untuk tipe 'beli')
+  if(selisih!==0&&t.tipe==='beli'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+selisih}).eq('id',t.saham_id);
+  }
+  
+  toast('✅ Transaksi berhasil diupdate!');
+  await loadAll();
+  loadRiwayatTrx();
+}
+
+async function hapusTransaksi(id){
+  const t=aTrx.find(x=>x.id===id);
+  if(!t){toast('Transaksi tidak ditemukan',true);return;}
+  
+  const s=aSaham.find(x=>x.id===t.saham_id);
+  const namaAnggota=s?.nama||'Unknown';
+  
+  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${namaAnggota}\nTipe: ${t.tipe}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}\n\nPeringatan: Ini akan mengurangi jumlah lembar anggota!`))return;
+  
+  // Hapus transaksi
+  const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',id);
+  if(error){toast('Gagal hapus: '+error.message,true);return;}
+  
+  // Update jumlah_lembar di tabel ubnb_saham (reverse operasi)
+  if(t.tipe==='beli'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
+  }else if(t.tipe==='transfer_keluar'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+(t.jumlah_lembar||0)}).eq('id',t.saham_id);
+  }else if(t.tipe==='transfer_masuk'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
+  }
+  
+  toast('✅ Transaksi berhasil dihapus!');
+  await loadAll();
+  loadRiwayatTrx();
+}
+
+// ===== UNDO TRANSAKSI BELI =====
+async function undoTransaksiBeli(){
+  if(!window.lastTransaction){
+    toast('Tidak ada transaksi yang bisa di-undo',true);
+    return;
+  }
+  
+  const trx = window.lastTransaction;
+  const elapsedMinutes = Math.floor((Date.now() - trx.timestamp) / 1000 / 60);
+  
+  if(elapsedMinutes > 5){
+    toast('Transaksi sudah lebih dari 5 menit, tidak bisa di-undo',true);
+    window.lastTransaction = null;
+    const btnUndo = document.getElementById('btn-undo-beli');
+    if(btnUndo) {
+      btnUndo.disabled = true;
+      btnUndo.title = 'Undo transaksi terakhir';
+    }
+    return;
+  }
+  
+  if(!confirm(`UNDO transaksi pembelian saham?\n\nAnggota: ${trx.nama}\nJumlah: ${trx.jumlah_lembar} lembar\n\nIni akan menghapus transaksi dan mengurangi lembar anggota.`)){
+    return;
+  }
+  
+  // Hapus transaksi dari database
+  const {error: deleteError} = await sb.from('ubnb_saham_trx').delete().eq('id', trx.id);
+  if(deleteError){
+    toast('Gagal undo: ' + deleteError.message, true);
+    return;
+  }
+  
+  // Kurangi jumlah lembar di tabel ubnb_saham
+  const s = aSaham.find(x => x.id === trx.saham_id);
+  if(s){
+    await sb.from('ubnb_saham').update({
+      jumlah_lembar: (s.jumlah_lembar || 0) - trx.jumlah_lembar
+    }).eq('id', trx.saham_id);
+  }
+  
+  // Clear lastTransaction
+  window.lastTransaction = null;
+  
+  // Disable tombol undo
+  const btnUndo = document.getElementById('btn-undo-beli');
+  if(btnUndo) {
+    btnUndo.disabled = true;
+    btnUndo.title = 'Undo transaksi terakhir';
+  }
+  
+  toast('✅ Transaksi berhasil di-undo!');
+  await loadAll();
+  renderDashboard();
+  loadRiwayatTrx();
 }
 
 // ===== PROPORSI SHU =====
