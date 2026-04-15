@@ -938,7 +938,22 @@ async function simpanTrxBeli(){
   const tgl=document.getElementById('trx-tgl').value;
   const catatan=document.getElementById('trx-catatan').value.trim();
   if(!sahamId||!lembar||!tgl){toast('Lengkapi data transaksi',true);return;}
-  const{error}=await sb.from('ubnb_saham_trx').insert([{saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:catatan||null,operator:CU.username,harga_saham_saat_itu:harga}]);
+
+  // Generate no. saham lanjutan dari semua transaksi yang ada
+  // Format: XXXX/SHM-UBNB/YYYY
+  const tahun=new Date(tgl).getFullYear();
+  const reSHM=/([0-9]{4})[/]SHM-UBNB[/][0-9]{4}/g;
+  let maxNo=0;
+  aTrx.forEach(t=>{
+    const m=(t.catatan||'').match(reSHM);
+    if(m)m.forEach(s=>{const n=parseInt(s.split('/')[0]);if(n>maxNo)maxNo=n;});
+  });
+  const noSahamBaru=String(maxNo+1).padStart(4,'0')+'/SHM-UBNB/'+tahun;
+
+  // Gabung no. saham + catatan jika ada
+  const keterangan=catatan?noSahamBaru+' - '+catatan:noSahamBaru;
+
+  const{error}=await sb.from('ubnb_saham_trx').insert([{saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:keterangan,operator:CU.username,harga_saham_saat_itu:harga}]);
   if(error){toast('Gagal: '+error.message,true);return;}
   const s=aSaham.find(x=>x.id===sahamId);
   await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+lembar}).eq('id',sahamId);
