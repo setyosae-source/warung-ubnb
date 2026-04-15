@@ -169,8 +169,26 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 #bukti-cetak{display:none;}
 @media print{
   body > *{display:none!important;}
-  #bukti-cetak{display:block!important;position:fixed;inset:0;background:white;z-index:9999;padding:16px;overflow:visible;}
+  #bukti-cetak{
+    display:block!important;
+    position:fixed;
+    inset:0;
+    background:white;
+    z-index:9999;
+    padding:8px;
+    overflow:visible;
+  }
   #bukti-cetak *{visibility:visible!important;}
+  #bukti-cetak > div{
+    width:100%!important;
+    max-width:100%!important;
+    margin:0!important;
+  }
+}
+@media screen and (max-width:768px){
+  #bukti-cetak{padding:12px;}
+  #bukti-cetak table{font-size:10px!important;}
+  #bukti-cetak th,#bukti-cetak td{padding:4px 6px!important;}
 }
 
 /* MOBILE */
@@ -946,7 +964,7 @@ async function loadRiwayatTrx(){
   const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
   const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
   el.innerHTML=`<table class="tbl">
-    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th></tr></thead>
+    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th><th>Aksi</th></tr></thead>
     <tbody>${aTrx.map(t=>{
       const s=aSaham.find(x=>x.id===t.saham_id);
       return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
@@ -954,8 +972,85 @@ async function loadRiwayatTrx(){
         <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:11px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
         <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
         <td style="font-size:11px">${rp(t.total_nilai)}</td>
-        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td></tr>`;
+        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td>
+        <td style="white-space:nowrap"><button class="btn sm secondary" onclick="editTransaksi(${t.id})" style="padding:4px 8px;margin-right:4px">✏️</button><button class="btn sm danger" onclick="hapusTransaksi(${t.id})" style="padding:4px 8px">🗑️</button></td></tr>`;
     }).join('')}</tbody></table>`;
+}
+
+// ===== EDIT & HAPUS TRANSAKSI (ADMIN ONLY) =====
+async function editTransaksi(id){
+  const t=aTrx.find(x=>x.id===id);
+  if(!t){toast('Transaksi tidak ditemukan',true);return;}
+  
+  const s=aSaham.find(x=>x.id===t.saham_id);
+  const namaAnggota=s?.nama||'Unknown';
+  
+  const newLembar=prompt(`Edit Jumlah Lembar\nAnggota: ${namaAnggota}\nLembar saat ini: ${t.jumlah_lembar}`,t.jumlah_lembar);
+  if(newLembar===null)return;
+  
+  const lembar=parseInt(newLembar)||0;
+  if(lembar<=0){toast('Jumlah lembar harus > 0',true);return;}
+  
+  const newHarga=prompt(`Edit Harga per Lembar\nHarga saat ini: ${rp(t.harga_per_lembar)}`,t.harga_per_lembar);
+  if(newHarga===null)return;
+  
+  const harga=parseInt(newHarga)||0;
+  if(harga<=0){toast('Harga harus > 0',true);return;}
+  
+  const newTgl=prompt(`Edit Tanggal (YYYY-MM-DD)\nTanggal saat ini: ${t.tanggal}`,t.tanggal);
+  if(newTgl===null)return;
+  
+  const newCatatan=prompt(`Edit Catatan\nCatatan saat ini: ${t.catatan||'(kosong)'}`,t.catatan||'');
+  
+  // Hitung selisih lembar untuk update jumlah_lembar di tabel ubnb_saham
+  const selisih=lembar-(t.jumlah_lembar||0);
+  
+  // Update transaksi
+  const{error}=await sb.from('ubnb_saham_trx').update({
+    jumlah_lembar:lembar,
+    harga_per_lembar:harga,
+    total_nilai:lembar*harga,
+    tanggal:newTgl,
+    catatan:newCatatan||null
+  }).eq('id',id);
+  
+  if(error){toast('Gagal update: '+error.message,true);return;}
+  
+  // Update jumlah_lembar di tabel ubnb_saham
+  if(selisih!==0&&t.tipe==='beli'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+selisih}).eq('id',t.saham_id);
+  }
+  
+  toast('✅ Transaksi berhasil diupdate!');
+  await loadAll();
+  loadRiwayatTrx();
+}
+
+async function hapusTransaksi(id){
+  const t=aTrx.find(x=>x.id===id);
+  if(!t){toast('Transaksi tidak ditemukan',true);return;}
+  
+  const s=aSaham.find(x=>x.id===t.saham_id);
+  const namaAnggota=s?.nama||'Unknown';
+  
+  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${namaAnggota}\nTipe: ${t.tipe}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}\n\nPeringatan: Ini akan mengurangi jumlah lembar anggota!`))return;
+  
+  // Hapus transaksi
+  const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',id);
+  if(error){toast('Gagal hapus: '+error.message,true);return;}
+  
+  // Update jumlah_lembar di tabel ubnb_saham (kurangi kembali)
+  if(t.tipe==='beli'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
+  }else if(t.tipe==='transfer_keluar'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+(t.jumlah_lembar||0)}).eq('id',t.saham_id);
+  }else if(t.tipe==='transfer_masuk'){
+    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
+  }
+  
+  toast('✅ Transaksi berhasil dihapus!');
+  await loadAll();
+  loadRiwayatTrx();
 }
 
 // ===== PROPORSI SHU =====
@@ -1293,15 +1388,37 @@ async function hapusLapSHU(id,periode,kelompok){
 }
 
 // ===== CETAK BUKTI KEPEMILIKAN =====
-function cetakBukti(id){
+async function cetakBukti(id){
   const s=aSaham.find(x=>x.id===id);if(!s)return;
+  
+  // Ambil riwayat transaksi
+  const {data:trxData}=await supabase.from('saham_transaksi')
+    .select('*').eq('saham_id',id).order('tanggal',{ascending:false});
+  const trxList=trxData||[];
+  
   const totalLembar=aSaham.reduce((a,x)=>a+(x.jumlah_lembar||0),0);
   const pct=totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(4):0;
   const nilaiTotal=(s.jumlah_lembar||0)*HARGA_SAHAM;
   const tglCetak=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
   const kelWarna={PW1:'#1d4ed8',PW2:'#be185d',PW3:'#065f46',PW4:'#9a7830'};
   const kelBg2={PW1:'#dbeafe',PW2:'#fce7f3',PW3:'#d1fae5',PW4:'#fdf6e3'};
-  const html=`<div style="width:210mm;min-height:148mm;margin:0 auto;font-family:Arial,sans-serif;background:white;position:relative;overflow:hidden">
+  
+  // Generate riwayat transaksi rows
+  const trxRows = trxList.map(t=>{
+    const warna={beli:'#065f46',jual:'#c0392b',transfer_masuk:'#1e5fa8',transfer_keluar:'#d97706'};
+    const tipeTxt=t.tipe==='beli'?'Beli':t.tipe==='jual'?'Jual':t.tipe==='transfer_masuk'?'Transfer Masuk':'Transfer Keluar';
+    return `<tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px">${fmtTgl(t.tanggal)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px">
+        <span style="background:${warna[t.tipe]||'#f3f4f6'};color:white;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">${tipeTxt}</span>
+      </td>
+      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px;text-align:right;font-weight:700">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:10px;text-align:right">${rp(t.total_nilai)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:10px;color:#6b7280">${t.catatan||'-'}</td>
+    </tr>`;
+  }).join('');
+  
+  const html=`<div style="width:100%;max-width:210mm;min-height:148mm;margin:0 auto;font-family:Arial,sans-serif;background:white;position:relative;overflow:hidden">
     <div style="position:absolute;inset:6mm;border:3px solid #c9a84c;border-radius:4px;pointer-events:none"></div>
     <div style="position:absolute;inset:8.5mm;border:1px solid #c9a84c;border-radius:3px;pointer-events:none"></div>
     <div style="position:relative;padding:14mm 16mm">
@@ -1338,15 +1455,55 @@ function cetakBukti(id){
           <div style="font-size:9px;color:#6b7280">dari total saham</div>
         </div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e5e0d5;padding-top:4mm">
+      
+      ${trxList.length?`
+      <div style="margin-bottom:5mm">
+        <div style="font-size:11px;font-weight:800;color:#1a3a2a;margin-bottom:3mm;border-bottom:1.5px solid #e5e0d5;padding-bottom:2mm">📋 Riwayat Transaksi (${trxList.length})</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead>
+            <tr style="background:#1a6640;color:white">
+              <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Tanggal</th>
+              <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Tipe</th>
+              <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700">Lembar</th>
+              <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700">Nilai</th>
+              <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>${trxRows}</tbody>
+        </table>
+      </div>
+      `:''}
+      
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e5e0d5;padding-top:4mm;margin-top:${trxList.length?'3mm':'5mm'}">
         <div><div style="font-size:9px;color:#6b7280">Dicetak: ${tglCetak}</div><div style="font-size:9px;color:#6b7280">Dokumen sah sebagai bukti kepemilikan saham UBNB Perwira</div></div>
         <div style="text-align:center"><div style="width:30mm;border-bottom:1px solid #333;margin-bottom:2px"></div><div style="font-size:9px;color:#6b7280">Pengurus UBNB Perwira</div></div>
       </div>
     </div></div>`;
+  
   const el=document.getElementById('bukti-cetak');
   el.innerHTML=html;
-  el.style.cssText='display:block;position:fixed;inset:0;background:white;z-index:9999;padding:10px;overflow:auto;';
-  setTimeout(()=>{window.print();setTimeout(()=>{el.style.cssText='display:none;';el.innerHTML='';},1200);},300);
+  el.style.cssText='display:block;position:fixed;inset:0;background:white;z-index:9999;overflow:auto;';
+  
+  // PERBAIKAN MOBILE: Deteksi device & atur timeout berbeda
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  if(isMobile){
+    setTimeout(()=>{
+      window.print();
+      setTimeout(()=>{
+        el.style.cssText='display:none;';
+        el.innerHTML='';
+      },2000);
+    },800);
+  } else {
+    setTimeout(()=>{
+      window.print();
+      setTimeout(()=>{
+        el.style.cssText='display:none;';
+        el.innerHTML='';
+      },1200);
+    },300);
+  }
 }
 
 // ===== EXPORT LAPORAN =====
