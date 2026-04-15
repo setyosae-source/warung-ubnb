@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kepemilikan Saham UBNB</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#c9a84c;--gold-light:#fdf3dc;--gold-dark:#a07830;--hijau:#1a7a4a;--hijau-light:#e8f5e9;--red:#dc2626;--red-light:#fee2e2;--blue:#2563eb;--blue-light:#dbeafe;--bg:#f8f6f0;--surface:#fff;--border:#e5e0d5;--text:#1c1c1c;--text-muted:#6b7280;--radius:14px;--radius-sm:9px;--sidebar-w:220px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;}
+
+/* LOGIN */
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,#1a3a2a,#2e5c3a);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
+.login-box{background:white;border-radius:20px;padding:32px 28px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.login-logo{text-align:center;margin-bottom:24px;}
+.login-logo .logo-icon{font-size:48px;margin-bottom:8px;}
+.login-logo h1{font-size:20px;font-weight:800;color:var(--hijau);}
+.login-logo p{font-size:12px;color:var(--text-muted);}
+.login-field{margin-bottom:14px;}
+.login-field label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;}
+.login-field input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;}
+.login-field input:focus{outline:none;border-color:var(--hijau);}
+.btn-login{width:100%;padding:13px;background:var(--hijau);color:white;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;}
+#login-err{color:var(--red);font-size:12px;margin-top:8px;display:none;text-align:center;}
+
+/* APP LAYOUT */
+#app{display:none;width:100%;min-height:100vh;}
+.sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#1a3a2a 0%,#0f2018 100%);position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform 0.3s;}
+.sidebar-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.sidebar-logo h1{font-size:15px;font-weight:800;color:var(--gold);letter-spacing:0.3px;}
+.sidebar-logo p{font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;}
+.nav-items{flex:1;padding:12px 0;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 16px;color:rgba(255,255,255,0.65);cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.06);color:white;}
+.nav-item.active{background:rgba(201,168,76,0.15);color:var(--gold);border-left-color:var(--gold);}
+.nav-icon{font-size:16px;width:20px;text-align:center;}
+.sidebar-footer{padding:14px 16px;border-top:1px solid rgba(255,255,255,0.08);}
+.user-info{font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:8px;}
+.btn-logout-sb{width:100%;padding:8px;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border:none;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;}
+.btn-logout-sb:hover{background:rgba(255,255,255,0.15);}
+
+/* TOPBAR */
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:54px;background:white;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;z-index:99;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+.topbar-title{font-size:15px;font-weight:700;color:var(--hijau);}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.topbar-badge{background:var(--gold-light);color:var(--gold-dark);padding:4px 12px;border-radius:99px;font-size:11px;font-weight:600;}
+
+/* MAIN */
+.main-content{margin-left:var(--sidebar-w);padding-top:54px;min-height:100vh;}
+.page{display:none;padding:20px;}
+.page.active{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.05);border:1px solid var(--border);}
+.card-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+
+/* STAT GRID */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px;}
+.stat-card{background:white;border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,0.04);}
+.stat-lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:600;margin-bottom:4px;}
+.stat-val{font-size:20px;font-weight:800;}
+.stat-val.gold{color:var(--gold-dark);}
+.stat-val.hijau{color:var(--hijau);}
+.stat-val.blue{color:var(--blue);}
+.stat-sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{background:var(--hijau);color:white;padding:8px 10px;text-align:left;font-weight:600;}
+.tbl td{padding:8px 10px;border-bottom:1px solid #f0ede6;}
+.tbl tr:hover td{background:#faf8f3;}
+.tbl tr:nth-child(even) td{background:#fafafa;}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-pw1{background:#dbeafe;color:#1d4ed8;}
+.badge-pw2{background:#fce7f3;color:#be185d;}
+.badge-pw3{background:#d1fae5;color:#065f46;}
+.badge-pw4{background:var(--gold-light);color:var(--gold-dark);}
+
+/* FORM */
+.irow{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.irow label{min-width:140px;font-size:12px;font-weight:600;color:var(--text-muted);}
+.irow input,.irow select,.irow textarea{flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;}
+.irow input:focus,.irow select:focus{outline:none;border-color:var(--gold);}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+/* BUTTONS */
+.btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;}
+.btn.primary{background:var(--hijau);color:white;}
+.btn.gold{background:var(--gold);color:white;}
+.btn.danger{background:var(--red);color:white;}
+.btn.secondary{background:white;color:var(--hijau);border:1.5px solid var(--hijau);}
+.btn.sm{padding:5px 12px;font-size:12px;}
+.btn-row{display:flex;gap:8px;margin-top:16px;}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:150;display:none;align-items:flex-end;justify-content:center;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:20px;}
+.mhandle{width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 16px;}
+
+/* SEARCH BAR */
+.search-bar{display:flex;gap:8px;margin-bottom:14px;}
+.search-bar input{flex:1;padding:9px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;}
+.search-bar input:focus{outline:none;border-color:var(--gold);}
+.search-bar select{padding:9px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;}
+
+/* TOAST */
+.toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:999;display:none;}
+.toast{background:#1f2937;color:white;padding:10px 18px;border-radius:8px;font-size:13px;white-space:nowrap;}
+.toast.err{background:var(--red);}
+
+/* PRINT */
+@media print{
+  .sidebar,.topbar,.no-print{display:none!important;}
+  .main-content{margin:0;padding:0;}
+  .page{display:block!important;padding:0;}
+  #page-cetak{display:block!important;}
+}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--text-muted);}
+.empty .ei{font-size:40px;margin-bottom:10px;}
+
+/* SPINNER */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* MOBILE */
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-220px);}
+  .sidebar.open{transform:translateX(0);width:220px;}
+  .topbar{left:0;}
+  .main-content{margin-left:0;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .two-col{grid-template-columns:1fr;}
+  .irow{flex-direction:column;align-items:flex-start;}
+  .irow label{min-width:unset;}
+  .irow input,.irow select{width:100%;}
+}
+.hamburger{display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:4px;}
+@media(max-width:768px){.hamburger{display:block;}}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99;}
+.sb-overlay.show{display:block;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="logo-icon">📊</div>
+      <h1>Saham UBNB</h1>
+      <p>Modul Kepemilikan Saham</p>
+    </div>
+    <div class="login-field">
+      <label>Username</label>
+      <input type="text" id="inp-user" placeholder="Username" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="inp-pass" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- SIDEBAR OVERLAY -->
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <h1>📊 Saham UBNB</h1>
+      <p>Kepemilikan & Bagi Hasil</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+      <div class="nav-item" onclick="showPage('daftar',this)"><span class="nav-icon">👥</span>Daftar Pemegang</div>
+      <div class="nav-item" onclick="showPage('transaksi',this)"><span class="nav-icon">💹</span>Transaksi Saham</div>
+      <div class="nav-item" onclick="showPage('bagi-hasil',this)"><span class="nav-icon">💰</span>Bagi Hasil</div>
+      <div class="nav-item" onclick="showPage('laporan',this)"><span class="nav-icon">📋</span>Laporan</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-info" id="sb-user">-</div>
+      <a href="index.html" style="display:block;text-align:center;margin-bottom:6px;font-size:11px;color:rgba(255,255,255,0.5);text-decoration:none">🛒 Warung</a>
+      <a href="bmt.html" style="display:block;text-align:center;margin-bottom:8px;font-size:11px;color:rgba(255,255,255,0.5);text-decoration:none">🕌 BMT</a>
+      <button class="btn-logout-sb" onclick="doLogout()">Keluar</button>
+    </div>
+  </div>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="hamburger" onclick="toggleSidebar()">☰</button>
+      <span class="topbar-title" id="topbar-title">Dashboard Saham</span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-badge" id="user-badge">-</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-content">
+
+    <!-- PAGE: DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stat-grid" id="dash-stats"></div>
+      <div class="card">
+        <div class="card-title">📊 Rekap Per Kelompok</div>
+        <div id="dash-kelompok"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🏆 Top 10 Pemegang Saham</div>
+        <div id="dash-top10"></div>
+      </div>
+    </div>
+
+    <!-- PAGE: DAFTAR PEMEGANG -->
+    <div class="page" id="page-daftar">
+      <div class="card">
+        <div class="card-title">
+          👥 Daftar Pemegang Saham
+          <button class="btn gold sm" onclick="openModalTambahAnggota()">＋ Anggota Baru</button>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="cari-pemegang" placeholder="🔍 Cari nama / no. anggota..." oninput="renderDaftar()">
+          <select id="flt-kelompok" onchange="renderDaftar()">
+            <option value="">Semua Kelompok</option>
+            <option value="PW1">PW1</option>
+            <option value="PW2">PW2</option>
+            <option value="PW3">PW3</option>
+            <option value="PW4">PW4</option>
+          </select>
+        </div>
+        <div id="pemegang-count" style="font-size:12px;color:var(--text-muted);margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><div id="daftar-list"></div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: TRANSAKSI -->
+    <div class="page" id="page-transaksi">
+      <div class="two-col">
+        <!-- Form Beli / Tambah -->
+        <div class="card">
+          <div class="card-title">💹 Beli / Tambah Saham</div>
+          <div class="irow"><label>Anggota</label>
+            <select id="trx-anggota" onchange="onTrxAnggotaChange()" style="flex:1">
+              <option value="">-- Pilih Anggota --</option>
+            </select>
+          </div>
+          <div id="trx-info-anggota" style="display:none;background:var(--hijau-light);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px"></div>
+          <div class="irow"><label>Jumlah Lembar</label><input type="number" id="trx-lembar" placeholder="0" min="1" oninput="hitungTrx()"></div>
+          <div class="irow"><label>Harga/Lembar (Rp)</label><input type="number" id="trx-harga" value="10200" oninput="hitungTrx()"></div>
+          <div class="irow"><label>Tanggal</label><input type="date" id="trx-tgl"></div>
+          <div id="trx-total" style="background:var(--gold-light);border-radius:8px;padding:12px;margin-bottom:12px;display:none">
+            <div style="font-size:12px;color:var(--gold-dark)">Total Nilai</div>
+            <div style="font-size:22px;font-weight:800;color:var(--gold-dark)" id="trx-total-val">Rp 0</div>
+          </div>
+          <div class="irow"><label>Catatan</label><input type="text" id="trx-catatan" placeholder="Opsional"></div>
+          <div class="btn-row">
+            <button class="btn gold" style="flex:1" onclick="simpanTrxBeli()">💹 Simpan Transaksi</button>
+          </div>
+        </div>
+
+        <!-- Form Transfer -->
+        <div class="card">
+          <div class="card-title">🔄 Transfer Saham</div>
+          <div class="irow"><label>Dari Anggota</label>
+            <select id="tf-dari" onchange="onTfDariChange()" style="flex:1">
+              <option value="">-- Penjual --</option>
+            </select>
+          </div>
+          <div id="tf-dari-info" style="display:none;background:#fee2e2;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px"></div>
+          <div class="irow"><label>Ke Anggota</label>
+            <select id="tf-ke" style="flex:1">
+              <option value="">-- Pembeli --</option>
+            </select>
+          </div>
+          <div class="irow"><label>Jumlah Lembar</label><input type="number" id="tf-lembar" placeholder="0" min="1" oninput="hitungTf()"></div>
+          <div class="irow"><label>Harga/Lembar (Rp)</label><input type="number" id="tf-harga" value="10200" oninput="hitungTf()"></div>
+          <div class="irow"><label>Tanggal</label><input type="date" id="tf-tgl"></div>
+          <div id="tf-total" style="background:#fef3c7;border-radius:8px;padding:12px;margin-bottom:12px;display:none">
+            <div style="font-size:12px;color:#92400e">Total Nilai Transfer</div>
+            <div style="font-size:22px;font-weight:800;color:#92400e" id="tf-total-val">Rp 0</div>
+          </div>
+          <div class="irow"><label>Catatan</label><input type="text" id="tf-catatan" placeholder="Alasan transfer"></div>
+          <div class="btn-row">
+            <button class="btn secondary" style="flex:1" onclick="simpanTransfer()">🔄 Proses Transfer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Riwayat Transaksi -->
+      <div class="card">
+        <div class="card-title">
+          📋 Riwayat Transaksi
+          <button class="btn sm secondary" onclick="loadRiwayatTrx()">🔄 Refresh</button>
+        </div>
+        <div id="riwayat-trx"></div>
+      </div>
+    </div>
+
+    <!-- PAGE: BAGI HASIL -->
+    <div class="page" id="page-bagi-hasil">
+      <div class="two-col">
+        <!-- Form Bagi Hasil -->
+        <div class="card">
+          <div class="card-title">💰 Input Bagi Hasil</div>
+          <div class="irow"><label>Periode</label><input type="text" id="bh-periode" placeholder="Contoh: 2024" maxlength="4"></div>
+          <div class="irow"><label>Total Laba UBNB (Rp)</label><input type="number" id="bh-laba" placeholder="0" oninput="hitungBH()"></div>
+          <div class="irow"><label>% untuk Pemegang Saham</label><input type="number" id="bh-pct" placeholder="40" value="40" min="1" max="100" oninput="hitungBH()"></div>
+          <div id="bh-preview" style="display:none;background:var(--gold-light);border-radius:8px;padding:14px;margin-bottom:12px">
+            <div style="font-size:12px;color:var(--gold-dark);margin-bottom:4px">Total yang Dibagikan</div>
+            <div style="font-size:24px;font-weight:800;color:var(--gold-dark)" id="bh-total-val">Rp 0</div>
+            <div style="font-size:11px;color:var(--gold-dark);margin-top:4px" id="bh-per-lembar">≈ Rp 0 / lembar</div>
+          </div>
+          <div class="irow"><label>Tanggal Bagi</label><input type="date" id="bh-tgl"></div>
+          <div class="irow"><label>Catatan</label><input type="text" id="bh-catatan" placeholder="Opsional"></div>
+          <div class="btn-row">
+            <button class="btn gold" style="flex:1" onclick="simpanBagiHasil()">💰 Hitung & Simpan</button>
+          </div>
+        </div>
+
+        <!-- Riwayat Bagi Hasil -->
+        <div class="card">
+          <div class="card-title">📜 Riwayat Bagi Hasil</div>
+          <div id="riwayat-bh"></div>
+        </div>
+      </div>
+
+      <!-- Detail Bagi Hasil -->
+      <div class="card" id="detail-bh-card" style="display:none">
+        <div class="card-title">
+          <span id="detail-bh-title">Detail Bagi Hasil</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn sm secondary" onclick="cetakBH()">🖨️ Cetak</button>
+            <button class="btn sm gold" onclick="exportBH()">⬇️ Excel</button>
+          </div>
+        </div>
+        <div id="detail-bh-list"></div>
+      </div>
+    </div>
+
+    <!-- PAGE: LAPORAN -->
+    <div class="page" id="page-laporan">
+      <div class="card">
+        <div class="card-title">📋 Export Laporan</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="background:var(--hijau-light);border-radius:10px;padding:16px;text-align:center;cursor:pointer" onclick="exportDaftarPemegang()">
+            <div style="font-size:32px;margin-bottom:8px">📊</div>
+            <div style="font-weight:700;color:var(--hijau)">Daftar Pemegang Saham</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Semua anggota + jumlah lembar</div>
+            <button class="btn primary sm" style="margin-top:10px">⬇️ Export Excel</button>
+          </div>
+          <div style="background:var(--gold-light);border-radius:10px;padding:16px;text-align:center;cursor:pointer" onclick="exportRiwayatTrxAll()">
+            <div style="font-size:32px;margin-bottom:8px">💹</div>
+            <div style="font-weight:700;color:var(--gold-dark)">Riwayat Transaksi</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Semua transaksi beli & transfer</div>
+            <button class="btn gold sm" style="margin-top:10px">⬇️ Export Excel</button>
+          </div>
+          <div style="background:var(--blue-light);border-radius:10px;padding:16px;text-align:center;cursor:pointer" onclick="exportRekapKelompok()">
+            <div style="font-size:32px;margin-bottom:8px">👥</div>
+            <div style="font-weight:700;color:var(--blue)">Rekap Per Kelompok</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Ringkasan per kelompok PW</div>
+            <button class="btn sm" style="background:var(--blue);color:white;margin-top:10px">⬇️ Export Excel</button>
+          </div>
+          <div style="background:#fef3c7;border-radius:10px;padding:16px;text-align:center;cursor:pointer" onclick="exportBagiHasilAll()">
+            <div style="font-size:32px;margin-bottom:8px">💰</div>
+            <div style="font-weight:700;color:#92400e">Laporan Bagi Hasil</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Semua periode bagi hasil</div>
+            <button class="btn sm" style="background:#f59e0b;color:white;margin-top:10px">⬇️ Export Excel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end main-content -->
+</div><!-- end app -->
+
+<!-- MODAL TAMBAH ANGGOTA -->
+<div class="overlay" id="modal-anggota">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div style="font-weight:700;font-size:16px;margin-bottom:16px">➕ Tambah Anggota Baru</div>
+    <div class="irow"><label>No. Anggota</label><input type="text" id="ma-no" placeholder="UBNB-PW/xxxxx"></div>
+    <div class="irow"><label>Nama Pemilik</label><input type="text" id="ma-nama" placeholder="Nama lengkap"></div>
+    <div class="irow"><label>Nama Keluarga</label><input type="text" id="ma-keluarga" placeholder="Opsional"></div>
+    <div class="irow"><label>Kelompok</label>
+      <select id="ma-kelompok" style="flex:1">
+        <option value="PW1">PW1 - Perwirasari</option>
+        <option value="PW2">PW2 - Alinda</option>
+        <option value="PW3">PW3 - Bulak Perwira</option>
+        <option value="PW4">PW4 - VIP</option>
+      </select>
+    </div>
+    <div class="irow"><label>Jenis</label>
+      <select id="ma-jenis" style="flex:1">
+        <option value="anggota">Anggota</option>
+        <option value="investor">Investor</option>
+      </select>
+    </div>
+    <div class="irow"><label>No. HP</label><input type="tel" id="ma-hp" placeholder="08xxxxxxxxxx"></div>
+    <div class="irow"><label>Alamat</label><input type="text" id="ma-alamat" placeholder="Opsional"></div>
+    <div class="btn-row">
+      <button class="btn secondary" style="flex:1" onclick="closeModal('modal-anggota')">Batal</button>
+      <button class="btn gold" style="flex:2" onclick="simpanAnggota()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETAIL PEMEGANG -->
+<div class="overlay" id="modal-detail">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div id="modal-detail-content"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-wrap" id="toast-wrap">
+  <div class="toast" id="toast-msg"></div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SURL,SKEY);
+
+let CU=null, aSaham=[], aTrx=[], aBH=[], aBHDetail=[];
+const HARGA_SAHAM=10200;
+
+// ===== UTILS =====
+function rp(n){return 'Rp '+(n||0).toLocaleString('id-ID');}
+function fmtTgl(s){if(!s)return'-';try{return new Date(s).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});}catch(e){return s;}}
+function toast(msg,err=false){
+  const w=document.getElementById('toast-wrap');
+  const m=document.getElementById('toast-msg');
+  m.textContent=msg;m.className='toast'+(err?' err':'');
+  w.style.display='block';
+  setTimeout(()=>w.style.display='none',3000);
+}
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(el)el.classList.add('active');
+  const titles={dashboard:'Dashboard Saham',daftar:'Daftar Pemegang Saham',transaksi:'Transaksi Saham','bagi-hasil':'Bagi Hasil',laporan:'Laporan'};
+  document.getElementById('topbar-title').textContent=titles[id]||'';
+  if(id==='daftar')renderDaftar();
+  if(id==='transaksi'){isiDropdownTrx();loadRiwayatTrx();}
+  if(id==='bagi-hasil')loadBagiHasil();
+  closeSidebar();
+}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function kelBadge(k){
+  const cls={PW1:'badge-pw1',PW2:'badge-pw2',PW3:'badge-pw3',PW4:'badge-pw4'};
+  return`<span class="badge ${cls[k]||''}">${k}</span>`;
+}
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sb-overlay').classList.toggle('show');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('show');
+}
+
+// ===== AUTH =====
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  const btn=document.getElementById('btn-login');
+  btn.textContent='Masuk...';btn.disabled=true;
+  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.textContent='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';document.getElementById('login-err').style.display='block';return;}
+  CU=data;
+  localStorage.setItem('saham_user',JSON.stringify(data));
+  loginOK();
+}
+async function loginOK(){
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username+' · '+CU.role;
+  document.getElementById('sb-user').textContent=CU.username+' ('+CU.role+')';
+  // Set default tanggal
+  const today=new Date().toISOString().split('T')[0];
+  ['trx-tgl','tf-tgl','bh-tgl'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today;});
+  await loadAll();
+  renderDashboard();
+}
+function doLogout(){
+  CU=null;localStorage.removeItem('saham_user');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-wrap').style.display='flex';
+}
+// Auto login
+window.addEventListener('load',()=>{
+  const saved=localStorage.getItem('saham_user');
+  if(saved){try{CU=JSON.parse(saved);loginOK();}catch(e){}}
+});
+
+// ===== LOAD DATA =====
+async function loadAll(){
+  const[{data:s},{data:t},{data:b},{data:bd}]=await Promise.all([
+    sb.from('ubnb_saham').select('*').order('jumlah_lembar',{ascending:false}),
+    sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}),
+    sb.from('ubnb_saham_bagi_hasil').select('*').order('periode',{ascending:false}),
+    sb.from('ubnb_saham_bagi_hasil_detail').select('*'),
+  ]);
+  aSaham=s||[];aTrx=t||[];aBH=b||[];aBHDetail=bd||[];
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const totalLembar=aSaham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  const totalNilai=totalLembar*HARGA_SAHAM;
+  const totalAnggota=aSaham.length;
+  const hargaLembar=HARGA_SAHAM;
+
+  // Stat cards
+  document.getElementById('dash-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-lbl">Total Pemegang Saham</div><div class="stat-val blue">${totalAnggota.toLocaleString('id-ID')}</div><div class="stat-sub">orang</div></div>
+    <div class="stat-card"><div class="stat-lbl">Total Lembar Beredar</div><div class="stat-val gold">${totalLembar.toLocaleString('id-ID')}</div><div class="stat-sub">lembar</div></div>
+    <div class="stat-card"><div class="stat-lbl">Modal Dasar UBNB</div><div class="stat-val hijau">${rp(totalNilai)}</div><div class="stat-sub">@ Rp ${hargaLembar.toLocaleString('id-ID')}/lembar</div></div>
+    <div class="stat-card"><div class="stat-lbl">Riwayat Bagi Hasil</div><div class="stat-val gold">${aBH.length}</div><div class="stat-sub">periode</div></div>`;
+
+  // Rekap per kelompok
+  const kelompoks=['PW1','PW2','PW3','PW4'];
+  const rekapRows=kelompoks.map(k=>{
+    const members=aSaham.filter(s=>s.kelompok===k);
+    const lembar=members.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+    const pct=totalLembar>0?(lembar/totalLembar*100).toFixed(1):0;
+    return{k,count:members.length,lembar,nilai:lembar*HARGA_SAHAM,pct};
+  });
+  document.getElementById('dash-kelompok').innerHTML=`
+    <table class="tbl">
+      <thead><tr><th>Kelompok</th><th>Anggota</th><th>Lembar</th><th>Nilai</th><th>%</th></tr></thead>
+      <tbody>
+        ${rekapRows.map(r=>`<tr>
+          <td>${kelBadge(r.k)}</td>
+          <td>${r.count}</td>
+          <td><strong>${r.lembar.toLocaleString('id-ID')}</strong></td>
+          <td>${rp(r.nilai)}</td>
+          <td><div style="display:flex;align-items:center;gap:6px">
+            <div style="flex:1;background:#f0ede6;border-radius:99px;height:6px">
+              <div style="width:${r.pct}%;background:var(--gold);height:100%;border-radius:99px"></div>
+            </div>${r.pct}%
+          </div></td>
+        </tr>`).join('')}
+        <tr style="font-weight:700;background:var(--gold-light)">
+          <td>TOTAL</td><td>${totalAnggota}</td>
+          <td>${totalLembar.toLocaleString('id-ID')}</td>
+          <td>${rp(totalNilai)}</td><td>100%</td>
+        </tr>
+      </tbody>
+    </table>`;
+
+  // Top 10
+  const top10=aSaham.slice(0,10);
+  document.getElementById('dash-top10').innerHTML=`
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Nama</th><th>Kelompok</th><th>Lembar</th><th>Nilai</th><th>%</th></tr></thead>
+      <tbody>
+        ${top10.map((s,i)=>`<tr>
+          <td><strong>${i+1}</strong></td>
+          <td><div style="font-weight:600">${s.nama}</div><div style="font-size:10px;color:var(--text-muted)">${s.no_anggota}</div></td>
+          <td>${kelBadge(s.kelompok)}</td>
+          <td><strong>${(s.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
+          <td>${rp((s.jumlah_lembar||0)*HARGA_SAHAM)}</td>
+          <td>${totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(2):0}%</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ===== DAFTAR PEMEGANG =====
+function renderDaftar(){
+  const q=(document.getElementById('cari-pemegang')?.value||'').toLowerCase();
+  const kel=document.getElementById('flt-kelompok')?.value||'';
+  let list=[...aSaham];
+  if(q)list=list.filter(s=>(s.nama||'').toLowerCase().includes(q)||(s.no_anggota||'').toLowerCase().includes(q));
+  if(kel)list=list.filter(s=>s.kelompok===kel);
+  list.sort((a,b)=>(b.jumlah_lembar||0)-(a.jumlah_lembar||0));
+  const totalLembar=aSaham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  document.getElementById('pemegang-count').textContent=`Menampilkan ${list.length} dari ${aSaham.length} pemegang saham`;
+  if(!list.length){document.getElementById('daftar-list').innerHTML='<div class="empty"><div class="ei">👥</div>Tidak ada data</div>';return;}
+  document.getElementById('daftar-list').innerHTML=`
+    <table class="tbl">
+      <thead><tr><th>No. Anggota</th><th>Nama</th><th>Kelompok</th><th>Lembar</th><th>Nilai</th><th>%</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(s=>`<tr>
+          <td style="font-size:11px;color:var(--text-muted)">${s.no_anggota}</td>
+          <td><div style="font-weight:600">${s.nama}</div>${s.nama_keluarga?`<div style="font-size:10px;color:var(--text-muted)">${s.nama_keluarga}</div>`:''}</td>
+          <td>${kelBadge(s.kelompok)}</td>
+          <td><strong>${(s.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
+          <td style="font-size:12px">${rp((s.jumlah_lembar||0)*HARGA_SAHAM)}</td>
+          <td style="font-size:11px">${totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(2):0}%</td>
+          <td><button class="btn sm secondary" onclick="lihatDetail(${s.id})">Detail</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function lihatDetail(id){
+  const s=aSaham.find(x=>x.id===id);if(!s)return;
+  const trxList=aTrx.filter(t=>t.saham_id===id);
+  const totalLembar=aSaham.reduce((a,x)=>a+(x.jumlah_lembar||0),0);
+  const pct=totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(2):0;
+  document.getElementById('modal-detail-content').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-weight:800;font-size:18px">${s.nama}</div>
+      <button onclick="closeModal('modal-detail')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+    </div>
+    <div style="background:var(--gold-light);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        <div><div style="font-size:10px;color:var(--gold-dark);text-transform:uppercase;font-weight:600">No. Anggota</div><div style="font-weight:700">${s.no_anggota}</div></div>
+        <div><div style="font-size:10px;color:var(--gold-dark);text-transform:uppercase;font-weight:600">Kelompok</div><div>${kelBadge(s.kelompok)}</div></div>
+        <div><div style="font-size:10px;color:var(--gold-dark);text-transform:uppercase;font-weight:600">Jumlah Lembar</div><div style="font-size:20px;font-weight:800;color:var(--gold-dark)">${(s.jumlah_lembar||0).toLocaleString('id-ID')}</div></div>
+        <div><div style="font-size:10px;color:var(--gold-dark);text-transform:uppercase;font-weight:600">Nilai Saham</div><div style="font-weight:700;color:var(--gold-dark)">${rp((s.jumlah_lembar||0)*HARGA_SAHAM)}</div></div>
+        <div><div style="font-size:10px;color:var(--gold-dark);text-transform:uppercase;font-weight:600">Porsi Kepemilikan</div><div style="font-weight:700">${pct}%</div></div>
+        <div><div style="font-size:10px;color:var(--gold-dark);text-transform:uppercase;font-weight:600">Tgl. Pertama</div><div>${fmtTgl(s.tanggal_pertama)}</div></div>
+      </div>
+    </div>
+    <div style="font-weight:700;margin-bottom:10px">📋 Riwayat Transaksi (${trxList.length})</div>
+    ${trxList.length?`<table class="tbl">
+      <thead><tr><th>Tanggal</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Keterangan</th></tr></thead>
+      <tbody>
+        ${trxList.map(t=>{
+          const tipeColor={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
+          return`<tr>
+            <td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
+            <td><span style="color:${tipeColor[t.tipe]||'inherit'};font-weight:700;font-size:11px;text-transform:uppercase">${t.tipe.replace('_',' ')}</span></td>
+            <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
+            <td style="font-size:11px">${rp(t.total_nilai)}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${t.catatan||'-'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`:'<div class="empty" style="padding:16px"><div class="ei" style="font-size:24px">📋</div>Belum ada transaksi</div>'}`;
+  openModal('modal-detail');
+}
+
+// ===== TAMBAH ANGGOTA =====
+function openModalTambahAnggota(){openModal('modal-anggota');}
+async function simpanAnggota(){
+  const no=document.getElementById('ma-no').value.trim();
+  const nama=document.getElementById('ma-nama').value.trim();
+  if(!no||!nama){toast('No. Anggota dan Nama wajib diisi',true);return;}
+  const payload={
+    no_anggota:no,nama,
+    nama_keluarga:document.getElementById('ma-keluarga').value.trim()||null,
+    kelompok:document.getElementById('ma-kelompok').value,
+    jenis:document.getElementById('ma-jenis').value,
+    no_hp:document.getElementById('ma-hp').value.trim()||null,
+    alamat:document.getElementById('ma-alamat').value.trim()||null,
+    jumlah_lembar:0,nilai_per_lembar:HARGA_SAHAM,status:'Aktif',
+  };
+  const{error}=await sb.from('ubnb_saham').insert([payload]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('Anggota berhasil ditambahkan!');
+  closeModal('modal-anggota');
+  await loadAll();renderDaftar();isiDropdownTrx();
+}
+
+// ===== TRANSAKSI =====
+function isiDropdownTrx(){
+  const opts=aSaham.map(s=>`<option value="${s.id}">${s.nama} (${s.no_anggota}) - ${(s.jumlah_lembar||0)} lbr</option>`).join('');
+  ['trx-anggota','tf-dari','tf-ke'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){const first=el.options[0].outerHTML;el.innerHTML=first+opts;}
+  });
+}
+
+function onTrxAnggotaChange(){
+  const id=parseInt(document.getElementById('trx-anggota').value);
+  const s=aSaham.find(x=>x.id===id);
+  const info=document.getElementById('trx-info-anggota');
+  if(s){
+    info.style.display='block';
+    info.innerHTML=`<strong>${s.nama}</strong> · ${s.kelompok} · <span style="color:var(--hijau);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span> dimiliki`;
+  } else info.style.display='none';
+}
+
+function onTfDariChange(){
+  const id=parseInt(document.getElementById('tf-dari').value);
+  const s=aSaham.find(x=>x.id===id);
+  const info=document.getElementById('tf-dari-info');
+  if(s){
+    info.style.display='block';
+    info.innerHTML=`<strong>${s.nama}</strong> memiliki <span style="color:var(--red);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span> (maks. yang bisa ditransfer)`;
+  } else info.style.display='none';
+}
+
+function hitungTrx(){
+  const lembar=parseInt(document.getElementById('trx-lembar').value)||0;
+  const harga=parseInt(document.getElementById('trx-harga').value)||0;
+  const total=lembar*harga;
+  const el=document.getElementById('trx-total');
+  if(lembar>0&&harga>0){el.style.display='block';document.getElementById('trx-total-val').textContent=rp(total);}
+  else el.style.display='none';
+}
+
+function hitungTf(){
+  const lembar=parseInt(document.getElementById('tf-lembar').value)||0;
+  const harga=parseInt(document.getElementById('tf-harga').value)||0;
+  const total=lembar*harga;
+  const el=document.getElementById('tf-total');
+  if(lembar>0&&harga>0){el.style.display='block';document.getElementById('tf-total-val').textContent=rp(total);}
+  else el.style.display='none';
+}
+
+async function simpanTrxBeli(){
+  const sahamId=parseInt(document.getElementById('trx-anggota').value);
+  const lembar=parseInt(document.getElementById('trx-lembar').value)||0;
+  const harga=parseInt(document.getElementById('trx-harga').value)||HARGA_SAHAM;
+  const tgl=document.getElementById('trx-tgl').value;
+  const catatan=document.getElementById('trx-catatan').value.trim();
+  if(!sahamId||!lembar||!tgl){toast('Lengkapi data transaksi',true);return;}
+  // Insert transaksi
+  const{error:e1}=await sb.from('ubnb_saham_trx').insert([{
+    saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,
+    harga_per_lembar:harga,total_nilai:lembar*harga,
+    tanggal:tgl,catatan:catatan||null,operator:CU.username
+  }]);
+  if(e1){toast('Gagal simpan transaksi: '+e1.message,true);return;}
+  // Update jumlah lembar
+  const s=aSaham.find(x=>x.id===sahamId);
+  const newLembar=(s?.jumlah_lembar||0)+lembar;
+  await sb.from('ubnb_saham').update({jumlah_lembar:newLembar}).eq('id',sahamId);
+  toast('Transaksi berhasil disimpan!');
+  document.getElementById('trx-lembar').value='';
+  document.getElementById('trx-catatan').value='';
+  document.getElementById('trx-total').style.display='none';
+  await loadAll();renderDashboard();isiDropdownTrx();loadRiwayatTrx();
+}
+
+async function simpanTransfer(){
+  const dariId=parseInt(document.getElementById('tf-dari').value);
+  const keId=parseInt(document.getElementById('tf-ke').value);
+  const lembar=parseInt(document.getElementById('tf-lembar').value)||0;
+  const harga=parseInt(document.getElementById('tf-harga').value)||HARGA_SAHAM;
+  const tgl=document.getElementById('tf-tgl').value;
+  const catatan=document.getElementById('tf-catatan').value.trim();
+  if(!dariId||!keId||!lembar||!tgl){toast('Lengkapi data transfer',true);return;}
+  if(dariId===keId){toast('Dari dan ke tidak boleh sama',true);return;}
+  const sDari=aSaham.find(x=>x.id===dariId);
+  if((sDari?.jumlah_lembar||0)<lembar){toast('Lembar tidak cukup untuk ditransfer',true);return;}
+  const sKe=aSaham.find(x=>x.id===keId);
+  // Insert 2 transaksi
+  await sb.from('ubnb_saham_trx').insert([
+    {saham_id:dariId,tipe:'transfer_keluar',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:catatan||null,ke_id:keId,operator:CU.username},
+    {saham_id:keId,tipe:'transfer_masuk',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:catatan||null,dari_id:dariId,operator:CU.username},
+  ]);
+  // Update lembar
+  await sb.from('ubnb_saham').update({jumlah_lembar:(sDari.jumlah_lembar||0)-lembar}).eq('id',dariId);
+  await sb.from('ubnb_saham').update({jumlah_lembar:(sKe?.jumlah_lembar||0)+lembar}).eq('id',keId);
+  toast('Transfer berhasil!');
+  document.getElementById('tf-lembar').value='';
+  document.getElementById('tf-total').style.display='none';
+  await loadAll();renderDashboard();isiDropdownTrx();loadRiwayatTrx();
+}
+
+async function loadRiwayatTrx(){
+  const{data}=await sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}).limit(50);
+  aTrx=data||[];
+  const el=document.getElementById('riwayat-trx');
+  if(!el)return;
+  if(!aTrx.length){el.innerHTML='<div class="empty"><div class="ei">💹</div>Belum ada transaksi</div>';return;}
+  const tipeColor={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
+  const tipeIcon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
+  el.innerHTML=`<table class="tbl">
+    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Keterangan</th></tr></thead>
+    <tbody>
+      ${aTrx.map(t=>{
+        const s=aSaham.find(x=>x.id===t.saham_id);
+        return`<tr>
+          <td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
+          <td><div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div></td>
+          <td><span style="color:${tipeColor[t.tipe]||'inherit'};font-weight:700;font-size:11px">${tipeIcon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
+          <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
+          <td style="font-size:11px">${rp(t.total_nilai)}</td>
+          <td style="font-size:11px;color:var(--text-muted)">${t.catatan||'-'}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ===== BAGI HASIL =====
+function hitungBH(){
+  const laba=parseFloat(document.getElementById('bh-laba').value)||0;
+  const pct=parseFloat(document.getElementById('bh-pct').value)||0;
+  const total=laba*pct/100;
+  const totalLembar=aSaham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  const perLembar=totalLembar>0?total/totalLembar:0;
+  const el=document.getElementById('bh-preview');
+  if(laba>0&&pct>0){
+    el.style.display='block';
+    document.getElementById('bh-total-val').textContent=rp(total);
+    document.getElementById('bh-per-lembar').textContent=`≈ ${rp(Math.round(perLembar))} / lembar`;
+  } else el.style.display='none';
+}
+
+async function simpanBagiHasil(){
+  const periode=document.getElementById('bh-periode').value.trim();
+  const laba=parseFloat(document.getElementById('bh-laba').value)||0;
+  const pct=parseFloat(document.getElementById('bh-pct').value)||0;
+  const tgl=document.getElementById('bh-tgl').value;
+  const catatan=document.getElementById('bh-catatan').value.trim();
+  if(!periode||!laba||!pct||!tgl){toast('Lengkapi semua field bagi hasil',true);return;}
+  const totalDibagi=laba*pct/100;
+  const totalLembar=aSaham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  const perLembar=totalLembar>0?totalDibagi/totalLembar:0;
+  // Insert header
+  const{data:bhData,error}=await sb.from('ubnb_saham_bagi_hasil').insert([{
+    periode,total_laba:laba,pct_bagi_hasil:pct,total_dibagi:totalDibagi,
+    tanggal_bagi:tgl,catatan:catatan||null,operator:CU.username
+  }]).select('id').single();
+  if(error){toast('Gagal: '+error.message,true);return;}
+  // Insert detail per anggota
+  const details=aSaham.filter(s=>s.jumlah_lembar>0).map(s=>({
+    bagi_hasil_id:bhData.id,
+    saham_id:s.id,
+    jumlah_lembar:s.jumlah_lembar,
+    porsi_pct:(s.jumlah_lembar/totalLembar*100).toFixed(4),
+    jumlah_diterima:Math.round(s.jumlah_lembar*perLembar),
+    sudah_dibayar:false,
+  }));
+  await sb.from('ubnb_saham_bagi_hasil_detail').insert(details);
+  toast('Bagi hasil berhasil dihitung!');
+  await loadAll();loadBagiHasil();
+}
+
+async function loadBagiHasil(){
+  const el=document.getElementById('riwayat-bh');
+  if(!el)return;
+  if(!aBH.length){el.innerHTML='<div class="empty"><div class="ei">💰</div>Belum ada bagi hasil</div>';return;}
+  el.innerHTML=aBH.map(b=>`
+    <div style="border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;cursor:pointer" onclick="lihatDetailBH(${b.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700">Periode ${b.periode}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${fmtTgl(b.tanggal_bagi)} · ${b.pct_bagi_hasil}% dari laba</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--gold-dark)">${rp(b.total_dibagi)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">dibagikan</div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+let activeBHId=null;
+function lihatDetailBH(id){
+  activeBHId=id;
+  const bh=aBH.find(x=>x.id===id);
+  const details=aBHDetail.filter(d=>d.bagi_hasil_id===id).sort((a,b)=>b.jumlah_diterima-a.jumlah_diterima);
+  const card=document.getElementById('detail-bh-card');
+  card.style.display='block';
+  document.getElementById('detail-bh-title').textContent=`Bagi Hasil Periode ${bh?.periode} — ${rp(bh?.total_dibagi)}`;
+  document.getElementById('detail-bh-list').innerHTML=`
+    <table class="tbl">
+      <thead><tr><th>No.</th><th>Nama</th><th>Kelompok</th><th>Lembar</th><th>Porsi</th><th>Diterima</th><th>Status</th></tr></thead>
+      <tbody>
+        ${details.map((d,i)=>{
+          const s=aSaham.find(x=>x.id===d.saham_id);
+          return`<tr>
+            <td>${i+1}</td>
+            <td><div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">${s?.no_anggota||''}</div></td>
+            <td>${kelBadge(s?.kelompok||'')}</td>
+            <td>${(d.jumlah_lembar||0).toLocaleString('id-ID')}</td>
+            <td>${parseFloat(d.porsi_pct||0).toFixed(2)}%</td>
+            <td><strong>${rp(d.jumlah_diterima)}</strong></td>
+            <td><button onclick="toggleBayarBH(${d.id},${d.sudah_dibayar})" class="btn sm ${d.sudah_dibayar?'primary':'secondary'}" style="${d.sudah_dibayar?'background:#6b7280':''}">${d.sudah_dibayar?'✅ Sudah':'⏳ Belum'}</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  card.scrollIntoView({behavior:'smooth'});
+}
+
+async function toggleBayarBH(detailId, sudah){
+  const tgl=sudah?null:new Date().toISOString().split('T')[0];
+  await sb.from('ubnb_saham_bagi_hasil_detail').update({sudah_dibayar:!sudah,tgl_bayar:tgl}).eq('id',detailId);
+  await loadAll();
+  if(activeBHId)lihatDetailBH(activeBHId);
+}
+
+function cetakBH(){window.print();}
+
+// ===== EXPORT =====
+function exportDaftarPemegang(){
+  const XLSX=window.XLSX;
+  const rows=[['No.','No. Anggota','No. Saham','Nama','Nama Keluarga','Kelompok','Jenis','Jumlah Lembar','Nilai (Rp)','% Kepemilikan','Tgl. Pertama','Status']];
+  const totalLembar=aSaham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  aSaham.sort((a,b)=>(b.jumlah_lembar||0)-(a.jumlah_lembar||0)).forEach((s,i)=>{
+    rows.push([i+1,s.no_anggota,s.no_saham,s.nama,s.nama_keluarga,s.kelompok,s.jenis,
+      s.jumlah_lembar,(s.jumlah_lembar||0)*HARGA_SAHAM,
+      totalLembar>0+((s.jumlah_lembar||0)/totalLembar*100).toFixed(2),
+      s.tanggal_pertama,s.status]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:4},{wch:16},{wch:20},{wch:24},{wch:24},{wch:8},{wch:10},{wch:10},{wch:16},{wch:12},{wch:12},{wch:8}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Pemegang Saham');
+  XLSX.writeFile(wb,'UBNB_Saham_Daftar_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+function exportRiwayatTrxAll(){
+  const XLSX=window.XLSX;
+  const rows=[['Tanggal','No. Anggota','Nama','Kelompok','Tipe','Lembar','Harga/Lembar','Total Nilai','Keterangan','Operator']];
+  aTrx.forEach(t=>{
+    const s=aSaham.find(x=>x.id===t.saham_id);
+    rows.push([t.tanggal,s?.no_anggota,s?.nama,s?.kelompok,t.tipe,t.jumlah_lembar,t.harga_per_lembar,t.total_nilai,t.catatan,t.operator]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Riwayat Transaksi');
+  XLSX.writeFile(wb,'UBNB_Saham_Transaksi_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+function exportRekapKelompok(){
+  const XLSX=window.XLSX;
+  const totalLembar=aSaham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  const rows=[['Kelompok','Jumlah Anggota','Total Lembar','Total Nilai (Rp)','% dari Total']];
+  ['PW1','PW2','PW3','PW4'].forEach(k=>{
+    const m=aSaham.filter(s=>s.kelompok===k);
+    const l=m.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+    rows.push([k,m.length,l,l*HARGA_SAHAM,totalLembar>0?(l/totalLembar*100).toFixed(2):0]);
+  });
+  rows.push(['TOTAL',aSaham.length,totalLembar,totalLembar*HARGA_SAHAM,'100']);
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Rekap Kelompok');
+  XLSX.writeFile(wb,'UBNB_Saham_Rekap_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+function exportBagiHasilAll(){
+  const XLSX=window.XLSX;
+  const wb=XLSX.utils.book_new();
+  // Sheet 1: Summary
+  const rows1=[['Periode','Total Laba','% Bagi Hasil','Total Dibagikan','Tanggal Bagi','Catatan']];
+  aBH.forEach(b=>rows1.push([b.periode,b.total_laba,b.pct_bagi_hasil,b.total_dibagi,b.tanggal_bagi,b.catatan]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows1),'Summary Bagi Hasil');
+  // Sheet 2: Detail
+  const rows2=[['Periode','No. Anggota','Nama','Kelompok','Lembar','Porsi %','Diterima (Rp)','Sudah Dibayar','Tgl Bayar']];
+  aBHDetail.forEach(d=>{
+    const bh=aBH.find(x=>x.id===d.bagi_hasil_id);
+    const s=aSaham.find(x=>x.id===d.saham_id);
+    rows2.push([bh?.periode,s?.no_anggota,s?.nama,s?.kelompok,d.jumlah_lembar,d.porsi_pct,d.jumlah_diterima,d.sudah_dibayar?'Ya':'Tidak',d.tgl_bayar||'']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows2),'Detail Bagi Hasil');
+  XLSX.writeFile(wb,'UBNB_Saham_BagiHasil_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+function exportBH(){
+  if(!activeBHId)return;
+  const bh=aBH.find(x=>x.id===activeBHId);
+  const details=aBHDetail.filter(d=>d.bagi_hasil_id===activeBHId);
+  const XLSX=window.XLSX;
+  const rows=[['No.','No. Anggota','Nama','Kelompok','Lembar','Porsi %','Diterima (Rp)','Status','Tgl Bayar']];
+  details.sort((a,b)=>b.jumlah_diterima-a.jumlah_diterima).forEach((d,i)=>{
+    const s=aSaham.find(x=>x.id===d.saham_id);
+    rows.push([i+1,s?.no_anggota,s?.nama,s?.kelompok,d.jumlah_lembar,parseFloat(d.porsi_pct).toFixed(2),d.jumlah_diterima,d.sudah_dibayar?'Sudah':'Belum',d.tgl_bayar||'']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,`BH ${bh?.periode}`);
+  XLSX.writeFile(wb,`UBNB_BagiHasil_${bh?.periode}.xlsx`);
+  toast('✅ Export berhasil!');
+}
+</script>
+</body>
+</html>
