@@ -6,7 +6,6 @@
 <title>Saham UBNB Perwira</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== VARIABLES ===== */
@@ -170,26 +169,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 #bukti-cetak{display:none;}
 @media print{
   body > *{display:none!important;}
-  #bukti-cetak{
-    display:block!important;
-    position:fixed;
-    inset:0;
-    background:white;
-    z-index:9999;
-    padding:8px;
-    overflow:visible;
-  }
+  #bukti-cetak{display:block!important;position:fixed;inset:0;background:white;z-index:9999;padding:16px;overflow:visible;}
   #bukti-cetak *{visibility:visible!important;}
-  #bukti-cetak > div{
-    width:100%!important;
-    max-width:100%!important;
-    margin:0!important;
-  }
-}
-@media screen and (max-width:768px){
-  #bukti-cetak{padding:12px;}
-  #bukti-cetak table{font-size:10px!important;}
-  #bukti-cetak th,#bukti-cetak td{padding:4px 6px!important;}
 }
 
 /* MOBILE */
@@ -573,6 +554,37 @@ function toast(msg,err=false){
 }
 function openModal(id){document.getElementById(id).classList.add('show');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
+function bukaWindowCetak(html){
+  // Buka window baru khusus cetak - lebih reliable dari manipulasi DOM
+  const w = window.open('','_blank','width=900,height=700');
+  if(!w){toast('Popup diblokir browser. Izinkan popup untuk mencetak.',true);return;}
+  w.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>Cetak - UBNB Perwira</title>
+<style>
+  body{margin:0;padding:0;background:white;font-family:Arial,sans-serif;}
+  @media print{
+    @page{margin:10mm;}
+    body{margin:0;}
+  }
+  .no-print{display:block;text-align:center;padding:12px;background:#f0f0f0;border-bottom:1px solid #ddd;}
+  @media print{.no-print{display:none!important;}}
+</style>
+</head><body>
+<div class="no-print">
+  <button onclick="window.print()" style="background:#1a6640;color:white;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer;margin-right:8px">🖨️ Cetak / Simpan PDF</button>
+  <button onclick="window.close()" style="background:#666;color:white;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer">✕ Tutup</button>
+</div>
+${html}
+</body></html>`);
+  w.document.close();
+  // Auto trigger print setelah konten dimuat
+  w.onload=()=>{
+    setTimeout(()=>w.print(),400);
+  };
+}
+
 function navBack(){
   // Kalau ada history sebelumnya di app, back
   // Kalau sudah di dashboard, tidak keluar
@@ -752,8 +764,7 @@ function lihatDetail(id){
       <div style="font-weight:800;font-size:17px">${s.nama}</div>
       <div style="display:flex;gap:6px">
         <button onclick="bukaEdit(${s.id});closeModal('modal-detail')" class="btn secondary sm">✏️ Edit</button>
-        <button onclick="generatePDF(${s.id})" class="btn gold sm">📄 PDF</button>
-        <button onclick="cetakBukti(${s.id})" class="btn secondary sm" style="display:none" id="btn-print-${s.id}">🖨️ Print</button>
+        <button onclick="cetakBukti(${s.id})" class="btn gold sm">🖨️ Cetak Bukti</button>
         <button onclick="closeModal('modal-detail')" class="btn-close">✕</button>
       </div>
     </div>
@@ -779,11 +790,6 @@ function lihatDetail(id){
       }).join('')}</tbody></table></div>`
     :'<div class="empty" style="padding:16px"><div class="ei" style="font-size:24px">📋</div>Belum ada transaksi</div>'}`;
   openModal('modal-detail');
-  
-  // Show tombol Print untuk desktop
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const btnPrint = document.getElementById('btn-print-'+id);
-  if(btnPrint && !isMobile) btnPrint.style.display = 'inline-flex';
 }
 
 // ===== TAMBAH ANGGOTA =====
@@ -971,7 +977,7 @@ async function loadRiwayatTrx(){
   const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
   const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
   el.innerHTML=`<table class="tbl">
-    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th><th>Aksi</th></tr></thead>
+    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th></tr></thead>
     <tbody>${aTrx.map(t=>{
       const s=aSaham.find(x=>x.id===t.saham_id);
       return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
@@ -979,85 +985,8 @@ async function loadRiwayatTrx(){
         <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:11px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
         <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
         <td style="font-size:11px">${rp(t.total_nilai)}</td>
-        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td>
-        <td style="white-space:nowrap"><button class="btn sm secondary" onclick="editTransaksi(${t.id})" style="padding:4px 8px;margin-right:4px">✏️</button><button class="btn sm danger" onclick="hapusTransaksi(${t.id})" style="padding:4px 8px">🗑️</button></td></tr>`;
+        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td></tr>`;
     }).join('')}</tbody></table>`;
-}
-
-// ===== EDIT & HAPUS TRANSAKSI (ADMIN ONLY) =====
-async function editTransaksi(id){
-  const t=aTrx.find(x=>x.id===id);
-  if(!t){toast('Transaksi tidak ditemukan',true);return;}
-  
-  const s=aSaham.find(x=>x.id===t.saham_id);
-  const namaAnggota=s?.nama||'Unknown';
-  
-  const newLembar=prompt(`Edit Jumlah Lembar\nAnggota: ${namaAnggota}\nLembar saat ini: ${t.jumlah_lembar}`,t.jumlah_lembar);
-  if(newLembar===null)return;
-  
-  const lembar=parseInt(newLembar)||0;
-  if(lembar<=0){toast('Jumlah lembar harus > 0',true);return;}
-  
-  const newHarga=prompt(`Edit Harga per Lembar\nHarga saat ini: ${rp(t.harga_per_lembar)}`,t.harga_per_lembar);
-  if(newHarga===null)return;
-  
-  const harga=parseInt(newHarga)||0;
-  if(harga<=0){toast('Harga harus > 0',true);return;}
-  
-  const newTgl=prompt(`Edit Tanggal (YYYY-MM-DD)\nTanggal saat ini: ${t.tanggal}`,t.tanggal);
-  if(newTgl===null)return;
-  
-  const newCatatan=prompt(`Edit Catatan\nCatatan saat ini: ${t.catatan||'(kosong)'}`,t.catatan||'');
-  
-  // Hitung selisih lembar untuk update jumlah_lembar di tabel ubnb_saham
-  const selisih=lembar-(t.jumlah_lembar||0);
-  
-  // Update transaksi
-  const{error}=await sb.from('ubnb_saham_trx').update({
-    jumlah_lembar:lembar,
-    harga_per_lembar:harga,
-    total_nilai:lembar*harga,
-    tanggal:newTgl,
-    catatan:newCatatan||null
-  }).eq('id',id);
-  
-  if(error){toast('Gagal update: '+error.message,true);return;}
-  
-  // Update jumlah_lembar di tabel ubnb_saham
-  if(selisih!==0&&t.tipe==='beli'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+selisih}).eq('id',t.saham_id);
-  }
-  
-  toast('✅ Transaksi berhasil diupdate!');
-  await loadAll();
-  loadRiwayatTrx();
-}
-
-async function hapusTransaksi(id){
-  const t=aTrx.find(x=>x.id===id);
-  if(!t){toast('Transaksi tidak ditemukan',true);return;}
-  
-  const s=aSaham.find(x=>x.id===t.saham_id);
-  const namaAnggota=s?.nama||'Unknown';
-  
-  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${namaAnggota}\nTipe: ${t.tipe}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}\n\nPeringatan: Ini akan mengurangi jumlah lembar anggota!`))return;
-  
-  // Hapus transaksi
-  const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',id);
-  if(error){toast('Gagal hapus: '+error.message,true);return;}
-  
-  // Update jumlah_lembar di tabel ubnb_saham (kurangi kembali)
-  if(t.tipe==='beli'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
-  }else if(t.tipe==='transfer_keluar'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+(t.jumlah_lembar||0)}).eq('id',t.saham_id);
-  }else if(t.tipe==='transfer_masuk'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
-  }
-  
-  toast('✅ Transaksi berhasil dihapus!');
-  await loadAll();
-  loadRiwayatTrx();
 }
 
 // ===== PROPORSI SHU =====
@@ -1382,10 +1311,7 @@ function cetakModalLaporan(){
 async function cetakLapSHU(id){
   const{data}=await sb.from('ubnb_laporan_shu').select('html_content').eq('id',id).single();
   if(!data?.html_content){toast('Konten tidak ditemukan',true);return;}
-  const el=document.getElementById('bukti-cetak');
-  el.innerHTML=data.html_content;
-  el.style.cssText='display:block;position:fixed;inset:0;background:white;z-index:9999;padding:16px;overflow:auto;';
-  setTimeout(()=>{window.print();setTimeout(()=>{el.style.cssText='display:none;';el.innerHTML='';},1200);},300);
+  bukaWindowCetak(data.html_content);
 }
 async function hapusLapSHU(id,periode,kelompok){
   if(!confirm('Hapus laporan SHU '+periode+' '+kelompok+'?'))return;
@@ -1394,161 +1320,16 @@ async function hapusLapSHU(id,periode,kelompok){
   await loadAll();renderLapSHUList();
 }
 
-// ===== GENERATE PDF BUKTI KEPEMILIKAN (MOBILE-FRIENDLY) =====
-async function generatePDF(id){
-  const s=aSaham.find(x=>x.id===id);if(!s)return;
-  
-  toast('Membuat PDF...');
-  
-  // Ambil riwayat transaksi
-  const {data:trxData}=await sb.from('ubnb_saham_trx')
-    .select('*').eq('saham_id',id).order('tanggal',{ascending:false});
-  const trxList=trxData||[];
-  
-  const totalLembar=aSaham.reduce((a,x)=>a+(x.jumlah_lembar||0),0);
-  const pct=totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(4):0;
-  const nilaiTotal=(s.jumlah_lembar||0)*HARGA_SAHAM;
-  const tglCetak=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
-  const kelWarna={PW1:'#1d4ed8',PW2:'#be185d',PW3:'#065f46',PW4:'#9a7830'};
-  const kelBg2={PW1:'#dbeafe',PW2:'#fce7f3',PW3:'#d1fae5',PW4:'#fdf6e3'};
-  
-  // Generate riwayat transaksi rows
-  const trxRows = trxList.map(t=>{
-    const warna={beli:'#065f46',jual:'#c0392b',transfer_masuk:'#1e5fa8',transfer_keluar:'#d97706'};
-    const tipeTxt=t.tipe==='beli'?'Beli':t.tipe==='jual'?'Jual':t.tipe==='transfer_masuk'?'Transfer Masuk':'Transfer Keluar';
-    return `<tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px">${fmtTgl(t.tanggal)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px">
-        <span style="background:${warna[t.tipe]||'#f3f4f6'};color:white;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">${tipeTxt}</span>
-      </td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px;text-align:right;font-weight:700">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:10px;text-align:right">${rp(t.total_nilai)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:10px;color:#6b7280">${t.catatan||'-'}</td>
-    </tr>`;
-  }).join('');
-  
-  const htmlContent=`
-    <div style="width:210mm;min-height:148mm;margin:0 auto;font-family:Arial,sans-serif;background:white;position:relative;overflow:hidden">
-      <div style="position:absolute;inset:6mm;border:3px solid #c9a84c;border-radius:4px;pointer-events:none"></div>
-      <div style="position:absolute;inset:8.5mm;border:1px solid #c9a84c;border-radius:3px;pointer-events:none"></div>
-      <div style="position:relative;padding:14mm 16mm">
-        <div style="text-align:center;margin-bottom:8mm;border-bottom:2px solid #c9a84c;padding-bottom:5mm">
-          <div style="font-size:16px;font-weight:900;color:#1a3a2a;letter-spacing:2px">UBNB PERWIRA</div>
-          <div style="margin-top:6px;display:inline-block;background:#c9a84c;color:white;padding:3px 18px;border-radius:99px;font-size:12px;font-weight:800;letter-spacing:2px">BUKTI KEPEMILIKAN SAHAM</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:5mm">
-          <div><div style="font-size:9px;color:#6b7280;text-transform:uppercase">No. Sertifikat</div><div style="font-size:13px;font-weight:800;font-family:monospace">${s.no_saham||s.no_anggota}</div></div>
-          <div style="text-align:right"><div style="font-size:9px;color:#6b7280;text-transform:uppercase">No. Anggota</div><div style="font-size:13px;font-weight:800;font-family:monospace">${s.no_anggota}</div></div>
-        </div>
-        <div style="background:#faf8f0;border:1px solid #e5e0d5;border-radius:8px;padding:6mm;margin-bottom:5mm">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4mm">
-            <div><div style="font-size:9px;color:#6b7280;text-transform:uppercase">Nama Pemegang</div><div style="font-size:15px;font-weight:900;color:#1a3a2a">${s.nama}</div>${s.nama_keluarga&&s.nama_keluarga!=='< BELUM ADA >'?'<div style="font-size:10px;color:#6b7280">KK: '+s.nama_keluarga+'</div>':''}</div>
-            <div><div style="font-size:9px;color:#6b7280;text-transform:uppercase">Kelompok</div><div style="display:inline-block;background:${kelBg2[s.kelompok]||'#f3f4f6'};color:${kelWarna[s.kelompok]||'#374151'};padding:2px 12px;border-radius:99px;font-size:13px;font-weight:800;margin-top:3px">${s.kelompok}</div></div>
-            <div><div style="font-size:9px;color:#6b7280;text-transform:uppercase">Tgl. Pertama Masuk</div><div style="font-size:12px;font-weight:600">${fmtTgl(s.tanggal_pertama)}</div></div>
-            <div><div style="font-size:9px;color:#6b7280;text-transform:uppercase">Status</div><div style="font-size:12px;font-weight:600;color:#065f46">✅ ${s.status||'Aktif'}</div></div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-bottom:5mm">
-          <div style="background:#1a3a2a;color:white;border-radius:8px;padding:5mm;text-align:center">
-            <div style="font-size:9px;opacity:.7;text-transform:uppercase;margin-bottom:2px">Jumlah Lembar</div>
-            <div style="font-size:22px;font-weight:900">${(s.jumlah_lembar||0).toLocaleString('id-ID')}</div>
-            <div style="font-size:9px;opacity:.7">lembar saham</div>
-          </div>
-          <div style="background:#c9a84c;color:white;border-radius:8px;padding:5mm;text-align:center">
-            <div style="font-size:9px;opacity:.85;text-transform:uppercase;margin-bottom:2px">Nilai Saham</div>
-            <div style="font-size:13px;font-weight:900">${rp(nilaiTotal)}</div>
-            <div style="font-size:9px;opacity:.85">@ ${rp(HARGA_SAHAM)}/lbr</div>
-          </div>
-          <div style="background:#faf8f0;border:2px solid #c9a84c;border-radius:8px;padding:5mm;text-align:center">
-            <div style="font-size:9px;color:#6b7280;text-transform:uppercase;margin-bottom:2px">Porsi Kepemilikan</div>
-            <div style="font-size:22px;font-weight:900;color:#9a7830">${pct}%</div>
-            <div style="font-size:9px;color:#6b7280">dari total saham</div>
-          </div>
-        </div>
-        
-        ${trxList.length?`
-        <div style="margin-bottom:5mm">
-          <div style="font-size:11px;font-weight:800;color:#1a3a2a;margin-bottom:3mm;border-bottom:1.5px solid #e5e0d5;padding-bottom:2mm">📋 Riwayat Transaksi (${trxList.length})</div>
-          <table style="width:100%;border-collapse:collapse;font-size:11px">
-            <thead>
-              <tr style="background:#1a6640;color:white">
-                <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Tanggal</th>
-                <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Tipe</th>
-                <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700">Lembar</th>
-                <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700">Nilai</th>
-                <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Keterangan</th>
-              </tr>
-            </thead>
-            <tbody>${trxRows}</tbody>
-          </table>
-        </div>
-        `:''}
-        
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e5e0d5;padding-top:4mm;margin-top:${trxList.length?'3mm':'5mm'}">
-          <div><div style="font-size:9px;color:#6b7280">Dicetak: ${tglCetak}</div><div style="font-size:9px;color:#6b7280">Dokumen sah sebagai bukti kepemilikan saham UBNB Perwira</div></div>
-          <div style="text-align:center"><div style="width:30mm;border-bottom:1px solid #333;margin-bottom:2px"></div><div style="font-size:9px;color:#6b7280">Pengurus UBNB Perwira</div></div>
-        </div>
-      </div>
-    </div>`;
-  
-  // Buat element sementara
-  const tempEl = document.createElement('div');
-  tempEl.innerHTML = htmlContent;
-  tempEl.style.cssText = 'position:fixed;left:-9999px;top:0;';
-  document.body.appendChild(tempEl);
-  
-  // Generate PDF
-  const opt = {
-    margin: 0,
-    filename: `Bukti_Saham_${s.nama.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().getTime()}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-  };
-  
-  try {
-    await html2pdf().set(opt).from(tempEl).save();
-    toast('✅ PDF berhasil dibuat!');
-  } catch(error) {
-    console.error('PDF Error:', error);
-    toast('❌ Gagal membuat PDF', true);
-  } finally {
-    document.body.removeChild(tempEl);
-  }
-}
-
 // ===== CETAK BUKTI KEPEMILIKAN =====
-async function cetakBukti(id){
+function cetakBukti(id){
   const s=aSaham.find(x=>x.id===id);if(!s)return;
-  
-  // Ambil riwayat transaksi
-  const {data:trxData}=await sb.from('ubnb_saham_trx')
-    .select('*').eq('saham_id',id).order('tanggal',{ascending:false});
-  const trxList=trxData||[];
-  
   const totalLembar=aSaham.reduce((a,x)=>a+(x.jumlah_lembar||0),0);
   const pct=totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(4):0;
   const nilaiTotal=(s.jumlah_lembar||0)*HARGA_SAHAM;
   const tglCetak=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
   const kelWarna={PW1:'#1d4ed8',PW2:'#be185d',PW3:'#065f46',PW4:'#9a7830'};
   const kelBg2={PW1:'#dbeafe',PW2:'#fce7f3',PW3:'#d1fae5',PW4:'#fdf6e3'};
-  
-  // Generate riwayat transaksi rows
-  const trxRows = trxList.map(t=>{
-    const warna={beli:'#065f46',jual:'#c0392b',transfer_masuk:'#1e5fa8',transfer_keluar:'#d97706'};
-    const tipeTxt=t.tipe==='beli'?'Beli':t.tipe==='jual'?'Jual':t.tipe==='transfer_masuk'?'Transfer Masuk':'Transfer Keluar';
-    return `<tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px">${fmtTgl(t.tanggal)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px">
-        <span style="background:${warna[t.tipe]||'#f3f4f6'};color:white;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">${tipeTxt}</span>
-      </td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:11px;text-align:right;font-weight:700">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:10px;text-align:right">${rp(t.total_nilai)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #ede8df;font-size:10px;color:#6b7280">${t.catatan||'-'}</td>
-    </tr>`;
-  }).join('');
-  
-  const html=`<div style="width:100%;max-width:210mm;min-height:148mm;margin:0 auto;font-family:Arial,sans-serif;background:white;position:relative;overflow:hidden">
+  const html=`<div style="width:210mm;min-height:148mm;margin:0 auto;font-family:Arial,sans-serif;background:white;position:relative;overflow:hidden">
     <div style="position:absolute;inset:6mm;border:3px solid #c9a84c;border-radius:4px;pointer-events:none"></div>
     <div style="position:absolute;inset:8.5mm;border:1px solid #c9a84c;border-radius:3px;pointer-events:none"></div>
     <div style="position:relative;padding:14mm 16mm">
@@ -1585,55 +1366,12 @@ async function cetakBukti(id){
           <div style="font-size:9px;color:#6b7280">dari total saham</div>
         </div>
       </div>
-      
-      ${trxList.length?`
-      <div style="margin-bottom:5mm">
-        <div style="font-size:11px;font-weight:800;color:#1a3a2a;margin-bottom:3mm;border-bottom:1.5px solid #e5e0d5;padding-bottom:2mm">📋 Riwayat Transaksi (${trxList.length})</div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead>
-            <tr style="background:#1a6640;color:white">
-              <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Tanggal</th>
-              <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Tipe</th>
-              <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700">Lembar</th>
-              <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700">Nilai</th>
-              <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700">Keterangan</th>
-            </tr>
-          </thead>
-          <tbody>${trxRows}</tbody>
-        </table>
-      </div>
-      `:''}
-      
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e5e0d5;padding-top:4mm;margin-top:${trxList.length?'3mm':'5mm'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e5e0d5;padding-top:4mm">
         <div><div style="font-size:9px;color:#6b7280">Dicetak: ${tglCetak}</div><div style="font-size:9px;color:#6b7280">Dokumen sah sebagai bukti kepemilikan saham UBNB Perwira</div></div>
         <div style="text-align:center"><div style="width:30mm;border-bottom:1px solid #333;margin-bottom:2px"></div><div style="font-size:9px;color:#6b7280">Pengurus UBNB Perwira</div></div>
       </div>
     </div></div>`;
-  
-  const el=document.getElementById('bukti-cetak');
-  el.innerHTML=html;
-  el.style.cssText='display:block;position:fixed;inset:0;background:white;z-index:9999;overflow:auto;';
-  
-  // PERBAIKAN MOBILE: Deteksi device & atur timeout berbeda
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  
-  if(isMobile){
-    setTimeout(()=>{
-      window.print();
-      setTimeout(()=>{
-        el.style.cssText='display:none;';
-        el.innerHTML='';
-      },2000);
-    },800);
-  } else {
-    setTimeout(()=>{
-      window.print();
-      setTimeout(()=>{
-        el.style.cssText='display:none;';
-        el.innerHTML='';
-      },1200);
-    },300);
-  }
+  bukaWindowCetak(html);
 }
 
 // ===== EXPORT LAPORAN =====
