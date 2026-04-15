@@ -790,11 +790,22 @@ function lihatDetail(id){
       <tbody>${trxList.map(t=>{
         const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
         const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
+        
+        // Untuk transfer, tambahkan info dari/ke siapa
+        let keteranganDisplay = t.catatan||'-';
+        if(t.tipe==='transfer_keluar' && t.ke_id){
+          const sPembeli = aSaham.find(x=>x.id===t.ke_id);
+          keteranganDisplay = `<div style="font-weight:600">→ Ke: ${sPembeli?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;
+        } else if(t.tipe==='transfer_masuk' && t.dari_id){
+          const sPenjual = aSaham.find(x=>x.id===t.dari_id);
+          keteranganDisplay = `<div style="font-weight:600">← Dari: ${sPenjual?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;
+        }
+        
         return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
           <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:10px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
           <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
           <td style="font-size:11px">${rp(t.total_nilai)}</td>
-          <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td></tr>`;
+          <td style="font-size:10px;color:var(--text-muted)">${keteranganDisplay}</td></tr>`;
       }).join('')}</tbody></table></div>`
     :'<div class="empty" style="padding:16px"><div class="ei" style="font-size:24px">📋</div>Belum ada transaksi</div>'}`;
   openModal('modal-detail');
@@ -1543,13 +1554,25 @@ function cetakBukti(id){
           <th style="padding:4px 6px;text-align:right">Nilai</th>
           <th style="padding:4px 6px;text-align:left">Keterangan</th>
         </tr></thead>
-        <tbody>${trxList.map((t,i)=>`<tr style="background:${i%2===0?'white':'#faf8f0'}">
+        <tbody>${trxList.map((t,i)=>{
+          // Untuk transfer, tambahkan info dari/ke siapa
+          let keteranganDisplay = t.catatan||'-';
+          if(t.tipe==='transfer_keluar' && t.ke_id){
+            const sPembeli = aSaham.find(x=>x.id===t.ke_id);
+            keteranganDisplay = `→ Ke: ${sPembeli?.nama||'Unknown'}${t.catatan?' | '+t.catatan:''}`;
+          } else if(t.tipe==='transfer_masuk' && t.dari_id){
+            const sPenjual = aSaham.find(x=>x.id===t.dari_id);
+            keteranganDisplay = `← Dari: ${sPenjual?.nama||'Unknown'}${t.catatan?' | '+t.catatan:''}`;
+          }
+          
+          return `<tr style="background:${i%2===0?'white':'#faf8f0'}">
           <td style="padding:3px 6px">${fmtTgl(t.tanggal)}</td>
           <td style="padding:3px 6px;color:${tipeWarna[t.tipe]||'#333'};font-weight:700">${t.tipe.replace(/_/g,' ')}</td>
           <td style="padding:3px 6px;text-align:center;font-weight:700">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
           <td style="padding:3px 6px;text-align:right">${rp(t.total_nilai)}</td>
-          <td style="padding:3px 6px;color:#6b7280">${t.catatan||'-'}</td>
-        </tr>`).join('')}</tbody>
+          <td style="padding:3px 6px;color:#6b7280">${keteranganDisplay}</td>
+        </tr>`;
+        }).join('')}</tbody>
       </table>
     </div>`:'';
 
