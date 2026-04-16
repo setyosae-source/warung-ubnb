@@ -1011,23 +1011,13 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div class="info-box">Hitung stok fisik di gudang, lalu bandingkan dengan data sistem. Selisih akan dicatat dan stok diperbarui.</div>
           <div id="opname-form" style="display:none">
             <div style="margin-bottom:12px;padding:10px 12px;background:var(--amber-light);border-radius:var(--radius-sm);font-size:12px;color:var(--amber);font-weight:500">
-              ⚠️ Opname aktif — masukkan jumlah stok fisik, <b>Simpan</b> dulu lalu <b>Adjustment</b> untuk update stok aktual.
-            </div>
-            <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-              <input type="text" id="opname-search" placeholder="🔍 Cari barang..." oninput="renderOpnameList()" style="flex:1;height:36px;font-size:13px"/>
-              <span id="opname-count" style="font-size:12px;color:var(--text-muted);white-space:nowrap"></span>
+              ⚠️ Opname aktif — masukkan jumlah stok fisik untuk setiap barang, lalu klik Simpan Opname.
             </div>
             <div id="opname-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
-            <div class="irow"><label>Tgl Opname</label><input type="date" id="opname-tgl"/></div>
             <div class="irow"><label>Alasan</label><input type="text" id="opname-alasan" placeholder="Misal: Opname bulanan, barang rusak, dll"/></div>
-            <!-- Status setelah simpan -->
-            <div id="opname-saved-info" style="display:none;padding:10px 14px;background:var(--green-light);border-radius:var(--radius-sm);font-size:13px;color:var(--green-dark);margin-bottom:10px">
-              ✅ <span id="opname-saved-msg"></span>
-            </div>
             <div class="btn-row">
               <button class="btn" onclick="batalOpname()" style="flex:1">Batal</button>
-              <button class="btn amber" id="btn-simpan-opname" onclick="simpanOpname()" style="flex:2">📋 Simpan Opname</button>
-              <button class="btn primary" id="btn-adjust-opname" onclick="adjustOpname()" style="flex:2;display:none">⚙️ Adjustment Stok</button>
+              <button class="btn primary" onclick="simpanOpname()" style="flex:2">💾 Simpan Opname</button>
             </div>
           </div>
           <div id="opname-idle">
@@ -1069,18 +1059,16 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
 
           <div class="irow"><label>Produk / Layanan</label>
-            <div style="display:flex;gap:6px">
-              <select id="ppob-produk-select" onchange="pilihProdukPPOB()" style="flex:1">
-                <option value="">Pilih produk...</option>
-              </select>
-              <input type="text" id="ppob-produk-manual" placeholder="Atau ketik manual" style="flex:1"/>
-            </div>
+            <select id="ppob-produk-select" onchange="pilihProdukPPOB()">
+              <option value="">Pilih produk...</option>
+            </select>
+          </div>
+          <div class="irow"><label>Ketik Manual</label>
+            <input type="text" id="ppob-produk-manual" placeholder="Atau ketik nama produk manual"/>
           </div>
           <div class="irow"><label>Catatan (opsional)</label><input type="text" id="ppob-catatan" placeholder="No. meter, no. HP, ID pelanggan, dll"/></div>
-          <div class="two-col">
-            <div class="irow"><label>Harga Beli (Modal)</label><input type="number" id="ppob-hbeli" placeholder="0" oninput="hitungUntungPPOB()"/></div>
-            <div class="irow"><label>Harga Jual</label><input type="number" id="ppob-hjual" placeholder="0" oninput="hitungUntungPPOB()"/></div>
-          </div>
+          <div class="irow"><label>Harga Beli (Modal)</label><input type="number" id="ppob-hbeli" placeholder="0" oninput="hitungUntungPPOB()"/></div>
+          <div class="irow"><label>Harga Jual</label><input type="number" id="ppob-hjual" placeholder="0" oninput="hitungUntungPPOB()"/></div>
           <div id="ppob-keuntungan-info" style="display:none;background:var(--green-light);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;margin-bottom:10px">
             💵 Keuntungan: <strong id="ppob-keuntungan-txt" style="color:var(--green-dark)">-</strong>
           </div>
@@ -3651,23 +3639,14 @@ let opnameData=[];
 async function loadOpname(){const{data}=await sb.from('stock_opname').select('*').order('created_at',{ascending:false});return data||[];}
 function mulaiOpname(){
   if(!aB.length){toast('Tidak ada barang',true);return;}
-  // Hanya barang warung, urut nama
-  const warung=aB.filter(b=>b.kategori==='warung'||!b.kategori).sort((a,b)=>a.nama.localeCompare(b.nama));
-  opnameData=warung.map(b=>({id:b.id,nama:b.nama,stokSistem:b.stok,stokFisik:b.stok,satuan:b.satuan||'pcs'}));
-  opnameSavedId=null; // reset status saved
+  opnameData=aB.map(b=>({id:b.id,nama:b.nama,stokSistem:b.stok,stokFisik:b.stok,satuan:b.satuan||'pcs'}));
   document.getElementById('opname-idle').style.display='none';
   document.getElementById('opname-form').style.display='block';
   document.getElementById('btn-scan-opname').style.display='';
-  document.getElementById('opname-tgl').value=new Date().toISOString().split('T')[0];
-  document.getElementById('opname-search').value='';
-  document.getElementById('opname-saved-info').style.display='none';
-  document.getElementById('btn-simpan-opname').style.display='';
-  document.getElementById('btn-adjust-opname').style.display='none';
   renderOpnameList();
 }
 function batalOpname(){
   opnameData=[];
-  opnameSavedId=null;
   document.getElementById('opname-idle').style.display='block';
   document.getElementById('opname-form').style.display='none';
   document.getElementById('btn-scan-opname').style.display='none';
@@ -3675,20 +3654,13 @@ function batalOpname(){
 }
 function renderOpnameList(){
   const el=document.getElementById('opname-list');
-  const q=(document.getElementById('opname-search')?.value||'').toLowerCase();
-  const filtered=q?opnameData.filter(b=>b.nama.toLowerCase().includes(q)):opnameData;
-  const counter=document.getElementById('opname-count');
-  if(counter)counter.textContent=filtered.length+' / '+opnameData.length+' barang';
   el.innerHTML=`<div style="display:flex;gap:8px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px"><span style="flex:1">Barang</span><span style="min-width:60px;text-align:center">Sistem</span><span style="width:80px;text-align:center">Fisik</span><span style="min-width:60px;text-align:right">Selisih</span></div>`
-  +(filtered.length?filtered.map((b)=>{
-    const i=opnameData.indexOf(b);
+  +opnameData.map((b,i)=>{
     const sel=b.stokFisik-b.stokSistem;
     const selColor=sel>0?'var(--green)':sel<0?'var(--red)':'var(--text-muted)';
     const selTxt=sel>0?'+'+sel:sel===0?'—':sel;
-    const rowBg=sel!==0?'background:rgba(255,193,7,0.08);border-radius:6px;':'';
-    const disabled=opnameSavedId?'disabled style="opacity:0.6"':'';
-    return `<div class="opname-row" style="${rowBg}"><div class="on-nama">${b.nama}<div style="font-size:10px;color:var(--text-muted)">${b.satuan||'pcs'}</div></div><div class="on-sistem">${b.stokSistem}</div><input type="number" class="on-input" value="${b.stokFisik}" min="0" oninput="updateOpname(${i},this.value)" ${disabled}/><div class="on-selisih" id="sel-${i}" style="color:${selColor}">${selTxt}</div></div>`;
-  }).join(''):'<div class="empty" style="padding:20px">Tidak ditemukan</div>');
+    return `<div class="opname-row"><div class="on-nama">${b.nama}<div style="font-size:10px;color:var(--text-muted)">${b.satuan}</div></div><div class="on-sistem">${b.stokSistem}</div><input type="number" class="on-input" value="${b.stokFisik}" min="0" oninput="updateOpname(${i},this.value)"/><div class="on-selisih" id="sel-${i}" style="color:${selColor}">${selTxt}</div></div>`;
+  }).join('');
 }
 function updateOpname(i,val){
   opnameData[i].stokFisik=parseInt(val)||0;
@@ -3697,76 +3669,22 @@ function updateOpname(i,val){
   el.textContent=sel>0?'+'+sel:sel===0?'—':sel;
   el.style.color=sel>0?'var(--green)':sel<0?'var(--red)':'var(--text-muted)';
 }
-let opnameSavedId=null;
-
 async function simpanOpname(){
-  if(opnameSavedId){toast('Opname sudah disimpan, klik Adjustment untuk update stok',true);return;}
-  const alasan=document.getElementById('opname-alasan').value.trim()||'Stock opname';
-  const tglOpname=document.getElementById('opname-tgl').value||new Date().toISOString().split('T')[0];
+  const alasan=document.getElementById('opname-alasan').value.trim();
   const changed=opnameData.filter(b=>b.stokFisik!==b.stokSistem);
   if(!changed.length&&!confirm('Tidak ada selisih stok. Tetap simpan opname?'))return;
-
-  // Catat ke stock_opname SAJA - belum update stok
-  const records=opnameData.map(b=>({
-    barang_id:b.id,nama_barang:b.nama,
-    stok_sistem:b.stokSistem,stok_fisik:b.stokFisik,
-    selisih:b.stokFisik-b.stokSistem,
-    alasan:alasan+' [Opname: '+tglOpname+']',
-    operator:CU.username
-  }));
+  const records=opnameData.map(b=>({barang_id:b.id,nama_barang:b.nama,stok_sistem:b.stokSistem,stok_fisik:b.stokFisik,selisih:b.stokFisik-b.stokSistem,alasan:alasan||'Stock opname',operator:CU.username}));
   await sb.from('stock_opname').insert(records);
-  opnameSavedId=tglOpname; // tandai sudah disimpan
-
-  // Lock input, tampilkan info + tombol adjustment
-  const info=document.getElementById('opname-saved-info');
-  document.getElementById('opname-saved-msg').textContent=
-    'Data opname '+tglOpname+' tersimpan — '+changed.length+' barang selisih. Klik Adjustment untuk update stok aktual.';
-  info.style.display='block';
-  document.getElementById('btn-simpan-opname').style.display='none';
-  document.getElementById('btn-adjust-opname').style.display='';
-  renderOpnameList(); // re-render dengan input locked
-  renderOpnameRiwayat();
-  toast('Opname tersimpan! Klik Adjustment untuk update stok');
-}
-
-async function adjustOpname(){
-  if(!opnameSavedId){toast('Simpan opname dulu sebelum adjustment',true);return;}
-  const changed=opnameData.filter(b=>b.stokFisik!==b.stokSistem);
-  if(!changed.length){toast('Tidak ada selisih stok untuk di-adjust');batalOpname();return;}
-  if(!confirm('Update stok aktual untuk '+changed.length+' barang sesuai hasil opname?'))return;
-
-  const tglOpname=document.getElementById('opname-tgl').value||new Date().toISOString().split('T')[0];
-
-  for(const b of changed){
-    const selisih=b.stokFisik-b.stokSistem;
-    // Update stok barang
-    await sb.from('barang').update({stok:b.stokFisik}).eq('id',b.id);
-    // Update stok_batch
-    if(selisih>0){
-      // Penambahan — buat batch baru
-      await sb.from('stok_batch').insert([{
-        barang_id:b.id,tgl_masuk:tglOpname,
-        qty_awal:selisih,qty_sisa:selisih,
-        harga_beli:aB.find(x=>x.id===b.id)?.harga_beli||0,
-        harga_jual:aB.find(x=>x.id===b.id)?.harga||0
-      }]);
-    } else {
-      // Pengurangan — kurangi FIFO batch
-      let sisaKurang=Math.abs(selisih);
-      const batches=(aBatch||[]).filter(bt=>bt.barang_id===b.id&&bt.qty_sisa>0)
-        .sort((a,c)=>new Date(a.tgl_masuk)-new Date(c.tgl_masuk));
-      for(const bt of batches){
-        if(sisaKurang<=0)break;
-        const d=Math.min(bt.qty_sisa,sisaKurang);
-        await sb.from('stok_batch').update({qty_sisa:bt.qty_sisa-d}).eq('id',bt.id);
-        sisaKurang-=d;
-      }
+  // Update stok barang
+  for(const b of opnameData){
+    if(b.stokFisik!==b.stokSistem){
+      await sb.from('barang').update({stok:b.stokFisik}).eq('id',b.id);
     }
   }
-
   await lB();await lBatch();renderStok();filterSD('prod');filterSD('bprod');
   batalOpname();
-  toast(`✅ Adjustment selesai! ${changed.length} stok barang diperbarui`);
+  renderOpnameRiwayat();
+  toast(`Opname selesai! ${changed.length} barang diperbarui`);
 }
 async function renderOpnameRiwayat(){
   const data=await loadOpname();
