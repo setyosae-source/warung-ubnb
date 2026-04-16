@@ -473,7 +473,17 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
       <div class="card">
         <div class="card-title">📄 Kartu Kontrol Pembiayaan</div>
         <div class="fg"><label>Pilih Nasabah / Akad</label>
-          <select id="kartu-pilih" onchange="kartuPreview()"><option value="">— Pilih akad —</option></select>
+          <div style="position:relative">
+          <input type="text" id="kartu-cari" 
+            placeholder="🔍 Ketik nama / no. akad..." 
+            oninput="kartuCari(this.value)"
+            onfocus="kartuShowList(true)"
+            onblur="setTimeout(()=>kartuShowList(false),200)"
+            autocomplete="off"
+            style="width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);background:var(--krem)">
+          <div id="kartu-dropdown" style="display:none;position:absolute;z-index:999;width:100%;background:white;border:2px solid var(--hijau);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
+          <input type="hidden" id="kartu-pilih" value="">
+        </div>
         </div>
         <div id="kartu-preview" style="display:none"></div>
         <div id="kartu-btn" style="display:none;margin-top:12px">
@@ -569,14 +579,58 @@ async function loadAll(){
 }
 function isiDropdown(){
   const aktif=aAkad.filter(a=>a.status==='Belum Lunas');
-  ['pay-akad','kartu-pilih'].forEach(id=>{
-    const sel=document.getElementById(id);
-    const prev=sel.value;
-    const pool=id==='pay-akad'?aktif:aAkad;
-    sel.innerHTML='<option value="">— Pilih akad —</option>'+
-      pool.map(a=>`<option value="${a.id}">${a.no_akad} — ${a.nama_jamaah} (${a.kelompok}) | ${a.objek_pembiayaan}</option>`).join('');
-    if(prev)sel.value=prev;
-  });
+  // pay-akad tetap select biasa
+  const sel=document.getElementById('pay-akad');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Pilih akad —</option>'+
+    aktif.map(a=>`<option value="${a.id}">${a.no_akad} — ${a.nama_jamaah} (${a.kelompok}) | ${a.objek_pembiayaan}</option>`).join('');
+  if(prev)sel.value=prev;
+  // kartu-pilih pakai searchable - simpan data ke window
+  window._kartuPool = aAkad;
+  kartuRenderList(aAkad);
+}
+
+function kartuRenderList(pool){
+  const dd=document.getElementById('kartu-dropdown');
+  if(!dd)return;
+  if(!pool.length){dd.innerHTML='<div style="padding:10px 12px;color:var(--text-muted);font-size:13px">Tidak ada data</div>';return;}
+  dd.innerHTML=pool.map(a=>`
+    <div onclick="kartuPilih(${a.id},'${a.no_akad} — ${a.nama_jamaah} (${a.kelompok})')"
+      style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0ede8;font-size:13px;transition:background 0.15s"
+      onmouseover="this.style.background='var(--hijau-light)'"
+      onmouseout="this.style.background='white'">
+      <div style="font-weight:600;color:var(--text)">${a.nama_jamaah} <span style="color:var(--text-muted);font-weight:400">(${a.kelompok})</span></div>
+      <div style="font-size:11px;color:var(--text-muted)">${a.no_akad} · ${a.objek_pembiayaan} · <span style="color:${a.status==='Lunas'?'#166534':'#92400e'};font-weight:600">${a.status}</span></div>
+    </div>`).join('');
+}
+
+function kartuCari(q){
+  const pool=window._kartuPool||[];
+  const ql=q.toLowerCase();
+  const filtered=ql?pool.filter(a=>
+    (a.nama_jamaah||'').toLowerCase().includes(ql)||
+    (a.no_akad||'').toLowerCase().includes(ql)||
+    (a.objek_pembiayaan||'').toLowerCase().includes(ql)||
+    (a.kelompok||'').toLowerCase().includes(ql)
+  ):pool;
+  kartuRenderList(filtered);
+  document.getElementById('kartu-dropdown').style.display='block';
+  // Reset pilihan jika user mengetik ulang
+  document.getElementById('kartu-pilih').value='';
+  document.getElementById('kartu-preview').style.display='none';
+  document.getElementById('kartu-btn').style.display='none';
+}
+
+function kartuShowList(show){
+  const dd=document.getElementById('kartu-dropdown');
+  if(dd)dd.style.display=show?'block':'none';
+}
+
+function kartuPilih(id, label){
+  document.getElementById('kartu-pilih').value=id;
+  document.getElementById('kartu-cari').value=label;
+  document.getElementById('kartu-dropdown').style.display='none';
+  kartuPreview();
 }
 
 // ===== PAGE =====
@@ -1023,7 +1077,7 @@ async function recalcKas(kasId){
 
 // ===== KARTU KONTROL =====
 function kartuPreview(){
-  const id=parseInt(document.getElementById('kartu-pilih').value);
+  const id=parseInt(document.getElementById('kartu-pilih').value)||0;
   const prev=document.getElementById('kartu-preview');
   const btn=document.getElementById('kartu-btn');
   if(!id){prev.style.display='none';btn.style.display='none';return;}
