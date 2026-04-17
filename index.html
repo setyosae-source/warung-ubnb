@@ -1059,16 +1059,18 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
 
           <div class="irow"><label>Produk / Layanan</label>
-            <select id="ppob-produk-select" onchange="pilihProdukPPOB()">
-              <option value="">Pilih produk...</option>
-            </select>
-          </div>
-          <div class="irow"><label>Ketik Manual</label>
-            <input type="text" id="ppob-produk-manual" placeholder="Atau ketik nama produk manual"/>
+            <div style="display:flex;gap:6px">
+              <select id="ppob-produk-select" onchange="pilihProdukPPOB()" style="flex:1">
+                <option value="">Pilih produk...</option>
+              </select>
+              <input type="text" id="ppob-produk-manual" placeholder="Atau ketik manual" style="flex:1"/>
+            </div>
           </div>
           <div class="irow"><label>Catatan (opsional)</label><input type="text" id="ppob-catatan" placeholder="No. meter, no. HP, ID pelanggan, dll"/></div>
-          <div class="irow"><label>Harga Beli (Modal)</label><input type="number" id="ppob-hbeli" placeholder="0" oninput="hitungUntungPPOB()"/></div>
-          <div class="irow"><label>Harga Jual</label><input type="number" id="ppob-hjual" placeholder="0" oninput="hitungUntungPPOB()"/></div>
+          <div class="two-col">
+            <div class="irow"><label>Harga Beli (Modal)</label><input type="number" id="ppob-hbeli" placeholder="0" oninput="hitungUntungPPOB()"/></div>
+            <div class="irow"><label>Harga Jual</label><input type="number" id="ppob-hjual" placeholder="0" oninput="hitungUntungPPOB()"/></div>
+          </div>
           <div id="ppob-keuntungan-info" style="display:none;background:var(--green-light);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;margin-bottom:10px">
             💵 Keuntungan: <strong id="ppob-keuntungan-txt" style="color:var(--green-dark)">-</strong>
           </div>
@@ -1756,17 +1758,14 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <div class="modal-handle"></div>
     <div class="modal-title">✏️ Edit Transaksi Penjualan</div>
     <input type="hidden" id="edit-jual-id"/>
-    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px">
-      <div style="color:var(--text-muted)">Items:</div>
-      <div id="edit-jual-items" style="font-weight:600;margin-top:2px"></div>
-      <div style="display:flex;justify-content:space-between;margin-top:6px">
-        <span style="color:var(--text-muted)">Total:</span>
-        <span id="edit-jual-total" style="font-weight:700;color:var(--green)"></span>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:2px">
-        <span style="color:var(--text-muted)">Kasir:</span>
-        <span id="edit-jual-kasir" style="font-weight:600"></span>
-      </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Items Transaksi</div>
+    <div id="edit-jual-items-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+    <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--green-light);border-radius:var(--radius-sm);margin-bottom:12px">
+      <span style="font-size:13px;color:var(--green-dark)">Total:</span>
+      <span id="edit-jual-total" style="font-weight:800;color:var(--green-dark);font-family:'Courier New',monospace"></span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:var(--text-muted)">
+      <span>Kasir: <strong id="edit-jual-kasir" style="color:var(--text)"></strong></span>
     </div>
     <div class="irow"><label>Tanggal</label><input type="date" id="edit-jual-tgl"/></div>
     <div class="irow"><label>Status Bayar</label>
@@ -2538,17 +2537,45 @@ function renderRiwayatJual(){
     </div>`;
   }).join('');
 }
+let _editJualItems=[];
+
+function _renderEditItems(){
+  const el=document.getElementById('edit-jual-items-list');
+  el.innerHTML=_editJualItems.map((it,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius-sm)">
+      <div style="flex:1;font-size:13px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${it.nama}">${it.nama}</div>
+      <div style="font-size:11px;color:var(--text-muted);flex-shrink:0">${fmt(it.harga||it.hE||0)}</div>
+      <input type="number" value="${it.qty}" min="0" step="0.5"
+        style="width:60px;text-align:center;height:32px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"
+        oninput="_updateEditQty(${i},this.value)"/>
+      <button onclick="_hapusEditItem(${i})" style="width:28px;height:28px;border:none;background:var(--red-light);color:var(--red);border-radius:6px;cursor:pointer;font-size:14px;flex-shrink:0">✕</button>
+    </div>`).join('');
+  // Update total
+  const total=_editJualItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
+  document.getElementById('edit-jual-total').textContent=fmt(total);
+}
+
+function _updateEditQty(i,val){
+  _editJualItems[i].qty=parseFloat(val)||0;
+  _renderEditItems();
+}
+
+function _hapusEditItem(i){
+  _editJualItems.splice(i,1);
+  _renderEditItems();
+}
+
 async function editTransaksiJual(id){
   const t=aT.find(x=>x.id===id);if(!t)return;
-  // Build modal content
   const tgl=t.tgl_transaksi||new Date(t.waktu).toISOString().slice(0,10);
+  // Deep copy items untuk diedit
+  _editJualItems=t.items.map(it=>({...it}));
   document.getElementById('edit-jual-id').value=id;
   document.getElementById('edit-jual-tgl').value=tgl;
   document.getElementById('edit-jual-bayar').value=t.bayar||t.total;
   document.getElementById('edit-jual-status').value=t.status_bayar||'lunas';
   document.getElementById('edit-jual-kasir').textContent=t.kasir||'-';
-  document.getElementById('edit-jual-items').textContent=t.items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ');
-  document.getElementById('edit-jual-total').textContent=fmt(t.total);
+  _renderEditItems();
   openModal('modal-edit-jual');
 }
 
@@ -2557,14 +2584,55 @@ async function simpanEditJual(){
   const tgl=document.getElementById('edit-jual-tgl').value;
   const status=document.getElementById('edit-jual-status').value;
   const bayar=parseFloat(document.getElementById('edit-jual-bayar').value)||0;
-  await sb.from('transaksi').update({tgl_transaksi:tgl,status_bayar:status,bayar}).eq('id',id);
-  // Update hutang terkait jika status berubah
+  const tOld=aT.find(x=>x.id===id);if(!tOld)return;
+
+  // Hitung total baru dari items yang sudah diedit
+  const newItems=_editJualItems.filter(it=>it.qty>0);
+  const newTotal=newItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
+  const newHpp=newItems.reduce((s,it)=>s+(it.harga_beli||0)*it.qty,0);
+
+  // Simpan transaksi dengan items baru
+  await sb.from('transaksi').update({
+    tgl_transaksi:tgl,status_bayar:status,bayar,
+    items:newItems,total:newTotal,hpp:newHpp,
+    kembali:Math.max(0,bayar-newTotal)
+  }).eq('id',id);
+
+  // Update hutang jika lunas
   if(status==='lunas'){
     await sb.from('hutang').update({lunas:true}).eq('ref_id',id).eq('ref_type','transaksi');
   }
-  await lT();await lH();renderRiwayatJual();renderHutang();
+
+  // Update stok berdasarkan selisih qty per item
+  const oldItems=tOld.items||[];
+  // Buat map qty lama berdasarkan barang_id
+  const oldQtyMap={};
+  oldItems.forEach(it=>{
+    const bid=it.barang_id||it.id;
+    if(bid)oldQtyMap[bid]=(oldQtyMap[bid]||0)+it.qty;
+  });
+  // Buat map qty baru
+  const newQtyMap={};
+  newItems.forEach(it=>{
+    const bid=it.barang_id||it.id;
+    if(bid)newQtyMap[bid]=(newQtyMap[bid]||0)+it.qty;
+  });
+  // Gabungkan semua barang_id yang terpengaruh
+  const allIds=new Set([...Object.keys(oldQtyMap),...Object.keys(newQtyMap)]);
+  for(const bid of allIds){
+    const qOld=oldQtyMap[bid]||0;
+    const qNew=newQtyMap[bid]||0;
+    const selisih=qOld-qNew; // positif = stok bertambah (qty jual berkurang), negatif = stok berkurang
+    if(selisih===0)continue;
+    const b=aB.find(x=>x.id===parseInt(bid));
+    if(!b)continue;
+    const stokBaru=Math.max(0,b.stok+selisih);
+    await sb.from('barang').update({stok:stokBaru}).eq('id',b.id);
+  }
+
+  await lT();await lH();await lB();renderRiwayatJual();renderHutang();renderStok();
   closeModal('modal-edit-jual');
-  toast('Transaksi berhasil diperbarui!');
+  toast('Transaksi & stok berhasil diperbarui!');
 }
 
 async function hapusTransaksiJual(id){
