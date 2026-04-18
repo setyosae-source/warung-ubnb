@@ -2273,6 +2273,15 @@ function setDefaultDates(pfx){
 function tambahJual(){
   const p=sdSel['prod'];if(!p){toast('Pilih produk dulu',true);return;}
   const b=aB.find(x=>x.id===p.id);if(!b)return;
+  // Laundry/Service → buka form detail dulu
+  if(b.kategori==='laundry'){
+    _openLaundryForm(b);
+    return;
+  }
+  if(b.kategori==='service'){
+    _openServiceForm(b);
+    return;
+  }
   if(b.stok<=0){toast('Stok habis!',true);return;}
   // Jika ada harga levels → tampilkan picker dulu
   if(b.harga_levels&&b.harga_levels.length>0){
@@ -2716,6 +2725,51 @@ async function bayar(){
     await sb.from('hutang').insert([{nama:pelNamaH,jml:total,ket:'Penjualan: '+itemNames,lunas:false,tipe:'piutang',ref_id:data.id,ref_type:'transaksi'}]);
   }
   await lB();await lT();await lBatch();await lPel();await lH();
+  
+  // Simpan laundry/service items jika ada
+  const txId = data?.id;
+  if(txId){
+    for(let i = 0; i < KR.length; i++){
+      const k = KR[i];
+      if(k._kategori === 'laundry' && k._laundryData){
+        const ld = k._laundryData;
+        await sb.from('laundry_items').insert([{
+          transaksi_id: txId,
+          item_idx: i,
+          nama_item: k.nama,
+          berat: ld.berat || null,
+          qty: 1,
+          status: 'antri',
+          tgl_masuk: new Date().toISOString(),
+          catatan: ld.catatan || null,
+          nama_pelanggan: pelNama !== 'Umum' ? pelNama : null,
+          telp_pelanggan: ps?.telp || null,
+          total_harga: k.hE * k.qty
+        }]);
+      }
+      if(k._kategori === 'service' && k._serviceData){
+        const sd = k._serviceData;
+        await sb.from('service_items').insert([{
+          transaksi_id: txId,
+          item_idx: i,
+          jenis: sd.jenis,
+          nama_item: k.nama,
+          merk: sd.merk || null,
+          no_unit: sd.no_unit || null,
+          keluhan: sd.keluhan || null,
+          status: 'antri',
+          teknisi: sd.teknisi || null,
+          tgl_masuk: new Date().toISOString(),
+          tgl_estimasi: sd.tgl_estimasi || null,
+          nama_pelanggan: pelNama !== 'Umum' ? pelNama : null,
+          telp_pelanggan: ps?.telp || null,
+          total_harga: k.hE * k.qty,
+          biaya_jasa: k.hE * k.qty
+        }]);
+      }
+    }
+  }
+  
   lastTxId=data?.id||null;
   const kembalian=metodeBayar!=='belum'?Math.max(0,(parseInt(document.getElementById('jual-bayar').value)||0)-payload.total):0;
   resetJual();
@@ -6660,6 +6714,331 @@ async function simpanAkses(userId){
 }
 
 
+
+// ===== LAUNDRY & SERVICE TRACKING =====
+let aLaundry = []; // array laundry_items
+let aService = []; // array service_items
+let _laundryFilter = 'all';
+let _serviceFilter = 'all';
+
+// Load data tracking
+async function lLaundry(){
+  const {data} = await sb.from('laundry_items').select('*').order('tgl_masuk', {ascending: false});
+  aLaundry = data || [];
+}
+
+async function lService(){
+  const {data} = await sb.from('service_items').select('*').order('tgl_masuk', {ascending: false});
+  aService = data || [];
+}
+
+// Open form laundry
+function _openLaundryForm(barang){
+  document.getElementById('lf-barang-id').value = barang.id;
+  document.getElementById('lf-nama').value = barang.nama;
+  document.getElementById('lf-harga').value = barang.harga;
+  document.getElementById('lf-berat').value = '';
+  document.getElementById('lf-catatan').value = '';
+  document.getElementById('lf-total-info').style.display = 'none';
+  openModal('modal-laundry-form');
+}
+
+function hitungLaundry(){
+  const berat = parseFloat(document.getElementById('lf-berat').value) || 0;
+  const harga = parseInt(document.getElementById('lf-harga').value) || 0;
+  const total = berat * harga;
+  const info = document.getElementById('lf-total-info');
+  if(berat > 0){
+    info.textContent = `Total: ${berat}kg × ${fmt(harga)} = ${fmt(total)}`;
+    info.style.display = 'block';
+  } else {
+    info.style.display = 'none';
+  }
+}
+
+function simpanLaundryItem(){
+  const barangId = parseInt(document.getElementById('lf-barang-id').value);
+  const berat = parseFloat(document.getElementById('lf-berat').value) || 0;
+  const catatan = document.getElementById('lf-catatan').value.trim();
+  
+  if(berat <= 0){
+    toast('Berat wajib diisi', true);
+    return;
+  }
+  
+  const b = aB.find(x => x.id === barangId);
+  if(!b) return;
+  
+  const harga = b.harga;
+  const total = berat * harga;
+  
+  // Tambah ke keranjang dengan metadata laundry
+  KR.push({
+    id: barangId,
+    barang_id: barangId,
+    nama: b.nama,
+    harga: harga,
+    hE: total,
+    dI: 0,
+    dTipe: '',
+    dNilai: 0,
+    qty: 1,
+    isPaket: false,
+    _kategori: 'laundry',
+    _laundryData: {
+      berat: berat,
+      catatan: catatan
+    }
+  });
+  
+  closeModal('modal-laundry-form');
+  document.getElementById('sdd-prod').textContent = 'Pilih produk...';
+  sdSel['prod'] = null;
+  renderKeranjang();
+  hitungDiskon();
+  toast(`${b.nama} (${berat}kg) ditambahkan ke keranjang`);
+}
+
+// Open form service
+function _openServiceForm(barang){
+  document.getElementById('sf-barang-id').value = barang.id;
+  document.getElementById('sf-nama').value = barang.nama;
+  document.getElementById('sf-jenis').value = 'motor';
+  document.getElementById('sf-merk').value = '';
+  document.getElementById('sf-no-unit').value = '';
+  document.getElementById('sf-keluhan').value = '';
+  document.getElementById('sf-teknisi').value = '';
+  document.getElementById('sf-estimasi').value = '';
+  document.getElementById('sf-total-info').textContent = `Biaya: ${fmt(barang.harga)}`;
+  openModal('modal-service-form');
+}
+
+function simpanServiceItem(){
+  const barangId = parseInt(document.getElementById('sf-barang-id').value);
+  const jenis = document.getElementById('sf-jenis').value;
+  const merk = document.getElementById('sf-merk').value.trim();
+  const noUnit = document.getElementById('sf-no-unit').value.trim();
+  const keluhan = document.getElementById('sf-keluhan').value.trim();
+  const teknisi = document.getElementById('sf-teknisi').value.trim();
+  const estimasi = document.getElementById('sf-estimasi').value;
+  
+  const b = aB.find(x => x.id === barangId);
+  if(!b) return;
+  
+  // Tambah ke keranjang dengan metadata service
+  KR.push({
+    id: barangId,
+    barang_id: barangId,
+    nama: b.nama,
+    harga: b.harga,
+    hE: b.harga,
+    dI: 0,
+    dTipe: '',
+    dNilai: 0,
+    qty: 1,
+    isPaket: false,
+    _kategori: 'service',
+    _serviceData: {
+      jenis: jenis,
+      merk: merk,
+      no_unit: noUnit,
+      keluhan: keluhan,
+      teknisi: teknisi,
+      tgl_estimasi: estimasi || null
+    }
+  });
+  
+  closeModal('modal-service-form');
+  document.getElementById('sdd-prod').textContent = 'Pilih produk...';
+  sdSel['prod'] = null;
+  renderKeranjang();
+  hitungDiskon();
+  toast(`${b.nama} ditambahkan ke keranjang`);
+}
+
+// Filter tracking laundry
+function filterLaundry(status){
+  _laundryFilter = status;
+  // Update button aktif
+  ['all','antri','proses','selesai','diambil'].forEach(s => {
+    const btn = document.getElementById('btn-laundry-' + s);
+    if(btn){
+      btn.className = s === status ? 'btn sm' : 'btn sm sec';
+    }
+  });
+  renderTrackingLaundry();
+}
+
+function renderTrackingLaundry(){
+  const search = (document.getElementById('search-laundry')?.value || '').toLowerCase();
+  let filtered = aLaundry;
+  
+  if(_laundryFilter !== 'all'){
+    filtered = filtered.filter(x => x.status === _laundryFilter);
+  }
+  
+  if(search){
+    filtered = filtered.filter(x => 
+      (x.no_antrian||'').toLowerCase().includes(search) ||
+      (x.nama_pelanggan||'').toLowerCase().includes(search) ||
+      (x.nama_item||'').toLowerCase().includes(search)
+    );
+  }
+  
+  const el = document.getElementById('tracking-laundry-list');
+  if(!filtered.length){
+    el.innerHTML = '<div class="empty"><div class="ei">🧺</div>Tidak ada data</div>';
+    return;
+  }
+  
+  const statusColors = {
+    antri: '#f59e0b',
+    proses: '#3b82f6',
+    selesai: '#10b981',
+    diambil: '#6b7280'
+  };
+  
+  el.innerHTML = filtered.map(item => {
+    const color = statusColors[item.status] || '#6b7280';
+    const tglMasuk = new Date(item.tgl_masuk).toLocaleDateString('id-ID');
+    return `
+      <div style="background:white;border-radius:var(--radius);padding:12px;margin-bottom:8px;border-left:4px solid ${color}">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+          <div>
+            <div style="font-weight:700;font-size:14px">${item.no_antrian || '-'}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${item.nama_item}</div>
+          </div>
+          <span style="font-size:11px;background:${color};color:white;padding:3px 8px;border-radius:99px;font-weight:600">${item.status.toUpperCase()}</span>
+        </div>
+        <div style="font-size:12px;margin-bottom:4px">
+          <strong>${item.nama_pelanggan || '-'}</strong>
+          ${item.telp_pelanggan ? `<span style="color:var(--text-muted)"> • ${item.telp_pelanggan}</span>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
+          ${item.berat ? `${item.berat}kg` : `${item.qty} pcs`} • ${fmt(item.total_harga)} • Masuk: ${tglMasuk}
+        </div>
+        ${item.catatan ? `<div style="font-size:11px;font-style:italic;color:var(--text-muted);margin-bottom:8px">"${item.catatan}"</div>` : ''}
+        <div style="display:flex;gap:6px">
+          ${item.status === 'antri' ? `<button class="btn sm" onclick="updateStatusLaundry(${item.id},'proses')">Mulai Proses</button>` : ''}
+          ${item.status === 'proses' ? `<button class="btn sm" onclick="updateStatusLaundry(${item.id},'selesai')">Tandai Selesai</button>` : ''}
+          ${item.status === 'selesai' ? `<button class="btn sm" onclick="updateStatusLaundry(${item.id},'diambil')">Tandai Diambil</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateStatusLaundry(id, newStatus){
+  const tglField = newStatus === 'selesai' ? 'tgl_selesai' : newStatus === 'diambil' ? 'tgl_diambil' : null;
+  const payload = {status: newStatus};
+  if(tglField) payload[tglField] = new Date().toISOString();
+  
+  const {error} = await sb.from('laundry_items').update(payload).eq('id', id);
+  if(error){
+    toast('Gagal update status: ' + error.message, true);
+    return;
+  }
+  
+  toast('Status diupdate ke ' + newStatus);
+  await lLaundry();
+  renderTrackingLaundry();
+}
+
+// Filter tracking service
+function filterService(status){
+  _serviceFilter = status;
+  ['all','antri','diagnosa','proses','selesai','diambil'].forEach(s => {
+    const btn = document.getElementById('btn-service-' + s);
+    if(btn){
+      btn.className = s === status ? 'btn sm' : 'btn sm sec';
+    }
+  });
+  renderTrackingService();
+}
+
+function renderTrackingService(){
+  const search = (document.getElementById('search-service')?.value || '').toLowerCase();
+  let filtered = aService;
+  
+  if(_serviceFilter !== 'all'){
+    filtered = filtered.filter(x => x.status === _serviceFilter);
+  }
+  
+  if(search){
+    filtered = filtered.filter(x => 
+      (x.no_antrian||'').toLowerCase().includes(search) ||
+      (x.nama_pelanggan||'').toLowerCase().includes(search) ||
+      (x.no_unit||'').toLowerCase().includes(search) ||
+      (x.nama_item||'').toLowerCase().includes(search)
+    );
+  }
+  
+  const el = document.getElementById('tracking-service-list');
+  if(!filtered.length){
+    el.innerHTML = '<div class="empty"><div class="ei">🔧</div>Tidak ada data</div>';
+    return;
+  }
+  
+  const statusColors = {
+    antri: '#f59e0b',
+    diagnosa: '#8b5cf6',
+    proses: '#3b82f6',
+    selesai: '#10b981',
+    diambil: '#6b7280'
+  };
+  
+  el.innerHTML = filtered.map(item => {
+    const color = statusColors[item.status] || '#6b7280';
+    const tglMasuk = new Date(item.tgl_masuk).toLocaleDateString('id-ID');
+    const jenisIcon = item.jenis === 'motor' ? '🏍️' : '❄️';
+    return `
+      <div style="background:white;border-radius:var(--radius);padding:12px;margin-bottom:8px;border-left:4px solid ${color}">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+          <div>
+            <div style="font-weight:700;font-size:14px">${item.no_antrian || '-'}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${jenisIcon} ${item.nama_item}</div>
+          </div>
+          <span style="font-size:11px;background:${color};color:white;padding:3px 8px;border-radius:99px;font-weight:600">${item.status.toUpperCase()}</span>
+        </div>
+        <div style="font-size:12px;margin-bottom:4px">
+          <strong>${item.nama_pelanggan || '-'}</strong>
+          ${item.telp_pelanggan ? `<span style="color:var(--text-muted)"> • ${item.telp_pelanggan}</span>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">
+          ${item.merk ? `Merk: ${item.merk}` : ''} ${item.no_unit ? `• No: ${item.no_unit}` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
+          ${fmt(item.total_harga)} • Masuk: ${tglMasuk}
+          ${item.teknisi ? ` • Teknisi: ${item.teknisi}` : ''}
+        </div>
+        ${item.keluhan ? `<div style="font-size:11px;font-style:italic;color:var(--text-muted);margin-bottom:8px">"${item.keluhan}"</div>` : ''}
+        <div style="display:flex;gap:6px">
+          ${item.status === 'antri' ? `<button class="btn sm" onclick="updateStatusService(${item.id},'diagnosa')">Mulai Diagnosa</button>` : ''}
+          ${item.status === 'diagnosa' ? `<button class="btn sm" onclick="updateStatusService(${item.id},'proses')">Mulai Perbaikan</button>` : ''}
+          ${item.status === 'proses' ? `<button class="btn sm" onclick="updateStatusService(${item.id},'selesai')">Tandai Selesai</button>` : ''}
+          ${item.status === 'selesai' ? `<button class="btn sm" onclick="updateStatusService(${item.id},'diambil')">Tandai Diambil</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateStatusService(id, newStatus){
+  const tglField = newStatus === 'selesai' ? 'tgl_selesai' : newStatus === 'diambil' ? 'tgl_diambil' : null;
+  const payload = {status: newStatus};
+  if(tglField) payload[tglField] = new Date().toISOString();
+  
+  const {error} = await sb.from('service_items').update(payload).eq('id', id);
+  if(error){
+    toast('Gagal update status: ' + error.message, true);
+    return;
+  }
+  
+  toast('Status diupdate ke ' + newStatus);
+  await lService();
+  renderTrackingService();
+}
+
 </script>
 
 <!-- MODAL LEVEL HARGA JUAL -->
@@ -6672,5 +7051,129 @@ async function simpanAkses(userId){
     <button class="btn" onclick="closeModal('modal-level-picker')" style="width:100%;margin-top:4px">Batal</button>
   </div>
 </div>
+<!-- MODAL FORM LAUNDRY -->
+<div class="modal-overlay" id="modal-laundry-form">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🧺 Form Laundry</div>
+    <input type="hidden" id="lf-barang-id"/>
+    <div class="irow">
+      <label>Item</label>
+      <input type="text" id="lf-nama" readonly style="background:var(--bg)"/>
+    </div>
+    <div class="two-col">
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Berat (kg) *</div>
+        <input type="number" id="lf-berat" placeholder="0" step="0.5" min="0.5" oninput="hitungLaundry()"/>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Harga/kg</div>
+        <input type="number" id="lf-harga" readonly style="background:var(--bg)"/>
+      </div>
+    </div>
+    <div id="lf-total-info" style="padding:10px;background:var(--green-light);border-radius:var(--radius-sm);margin:8px 0;font-weight:700;color:var(--green);display:none"></div>
+    <div class="irow">
+      <label>Catatan</label>
+      <textarea id="lf-catatan" placeholder="Catatan khusus (opsional)" rows="2"></textarea>
+    </div>
+    <div class="two-col" style="margin-top:12px">
+      <button class="btn sec" onclick="closeModal('modal-laundry-form')">Batal</button>
+      <button class="btn" onclick="simpanLaundryItem()">Tambah</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FORM SERVICE -->
+<div class="modal-overlay" id="modal-service-form">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔧 Form Service</div>
+    <input type="hidden" id="sf-barang-id"/>
+    <div class="irow">
+      <label>Jenis Service</label>
+      <input type="text" id="sf-nama" readonly style="background:var(--bg)"/>
+    </div>
+    <div class="two-col">
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Jenis *</div>
+        <select id="sf-jenis">
+          <option value="motor">🏍️ Motor</option>
+          <option value="ac">❄️ AC</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Merk</div>
+        <input type="text" id="sf-merk" placeholder="Honda, Daikin, dll"/>
+      </div>
+    </div>
+    <div class="irow">
+      <label>No Unit / Plat</label>
+      <input type="text" id="sf-no-unit" placeholder="B 1234 XYZ / SN-12345"/>
+    </div>
+    <div class="irow">
+      <label>Keluhan</label>
+      <textarea id="sf-keluhan" placeholder="Keluhan pelanggan" rows="2"></textarea>
+    </div>
+    <div class="two-col">
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Teknisi</div>
+        <input type="text" id="sf-teknisi" placeholder="Nama teknisi (opsional)"/>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Estimasi Selesai</div>
+        <input type="datetime-local" id="sf-estimasi"/>
+      </div>
+    </div>
+    <div id="sf-total-info" style="padding:10px;background:var(--green-light);border-radius:var(--radius-sm);margin:8px 0;font-weight:700;color:var(--green)"></div>
+    <div class="two-col" style="margin-top:12px">
+      <button class="btn sec" onclick="closeModal('modal-service-form')">Batal</button>
+      <button class="btn" onclick="simpanServiceItem()">Tambah</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE TRACKING LAUNDRY -->
+<div class="page" id="page-tracking-laundry">
+  <div class="page-title">
+    <button class="back-btn" onclick="showPage('jual',document.querySelector('.nav-item.active'))">‹</button>
+    🧺 Tracking Laundry
+  </div>
+  <div class="content">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn sm" onclick="filterLaundry('all')" id="btn-laundry-all">Semua</button>
+      <button class="btn sm sec" onclick="filterLaundry('antri')" id="btn-laundry-antri">Antri</button>
+      <button class="btn sm sec" onclick="filterLaundry('proses')" id="btn-laundry-proses">Proses</button>
+      <button class="btn sm sec" onclick="filterLaundry('selesai')" id="btn-laundry-selesai">Selesai</button>
+      <button class="btn sm sec" onclick="filterLaundry('diambil')" id="btn-laundry-diambil">Diambil</button>
+    </div>
+    <div class="search-box" style="margin-bottom:12px">
+      <input type="text" id="search-laundry" placeholder="Cari no antrian / nama pelanggan..." oninput="renderTrackingLaundry()"/>
+    </div>
+    <div id="tracking-laundry-list"></div>
+  </div>
+</div>
+
+<!-- PAGE TRACKING SERVICE -->
+<div class="page" id="page-tracking-service">
+  <div class="page-title">
+    <button class="back-btn" onclick="showPage('jual',document.querySelector('.nav-item.active'))">‹</button>
+    🔧 Tracking Service
+  </div>
+  <div class="content">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn sm" onclick="filterService('all')" id="btn-service-all">Semua</button>
+      <button class="btn sm sec" onclick="filterService('antri')" id="btn-service-antri">Antri</button>
+      <button class="btn sm sec" onclick="filterService('diagnosa')" id="btn-service-diagnosa">Diagnosa</button>
+      <button class="btn sm sec" onclick="filterService('proses')" id="btn-service-proses">Proses</button>
+      <button class="btn sm sec" onclick="filterService('selesai')" id="btn-service-selesai">Selesai</button>
+      <button class="btn sm sec" onclick="filterService('diambil')" id="btn-service-diambil">Diambil</button>
+    </div>
+    <div class="search-box" style="margin-bottom:12px">
+      <input type="text" id="search-service" placeholder="Cari no antrian / nama / no unit..." oninput="renderTrackingService()"/>
+    </div>
+    <div id="tracking-service-list"></div>
+  </div>
+</div>
+
 </body>
 </html>
