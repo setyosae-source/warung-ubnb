@@ -2184,7 +2184,7 @@ window.addEventListener('popstate', e=>{
 window.addEventListener('load',async()=>{const s=localStorage.getItem('wu');if(!s)return;try{const u=JSON.parse(s);const{data,error}=await sb.from('users').select('*').eq('id',u.id).single();if(error||!data){localStorage.removeItem('wu');return;}loginOK(data);}catch(e){localStorage.removeItem('wu');}});
 
 async function loadAll(){
-  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB()]);
+  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB(),lLaundry(),lService()]);
   filterSD('pel');filterSD('prod');filterSD('sup');filterSD('bprod');
   renderKeranjang();renderStok();renderPaketBuilder();renderPaketList();renderJualPaketGrid();renderVoucherList();renderPel();renderSup();renderHutang();
   loadPesanan(); // Load pesanan count for badge
@@ -5051,6 +5051,7 @@ const MENU_DEF = [
   {id:'warung_beli',    label:'Pembelian',        modul:'🏪 Warung',      page:'beli'},
   {id:'warung_riwayat_beli', label:'Riwayat Beli', modul:'🏪 Warung',   page:'riwayat-beli'},
   {id:'warung_stok',    label:'Stok Barang',      modul:'🏪 Warung',      page:'stok'},
+  {id:'warung_daftar_produk', label:'Daftar Produk', modul:'🏪 Warung', page:'daftar-produk'},
   {id:'warung_paket',   label:'Paket & Bundling', modul:'🏪 Warung',      page:'paket'},
   {id:'warung_opname',  label:'Stock Opname',     modul:'🏪 Warung',      page:'opname'},
   {id:'ppob_transaksi', label:'Transaksi PPOB',   modul:'⚡ PPOB',        page:'ppob'},
@@ -7039,6 +7040,256 @@ async function updateStatusService(id, newStatus){
   renderTrackingService();
 }
 
+
+// ===== DAFTAR PRODUK =====
+let _produkFilter = 'all';
+
+function filterProduk(kat){
+  _produkFilter = kat;
+  ['all','warung','ppob','laundry','service'].forEach(k => {
+    const btn = document.getElementById('btn-prod-' + k);
+    if(btn) btn.className = k === kat ? 'btn sm' : 'btn sm sec';
+  });
+  renderDaftarProduk();
+}
+
+function renderDaftarProduk(){
+  const search = (document.getElementById('search-produk')?.value || '').toLowerCase();
+  const sortBy = document.getElementById('sort-produk')?.value || 'nama';
+  
+  let filtered = aB.slice();
+  
+  // Filter kategori
+  if(_produkFilter !== 'all'){
+    filtered = filtered.filter(b => b.kategori === _produkFilter);
+  }
+  
+  // Search
+  if(search){
+    filtered = filtered.filter(b => 
+      (b.nama||'').toLowerCase().includes(search) ||
+      (b.barcode||'').toLowerCase().includes(search) ||
+      (b.kategori||'').toLowerCase().includes(search)
+    );
+  }
+  
+  // Sort
+  if(sortBy === 'nama'){
+    filtered.sort((a,b) => (a.nama||'').localeCompare(b.nama||''));
+  } else if(sortBy === 'stok'){
+    filtered.sort((a,b) => (b.stok||0) - (a.stok||0));
+  } else if(sortBy === 'harga'){
+    filtered.sort((a,b) => (b.harga||0) - (a.harga||0));
+  } else if(sortBy === 'terbaru'){
+    filtered.sort((a,b) => (b.id||0) - (a.id||0));
+  }
+  
+  // Stats
+  renderProdukStats(filtered);
+  
+  // Tabel
+  const el = document.getElementById('daftar-produk-list');
+  if(!filtered.length){
+    el.innerHTML = '<div class="empty"><div class="ei">📦</div>Tidak ada produk</div>';
+    return;
+  }
+  
+  const catIcons = {warung:'🏪',ppob:'⚡',laundry:'🧺',service:'🔧'};
+  
+  el.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;background:white;border-radius:var(--radius)">
+        <thead style="background:var(--bg);position:sticky;top:0;z-index:1">
+          <tr>
+            <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted)">FOTO</th>
+            <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted)">NAMA</th>
+            <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted)">KATEGORI</th>
+            <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted)">STOK</th>
+            <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted)">HARGA JUAL</th>
+            <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted)">HARGA BELI</th>
+            <th style="padding:10px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted)">AKSI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map(b => {
+            const fotoThumb = b.foto_url 
+              ? `<img src="${b.foto_url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'"/>`
+              : `<div style="width:40px;height:40px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text-muted)">${(b.nama||'').substring(0,2).toUpperCase()}</div>`;
+            
+            const stokColor = b.stok <= 0 ? '#ef4444' : b.stok <= 10 ? '#f59e0b' : '#10b981';
+            const catIcon = catIcons[b.kategori] || '';
+            
+            return `
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:10px">${fotoThumb}</td>
+                <td style="padding:10px">
+                  <div style="font-weight:600;font-size:13px">${b.nama}</div>
+                  ${b.barcode ? `<div style="font-size:11px;color:var(--text-muted)">Barcode: ${b.barcode}</div>` : ''}
+                </td>
+                <td style="padding:10px">
+                  <span style="font-size:11px;background:var(--bg);padding:3px 8px;border-radius:99px">${catIcon} ${b.kategori||'warung'}</span>
+                </td>
+                <td style="padding:10px;text-align:right">
+                  <span style="font-weight:700;color:${stokColor}">${b.stok||0}</span>
+                  <span style="font-size:11px;color:var(--text-muted);margin-left:2px">${b.satuan||'pcs'}</span>
+                </td>
+                <td style="padding:10px;text-align:right;font-weight:600">${fmt(b.harga||0)}</td>
+                <td style="padding:10px;text-align:right;color:var(--text-muted)">${fmt(b.harga_beli||0)}</td>
+                <td style="padding:10px;text-align:center">
+                  <button class="btn sm" onclick="openModalBarang(${b.id})" style="padding:4px 10px;font-size:11px">✏️ Edit</button>
+                  <button class="btn sm sec" onclick="hapusProduk(${b.id})" style="padding:4px 10px;font-size:11px;margin-left:4px">🗑️</button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderProdukStats(filtered){
+  const el = document.getElementById('produk-stats');
+  const total = filtered.length;
+  const totalStok = filtered.reduce((s,b) => s + (b.stok||0), 0);
+  const nilaiStok = filtered.reduce((s,b) => s + (b.stok||0) * (b.harga||0), 0);
+  const stokHabis = filtered.filter(b => (b.stok||0) <= 0).length;
+  
+  el.innerHTML = `
+    <div style="background:white;padding:12px;border-radius:var(--radius);border-left:4px solid var(--green)">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Produk</div>
+      <div style="font-size:20px;font-weight:800;color:var(--green)">${total}</div>
+    </div>
+    <div style="background:white;padding:12px;border-radius:var(--radius);border-left:4px solid var(--blue)">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Stok</div>
+      <div style="font-size:20px;font-weight:800;color:var(--blue)">${totalStok.toLocaleString('id')}</div>
+    </div>
+    <div style="background:white;padding:12px;border-radius:var(--radius);border-left:4px solid var(--purple)">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Nilai Stok</div>
+      <div style="font-size:20px;font-weight:800;color:var(--purple)">${fmt(nilaiStok)}</div>
+    </div>
+    <div style="background:white;padding:12px;border-radius:var(--radius);border-left:4px solid var(--red)">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Stok Habis</div>
+      <div style="font-size:20px;font-weight:800;color:var(--red)">${stokHabis}</div>
+    </div>
+  `;
+}
+
+async function hapusProduk(id){
+  const b = aB.find(x => x.id === id);
+  if(!b) return;
+  
+  if(!confirm(`Hapus produk "${b.nama}"?\n\nData stok dan riwayat transaksi terkait akan tetap tersimpan.`)) return;
+  
+  const {error} = await sb.from('barang').delete().eq('id', id);
+  if(error){
+    toast('Gagal hapus: ' + error.message, true);
+    return;
+  }
+  
+  toast('Produk dihapus');
+  await lB();
+  renderDaftarProduk();
+  renderStok();
+}
+
+// Export ke Excel
+function exportProduk(){
+  const search = (document.getElementById('search-produk')?.value || '').toLowerCase();
+  let filtered = aB.slice();
+  
+  if(_produkFilter !== 'all'){
+    filtered = filtered.filter(b => b.kategori === _produkFilter);
+  }
+  if(search){
+    filtered = filtered.filter(b => 
+      (b.nama||'').toLowerCase().includes(search) ||
+      (b.barcode||'').toLowerCase().includes(search)
+    );
+  }
+  
+  // Buat CSV
+  let csv = 'Nama,Kategori,Barcode,Stok,Satuan,Harga Jual,Harga Beli,Diskon Tipe,Diskon Nilai\n';
+  filtered.forEach(b => {
+    csv += `"${(b.nama||'').replace(/"/g,'""')}",`;
+    csv += `"${b.kategori||'warung'}",`;
+    csv += `"${b.barcode||''}",`;
+    csv += `${b.stok||0},`;
+    csv += `"${b.satuan||'pcs'}",`;
+    csv += `${b.harga||0},`;
+    csv += `${b.harga_beli||0},`;
+    csv += `"${b.diskon_tipe||''}",`;
+    csv += `${b.diskon_nilai||0}\n`;
+  });
+  
+  // Download
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `produk_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+  
+  toast(`${filtered.length} produk di-export ke CSV`);
+}
+
+// Import dari Excel/CSV
+async function importProduk(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim());
+      
+      if(lines.length < 2){
+        toast('File kosong atau format salah', true);
+        return;
+      }
+      
+      // Skip header
+      const rows = lines.slice(1);
+      let success = 0, failed = 0;
+      
+      for(const row of rows){
+        // Parse CSV (simple - assumes no commas in quoted fields for now)
+        const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        if(cols.length < 6) continue;
+        
+        const [nama, kategori, barcode, stok, satuan, hargaJual, hargaBeli, diskonTipe, diskonNilai] = cols;
+        
+        const payload = {
+          nama: nama || 'Produk Import',
+          kategori: kategori || 'warung',
+          barcode: barcode || null,
+          stok: parseInt(stok) || 0,
+          satuan: satuan || 'pcs',
+          harga: parseInt(hargaJual) || 0,
+          harga_beli: parseInt(hargaBeli) || 0,
+          diskon_tipe: diskonTipe || null,
+          diskon_nilai: parseInt(diskonNilai) || 0
+        };
+        
+        const {error} = await sb.from('barang').insert([payload]);
+        if(error) failed++;
+        else success++;
+      }
+      
+      toast(`Import selesai: ${success} sukses, ${failed} gagal`);
+      await lB();
+      renderDaftarProduk();
+      renderStok();
+      
+    } catch(err){
+      toast('Gagal import: ' + err.message, true);
+    }
+  };
+  
+  reader.readAsText(file);
+  event.target.value = ''; // reset input
+}
+
 </script>
 
 <!-- MODAL LEVEL HARGA JUAL -->
@@ -7172,6 +7423,47 @@ async function updateStatusService(id, newStatus){
       <input type="text" id="search-service" placeholder="Cari no antrian / nama / no unit..." oninput="renderTrackingService()"/>
     </div>
     <div id="tracking-service-list"></div>
+  </div>
+</div>
+
+
+<!-- PAGE DAFTAR PRODUK -->
+<div class="page" id="page-daftar-produk">
+  <div class="page-title">
+    📦 Daftar Produk
+    <button class="btn sm" onclick="openModalBarang()" style="margin-left:auto">＋ Tambah Barang</button>
+  </div>
+  <div class="content">
+    <!-- Filter & Search -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn sm" onclick="filterProduk('all')" id="btn-prod-all">Semua</button>
+      <button class="btn sm sec" onclick="filterProduk('warung')" id="btn-prod-warung">🏪 Warung</button>
+      <button class="btn sm sec" onclick="filterProduk('ppob')" id="btn-prod-ppob">⚡ PPOB</button>
+      <button class="btn sm sec" onclick="filterProduk('laundry')" id="btn-prod-laundry">🧺 Laundry</button>
+      <button class="btn sm sec" onclick="filterProduk('service')" id="btn-prod-service">🔧 Service</button>
+    </div>
+    <div class="search-box" style="margin-bottom:12px">
+      <input type="text" id="search-produk" placeholder="Cari nama, barcode, kategori..." oninput="renderDaftarProduk()"/>
+    </div>
+    
+    <!-- Toolbar -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <select id="sort-produk" onchange="renderDaftarProduk()" style="flex:1;max-width:200px">
+        <option value="nama">Urutkan: Nama A-Z</option>
+        <option value="stok">Urutkan: Stok Terbanyak</option>
+        <option value="harga">Urutkan: Harga Tertinggi</option>
+        <option value="terbaru">Urutkan: Terbaru</option>
+      </select>
+      <button class="btn sm sec" onclick="exportProduk()">📥 Export Excel</button>
+      <button class="btn sm sec" onclick="document.getElementById('import-produk-file').click()">📤 Import</button>
+      <input type="file" id="import-produk-file" accept=".xlsx,.csv" style="display:none" onchange="importProduk(event)"/>
+    </div>
+    
+    <!-- Stats -->
+    <div id="produk-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px"></div>
+    
+    <!-- Tabel -->
+    <div id="daftar-produk-list"></div>
   </div>
 </div>
 
