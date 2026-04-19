@@ -2393,7 +2393,7 @@ function tambahJual(){
     _openServiceForm(b);
     return;
   }
-  if(b.stok<=0){toast('Stok habis!',true);return;}
+  if(b.stok<=0&&!['ppob','laundry','service'].includes(b.kategori)){toast('Stok habis!',true);return;}
   // Jika ada harga levels → tampilkan picker dulu
   if(b.harga_levels&&b.harga_levels.length>0){
     _showLevelPicker(b.id);
@@ -2477,7 +2477,7 @@ function _pilihLevel(barangId,levelIdx){
   else if(b.diskon_tipe==='nominal'&&b.diskon_nilai>0){dI=b.diskon_nilai;hE=Math.max(0,lv.harga-dI);}
   const ex=KR.find(x=>x.id===b.id&&x._level===levelIdx&&!x.isPaket);
   if(ex){
-    if(ex.qty*lv.qty<=b.stok)ex.qty++;
+    if(ex.qty*lv.qty<=b.stok||['ppob','laundry','service'].includes(b.kategori))ex.qty++;
     else{toast('Stok tidak cukup',true);closeModal('modal-level-picker');return;}
   } else {
     KR.push({id:b.id,nama:b.nama+(lv.qty>1?` (${lv.label})`:''),
@@ -2503,7 +2503,7 @@ function tambahPaket(pid){
 function ubahQty(id,d){
   const idx=KR.findIndex(x=>String(x.id)===String(id));if(idx<0)return;
   const k=KR[idx];
-  if(!k.isPaket){const b=aB.find(x=>x.id===k.id);if(d>0&&k.qty>=(b?.stok||99)){toast('Stok tidak cukup',true);return;}}
+  if(!k.isPaket){const b=aB.find(x=>x.id===k.id);if(d>0&&k.qty>=(b?.stok||99)&&!['ppob','laundry','service'].includes(b?.kategori)){toast('Stok tidak cukup',true);return;}}
   KR[idx].qty+=d;if(KR[idx].qty<=0)KR.splice(idx,1);
   renderKeranjang();hitungDiskon();
 }
@@ -2556,7 +2556,8 @@ function renderProdukJual(){
     const avatar=b.foto_url
       ?`<img src="${b.foto_url}" onerror="this.parentElement.innerHTML='${initials}'">`
       :`${initials}`;
-    const stokInfo=b.stok<=0?'<span style="color:var(--red)">Habis</span>':
+    const nonStok=['ppob','laundry','service'].includes(b.kategori);
+    const stokInfo=nonStok?'':(b.stok<=0?'<span style="color:var(--red)">Habis</span>':
       b.stok<=5?`<span style="color:var(--amber)">${b.stok} tersisa</span>`:
       `${b.stok}`;
     const hargaDisp=b.diskon_tipe&&b.diskon_nilai>0
@@ -2586,7 +2587,7 @@ function renderProdukJual(){
 
 function tapProduk(id){
   const b=aB.find(x=>x.id===id);if(!b)return;
-  if(b.stok<=0){toast('Stok habis!',true);return;}
+  if(b.stok<=0&&!['ppob','laundry','service'].includes(b.kategori)){toast('Stok habis!',true);return;}
   // Set as selected product and tambah
   sdSel['prod']={id:b.id,label:b.nama};
   tambahJual();
@@ -2828,7 +2829,7 @@ async function bayar(){
   if(error){toast('Gagal simpan: '+error.message,true);return;}
   for(const k of KR){
     if(k.isPaket){for(const pi of k.paketItems){const b=aB.find(x=>x.id===pi.barang_id);if(b)await sb.from('barang').update({stok:Math.max(0,b.stok-pi.qty*k.qty)}).eq('id',pi.barang_id);}}
-    else{const bid=k.barang_id||k.id;const b=aB.find(x=>x.id===bid);const qtyReal=k.qty*(k._qtyPerUnit||1);if(b)await sb.from('barang').update({stok:Math.max(0,b.stok-qtyReal)}).eq('id',bid);}
+    else{const bid=k.barang_id||k.id;const b=aB.find(x=>x.id===bid);const qtyReal=k.qty*(k._qtyPerUnit||1);if(b&&!['ppob','laundry','service'].includes(b.kategori))await sb.from('barang').update({stok:Math.max(0,b.stok-qtyReal)}).eq('id',bid);}
   }
   for(const u of allUpd)await sb.from('stok_batch').update({qty_sisa:u.qty_sisa}).eq('id',u.id);
   if(pelId){const p=aPel.find(x=>x.id===pelId);if(p){const poin=Math.floor(total/1000);await sb.from('pelanggan').update({poin:(p.poin||0)+poin,total_belanja:(p.total_belanja||0)+total}).eq('id',pelId);}}
@@ -3653,7 +3654,7 @@ function renderStok(){
   const el=document.getElementById('stok-list');
   const q=(document.getElementById('stok-search')?.value||'').toLowerCase();
   if(!aB.length){el.innerHTML='<div class="empty"><div class="ei">📦</div>Belum ada barang<br><button class="btn primary sm" onclick="openModalBarang()" style="margin-top:10px">＋ Tambah Barang</button></div>';return;}
-  let list=aB.filter(b=>stokKategori==='ppob'?(b.kategori==='ppob'):(b.kategori==='warung'||!b.kategori));
+  let list=aB.filter(b=>b.kategori==='warung'||!b.kategori); // Stok hanya untuk warung
   if(q)list=list.filter(b=>b.nama.toLowerCase().includes(q));
   list.sort((a,b)=>{
     let va=a[sortField]||0,vb=b[sortField]||0;
@@ -4882,7 +4883,7 @@ function renderDashAlerts(){
   let alerts=[];
 
   // Stok habis
-  const habis=aB.filter(b=>b.stok===0);
+  const habis=aB.filter(b=>b.stok===0&&!['ppob','laundry','service'].includes(b.kategori));
   if(habis.length>0){
     alerts.push(`<div class="dash-alert danger" onclick="goToPage('stok')">
       <span style="font-size:20px">📦</span>
@@ -4893,7 +4894,7 @@ function renderDashAlerts(){
   }
 
   // Stok hampir habis
-  const hampir=aB.filter(b=>b.stok>0&&b.stok<=5);
+  const hampir=aB.filter(b=>b.stok>0&&b.stok<=5&&!['ppob','laundry','service'].includes(b.kategori));
   if(hampir.length>0){
     alerts.push(`<div class="dash-alert warn" onclick="goToPage('stok')">
       <span style="font-size:20px">⚠️</span>
