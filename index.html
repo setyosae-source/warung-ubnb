@@ -2103,9 +2103,9 @@ function filterSD(k){
     el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:i.id,anggota_id:i.anggota_id,label:i.label})})'><div><div>${i.label}${i.anggota_id?` <span style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 6px;border-radius:99px">⭐ Anggota</span>`:''}</div><div class="opt-sub">${i.sub}</div></div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }
   if(k==='ppob-pel'){
-    const items=aPel.map(p=>({id:p.id,label:p.nama,sub:p.telp||''}));
-    const f=items.filter(i=>i.label.toLowerCase().includes(q)||(i.sub&&i.sub.includes(q)));
-    el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("ppob-pel",${JSON.stringify({id:i.id,label:i.label})})'><div class="opt-label">${i.label}</div><div class="opt-sub">${i.sub}</div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
+    const items=[{id:null,anggota_id:null,label:'Umum',sub:'Bukan anggota UBNB'},...aSahamAnggota.map(a=>({id:null,anggota_id:a.id,label:a.nama,sub:a.no_anggota+' · '+a.kelompok+' · '+a.jumlah_lembar+' lembar'}))];
+    const f=items.filter(i=>i.label.toLowerCase().includes(q)||(i.sub&&i.sub.toLowerCase().includes(q)));
+    el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("ppob-pel",${JSON.stringify({id:i.id,anggota_id:i.anggota_id,label:i.label})})'><div class="opt-label">${i.anggota_id?'⭐ ':''} ${i.label}</div><div class="opt-sub">${i.sub}</div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }else if(k==='prod'){
     const f=aB.filter(b=>b.nama.toLowerCase().includes(q));
     el.innerHTML=f.map(b=>{const d=b.diskon_tipe?` [-${b.diskon_nilai}${b.diskon_tipe==='persen'?'%':'Rp'}]`:'';return `<div class="sd-option" onclick='selSD("prod",${JSON.stringify({id:b.id,label:b.nama,harga:b.harga,stok:b.stok})})'><div><div>${b.nama}${d}</div><div class="opt-sub">${fmt(b.harga)} · Stok: ${b.stok}</div></div></div>`;}).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
@@ -5309,29 +5309,28 @@ async function lPPOB(){
   aPPOB=data||[];
 }
 
-let ppobPelId = null;
+let ppobPelId = null; let ppobAnggotaId = null;
 function searchPelPPOB(q){
   const dd=document.getElementById('ppob-pel-dd');
   if(!dd)return;
+  // Gunakan anggota saham UBNB
+  const src=[{id:null,nama:'Umum',sub:'Bukan anggota UBNB'},...aSahamAnggota.map(a=>({id:a.id,nama:a.nama,sub:a.no_anggota+' · '+a.kelompok+' · '+a.jumlah_lembar+' lembar'}))];
   const filtered=q
-    ?aPel.filter(p=>p.nama.toLowerCase().includes(q.toLowerCase())||(p.telp&&p.telp.includes(q)))
-    :aPel.slice(0,8);
+    ?src.filter(p=>p.nama.toLowerCase().includes(q.toLowerCase())||p.sub.toLowerCase().includes(q.toLowerCase()))
+    :src.slice(0,8);
   dd.style.display='block';
-  // Tambah Pelanggan Baru selalu di paling atas
-  const addBtn=`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:2px solid var(--border);background:var(--green-light);display:flex;align-items:center;gap:8px" onmousedown="tambahPelPPOB('${(q||'').replace(/'/g,"\'")}')" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-    <span style="font-size:16px">＋</span>
-    <div><div style="font-weight:700;color:var(--green-dark)">Tambah Pelanggan Baru</div>
-    <div style="font-size:11px;color:var(--green-dark)">${q?'Nama: "'+q+'"':'Ketik nama untuk isi otomatis'}</div></div>
-  </div>`;
-  const rows=filtered.map(p=>`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--green-light)'" onmouseout="this.style.background=''" onmousedown="pilihPelPPOB(${p.id},'${p.nama.replace(/'/g,"\'").replace(/"/g,'\"')}')">
-    <div style="font-weight:600">${p.nama}</div>
-    <div style="font-size:11px;color:var(--text-muted)">${p.telp||''}${p.kelompok?' · '+p.kelompok:''}</div>
+  const addBtn='';
+  const rows=filtered.map(p=>`<div style="padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--green-light)'" onmouseout="this.style.background=''" onmousedown="pilihPelPPOB(${JSON.stringify(p.id||null)},'${p.nama.replace(/'/g,"\'").replace(/"/g,'\"')}')">
+    <div style="font-weight:600">${p.id?'⭐ ':''}${p.nama}</div>
+    <div style="font-size:11px;color:var(--text-muted)">${p.sub||''}</div>
   </div>`).join('');
   dd.innerHTML=addBtn+(rows||'<div style="padding:10px 12px;font-size:13px;color:var(--text-muted)">Tidak ditemukan</div>');
 }
 function pilihPelPPOB(id,nama){
-  ppobPelId=id;
-  document.getElementById('ppob-pel-search').value=nama;
+  ppobPelId=null;
+  ppobAnggotaId=null; // tidak pakai pelanggan_id lama
+  ppobAnggotaId=id; // anggota saham id
+  document.getElementById('ppob-pel-search').value=id?(('⭐ ')+nama):nama;
   document.getElementById('ppob-pel-dd').style.display='none';
 }
 function tambahPelPPOB(namaPrefill){
@@ -5586,7 +5585,7 @@ async function simpanPPOB(){
   // Nama pelanggan - dari search
   const namaDariSearch=document.getElementById('ppob-pel-search').value.trim();
   const nama=namaDariSearch;
-  const pelId=ppobPelId||null;
+  const pelId=ppobPelId||null; const anggotaIdPpob=ppobAnggotaId||null;
   
   if(!tgl){toast('Pilih tanggal',true);return;}
   if(!produk){toast('Pilih atau ketik produk/layanan',true);return;}
@@ -5596,7 +5595,7 @@ async function simpanPPOB(){
 
   const tid='ppob-'+Date.now().toString(36);
   const{error}=await sb.from('ppob').insert([{
-    tid,tanggal:tgl,nama,pelanggan_id:pelId,produk,
+    tid,tanggal:tgl,nama,pelanggan_id:pelId,anggota_id:anggotaIdPpob,produk,
     harga_beli:hb,harga_jual:hj,status_bayar:status,
     kas_id:parseInt(kasId),catatan,operator:CU.username
   }]);
