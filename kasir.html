@@ -364,7 +364,7 @@ const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 const {createClient}=supabase;
 const sb=createClient(SURL,SKEY);
 
-let CU=null, aB=[], aPel=[], aSup=[], aKB=[], aBatch=[];
+let CU=null, aB=[], aPel=[], aSup=[], aKB=[], aBatch=[], aSahamAnggota=[];
 let KR=[], KB=[]; // keranjang jual & beli
 let katFilter='', metodeBayar='tunai';
 let sdSel={prod:null, bprod:null, pel:null, sup:null};
@@ -418,7 +418,7 @@ window.addEventListener('DOMContentLoaded',async()=>{
 
 // ===== LOAD DATA =====
 async function loadAll(){
-  await Promise.all([lB(),lPel(),lSup(),lBatch()]);
+  await Promise.all([lB(),lPel(),lSup(),lBatch(),lAnggota()]);
   renderProduk();
   renderPelDropdown();
   renderSupDropdown();
@@ -427,6 +427,7 @@ async function loadAll(){
 
 async function lB(){const{data}=await sb.from('barang').select('*').order('nama');aB=data||[];}
 async function lPel(){const{data}=await sb.from('pelanggan').select('*').order('nama');aPel=data||[];}
+async function lAnggota(){const{data}=await sb.from('ubnb_saham').select('id,no_anggota,nama,kelompok,jumlah_lembar,status').eq('status','Aktif').order('nama');aSahamAnggota=data||[];}
 async function lSup(){const{data}=await sb.from('supplier').select('*').order('nama');aSup=data||[];}
 async function lBatch(){const{data}=await sb.from('stok_batch').select('*');aBatch=data||[];}
 
@@ -655,10 +656,11 @@ async function bayar(){
   const ps=sdSel.pel;
   const pelNama=ps?.label||'Umum';
   const pelId=ps?.id||null;
+  const anggotaId=ps?.anggota_id||null;
   const items=KR.map(k=>({id:k.id,nama:k.nama,qty:k.qty,harga:k.hE,hE:k.hE,dI:0,subtotal:k.hE*k.qty}));
 
   const payload={items,total,bayar:bayarVal,kembali:Math.max(0,bayarVal-total),kasir:CU.username,
-    pelanggan:pelNama,pelanggan_id:pelId,metode_bayar:metodeBayar,
+    pelanggan:pelNama,pelanggan_id:pelId,anggota_id:anggotaId,metode_bayar:metodeBayar,
     status_bayar:metodeBayar==='belum'?'belum':'lunas',waktu:nowISO(),tgl_transaksi:nowISO()};
 
   const{data,error}=await sb.from('transaksi').insert([payload]).select().single();
@@ -796,8 +798,11 @@ function selSD(k,item){
 }
 
 function renderPelDropdown(){
-  const items=[{id:null,label:'Umum (tanpa pelanggan)'},...aPel.map(p=>({id:p.id,label:p.nama}))];
-  document.getElementById('sdo-pel').innerHTML=items.map(i=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify(i)})'>${i.label}</div>`).join('');
+  const items=[
+    {id:null,anggota_id:null,label:'Umum'},
+    ...aSahamAnggota.map(a=>({id:null,anggota_id:a.id,label:a.nama,sub:a.no_anggota+' · '+a.kelompok}))
+  ];
+  document.getElementById('sdo-pel').innerHTML=items.map(i=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify(i)})'>${i.anggota_id?'⭐ ':''}${i.label}${i.sub?`<div style="font-size:10px;opacity:0.7">${i.sub}</div>`:''}</div>`).join('');
 }
 function renderSupDropdown(){
   const items=[{id:null,label:'Tanpa supplier'},...aSup.map(s=>({id:s.id,label:s.nama}))];
