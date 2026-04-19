@@ -173,6 +173,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   #bukti-cetak *{visibility:visible!important;}
 }
 
+/* ===== BREAKDOWN PER TAHUN ===== */
+.tahun-row{cursor:pointer;transition:background .15s;}
+.tahun-row:hover td{background:var(--gold-light)!important;}
+.tahun-row td:first-child{position:relative;}
+.tahun-badge{display:inline-flex;align-items:center;gap:5px;background:var(--hijau-dark);color:var(--gold);padding:3px 10px;border-radius:99px;font-weight:800;font-size:12px;font-family:monospace;}
+.tahun-badge.aktif{background:var(--gold);color:white;}
+.trx-tahun-card{border:2px solid var(--gold);border-radius:var(--radius);overflow:hidden;animation:fadeSlide .25s ease;}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.trx-tahun-header{background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
+.trx-tahun-header h4{font-size:14px;font-weight:800;color:var(--gold);}
+.tipe-beli{color:var(--hijau);font-weight:700;}
+.tipe-transfer_masuk{color:var(--blue);font-weight:700;}
+.tipe-transfer_keluar{color:#f59e0b;font-weight:700;}
+.tipe-jual{color:var(--red);font-weight:700;}
+
 /* MOBILE */
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;}
 .sb-overlay.show{display:block;}
@@ -256,6 +271,26 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <div class="card-title"><span>📊 Rekap Per Kelompok</span></div>
         <div style="overflow-x:auto"><div id="dash-kelompok"></div></div>
       </div>
+
+      <!-- ===== BREAKDOWN PER TAHUN (BARU) ===== -->
+      <div class="card">
+        <div class="card-title">
+          <span>📅 Breakdown Saham Per Tahun</span>
+          <span style="font-size:11px;color:var(--text-muted);font-weight:400">👆 klik baris tahun untuk lihat transaksi</span>
+        </div>
+        <div style="overflow-x:auto"><div id="dash-pertahun"></div></div>
+      </div>
+
+      <!-- Detail transaksi per tahun (muncul saat baris diklik) -->
+      <div class="card trx-tahun-card" id="card-trx-tahun" style="display:none">
+        <div class="trx-tahun-header">
+          <h4 id="trx-tahun-title">📋 Transaksi Tahun</h4>
+          <button class="btn sm" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3)" onclick="tutupTrxTahun()">✕ Tutup</button>
+        </div>
+        <div style="overflow-x:auto;padding:12px"><div id="dash-trx-tahun"></div></div>
+      </div>
+      <!-- ===== END BREAKDOWN PER TAHUN ===== -->
+
       <div class="card">
         <div class="card-title"><span>🏆 Top 10 Pemegang Saham</span></div>
         <div style="overflow-x:auto"><div id="dash-top10"></div></div>
@@ -411,7 +446,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         </div>
       </div>
 
-      <!-- SHU Section (muncul setelah MPPS dipilih) -->
+      <!-- SHU Section -->
       <div class="card" id="shu-section" style="display:none">
         <div class="card-title" style="justify-content:space-between">
           <span>💰 Hitung SHU — Periode <strong id="shu-periode-label">-</strong></span>
@@ -545,6 +580,7 @@ const sb=supabase.createClient(SURL,SKEY);
 let CU=null, aSaham=[], aTrx=[], aBH=[], aBHDetail=[], aMPPS=[], aKU=[], aLapSHU=[];
 let HARGA_SAHAM=10200;
 let activeBHId=null;
+let activeTahun=null; // track tahun yang sedang diklik
 
 // ===== UTILS =====
 function rp(n){return 'Rp '+(Math.round(n)||0).toLocaleString('id-ID');}
@@ -558,7 +594,6 @@ function toast(msg,err=false){
 function openModal(id){document.getElementById(id).classList.add('show');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 function bukaWindowCetak(html){
-  // Buka window baru khusus cetak - lebih reliable dari manipulasi DOM
   const w = window.open('','_blank','width=900,height=700');
   if(!w){toast('Popup diblokir browser. Izinkan popup untuk mencetak.',true);return;}
   w.document.write(`<!DOCTYPE html>
@@ -587,40 +622,24 @@ function bukaWindowCetak(html){
 ${html}
 </body></html>`);
   w.document.close();
-  // Auto trigger print setelah konten dimuat
-  w.onload=()=>{
-    setTimeout(()=>w.print(),400);
-  };
+  w.onload=()=>{setTimeout(()=>w.print(),400);};
 }
 
 function navBack(){
-  // Kalau ada history sebelumnya di app, back
-  // Kalau sudah di dashboard, tidak keluar
-  if(currentPage!=='dashboard'){
-    history.back();
-  } else {
-    toast('Anda sudah di halaman utama');
-  }
+  if(currentPage!=='dashboard'){history.back();}
+  else{toast('Anda sudah di halaman utama');}
 }
-
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sb-overlay').classList.toggle('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
 
 // ===== SHOW PAGE =====
-// Track halaman aktif
 let currentPage='dashboard';
-
 function showPage(id,el,pushState=true){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+id)?.classList.add('active');
   if(el)el.classList.add('active');
-  else{
-    // highlight nav item yang sesuai
-    document.querySelectorAll('.nav-item').forEach(n=>{
-      if(n.getAttribute('onclick')?.includes("'"+id+"'"))n.classList.add('active');
-    });
-  }
+  else{document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')?.includes("'"+id+"'"))n.classList.add('active');});}
   const titles={dashboard:'Dashboard Saham',daftar:'Daftar Pemegang Saham',transaksi:'Transaksi Saham',laporan:'Laporan',mpps:'MPPS & SHU','shu-laporan':'Laporan SHU'};
   document.getElementById('topbar-title').textContent=titles[id]||id;
   if(id==='daftar')renderDaftar();
@@ -628,18 +647,10 @@ function showPage(id,el,pushState=true){
   if(id==='mpps')renderMPPS();
   if(id==='shu-laporan')renderLapSHUList();
   closeSidebar();
-  // Push ke browser history supaya tombol back HP berfungsi
-  if(pushState && id !== currentPage){
-    history.pushState({page:id},'',window.location.pathname+'#'+id);
-  }
+  if(pushState && id !== currentPage){history.pushState({page:id},'',window.location.pathname+'#'+id);}
   currentPage=id;
 }
-
-// Handle tombol back HP
-window.addEventListener('popstate', e=>{
-  const page=e.state?.page||'dashboard';
-  showPage(page, null, false); // false = jangan push state lagi
-});
+window.addEventListener('popstate', e=>{const page=e.state?.page||'dashboard';showPage(page,null,false);});
 
 // ===== AUTH =====
 async function doLogin(){
@@ -662,7 +673,6 @@ async function loginOK(){
   ['trx-tgl','tf-tgl'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today;});
   await loadAll();
   renderDashboard();
-  // Set initial history entry supaya back pertama tidak keluar app
   history.replaceState({page:'dashboard'},'',window.location.pathname+'#dashboard');
 }
 function doLogout(){CU=null;localStorage.removeItem('saham_user');location.reload();}
@@ -692,6 +702,7 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-lbl">Total Lembar</div><div class="stat-val gold">${totalLembar.toLocaleString('id-ID')}</div><div class="stat-sub">lembar beredar</div></div>
     <div class="stat-card"><div class="stat-lbl">Modal Dasar UBNB</div><div class="stat-val hijau">${rp(totalNilai)}</div><div class="stat-sub">@ ${rp(HARGA_SAHAM)}/lembar</div></div>
     <div class="stat-card"><div class="stat-lbl">Riwayat SHU</div><div class="stat-val gold">${aBH.length}</div><div class="stat-sub">periode</div></div>`;
+
   // Rekap kelompok
   const kels=['PW1','PW2','PW3','PW4'];
   const rows=kels.map(k=>{
@@ -719,6 +730,10 @@ function renderDashboard(){
         <td>${rp(totalNilai)}</td><td>100%</td>
       </tr>
     </tbody></table>`;
+
+  // ===== BREAKDOWN PER TAHUN =====
+  renderBreakdownTahun(totalLembar);
+
   // Top 10
   document.getElementById('dash-top10').innerHTML=`<table class="tbl">
     <thead><tr><th>#</th><th>Nama</th><th>Kelompok</th><th>Lembar</th><th>Nilai</th><th>%</th></tr></thead>
@@ -732,6 +747,209 @@ function renderDashboard(){
         <td style="font-size:11px">${totalLembar>0?((s.jumlah_lembar||0)/totalLembar*100).toFixed(2):0}%</td>
       </tr>`).join('')}
     </tbody></table>`;
+}
+
+// ===== BREAKDOWN PER TAHUN =====
+function renderBreakdownTahun(totalLembarParam){
+  const totalLembar=totalLembarParam||aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
+
+  // Hitung data per tahun dari aTrx (semua tipe)
+  const byTahun={};
+  aTrx.forEach(t=>{
+    if(!t.tanggal)return;
+    const th=new Date(t.tanggal).getFullYear();
+    if(!byTahun[th])byTahun[th]={tahun:th,trxBeli:0,lembarBeli:0,nilaiBeli:0,trxTransfer:0,lembarTransfer:0,anggotaBaru:0};
+    if(t.tipe==='beli'){byTahun[th].trxBeli++;byTahun[th].lembarBeli+=(t.jumlah_lembar||0);byTahun[th].nilaiBeli+=(t.total_nilai||0);}
+    if(t.tipe==='transfer_masuk'||t.tipe==='transfer_keluar'){byTahun[th].trxTransfer++;}
+  });
+
+  // Hitung anggota baru per tahun dari tanggal_pertama
+  aSaham.forEach(s=>{
+    if(!s.tanggal_pertama)return;
+    const th=new Date(s.tanggal_pertama).getFullYear();
+    if(byTahun[th])byTahun[th].anggotaBaru++;
+    // Jika tahun tidak ada di byTahun (tidak ada transaksi tapi ada anggota baru)
+    else{byTahun[th]={tahun:th,trxBeli:0,lembarBeli:0,nilaiBeli:0,trxTransfer:0,lembarTransfer:0,anggotaBaru:1};}
+  });
+
+  const rowsTahun=Object.values(byTahun).sort((a,b)=>a.tahun-b.tahun);
+  const totalLembarBeli=rowsTahun.reduce((a,r)=>a+r.lembarBeli,0);
+  const totalTrxBeli=rowsTahun.reduce((a,r)=>a+r.trxBeli,0);
+  const totalNilaiBeli=rowsTahun.reduce((a,r)=>a+r.nilaiBeli,0);
+  const totalAnggotaBaru=rowsTahun.reduce((a,r)=>a+r.anggotaBaru,0);
+
+  if(!rowsTahun.length){
+    document.getElementById('dash-pertahun').innerHTML='<div class="empty"><div class="ei">📅</div>Belum ada data transaksi</div>';
+    return;
+  }
+
+  document.getElementById('dash-pertahun').innerHTML=`
+    <table class="tbl">
+      <thead><tr>
+        <th>Tahun</th>
+        <th style="text-align:center">Trx Beli</th>
+        <th style="text-align:right">Lembar Beli</th>
+        <th style="text-align:right">Nilai Pembelian</th>
+        <th style="width:160px">Proporsi</th>
+        <th style="text-align:center">Anggota Baru</th>
+        <th style="text-align:center">Transfer</th>
+      </tr></thead>
+      <tbody>
+        ${rowsTahun.map(r=>{
+          const pct=totalLembarBeli>0?(r.lembarBeli/totalLembarBeli*100).toFixed(1):0;
+          const isAktif=activeTahun===r.tahun;
+          return`<tr class="tahun-row" onclick="toggleTrxTahun(${r.tahun})" title="Klik untuk lihat detail transaksi tahun ${r.tahun}">
+            <td>
+              <span class="tahun-badge${isAktif?' aktif':''}">${isAktif?'▼':'▶'} ${r.tahun}</span>
+            </td>
+            <td style="text-align:center">${r.trxBeli}</td>
+            <td style="text-align:right"><strong>${r.lembarBeli.toLocaleString('id-ID')}</strong></td>
+            <td style="text-align:right;font-size:11px">${rp(r.nilaiBeli)}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="flex:1;background:var(--border-light);border-radius:99px;height:6px;overflow:hidden">
+                  <div style="width:${pct}%;background:var(--gold);height:100%;border-radius:99px"></div>
+                </div>
+                <span style="font-size:11px;font-weight:700;min-width:34px">${pct}%</span>
+              </div>
+            </td>
+            <td style="text-align:center">${r.anggotaBaru?`<span style="background:var(--hijau-light);color:var(--hijau);padding:1px 8px;border-radius:99px;font-weight:700;font-size:11px">+${r.anggotaBaru}</span>`:'-'}</td>
+            <td style="text-align:center;font-size:11px;color:var(--text-muted)">${r.trxTransfer?Math.round(r.trxTransfer/2)+' trx':'-'}</td>
+          </tr>`;
+        }).join('')}
+        <tr style="background:var(--gold-light);font-weight:800">
+          <td><span class="tahun-badge" style="background:var(--gold-dark)">TOTAL</span></td>
+          <td style="text-align:center">${totalTrxBeli}</td>
+          <td style="text-align:right">${totalLembarBeli.toLocaleString('id-ID')}</td>
+          <td style="text-align:right;font-size:11px">${rp(totalNilaiBeli)}</td>
+          <td style="font-size:11px;font-weight:700">100%</td>
+          <td style="text-align:center">${totalAnggotaBaru}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+// ===== TOGGLE TRANSAKSI PER TAHUN =====
+function toggleTrxTahun(tahun){
+  const card=document.getElementById('card-trx-tahun');
+  if(activeTahun===tahun){
+    // Tutup jika tahun yang sama diklik lagi
+    activeTahun=null;
+    card.style.display='none';
+    renderBreakdownTahun();
+    return;
+  }
+  activeTahun=tahun;
+  renderBreakdownTahun(); // update highlight baris
+  tampilTrxTahun(tahun);
+}
+
+function tutupTrxTahun(){
+  activeTahun=null;
+  document.getElementById('card-trx-tahun').style.display='none';
+  renderBreakdownTahun();
+}
+
+function tampilTrxTahun(tahun){
+  const card=document.getElementById('card-trx-tahun');
+  const title=document.getElementById('trx-tahun-title');
+  const container=document.getElementById('dash-trx-tahun');
+
+  // Filter transaksi di tahun tsb
+  const trxTahun=aTrx.filter(t=>{
+    if(!t.tanggal)return false;
+    return new Date(t.tanggal).getFullYear()===tahun;
+  }).sort((a,b)=>new Date(a.tanggal)-new Date(b.tanggal));
+
+  title.textContent=`📋 Transaksi Saham Tahun ${tahun} (${trxTahun.length} transaksi)`;
+
+  if(!trxTahun.length){
+    container.innerHTML='<div class="empty"><div class="ei">📋</div>Tidak ada transaksi di tahun '+tahun+'</div>';
+    card.style.display='block';
+    card.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return;
+  }
+
+  // Warna & ikon tipe
+  const warnaMap={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
+  const ikonMap={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
+
+  // Summary stats untuk tahun ini
+  const totalBeli=trxTahun.filter(t=>t.tipe==='beli').reduce((a,t)=>a+(t.jumlah_lembar||0),0);
+  const totalNilaiBeli=trxTahun.filter(t=>t.tipe==='beli').reduce((a,t)=>a+(t.total_nilai||0),0);
+  const jumlahTransfer=trxTahun.filter(t=>t.tipe==='transfer_masuk').length;
+
+  container.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:10px 14px">
+        <div style="font-size:10px;color:var(--hijau);font-weight:700;text-transform:uppercase">Total Lembar Beli</div>
+        <div style="font-size:20px;font-weight:800;color:var(--hijau)">${totalBeli.toLocaleString('id-ID')}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${rp(totalNilaiBeli)}</div>
+      </div>
+      <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:10px 14px">
+        <div style="font-size:10px;color:var(--blue);font-weight:700;text-transform:uppercase">Transfer Masuk</div>
+        <div style="font-size:20px;font-weight:800;color:var(--blue)">${jumlahTransfer}</div>
+        <div style="font-size:10px;color:var(--text-muted)">transaksi</div>
+      </div>
+      <div style="background:var(--gold-light);border-radius:var(--radius-sm);padding:10px 14px">
+        <div style="font-size:10px;color:var(--gold-dark);font-weight:700;text-transform:uppercase">Total Transaksi</div>
+        <div style="font-size:20px;font-weight:800;color:var(--gold-dark)">${trxTahun.length}</div>
+        <div style="font-size:10px;color:var(--text-muted)">semua tipe</div>
+      </div>
+    </div>
+    <table class="tbl">
+      <thead><tr>
+        <th>Tanggal</th>
+        <th>Anggota</th>
+        <th>Kelompok</th>
+        <th>Tipe</th>
+        <th style="text-align:center">Lembar</th>
+        <th style="text-align:right">Harga/Lbr</th>
+        <th style="text-align:right">Nilai</th>
+        <th>Keterangan</th>
+      </tr></thead>
+      <tbody>
+        ${trxTahun.map((t,i)=>{
+          const s=aSaham.find(x=>x.id===t.saham_id);
+          let infoTambahan='';
+          if(t.tipe==='transfer_keluar'&&t.ke_id){
+            const sk=aSaham.find(x=>x.id===t.ke_id);
+            infoTambahan=`<div style="font-size:10px;color:var(--text-muted)">→ ${sk?.nama||'?'}</div>`;
+          }else if(t.tipe==='transfer_masuk'&&t.dari_id){
+            const sd=aSaham.find(x=>x.id===t.dari_id);
+            infoTambahan=`<div style="font-size:10px;color:var(--text-muted)">← ${sd?.nama||'?'}</div>`;
+          }
+          return`<tr style="background:${i%2===0?'white':'var(--surface2)'}">
+            <td style="font-size:11px;white-space:nowrap">${fmtTgl(t.tanggal)}</td>
+            <td>
+              <div style="font-weight:700;font-size:12px">${s?.nama||'-'}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${s?.no_anggota||''}</div>
+              ${infoTambahan}
+            </td>
+            <td>${s?kelBadge(s.kelompok):'-'}</td>
+            <td><span class="tipe-${t.tipe}" style="font-size:11px">${ikonMap[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
+            <td style="text-align:center;font-weight:800">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
+            <td style="text-align:right;font-size:11px">${rp(t.harga_per_lembar||0)}</td>
+            <td style="text-align:right;font-size:11px;font-weight:700">${rp(t.total_nilai||0)}</td>
+            <td style="font-size:10px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.catatan||''}">${t.catatan||'-'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="background:var(--hijau-dark);color:white;font-weight:800">
+          <td colspan="4" style="padding:8px 10px;font-size:11px">TOTAL TAHUN ${tahun}</td>
+          <td style="text-align:center;padding:8px 10px">${trxTahun.reduce((a,t)=>a+(t.jumlah_lembar||0),0).toLocaleString('id-ID')}</td>
+          <td></td>
+          <td style="text-align:right;padding:8px 10px">${rp(trxTahun.reduce((a,t)=>a+(t.total_nilai||0),0))}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  card.style.display='block';
+  // Scroll ke card dengan smooth
+  setTimeout(()=>card.scrollIntoView({behavior:'smooth',block:'nearest'}),80);
 }
 
 // ===== DAFTAR PEMEGANG =====
@@ -790,17 +1008,9 @@ function lihatDetail(id){
       <tbody>${trxList.map(t=>{
         const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
         const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
-        
-        // Untuk transfer, tambahkan info dari/ke siapa
         let keteranganDisplay = t.catatan||'-';
-        if(t.tipe==='transfer_keluar' && t.ke_id){
-          const sPembeli = aSaham.find(x=>x.id===t.ke_id);
-          keteranganDisplay = `<div style="font-weight:600">→ Ke: ${sPembeli?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;
-        } else if(t.tipe==='transfer_masuk' && t.dari_id){
-          const sPenjual = aSaham.find(x=>x.id===t.dari_id);
-          keteranganDisplay = `<div style="font-weight:600">← Dari: ${sPenjual?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;
-        }
-        
+        if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);keteranganDisplay=`<div style="font-weight:600">→ Ke: ${sk?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;}
+        else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);keteranganDisplay=`<div style="font-weight:600">← Dari: ${sd?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;}
         return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
           <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:10px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
           <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
@@ -866,18 +1076,13 @@ async function updateAnggota(){
     no_saham:document.getElementById('ea-no-saham').value.trim()||null,
   }).eq('id',id);
   if(error){toast('Gagal: '+error.message,true);return;}
-  toast('Data diperbarui!');
-  closeModal('modal-edit');
+  toast('Data diperbarui!');closeModal('modal-edit');
   await loadAll();renderDaftar();renderDashboard();
 }
 
 // ===== AUTOCOMPLETE =====
 function filterAC(type){
-  const cfg={
-    trx:{inp:'trx-ac-input',list:'trx-ac-list',hid:'trx-ac-id'},
-    'tf-dari':{inp:'tf-dari-input',list:'tf-dari-list',hid:'tf-dari-id'},
-    'tf-ke':{inp:'tf-ke-input',list:'tf-ke-list',hid:'tf-ke-id'},
-  };
+  const cfg={trx:{inp:'trx-ac-input',list:'trx-ac-list',hid:'trx-ac-id'},'tf-dari':{inp:'tf-dari-input',list:'tf-dari-list',hid:'tf-dari-id'},'tf-ke':{inp:'tf-ke-input',list:'tf-ke-list',hid:'tf-ke-id'}};
   const{inp,list,hid}=cfg[type];
   const q=(document.getElementById(inp)?.value||'').toLowerCase();
   const listEl=document.getElementById(list);
@@ -888,63 +1093,27 @@ function filterAC(type){
   const filtered=aSaham.filter(s=>(s.nama||'').toLowerCase().includes(q)||(s.no_anggota||'').toLowerCase().includes(q)).slice(0,8);
   if(!filtered.length){listEl.style.display='none';return;}
   listEl.style.display='block';
-  listEl.innerHTML=filtered.map(s=>`
-    <div class="ac-item" onclick="selectAC('${type}',${s.id})">
-      <div class="ac-nama">${s.nama}</div>
-      <div class="ac-sub">${s.no_anggota} · ${s.kelompok} · ${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</div>
-    </div>`).join('');
+  listEl.innerHTML=filtered.map(s=>`<div class="ac-item" onclick="selectAC('${type}',${s.id})"><div class="ac-nama">${s.nama}</div><div class="ac-sub">${s.no_anggota} · ${s.kelompok} · ${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</div></div>`).join('');
 }
 function selectAC(type,id){
   const s=aSaham.find(x=>x.id===id);if(!s)return;
-  const cfg={
-    trx:{inp:'trx-ac-input',list:'trx-ac-list',hid:'trx-ac-id'},
-    'tf-dari':{inp:'tf-dari-input',list:'tf-dari-list',hid:'tf-dari-id'},
-    'tf-ke':{inp:'tf-ke-input',list:'tf-ke-list',hid:'tf-ke-id'},
-  };
+  const cfg={trx:{inp:'trx-ac-input',list:'trx-ac-list',hid:'trx-ac-id'},'tf-dari':{inp:'tf-dari-input',list:'tf-dari-list',hid:'tf-dari-id'},'tf-ke':{inp:'tf-ke-input',list:'tf-ke-list',hid:'tf-ke-id'}};
   const{inp,list,hid}=cfg[type];
   document.getElementById(inp).value=s.nama+' ('+s.no_anggota+')';
   document.getElementById(hid).value=id;
   document.getElementById(list).style.display='none';
-  if(type==='trx'){
-    const info=document.getElementById('trx-info');
-    info.style.display='block';
-    info.innerHTML=`<strong>${s.nama}</strong> · ${kelBadge(s.kelompok)} · <span style="color:var(--hijau);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;
-    hitungTrx();
-  }
-  if(type==='tf-dari'){
-    const info=document.getElementById('tf-dari-info');
-    info.style.display='block';
-    info.innerHTML=`<strong>${s.nama}</strong> memiliki <span style="color:var(--red);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;
-    hitungTf();
-  }
+  if(type==='trx'){const info=document.getElementById('trx-info');info.style.display='block';info.innerHTML=`<strong>${s.nama}</strong> · ${kelBadge(s.kelompok)} · <span style="color:var(--hijau);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;hitungTrx();}
+  if(type==='tf-dari'){const info=document.getElementById('tf-dari-info');info.style.display='block';info.innerHTML=`<strong>${s.nama}</strong> memiliki <span style="color:var(--red);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;hitungTf();}
 }
 document.addEventListener('click',e=>{
-  ['trx-ac-list','tf-dari-list','tf-ke-list'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el&&!el.parentElement?.contains(e.target))el.style.display='none';
-  });
+  ['trx-ac-list','tf-dari-list','tf-ke-list'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.parentElement?.contains(e.target))el.style.display='none';});
 });
 
 // ===== TRANSAKSI =====
-function setDefaultTrxHarga(){
-  ['trx-harga','tf-harga'].forEach(id=>{
-    const el=document.getElementById(id);if(el&&!el.value)el.value=HARGA_SAHAM;
-  });
-}
-function hitungTrx(){
-  const l=parseInt(document.getElementById('trx-lembar')?.value)||0;
-  const h=parseInt(document.getElementById('trx-harga')?.value)||0;
-  const el=document.getElementById('trx-total-box');
-  if(l>0&&h>0){el.style.display='block';document.getElementById('trx-total-val').textContent=rp(l*h);}
-  else el.style.display='none';
-}
-function hitungTf(){
-  const l=parseInt(document.getElementById('tf-lembar')?.value)||0;
-  const h=parseInt(document.getElementById('tf-harga')?.value)||0;
-  const el=document.getElementById('tf-total-box');
-  if(l>0&&h>0){el.style.display='block';document.getElementById('tf-total-val').textContent=rp(l*h);}
-  else el.style.display='none';
-}
+function setDefaultTrxHarga(){['trx-harga','tf-harga'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=HARGA_SAHAM;});}
+function hitungTrx(){const l=parseInt(document.getElementById('trx-lembar')?.value)||0;const h=parseInt(document.getElementById('trx-harga')?.value)||0;const el=document.getElementById('trx-total-box');if(l>0&&h>0){el.style.display='block';document.getElementById('trx-total-val').textContent=rp(l*h);}else el.style.display='none';}
+function hitungTf(){const l=parseInt(document.getElementById('tf-lembar')?.value)||0;const h=parseInt(document.getElementById('tf-harga')?.value)||0;const el=document.getElementById('tf-total-box');if(l>0&&h>0){el.style.display='block';document.getElementById('tf-total-val').textContent=rp(l*h);}else el.style.display='none';}
+
 async function simpanTrxBeli(){
   const sahamId=parseInt(document.getElementById('trx-ac-id').value);
   const lembar=parseInt(document.getElementById('trx-lembar').value)||0;
@@ -952,61 +1121,28 @@ async function simpanTrxBeli(){
   const tgl=document.getElementById('trx-tgl').value;
   const catatan=document.getElementById('trx-catatan').value.trim();
   if(!sahamId||!lembar||!tgl){toast('Lengkapi data transaksi',true);return;}
-
-  // Generate no. saham lanjutan dari semua transaksi yang ada
-  // Format: XXXX/SHM-UBNB/YYYY
   const tahun=new Date(tgl).getFullYear();
   const reSHM=/([0-9]{4})[/]SHM-UBNB[/][0-9]{4}/g;
   let maxNo=0;
-  aTrx.forEach(t=>{
-    const m=(t.catatan||'').match(reSHM);
-    if(m)m.forEach(s=>{const n=parseInt(s.split('/')[0]);if(n>maxNo)maxNo=n;});
-  });
+  aTrx.forEach(t=>{const m=(t.catatan||'').match(reSHM);if(m)m.forEach(s=>{const n=parseInt(s.split('/')[0]);if(n>maxNo)maxNo=n;});});
   const noSahamBaru=String(maxNo+1).padStart(4,'0')+'/SHM-UBNB/'+tahun;
-
-  // Gabung no. saham + catatan jika ada
   const keterangan=catatan?noSahamBaru+' - '+catatan:noSahamBaru;
-
   const{data:newTrx,error}=await sb.from('ubnb_saham_trx').insert([{saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:keterangan,operator:CU.username,harga_saham_saat_itu:harga}]).select().single();
   if(error){toast('Gagal: '+error.message,true);return;}
-  
   const s=aSaham.find(x=>x.id===sahamId);
   await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+lembar}).eq('id',sahamId);
-  
-  // Simpan info transaksi terakhir untuk undo
-  window.lastTransaction = {
-    id: newTrx.id,
-    saham_id: sahamId,
-    jumlah_lembar: lembar,
-    nama: s?.nama || 'Unknown',
-    timestamp: Date.now()
-  };
-  
-  // Enable tombol undo
-  const btnUndo = document.getElementById('btn-undo-beli');
-  if(btnUndo) {
-    btnUndo.disabled = false;
-    btnUndo.title = `Undo: ${s?.nama} - ${lembar} lembar`;
-  }
-  
+  window.lastTransaction={id:newTrx.id,saham_id:sahamId,jumlah_lembar:lembar,nama:s?.nama||'Unknown',timestamp:Date.now()};
+  const btnUndo=document.getElementById('btn-undo-beli');
+  if(btnUndo){btnUndo.disabled=false;btnUndo.title=`Undo: ${s?.nama} - ${lembar} lembar`;}
   toast('✅ Transaksi berhasil! (Bisa di-undo dalam 5 menit)');
   ['trx-ac-input','trx-catatan'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['trx-ac-id','trx-lembar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('trx-info').style.display='none';
   document.getElementById('trx-total-box').style.display='none';
   await loadAll();renderDashboard();loadRiwayatTrx();
-  
-  // Auto-disable undo setelah 5 menit
-  setTimeout(() => {
-    if(window.lastTransaction && window.lastTransaction.id === newTrx.id) {
-      window.lastTransaction = null;
-      if(btnUndo) {
-        btnUndo.disabled = true;
-        btnUndo.title = 'Undo transaksi terakhir';
-      }
-    }
-  }, 5 * 60 * 1000); // 5 menit
+  setTimeout(()=>{if(window.lastTransaction&&window.lastTransaction.id===newTrx.id){window.lastTransaction=null;if(btnUndo){btnUndo.disabled=true;btnUndo.title='Undo transaksi terakhir';}}},5*60*1000);
 }
+
 async function simpanTransfer(){
   const dariId=parseInt(document.getElementById('tf-dari-id').value);
   const keId=parseInt(document.getElementById('tf-ke-id').value);
@@ -1032,6 +1168,7 @@ async function simpanTransfer(){
   document.getElementById('tf-total-box').style.display='none';
   await loadAll();renderDashboard();loadRiwayatTrx();
 }
+
 async function loadRiwayatTrx(){
   const{data}=await sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}).limit(50);
   aTrx=data||[];
@@ -1043,181 +1180,78 @@ async function loadRiwayatTrx(){
     <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th><th>Aksi</th></tr></thead>
     <tbody>${aTrx.map(t=>{
       const s=aSaham.find(x=>x.id===t.saham_id);
-      
-      // Untuk transfer, tampilkan info dari/ke siapa
-      let namaDisplay = s?.nama||'-';
-      let keteranganDisplay = t.catatan||'-';
-      
-      if(t.tipe==='transfer_keluar' && t.ke_id){
-        const sPembeli = aSaham.find(x=>x.id===t.ke_id);
-        namaDisplay = `<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">→ Ke: ${sPembeli?.nama||'Unknown'}</div>`;
-      } else if(t.tipe==='transfer_masuk' && t.dari_id){
-        const sPenjual = aSaham.find(x=>x.id===t.dari_id);
-        namaDisplay = `<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">← Dari: ${sPenjual?.nama||'Unknown'}</div>`;
-      } else {
-        namaDisplay = `<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div>`;
-      }
-      
+      let namaDisplay=s?.nama||'-';
+      if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">→ Ke: ${sk?.nama||'Unknown'}</div>`;}
+      else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">← Dari: ${sd?.nama||'Unknown'}</div>`;}
+      else{namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div>`;}
       return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
         <td>${namaDisplay}</td>
         <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:11px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
         <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
         <td style="font-size:11px">${rp(t.total_nilai)}</td>
-        <td style="font-size:10px;color:var(--text-muted)">${keteranganDisplay}</td>
+        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td>
         <td style="white-space:nowrap"><button class="btn sm secondary" onclick="editTransaksi(${t.id})" style="padding:4px 8px;margin-right:4px">✏️</button><button class="btn sm danger" onclick="hapusTransaksi(${t.id})" style="padding:4px 8px">🗑️</button></td></tr>`;
     }).join('')}</tbody></table>`;
 }
 
-// ===== EDIT & HAPUS TRANSAKSI (ADMIN ONLY) =====
+// ===== EDIT & HAPUS TRANSAKSI =====
 async function editTransaksi(id){
-  const t=aTrx.find(x=>x.id===id);
-  if(!t){toast('Transaksi tidak ditemukan',true);return;}
-  
+  const t=aTrx.find(x=>x.id===id);if(!t)return;
   const s=aSaham.find(x=>x.id===t.saham_id);
-  const namaAnggota=s?.nama||'Unknown';
-  
-  const newLembar=prompt(`Edit Jumlah Lembar\nAnggota: ${namaAnggota}\nLembar saat ini: ${t.jumlah_lembar}`,t.jumlah_lembar);
-  if(newLembar===null)return;
-  
-  const lembar=parseInt(newLembar)||0;
-  if(lembar<=0){toast('Jumlah lembar harus > 0',true);return;}
-  
-  const newHarga=prompt(`Edit Harga per Lembar\nHarga saat ini: ${rp(t.harga_per_lembar)}`,t.harga_per_lembar);
-  if(newHarga===null)return;
-  
-  const harga=parseInt(newHarga)||0;
-  if(harga<=0){toast('Harga harus > 0',true);return;}
-  
-  const newTgl=prompt(`Edit Tanggal (YYYY-MM-DD)\nTanggal saat ini: ${t.tanggal}`,t.tanggal);
-  if(newTgl===null)return;
-  
+  const newLembar=prompt(`Edit Jumlah Lembar\nAnggota: ${s?.nama||'?'}\nLembar saat ini: ${t.jumlah_lembar}`,t.jumlah_lembar);if(newLembar===null)return;
+  const lembar=parseInt(newLembar)||0;if(lembar<=0){toast('Jumlah lembar harus > 0',true);return;}
+  const newHarga=prompt(`Edit Harga per Lembar\nHarga saat ini: ${rp(t.harga_per_lembar)}`,t.harga_per_lembar);if(newHarga===null)return;
+  const harga=parseInt(newHarga)||0;if(harga<=0){toast('Harga harus > 0',true);return;}
+  const newTgl=prompt(`Edit Tanggal (YYYY-MM-DD)\nTanggal saat ini: ${t.tanggal}`,t.tanggal);if(newTgl===null)return;
   const newCatatan=prompt(`Edit Catatan\nCatatan saat ini: ${t.catatan||'(kosong)'}`,t.catatan||'');
-  
-  // Hitung selisih lembar untuk update jumlah_lembar di tabel ubnb_saham
   const selisih=lembar-(t.jumlah_lembar||0);
-  
-  // Update transaksi
-  const{error}=await sb.from('ubnb_saham_trx').update({
-    jumlah_lembar:lembar,
-    harga_per_lembar:harga,
-    total_nilai:lembar*harga,
-    tanggal:newTgl,
-    catatan:newCatatan||null
-  }).eq('id',id);
-  
+  const{error}=await sb.from('ubnb_saham_trx').update({jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:newTgl,catatan:newCatatan||null}).eq('id',id);
   if(error){toast('Gagal update: '+error.message,true);return;}
-  
-  // Update jumlah_lembar di tabel ubnb_saham (hanya untuk tipe 'beli')
-  if(selisih!==0&&t.tipe==='beli'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+selisih}).eq('id',t.saham_id);
-  }
-  
-  toast('✅ Transaksi berhasil diupdate!');
-  await loadAll();
-  loadRiwayatTrx();
+  if(selisih!==0&&t.tipe==='beli'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+selisih}).eq('id',t.saham_id);}
+  toast('✅ Transaksi berhasil diupdate!');await loadAll();loadRiwayatTrx();
 }
-
 async function hapusTransaksi(id){
-  const t=aTrx.find(x=>x.id===id);
-  if(!t){toast('Transaksi tidak ditemukan',true);return;}
-  
+  const t=aTrx.find(x=>x.id===id);if(!t)return;
   const s=aSaham.find(x=>x.id===t.saham_id);
-  const namaAnggota=s?.nama||'Unknown';
-  
-  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${namaAnggota}\nTipe: ${t.tipe}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}\n\nPeringatan: Ini akan mengurangi jumlah lembar anggota!`))return;
-  
-  // Hapus transaksi
+  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${s?.nama||'?'}\nTipe: ${t.tipe}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}\n\nPeringatan: Ini akan mengurangi jumlah lembar anggota!`))return;
   const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',id);
   if(error){toast('Gagal hapus: '+error.message,true);return;}
-  
-  // Update jumlah_lembar di tabel ubnb_saham (reverse operasi)
-  if(t.tipe==='beli'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
-  }else if(t.tipe==='transfer_keluar'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+(t.jumlah_lembar||0)}).eq('id',t.saham_id);
-  }else if(t.tipe==='transfer_masuk'){
-    await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);
-  }
-  
-  toast('✅ Transaksi berhasil dihapus!');
-  await loadAll();
-  loadRiwayatTrx();
+  if(t.tipe==='beli'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);}
+  else if(t.tipe==='transfer_keluar'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+(t.jumlah_lembar||0)}).eq('id',t.saham_id);}
+  else if(t.tipe==='transfer_masuk'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);}
+  toast('✅ Transaksi berhasil dihapus!');await loadAll();loadRiwayatTrx();
 }
 
-// ===== UNDO TRANSAKSI BELI =====
+// ===== UNDO =====
 async function undoTransaksiBeli(){
-  if(!window.lastTransaction){
-    toast('Tidak ada transaksi yang bisa di-undo',true);
-    return;
-  }
-  
-  const trx = window.lastTransaction;
-  const elapsedMinutes = Math.floor((Date.now() - trx.timestamp) / 1000 / 60);
-  
-  if(elapsedMinutes > 5){
-    toast('Transaksi sudah lebih dari 5 menit, tidak bisa di-undo',true);
-    window.lastTransaction = null;
-    const btnUndo = document.getElementById('btn-undo-beli');
-    if(btnUndo) {
-      btnUndo.disabled = true;
-      btnUndo.title = 'Undo transaksi terakhir';
-    }
-    return;
-  }
-  
-  if(!confirm(`UNDO transaksi pembelian saham?\n\nAnggota: ${trx.nama}\nJumlah: ${trx.jumlah_lembar} lembar\n\nIni akan menghapus transaksi dan mengurangi lembar anggota.`)){
-    return;
-  }
-  
-  // Hapus transaksi dari database
-  const {error: deleteError} = await sb.from('ubnb_saham_trx').delete().eq('id', trx.id);
-  if(deleteError){
-    toast('Gagal undo: ' + deleteError.message, true);
-    return;
-  }
-  
-  // Kurangi jumlah lembar di tabel ubnb_saham
-  const s = aSaham.find(x => x.id === trx.saham_id);
-  if(s){
-    await sb.from('ubnb_saham').update({
-      jumlah_lembar: (s.jumlah_lembar || 0) - trx.jumlah_lembar
-    }).eq('id', trx.saham_id);
-  }
-  
-  // Clear lastTransaction
-  window.lastTransaction = null;
-  
-  // Disable tombol undo
-  const btnUndo = document.getElementById('btn-undo-beli');
-  if(btnUndo) {
-    btnUndo.disabled = true;
-    btnUndo.title = 'Undo transaksi terakhir';
-  }
-  
-  toast('✅ Transaksi berhasil di-undo!');
-  await loadAll();
-  renderDashboard();
-  loadRiwayatTrx();
+  if(!window.lastTransaction){toast('Tidak ada transaksi yang bisa di-undo',true);return;}
+  const trx=window.lastTransaction;
+  const elapsedMinutes=Math.floor((Date.now()-trx.timestamp)/1000/60);
+  if(elapsedMinutes>5){toast('Transaksi sudah lebih dari 5 menit, tidak bisa di-undo',true);window.lastTransaction=null;const btnUndo=document.getElementById('btn-undo-beli');if(btnUndo){btnUndo.disabled=true;btnUndo.title='Undo transaksi terakhir';}return;}
+  if(!confirm(`UNDO transaksi pembelian saham?\n\nAnggota: ${trx.nama}\nJumlah: ${trx.jumlah_lembar} lembar`))return;
+  const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',trx.id);
+  if(error){toast('Gagal undo: '+error.message,true);return;}
+  const s=aSaham.find(x=>x.id===trx.saham_id);
+  if(s){await sb.from('ubnb_saham').update({jumlah_lembar:(s.jumlah_lembar||0)-trx.jumlah_lembar}).eq('id',trx.saham_id);}
+  window.lastTransaction=null;
+  const btnUndo=document.getElementById('btn-undo-beli');if(btnUndo){btnUndo.disabled=true;btnUndo.title='Undo transaksi terakhir';}
+  toast('✅ Transaksi berhasil di-undo!');await loadAll();renderDashboard();loadRiwayatTrx();
 }
 
 // ===== PROPORSI SHU =====
 function hitungProporsiBulan(tglBeli,tahunPeriode){
   if(!tglBeli)return 12;
-  const d=new Date(tglBeli);
-  const thn=d.getFullYear(),bln=d.getMonth()+1,tgl=d.getDate();
-  if(thn<tahunPeriode)return 12;
-  if(thn>tahunPeriode)return 0;
-  if(bln<4)return 12;
-  if(bln>10||(bln===10&&tgl>15))return 0;
-  return 12-bln; // Apr=11,Mei=10,...,Okt(1-15)=2
+  const d=new Date(tglBeli);const thn=d.getFullYear(),bln=d.getMonth()+1,tgl=d.getDate();
+  if(thn<tahunPeriode)return 12;if(thn>tahunPeriode)return 0;
+  if(bln<4)return 12;if(bln>10||(bln===10&&tgl>15))return 0;
+  return 12-bln;
 }
 function getBatches(s,periodeInt){
   const trxIn=aTrx.filter(t=>t.saham_id===s.id&&(t.tipe==='beli'||t.tipe==='transfer_masuk')).sort((a,b)=>new Date(a.tanggal)-new Date(b.tanggal));
   if(!trxIn.length)return [{lembar:s.jumlah_lembar||0,tgl:s.tanggal_pertama||'2022-01-01'}];
   const totalOut=aTrx.filter(t=>t.saham_id===s.id&&t.tipe==='transfer_keluar').reduce((a,t)=>a+(t.jumlah_lembar||0),0);
   let batches=trxIn.map(t=>({lembar:t.jumlah_lembar,tgl:t.tanggal}));
-  let rem=totalOut;
-  for(let i=batches.length-1;i>=0&&rem>0;i--){const k=Math.min(batches[i].lembar,rem);batches[i].lembar-=k;rem-=k;}
+  let rem=totalOut;for(let i=batches.length-1;i>=0&&rem>0;i--){const k=Math.min(batches[i].lembar,rem);batches[i].lembar-=k;rem-=k;}
   return batches.filter(b=>b.lembar>0);
 }
 
@@ -1227,11 +1261,8 @@ function hitungMPPS(){
   const shu=parseFloat(document.getElementById('mpps-shu')?.value)||0;
   const totalLembar=aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
   const el=document.getElementById('mpps-preview');
-  if(harga>0){
-    el.style.display='block';
-    document.getElementById('mpps-modal-baru').textContent=rp(totalLembar*harga);
-    document.getElementById('mpps-total-shu').textContent=rp(totalLembar*shu);
-  }else el.style.display='none';
+  if(harga>0){el.style.display='block';document.getElementById('mpps-modal-baru').textContent=rp(totalLembar*harga);document.getElementById('mpps-total-shu').textContent=rp(totalLembar*shu);}
+  else el.style.display='none';
 }
 async function simpanMPPS(){
   const periode=document.getElementById('mpps-periode')?.value.trim();
@@ -1242,10 +1273,8 @@ async function simpanMPPS(){
   if(!periode||!tgl||!harga){toast('Lengkapi data MPPS',true);return;}
   const{data,error}=await sb.from('ubnb_mpps').insert([{periode,tanggal_mpps:tgl,harga_saham_baru:harga,shu_per_lembar:shu,total_shu:Math.round(aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0)*shu),catatan:catatan||null,operator:CU.username}]).select('id').single();
   if(error){toast('Gagal: '+error.message,true);return;}
-  toast('MPPS berhasil disimpan!');
-  HARGA_SAHAM=harga;
+  toast('MPPS berhasil disimpan!');HARGA_SAHAM=harga;
   await loadAll();renderMPPS();renderDashboard();
-  // Langsung buka SHU section
   if(data)bukaSHUdariMPPS(data.id);
 }
 function renderMPPS(){
@@ -1268,24 +1297,18 @@ function renderMPPS(){
         <button onclick="hapusMPPS(${m.id},'${m.periode}')" class="btn sm danger">🗑️</button>
       </div>
     </div>`).join('');
-  // KU Kelompok
   const kuEl=document.getElementById('ku-list');if(!kuEl)return;
   kuEl.innerHTML=`<table class="tbl">
     <thead><tr><th>Kelompok</th><th>Nama KU</th><th>No. HP</th><th></th></tr></thead>
     <tbody>${aKU.map(k=>`<tr id="ku-row-${k.id}">
-      <td>${kelBadge(k.kelompok)}</td>
-      <td><strong>${k.nama_ku}</strong></td>
-      <td>${k.no_hp||'-'}</td>
+      <td>${kelBadge(k.kelompok)}</td><td><strong>${k.nama_ku}</strong></td><td>${k.no_hp||'-'}</td>
       <td><button onclick="editKU(${k.id},'${k.kelompok}','${k.nama_ku}','${k.no_hp||''}')" class="btn sm secondary">✏️ Edit</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 async function hapusMPPS(id,periode){
   if(!confirm('Hapus MPPS '+periode+'?'))return;
   await sb.from('ubnb_mpps').delete().eq('id',id);
-  toast('MPPS '+periode+' dihapus!');
-  await loadAll();
-  HARGA_SAHAM=aMPPS.length?aMPPS[0].harga_saham_baru:10200;
-  renderMPPS();renderDashboard();
+  toast('MPPS '+periode+' dihapus!');await loadAll();HARGA_SAHAM=aMPPS.length?aMPPS[0].harga_saham_baru:10200;renderMPPS();renderDashboard();
 }
 function editKU(id,kel,nama,hp){
   const row=document.getElementById('ku-row-'+id);if(!row)return;
@@ -1293,18 +1316,13 @@ function editKU(id,kel,nama,hp){
   row.innerHTML=`<td><span class="badge ${badge}">${kel}</span></td>
     <td><input type="text" id="ku-nama-${id}" value="${nama}" style="width:100%;padding:6px 8px;border:1.5px solid var(--gold);border-radius:var(--radius-xs);font-family:inherit;font-size:12px"></td>
     <td><input type="tel" id="ku-hp-${id}" value="${hp||''}" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px"></td>
-    <td style="display:flex;gap:4px">
-      <button onclick="simpanKU(${id})" class="btn sm gold">💾</button>
-      <button onclick="renderMPPS()" class="btn sm secondary">✕</button>
-    </td>`;
+    <td style="display:flex;gap:4px"><button onclick="simpanKU(${id})" class="btn sm gold">💾</button><button onclick="renderMPPS()" class="btn sm secondary">✕</button></td>`;
 }
 async function simpanKU(id){
-  const nama=document.getElementById('ku-nama-'+id)?.value.trim();
-  const hp=document.getElementById('ku-hp-'+id)?.value.trim();
+  const nama=document.getElementById('ku-nama-'+id)?.value.trim();const hp=document.getElementById('ku-hp-'+id)?.value.trim();
   if(!nama){toast('Nama KU wajib diisi',true);return;}
   await sb.from('ubnb_ku_kelompok').update({nama_ku:nama,no_hp:hp||null}).eq('id',id);
-  toast('KU Kelompok diperbarui!');
-  await loadAll();renderMPPS();
+  toast('KU Kelompok diperbarui!');await loadAll();renderMPPS();
 }
 
 // ===== SHU SECTION =====
@@ -1312,12 +1330,7 @@ function bukaSHUdariMPPS(mppsId){
   const m=aMPPS.find(x=>x.id===mppsId);if(!m)return;
   const periodeInt=parseInt(m.periode);
   let totalSHUEst=0,totalLembarProp=0;
-  aSaham.forEach(s=>{
-    getBatches(s,periodeInt).forEach(b=>{
-      const bln=hitungProporsiBulan(b.tgl,periodeInt);
-      const lp=b.lembar*bln/12;totalSHUEst+=lp*(m.shu_per_lembar||0);totalLembarProp+=lp;
-    });
-  });
+  aSaham.forEach(s=>{getBatches(s,periodeInt).forEach(b=>{const bln=hitungProporsiBulan(b.tgl,periodeInt);const lp=b.lembar*bln/12;totalSHUEst+=lp*(m.shu_per_lembar||0);totalLembarProp+=lp;});});
   const section=document.getElementById('shu-section');
   section.style.display='block';section.dataset.mppsId=mppsId;
   document.getElementById('shu-periode-label').textContent=m.periode;
@@ -1348,23 +1361,11 @@ async function hitungDanSimpanSHU(){
   const m=aMPPS.find(x=>x.id===mppsId);
   if(!m){toast('Data MPPS tidak ditemukan',true);return;}
   const existing=aBH.find(b=>b.periode===m.periode);
-  if(existing){
-    if(!confirm('SHU periode '+m.periode+' sudah ada. Hapus dan buat ulang?'))return;
-    await sb.from('ubnb_saham_bagi_hasil_detail').delete().eq('bagi_hasil_id',existing.id);
-    await sb.from('ubnb_saham_bagi_hasil').delete().eq('id',existing.id);
-    await sb.from('ubnb_laporan_shu').delete().eq('periode',m.periode);
-  }
-  const periodeInt=parseInt(m.periode);
-  const shuPerLembar=m.shu_per_lembar||0;
-  const btn=document.getElementById('btn-hitung-shu');
-  if(btn){btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menghitung...';}
+  if(existing){if(!confirm('SHU periode '+m.periode+' sudah ada. Hapus dan buat ulang?'))return;await sb.from('ubnb_saham_bagi_hasil_detail').delete().eq('bagi_hasil_id',existing.id);await sb.from('ubnb_saham_bagi_hasil').delete().eq('id',existing.id);await sb.from('ubnb_laporan_shu').delete().eq('periode',m.periode);}
+  const periodeInt=parseInt(m.periode);const shuPerLembar=m.shu_per_lembar||0;
+  const btn=document.getElementById('btn-hitung-shu');if(btn){btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menghitung...';}
   const details=[];
-  aSaham.forEach(s=>{
-    const batches=getBatches(s,periodeInt);
-    let lembarProp=0,shuDiterima=0;
-    batches.forEach(b=>{const bln=hitungProporsiBulan(b.tgl,periodeInt);const lp=b.lembar*bln/12;lembarProp+=lp;shuDiterima+=lp*shuPerLembar;});
-    if(lembarProp>0)details.push({saham_id:s.id,jumlah_lembar:s.jumlah_lembar,lembar_proporsional:Math.round(lembarProp*100)/100,shu_per_lembar:shuPerLembar,jumlah_diterima:Math.round(shuDiterima),sudah_dibayar:false});
-  });
+  aSaham.forEach(s=>{const batches=getBatches(s,periodeInt);let lembarProp=0,shuDiterima=0;batches.forEach(b=>{const bln=hitungProporsiBulan(b.tgl,periodeInt);const lp=b.lembar*bln/12;lembarProp+=lp;shuDiterima+=lp*shuPerLembar;});if(lembarProp>0)details.push({saham_id:s.id,jumlah_lembar:s.jumlah_lembar,lembar_proporsional:Math.round(lembarProp*100)/100,shu_per_lembar:shuPerLembar,jumlah_diterima:Math.round(shuDiterima),sudah_dibayar:false});});
   const totalSHU=details.reduce((a,d)=>a+d.jumlah_diterima,0);
   const{data:bhData,error}=await sb.from('ubnb_saham_bagi_hasil').insert([{periode:m.periode,total_laba:0,pct_bagi_hasil:0,total_dibagi:totalSHU,tanggal_bagi:m.tanggal_mpps,catatan:'SHU MPPS '+m.periode+' — '+rp(shuPerLembar)+'/lembar',operator:CU.username}]).select('id').single();
   if(error){toast('Gagal: '+error.message,true);if(btn){btn.disabled=false;btn.innerHTML='💰 Hitung SHU & Buat Laporan';}return;}
@@ -1382,28 +1383,15 @@ async function buatLaporanSHU(){
   if(!activeBHId)return;
   const bh=aBH.find(x=>x.id===activeBHId);
   const details=aBHDetail.filter(d=>d.bagi_hasil_id===activeBHId);
-  const periode=bh?.periode||'-';
-  const tglRealisasi=fmtTgl(bh?.tanggal_bagi);
-  const shuPerLembar=details[0]?.shu_per_lembar||0;
+  const periode=bh?.periode||'-';const tglRealisasi=fmtTgl(bh?.tanggal_bagi);const shuPerLembar=details[0]?.shu_per_lembar||0;
   const kelompoks=['PW1','PW2','PW3','PW4'];
   for(const kel of kelompoks){
-    const ku=aKU.find(k=>k.kelompok===kel);
-    const namaKU=ku?.nama_ku||'________________';
+    const ku=aKU.find(k=>k.kelompok===kel);const namaKU=ku?.nama_ku||'________________';
     const anggotaKel=details.map(d=>{const s=aSaham.find(x=>x.id===d.saham_id);return s?.kelompok===kel?{...d,saham:s}:null;}).filter(Boolean);
     if(!anggotaKel.length)continue;
-    // Sort by nama keluarga ascending
-    anggotaKel.sort((a,b)=>{
-      const naA=(a.saham.nama_keluarga&&a.saham.nama_keluarga!=='< BELUM ADA >')?a.saham.nama_keluarga:a.saham.nama;
-      const naB=(b.saham.nama_keluarga&&b.saham.nama_keluarga!=='< BELUM ADA >')?b.saham.nama_keluarga:b.saham.nama;
-      return naA.localeCompare(naB)||(a.saham.nama||'').localeCompare(b.saham.nama||'');
-    });
-    // Group by nama keluarga
+    anggotaKel.sort((a,b)=>{const naA=(a.saham.nama_keluarga&&a.saham.nama_keluarga!=='< BELUM ADA >')?a.saham.nama_keluarga:a.saham.nama;const naB=(b.saham.nama_keluarga&&b.saham.nama_keluarga!=='< BELUM ADA >')?b.saham.nama_keluarga:b.saham.nama;return naA.localeCompare(naB)||(a.saham.nama||'').localeCompare(b.saham.nama||'');});
     const byKel={};
-    anggotaKel.forEach(d=>{
-      const namaKelKey=(d.saham.nama_keluarga&&d.saham.nama_keluarga!=='< BELUM ADA >')?d.saham.nama_keluarga:d.saham.nama;
-      if(!byKel[namaKelKey])byKel[namaKelKey]=[];
-      byKel[namaKelKey].push(d);
-    });
+    anggotaKel.forEach(d=>{const namaKelKey=(d.saham.nama_keluarga&&d.saham.nama_keluarga!=='< BELUM ADA >')?d.saham.nama_keluarga:d.saham.nama;if(!byKel[namaKelKey])byKel[namaKelKey]=[];byKel[namaKelKey].push(d);});
     const totalSHUKel=anggotaKel.reduce((a,d)=>a+d.jumlah_diterima,0);
     let rows='';let no=1;
     Object.entries(byKel).forEach(([namaKelKey,anggota])=>{
@@ -1420,20 +1408,10 @@ async function buatLaporanSHU(){
           <td style="text-align:center;padding:5px 7px;border:1px solid #ccc;font-size:11px">${d.jumlah_lembar}</td>
           <td style="text-align:center;padding:5px 7px;border:1px solid #ccc;font-size:11px">${parseFloat(d.lembar_proporsional||d.jumlah_lembar||0).toFixed(2)}</td>
           <td style="text-align:right;padding:5px 7px;border:1px solid #ccc;font-size:11px;font-weight:700">${rp(d.jumlah_diterima)}</td>
-          ${isFirst&&perluTTD?`<td rowspan="${anggota.length}" style="text-align:center;padding:5px 7px;border:1px solid #ccc;vertical-align:middle">
-            <div style="width:80px;border-bottom:1px solid #333;margin:0 auto 3px"></div>
-            <div style="font-size:9px;color:#666">(${namaKelKey})</div></td>`
-          :isFirst&&!perluTTD?`<td style="text-align:center;padding:5px 7px;border:1px solid #ccc;vertical-align:middle">
-            <div style="width:80px;border-bottom:1px solid #333;margin:0 auto 3px"></div>
-            <div style="font-size:9px;color:#666">(${d.saham.nama})</div></td>`:''}
+          ${isFirst&&perluTTD?`<td rowspan="${anggota.length}" style="text-align:center;padding:5px 7px;border:1px solid #ccc;vertical-align:middle"><div style="width:80px;border-bottom:1px solid #333;margin:0 auto 3px"></div><div style="font-size:9px;color:#666">(${namaKelKey})</div></td>`:isFirst&&!perluTTD?`<td style="text-align:center;padding:5px 7px;border:1px solid #ccc;vertical-align:middle"><div style="width:80px;border-bottom:1px solid #333;margin:0 auto 3px"></div><div style="font-size:9px;color:#666">(${d.saham.nama})</div></td>`:''}
         </tr>`;
       });
-      rows+=`<tr style="background:#f0f0f0;font-weight:700">
-        <td colspan="3" style="text-align:right;padding:4px 7px;border:1px solid #ccc;font-size:10px">Sub Total — ${namaKelKey}</td>
-        <td style="text-align:center;padding:4px 7px;border:1px solid #ccc;font-size:11px">${subLembar}</td>
-        <td style="text-align:center;padding:4px 7px;border:1px solid #ccc;font-size:11px">${subLembarProp.toFixed(2)}</td>
-        <td style="text-align:right;padding:4px 7px;border:1px solid #ccc;font-size:11px">${rp(subTotal)}</td>
-        <td style="border:1px solid #ccc"></td></tr>`;
+      rows+=`<tr style="background:#f0f0f0;font-weight:700"><td colspan="3" style="text-align:right;padding:4px 7px;border:1px solid #ccc;font-size:10px">Sub Total — ${namaKelKey}</td><td style="text-align:center;padding:4px 7px;border:1px solid #ccc;font-size:11px">${subLembar}</td><td style="text-align:center;padding:4px 7px;border:1px solid #ccc;font-size:11px">${subLembarProp.toFixed(2)}</td><td style="text-align:right;padding:4px 7px;border:1px solid #ccc;font-size:11px">${rp(subTotal)}</td><td style="border:1px solid #ccc"></td></tr>`;
     });
     const html=`<div style="font-family:Arial,sans-serif;padding:16px;max-width:780px;margin:0 auto">
       <div style="text-align:center;border-bottom:2px solid #1a6640;padding-bottom:10px;margin-bottom:14px">
@@ -1462,14 +1440,8 @@ async function buatLaporanSHU(){
         </tr></tfoot>
       </table>
       <div style="margin-top:28px;display:flex;justify-content:space-between">
-        <div style="text-align:center">
-          <div style="font-size:11px;margin-bottom:36px">Bendahara UB,</div>
-          <div style="width:120px;border-top:1px solid #333;margin:0 auto 3px;font-size:11px;padding-top:3px">( _________________ )</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:11px;margin-bottom:36px">KU Kelompok ${kel},</div>
-          <div style="width:160px;border-top:1px solid #333;margin:0 auto 3px;font-size:11px;padding-top:3px">( ${namaKU} )</div>
-        </div>
+        <div style="text-align:center"><div style="font-size:11px;margin-bottom:36px">Bendahara UB,</div><div style="width:120px;border-top:1px solid #333;margin:0 auto 3px;font-size:11px;padding-top:3px">( _________________ )</div></div>
+        <div style="text-align:center"><div style="font-size:11px;margin-bottom:36px">KU Kelompok ${kel},</div><div style="width:160px;border-top:1px solid #333;margin:0 auto 3px;font-size:11px;padding-top:3px">( ${namaKU} )</div></div>
       </div>
     </div>`;
     await sb.from('ubnb_laporan_shu').insert([{mpps_id:null,periode,kelompok:kel,total_anggota:anggotaKel.length,total_lembar_proporsional:anggotaKel.reduce((a,d)=>a+(parseFloat(d.lembar_proporsional)||d.jumlah_lembar||0),0),total_shu:totalSHUKel,html_content:html,status:'Final'}]);
@@ -1512,11 +1484,9 @@ async function lihatLapSHU(id){
   openModal('modal-laporan');
 }
 function cetakModalLaporan(){
-  const content=document.getElementById('modal-laporan-content')?.innerHTML;
-  if(!content)return;
+  const content=document.getElementById('modal-laporan-content')?.innerHTML;if(!content)return;
   const el=document.getElementById('bukti-cetak');
-  el.innerHTML=content;
-  el.style.cssText='display:block;position:fixed;inset:0;background:white;z-index:9999;padding:16px;overflow:auto;';
+  el.innerHTML=content;el.style.cssText='display:block;position:fixed;inset:0;background:white;z-index:9999;padding:16px;overflow:auto;';
   setTimeout(()=>{window.print();setTimeout(()=>{el.style.cssText='display:none;';el.innerHTML='';},1200);},300);
 }
 async function cetakLapSHU(id){
@@ -1527,8 +1497,7 @@ async function cetakLapSHU(id){
 async function hapusLapSHU(id,periode,kelompok){
   if(!confirm('Hapus laporan SHU '+periode+' '+kelompok+'?'))return;
   await sb.from('ubnb_laporan_shu').delete().eq('id',id);
-  toast('Laporan dihapus!');
-  await loadAll();renderLapSHUList();
+  toast('Laporan dihapus!');await loadAll();renderLapSHUList();
 }
 
 // ===== CETAK BUKTI KEPEMILIKAN =====
@@ -1540,7 +1509,6 @@ function cetakBukti(id){
   const tglCetak=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
   const kelWarna={PW1:'#1d4ed8',PW2:'#be185d',PW3:'#065f46',PW4:'#9a7830'};
   const kelBg2={PW1:'#dbeafe',PW2:'#fce7f3',PW3:'#d1fae5',PW4:'#fdf6e3'};
-  // Ambil riwayat transaksi
   const trxList=aTrx.filter(t=>t.saham_id===id).slice(0,20);
   const tipeWarna={beli:'#065f46',jual:'#b91c1c',transfer_masuk:'#1d4ed8',transfer_keluar:'#b45309'};
   const trxHTML=trxList.length?`
@@ -1548,34 +1516,24 @@ function cetakBukti(id){
       <div style="font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:700;margin-bottom:3mm;letter-spacing:0.5px">Riwayat Transaksi</div>
       <table style="width:100%;border-collapse:collapse;font-size:10px">
         <thead><tr style="background:#1a3a2a;color:white">
-          <th style="padding:4px 6px;text-align:left">Tanggal</th>
-          <th style="padding:4px 6px;text-align:left">Tipe</th>
-          <th style="padding:4px 6px;text-align:center">Lembar</th>
-          <th style="padding:4px 6px;text-align:right">Nilai</th>
+          <th style="padding:4px 6px;text-align:left">Tanggal</th><th style="padding:4px 6px;text-align:left">Tipe</th>
+          <th style="padding:4px 6px;text-align:center">Lembar</th><th style="padding:4px 6px;text-align:right">Nilai</th>
           <th style="padding:4px 6px;text-align:left">Keterangan</th>
         </tr></thead>
         <tbody>${trxList.map((t,i)=>{
-          // Untuk transfer, tambahkan info dari/ke siapa
-          let keteranganDisplay = t.catatan||'-';
-          if(t.tipe==='transfer_keluar' && t.ke_id){
-            const sPembeli = aSaham.find(x=>x.id===t.ke_id);
-            keteranganDisplay = `→ Ke: ${sPembeli?.nama||'Unknown'}${t.catatan?' | '+t.catatan:''}`;
-          } else if(t.tipe==='transfer_masuk' && t.dari_id){
-            const sPenjual = aSaham.find(x=>x.id===t.dari_id);
-            keteranganDisplay = `← Dari: ${sPenjual?.nama||'Unknown'}${t.catatan?' | '+t.catatan:''}`;
-          }
-          
-          return `<tr style="background:${i%2===0?'white':'#faf8f0'}">
-          <td style="padding:3px 6px">${fmtTgl(t.tanggal)}</td>
-          <td style="padding:3px 6px;color:${tipeWarna[t.tipe]||'#333'};font-weight:700">${t.tipe.replace(/_/g,' ')}</td>
-          <td style="padding:3px 6px;text-align:center;font-weight:700">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
-          <td style="padding:3px 6px;text-align:right">${rp(t.total_nilai)}</td>
-          <td style="padding:3px 6px;color:#6b7280">${keteranganDisplay}</td>
-        </tr>`;
+          let keteranganDisplay=t.catatan||'-';
+          if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);keteranganDisplay=`→ Ke: ${sk?.nama||'Unknown'}${t.catatan?' | '+t.catatan:''}`;}
+          else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);keteranganDisplay=`← Dari: ${sd?.nama||'Unknown'}${t.catatan?' | '+t.catatan:''}`;}
+          return`<tr style="background:${i%2===0?'white':'#faf8f0'}">
+            <td style="padding:3px 6px">${fmtTgl(t.tanggal)}</td>
+            <td style="padding:3px 6px;color:${tipeWarna[t.tipe]||'#333'};font-weight:700">${t.tipe.replace(/_/g,' ')}</td>
+            <td style="padding:3px 6px;text-align:center;font-weight:700">${(t.jumlah_lembar||0).toLocaleString('id-ID')}</td>
+            <td style="padding:3px 6px;text-align:right">${rp(t.total_nilai)}</td>
+            <td style="padding:3px 6px;color:#6b7280">${keteranganDisplay}</td>
+          </tr>`;
         }).join('')}</tbody>
       </table>
     </div>`:'';
-
   const html=`<div style="width:210mm;min-height:148mm;margin:0 auto;font-family:Arial,sans-serif;background:white;position:relative;overflow:hidden">
     <div style="position:absolute;inset:6mm;border:3px solid #c9a84c;border-radius:4px;pointer-events:none"></div>
     <div style="position:absolute;inset:8.5mm;border:1px solid #c9a84c;border-radius:3px;pointer-events:none"></div>
@@ -1626,11 +1584,8 @@ function cetakBukti(id){
 function exportDaftarPemegang(){
   const XLSX=window.XLSX;const totalLembar=aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
   const rows=[['No.','No. Anggota','No. Saham','Nama','Nama Keluarga','Kelompok','Jenis','Jumlah Lembar','Nilai (Rp)','% Kepemilikan','Tgl. Pertama','Status']];
-  [...aSaham].sort((a,b)=>(b.jumlah_lembar||0)-(a.jumlah_lembar||0)).forEach((s,i)=>{
-    rows.push([i+1,s.no_anggota,s.no_saham,s.nama,s.nama_keluarga,s.kelompok,s.jenis,s.jumlah_lembar,(s.jumlah_lembar||0)*HARGA_SAHAM,totalLembar>0?+((s.jumlah_lembar||0)/totalLembar*100).toFixed(2):0,s.tanggal_pertama,s.status]);
-  });
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Pemegang Saham');
+  [...aSaham].sort((a,b)=>(b.jumlah_lembar||0)-(a.jumlah_lembar||0)).forEach((s,i)=>{rows.push([i+1,s.no_anggota,s.no_saham,s.nama,s.nama_keluarga,s.kelompok,s.jenis,s.jumlah_lembar,(s.jumlah_lembar||0)*HARGA_SAHAM,totalLembar>0?+((s.jumlah_lembar||0)/totalLembar*100).toFixed(2):0,s.tanggal_pertama,s.status]);});
+  const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Pemegang Saham');
   XLSX.writeFile(wb,'UBNB_Saham_Daftar_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
   toast('✅ Export berhasil!');
 }
