@@ -494,9 +494,8 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
           <div class="fg"><label>Jumlah Diterima (Rp) *</label>
             <input type="number" id="pay-jumlah" placeholder="0" oninput="hitungBreakdownOtomatis()">
           </div>
-          <div class="fg"><label>Denda (Rp)</label>
-            <input type="number" id="pay-denda" placeholder="0" value="0" oninput="hitungBreakdownOtomatis()">
-          </div>
+          <div class="fg"></div>
+          <input type="hidden" id="pay-denda" value="0">
         </div>
         <!-- BREAKDOWN OTOMATIS (readonly) -->
         <div id="pay-breakdown-box" style="display:none;background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px">
@@ -510,7 +509,7 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
             <span id="pay-margin-display" style="font-weight:600;color:var(--hijau)">—</span>
           </div>
           <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:4px;margin-top:4px">
-            <span style="font-weight:700">Total (+ Denda)</span>
+            <span style="font-weight:700">Total</span>
             <span id="pay-total-display" style="font-weight:800;color:var(--hijau)">—</span>
           </div>
         </div>
@@ -907,7 +906,7 @@ function showPage(id,btn){
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   if(btn)btn.classList.add('active');
-  if(id==='dashboard')renderDashboard();
+  if(id==='dashboard'){loadAll().then(()=>renderDashboard());}
   if(id==='pengajuan'){loadPengajuan().then(()=>renderPengajuan());}
   if(id==='tabungan'){loadTabungan();}
   window.scrollTo(0,0);
@@ -1303,7 +1302,7 @@ function hitungBreakdownOtomatis(){
   box.style.display='block';
   document.getElementById('pay-pokok-display').textContent=rp(pokokPorsi);
   document.getElementById('pay-margin-display').textContent=rp(marginPorsi);
-  document.getElementById('pay-total-display').textContent=rp(jumlah+denda);
+  document.getElementById('pay-total-display').textContent=rp(jumlah);
 
   // Auto-detect terlambat
   const tgl=document.getElementById('pay-tgl').value;
@@ -1380,18 +1379,22 @@ function tampilRiwayat(akadId){
   rc.style.display='block';
   if(!al_.length){ri.innerHTML='<div class="empty"><div class="ei">📋</div>Belum ada catatan angsuran</div>';return;}
   const tot=al_.reduce((s,x)=>s+(x.jumlah||0),0);
+  const isPemilik=CU&&CU.role==='pemilik';
   ri.innerHTML=`<div class="tbl-wrap"><table class="bmt-tbl">
-    <thead><tr><th>No</th><th>Tanggal</th><th style="text-align:right">Pokok</th><th style="text-align:right">Margin</th><th style="text-align:right">Denda</th><th style="text-align:right">Total</th><th>Status</th></tr></thead>
+    <thead><tr><th>No</th><th>Tanggal</th><th style="text-align:right">Pokok</th><th style="text-align:right">Margin</th><th style="text-align:right">Total</th><th>Status</th>${isPemilik?'<th>Aksi</th>':''}</tr></thead>
     <tbody>${al_.map((x,i)=>`<tr>
       <td>${i+1}</td>
       <td>${fmtTgl(x.tanggal)}</td>
-      <td style="text-align:right">${x.pokok?rp(x.pokok):'-'}</td>
-      <td style="text-align:right">${x.margin?rp(x.margin):'-'}</td>
-      <td style="text-align:right;color:var(--red)">${x.denda?rp(x.denda):'-'}</td>
+      <td style="text-align:right;font-size:12px">${x.pokok?rp(x.pokok):'-'}</td>
+      <td style="text-align:right;font-size:12px;color:var(--hijau)">${x.margin?rp(x.margin):'-'}</td>
       <td style="text-align:right;font-weight:700;color:var(--hijau)">${rp(x.jumlah)}</td>
-      <td><span style="font-size:10px;padding:2px 6px;border-radius:99px;background:${x.status==='terlambat'?'#fee2e2':'#dcfce7'};color:${x.status==='terlambat'?'var(--red)':'var(--hijau)'}">${x.status==='terlambat'?'⚠️ Terlambat':'✅ Lunas'}</span></td>
+      <td><span style="font-size:10px;padding:2px 6px;border-radius:99px;background:${x.status==='terlambat'?'#fee2e2':'#dcfce7'};color:${x.status==='terlambat'?'var(--red)':'var(--hijau)'}">${x.status==='terlambat'?'⚠️':'✅'} ${x.status||'lunas'}</span></td>
+      ${isPemilik?`<td style="white-space:nowrap">
+        <button onclick="editAngsuran(${x.id})" style="font-size:10px;padding:2px 7px;border:none;border-radius:4px;background:#e0f2fe;color:#0369a1;cursor:pointer;margin-right:3px">✏️</button>
+        <button onclick="hapusAngsuran(${x.id},${x.akad_id},${x.jumlah})" style="font-size:10px;padding:2px 7px;border:none;border-radius:4px;background:#fee2e2;color:var(--red);cursor:pointer">🗑️</button>
+      </td>`:''}
     </tr>`).join('')}
-    <tr class="total-row"><td colspan="4">Total Terbayar</td><td></td><td style="text-align:right">${rp(tot)}</td><td></td></tr>
+    <tr class="total-row"><td colspan="3">Total Terbayar</td><td></td><td style="text-align:right">${rp(tot)}</td><td>${isPemilik?'<td>':''}</td></tr>
     </tbody></table></div>`;
 }
 async function simpanAngsuran(){
@@ -1401,7 +1404,7 @@ async function simpanAngsuran(){
   const denda=parseFloat(document.getElementById('pay-denda').value)||0;
   const pokok=parseFloat(document.getElementById('pay-pokok').value)||0;   // dari hidden (breakdown otomatis)
   const margin=parseFloat(document.getElementById('pay-margin').value)||0; // dari hidden (breakdown otomatis)
-  const jumlah=jumlahInput+denda; // total yang masuk ke kas
+  const jumlah=jumlahInput; // total yang masuk ke kas
   const kasId=parseInt(document.getElementById('pay-kas').value)||null;
   const statusAngsuran=document.getElementById('pay-status').value||'lunas';
   const tglJatuh=document.getElementById('pay-jatuh-tempo').value||null;
@@ -1429,11 +1432,11 @@ async function simpanAngsuran(){
   const pctPokok=pokok+margin>0?Math.round(pokok/(pokok+margin)*100):0;
   const ket='Angsuran '+a.no_akad+' — '+a.nama_jamaah+
     ' | Pokok: '+rp(pokok)+' ('+pctPokok+'%)'+
-    ' | Keuntungan: '+rp(margin)+' ('+(100-pctPokok)+'%)'+
-    (denda?' | Denda: '+rp(denda):'');
+    ' | Keuntungan: '+rp(margin)+' ('+(100-pctPokok)+'%)';
   await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah,tanggal:tgl,keterangan:ket,operator:CU.username}]);
   await recalcKas(kasId);
   await loadAll();
+  bayarPreview(); // refresh preview dengan data terbaru
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   al('bayar-alert','✅ Pembayaran berhasil!'+(newStatus==='Lunas'?' 🎉 Akad LUNAS!':''),'ok');
   document.getElementById('pay-jumlah').value='';
@@ -2338,6 +2341,128 @@ function renderMutasi(){
   </table>`;
 }
 // END TABUNGAN WADIAH
+
+// ============================================================
+// EDIT & HAPUS ANGSURAN (role pemilik)
+// ============================================================
+let _editAngsuranAkad = null;
+
+function editAngsuran(id){
+  const x=aAngsuran.find(a=>a.id===id);if(!x)return;
+  const a=aAkad.find(ak=>ak.id===x.akad_id);
+  _editAngsuranAkad=a;
+  document.getElementById('ea-id').value=x.id;
+  document.getElementById('ea-akad-id').value=x.akad_id;
+  document.getElementById('ea-jumlah-lama').value=x.jumlah;
+  document.getElementById('ea-tgl').value=x.tanggal;
+  document.getElementById('ea-jumlah').value=x.jumlah;
+  document.getElementById('ea-catatan').value=x.catatan||'';
+  document.getElementById('ea-breakdown').style.display='none';
+  document.getElementById('edit-angs-alert').innerHTML='';
+  hitungEditBreakdown();
+  document.getElementById('modal-edit-angs').style.display='flex';
+}
+function hitungEditBreakdown(){
+  const jumlah=parseFloat(document.getElementById('ea-jumlah').value)||0;
+  const a=_editAngsuranAkad;
+  const box=document.getElementById('ea-breakdown');
+  if(!jumlah||!a){box.style.display='none';return;}
+  const totalPokok=parseFloat(a.harga_beli)||0;
+  const totalMargin=parseFloat(a.total_margin)||0;
+  const totalPmb=totalPokok+totalMargin;
+  const pokokPorsi=totalPmb>0?Math.round(jumlah*totalPokok/totalPmb):jumlah;
+  const marginPorsi=jumlah-pokokPorsi;
+  box.style.display='block';
+  document.getElementById('ea-pokok-disp').textContent=rp(pokokPorsi);
+  document.getElementById('ea-margin-disp').textContent=rp(marginPorsi);
+}
+async function simpanEditAngsuran(){
+  const id=parseInt(document.getElementById('ea-id').value);
+  const akadId=parseInt(document.getElementById('ea-akad-id').value);
+  const jumlahLama=parseFloat(document.getElementById('ea-jumlah-lama').value)||0;
+  const tgl=document.getElementById('ea-tgl').value;
+  const jumlah=parseFloat(document.getElementById('ea-jumlah').value)||0;
+  const catatan=document.getElementById('ea-catatan').value.trim();
+  if(!tgl||!jumlah){al('edit-angs-alert','⚠️ Isi semua field','err');return;}
+  const a=aAkad.find(ak=>ak.id===akadId);if(!a)return;
+  const totalPokok=parseFloat(a.harga_beli)||0;
+  const totalMargin=parseFloat(a.total_margin)||0;
+  const totalPmb=totalPokok+totalMargin;
+  const pokok=totalPmb>0?Math.round(jumlah*totalPokok/totalPmb):jumlah;
+  const margin=jumlah-pokok;
+  const{error}=await sb.from('bmt_angsuran').update({tanggal:tgl,jumlah,pokok,margin,catatan:catatan||null}).eq('id',id);
+  if(error){al('edit-angs-alert','❌ Gagal: '+error.message,'err');return;}
+  const selisih=jumlah-jumlahLama;
+  const newTotal=Math.max(0,(a.total_angsuran||0)+selisih);
+  const newSisa=Math.max(0,(a.total_pembiayaan||0)-newTotal);
+  const newStatus=newSisa<=0?'Lunas':'Belum Lunas';
+  await sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId);
+  if(selisih!==0){
+    const kasBMT=aKas.find(k=>k.modul&&k.modul.includes('bmt'));
+    if(kasBMT){
+      await sb.from('kas_mutasi').insert([{kas_id:kasBMT.id,tipe:selisih>0?'masuk':'keluar',kategori:selisih>0?'masuk':'keluar',jumlah:Math.abs(selisih),tanggal:tgl,keterangan:'Koreksi Angsuran — '+a.nama_jamaah+' ('+a.no_akad+')',operator:CU.username}]);
+      await recalcKas(kasBMT.id);
+    }
+  }
+  document.getElementById('modal-edit-angs').style.display='none';
+  toast('✅ Angsuran berhasil diupdate');
+  await loadAll();bayarPreview();
+}
+async function hapusAngsuran(id,akadId,jumlah){
+  if(!confirm('Hapus angsuran ini?\nJumlah: '+rp(jumlah)+'\n\nTidak dapat dibatalkan.'))return;
+  const a=aAkad.find(ak=>ak.id===akadId);if(!a)return;
+  const{error}=await sb.from('bmt_angsuran').delete().eq('id',id);
+  if(error){toast('❌ Gagal: '+error.message,true);return;}
+  const newTotal=Math.max(0,(a.total_angsuran||0)-jumlah);
+  const newSisa=Math.max(0,(a.total_pembiayaan||0)-newTotal);
+  const newStatus=newSisa<=0?'Lunas':'Belum Lunas';
+  await sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId);
+  const kasBMT=aKas.find(k=>k.modul&&k.modul.includes('bmt'));
+  if(kasBMT){
+    await sb.from('kas_mutasi').insert([{kas_id:kasBMT.id,tipe:'keluar',kategori:'keluar',jumlah,tanggal:new Date().toISOString().slice(0,10),keterangan:'Hapus Angsuran — '+a.nama_jamaah+' ('+a.no_akad+')',operator:CU.username}]);
+    await recalcKas(kasBMT.id);
+  }
+  toast('✅ Angsuran dihapus');
+  await loadAll();bayarPreview();
+}
+// END EDIT HAPUS ANGSURAN
 </script>
+
+<!-- MODAL EDIT ANGSURAN -->
+<div id="modal-edit-angs" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:600;align-items:flex-end;justify-content:center">
+  <div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:0 16px 20px">
+    <div style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:12px auto 0"></div>
+    <div style="font-size:15px;font-weight:800;padding:14px 0 10px">✏️ Edit Angsuran</div>
+    <div id="edit-angs-alert"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><label style="font-size:11px;font-weight:700;color:#6b7c6b;display:block;margin-bottom:4px">Tanggal *</label>
+        <input type="date" id="ea-tgl" style="width:100%;padding:8px;border:1.5px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;color:#6b7c6b;display:block;margin-bottom:4px">Jumlah (Rp) *</label>
+        <input type="number" id="ea-jumlah" oninput="hitungEditBreakdown()" style="width:100%;padding:8px;border:1.5px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit">
+      </div>
+    </div>
+    <div id="ea-breakdown" style="background:#f4f6f4;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;display:none">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="color:#6b7c6b">Porsi Pokok</span><span id="ea-pokok-disp" style="font-weight:600">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:#6b7c6b">Porsi Keuntungan</span><span id="ea-margin-disp" style="font-weight:600;color:#1D9E75">—</span>
+      </div>
+    </div>
+    <div style="margin-bottom:14px"><label style="font-size:11px;font-weight:700;color:#6b7c6b;display:block;margin-bottom:4px">Catatan</label>
+      <input type="text" id="ea-catatan" placeholder="Opsional" style="width:100%;padding:8px;border:1.5px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit">
+    </div>
+    <input type="hidden" id="ea-id">
+    <input type="hidden" id="ea-akad-id">
+    <input type="hidden" id="ea-jumlah-lama">
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('modal-edit-angs').style.display='none'" 
+        style="flex:1;padding:10px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Batal</button>
+      <button onclick="simpanEditAngsuran()" 
+        style="flex:2;padding:10px;border:none;border-radius:8px;background:#C89B3C;color:#1a2e1a;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">💾 Simpan Perubahan</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
