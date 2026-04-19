@@ -343,12 +343,13 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
       <div class="card" id="baru-form-card">
         <div class="card-title">➕ Input Pembiayaan Baru</div>
         <div class="two-col">
-          <div class="fg"><label>Nama Jamaah *</label><input type="text" id="b-nama" oninput="resetBaru()"></div>
-          <div class="fg"><label>Kelompok *</label>
-            <select id="b-kelompok" onchange="resetBaru()">
-              <option value="">— Pilih —</option>
-              <option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option><option>Luar Perwira</option>
+          <div class="fg"><label>Nama Anggota *</label>
+            <select id="b-nama" onchange="onPilihAnggotaBMT(this)" style="font-size:13px">
+              <option value="">— Pilih Anggota —</option>
             </select>
+          </div>
+          <div class="fg"><label>Kelompok</label>
+            <input type="text" id="b-kelompok" readonly style="background:var(--bg);color:var(--text-muted)">
           </div>
         </div>
         <div class="two-col">
@@ -529,7 +530,7 @@ const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const sb=supabase.createClient(SURL,SKEY);
 
-let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',simR={};
+let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',simR={},aSahamAnggota=[];
 
 function rp(n){return'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');}
 function fmtTgl(v){if(!v)return'-';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});}
@@ -570,12 +571,25 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 // ===== DATA =====
 async function loadAll(){
-  const[{data:a},{data:b}]=await Promise.all([
+  const[{data:a},{data:b},{data:c}]=await Promise.all([
     sb.from('bmt_akad').select('*').order('created_at',{ascending:false}),
-    sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true})
+    sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}),
+    sb.from('ubnb_saham').select('id,no_anggota,nama,kelompok,jumlah_lembar,status').eq('status','Aktif').order('nama')
   ]);
-  aAkad=a||[];aAngsuran=b||[];
+  aAkad=a||[];aAngsuran=b||[];aSahamAnggota=c||[];isiDropdownAnggota();
   isiDropdown();
+}
+function isiDropdownAnggota(){
+  const sel=document.getElementById('b-nama');
+  if(!sel)return;
+  sel.innerHTML='<option value="">— Pilih Anggota —</option>'+
+    aSahamAnggota.map(a=>`<option value="${a.id}" data-kelompok="${a.kelompok}" data-nama="${a.nama}">${a.nama} (${a.no_anggota} · ${a.kelompok})</option>`).join('');
+}
+function onPilihAnggotaBMT(sel){
+  const opt=sel.options[sel.selectedIndex];
+  const kel=opt?opt.dataset.kelompok:'';
+  document.getElementById('b-kelompok').value=kel||'';
+  resetBaru();
 }
 function isiDropdown(){
   const aktif=aAkad.filter(a=>a.status==='Belum Lunas');
@@ -846,7 +860,10 @@ function hitungBaru(){
   resetBaru();
 }
 function previewBaru(){
-  const nama=document.getElementById('b-nama').value.trim();
+  const bNamaSel=document.getElementById('b-nama');
+  const anggotaId=bNamaSel.value?parseInt(bNamaSel.value):null;
+  const namaOpt=bNamaSel.options[bNamaSel.selectedIndex];
+  const nama=namaOpt&&namaOpt.dataset.nama?namaOpt.dataset.nama:bNamaSel.options[bNamaSel.selectedIndex]?.text||'';
   const kel=document.getElementById('b-kelompok').value;
   const tgl=document.getElementById('b-tgl').value;
   const jenis=document.getElementById('b-jenis').value;
@@ -856,14 +873,14 @@ function previewBaru(){
   const mPct=Number(document.getElementById('b-margin').value)||0;
   const jangka=Number(document.getElementById('b-jangka').value)||0;
   const tglRutin=document.getElementById('b-tgl-rutin').value;
-  if(!nama||!kel||!tgl||!objek||!harga||!mPct||!jangka||!tglRutin){al('baru-alert','⚠️ Harap lengkapi semua field (*)','err');return;}
+  if(!anggotaId||!tgl||!objek||!harga||!mPct||!jangka||!tglRutin){al('baru-alert','⚠️ Harap pilih anggota & lengkapi semua field (*)','err');return;}
   const totalM=Math.round(harga*(mPct/100)*jangka),totalP=harga+totalM;
   const aj=document.getElementById('b-admin-jenis').value;
   const av=Number(document.getElementById('b-admin-val').value)||0;
   const adminRp=aj==='pct'?Math.round(totalP*(av/100)):Math.round(av);
   const totalA=adminT==='angsuran'?totalP+adminRp:totalP;
   const angs=Math.round(totalA/jangka);
-  baruD={nama,kel,tgl,jenis,objek,jaminan,harga,mPct,totalM,totalP,adminRp,adminT,total:totalP,angs,jangka,tglRutin};
+  baruD={nama,kel,tgl,jenis,objek,jaminan,anggotaId,harga,mPct,totalM,totalP,adminRp,adminT,total:totalP,angs,jangka,tglRutin};
   document.getElementById('baru-preview-isi').innerHTML=`<div class="preview-box">
     <div class="preview-row"><span class="lbl">Nama Jamaah</span><span class="val">${nama}</span></div>
     <div class="preview-row"><span class="lbl">Kelompok</span><span class="val">${kel}</span></div>
@@ -890,7 +907,7 @@ async function simpanBaru(){
   const tglAkad=new Date(d.tgl);
   const noAkad=`BMT/${tglAkad.getFullYear()}/${String(tglAkad.getMonth()+1).padStart(2,'0')}/${String(aAkad.length+1).padStart(4,'0')}`;
   const{data,error}=await sb.from('bmt_akad').insert([{
-    no_akad:noAkad,nama_jamaah:d.nama,kelompok:d.kel,tanggal_akad:d.tgl,
+    no_akad:noAkad,nama_jamaah:d.nama,kelompok:d.kel,anggota_id:d.anggotaId||null,tanggal_akad:d.tgl,
     jenis_akad:d.jenis,objek_pembiayaan:d.objek,jaminan:d.jaminan,
     jangka:d.jangka,harga_beli:d.harga,margin_pct:d.mPct,
     total_margin:d.totalM,total_pembiayaan:d.totalP,
