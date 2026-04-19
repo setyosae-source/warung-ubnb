@@ -479,7 +479,15 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
       <div class="card">
         <div class="card-title">💳 Input Pembayaran Angsuran</div>
         <div class="fg"><label>Pilih Nasabah / Akad *</label>
-          <select id="pay-akad" onchange="bayarPreview()"><option value="">— Pilih akad —</option></select>
+          <div style="position:relative">
+            <input type="text" id="pay-akad-search" placeholder="🔍 Cari nama nasabah / no. akad..."
+              autocomplete="off"
+              oninput="searchPayAkad(this.value)"
+              onfocus="searchPayAkad(this.value)"
+              style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none"/>
+            <input type="hidden" id="pay-akad"/>
+            <div id="pay-akad-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--green);border-radius:6px;max-height:250px;overflow-y:auto;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,0.15)"></div>
+          </div>
         </div>
         <div id="pay-preview" style="display:none"></div>
         <div class="two-col" style="margin-top:12px">
@@ -1268,6 +1276,36 @@ function baruLagi(){
 }
 
 // ===== ANGSURAN =====
+function searchPayAkad(q){
+  const dd=document.getElementById('pay-akad-dd');
+  if(!dd)return;
+  const filtered=q
+    ?aAkad.filter(a=>a.status!=='Lunas'&&(
+        a.nama_jamaah.toLowerCase().includes(q.toLowerCase())||
+        a.no_akad.toLowerCase().includes(q.toLowerCase())
+      ))
+    :aAkad.filter(a=>a.status!=='Lunas').slice(0,10);
+  dd.style.display='block';
+  dd.innerHTML=filtered.map(a=>`
+    <div style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+      onmousedown="pilihPayAkad(${a.id},'${a.nama_jamaah.replace(/'/g,"\'")}','${a.no_akad}')">
+      <div style="font-weight:700;font-size:13px">${a.nama_jamaah}</div>
+      <div style="font-size:11px;color:#888">${a.no_akad} · Sisa: ${rp(a.sisa_angsuran)} · ${a.status}</div>
+    </div>`).join('')||
+    '<div style="padding:10px 12px;color:#888;font-size:13px">Tidak ada akad aktif</div>';
+}
+function pilihPayAkad(id,nama,noAkad){
+  document.getElementById('pay-akad').value=id;
+  document.getElementById('pay-akad-search').value=nama+' — '+noAkad;
+  document.getElementById('pay-akad-dd').style.display='none';
+  bayarPreview();
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#pay-akad-search')&&!e.target.closest('#pay-akad-dd')){
+    const dd=document.getElementById('pay-akad-dd');if(dd)dd.style.display='none';
+  }
+});
 function hitungBreakdownOtomatis(){
   // Breakdown proporsional dari jumlah yang diterima
   const id=parseInt(document.getElementById('pay-akad').value);
@@ -1439,12 +1477,14 @@ async function simpanAngsuran(){
   // Restore akad selection dan refresh riwayat
   if(_akadIdAfter){
     document.getElementById('pay-akad').value=_akadIdAfter;
-  }
-  bayarPreview(); // refresh preview dengan data terbaru
+    document.getElementById('pay-akad-search').value=_akadSearchAfter;
+    bayarPreview();
+  } // refresh preview dengan data terbaru
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   al('bayar-alert','✅ Pembayaran berhasil!'+(newStatus==='Lunas'?' 🎉 Akad LUNAS!':''),'ok');
-  // Simpan akad id sebelum reset, untuk refresh riwayat
+  // Simpan akad id & search text sebelum reset, untuk refresh riwayat
   const _akadIdAfter=document.getElementById('pay-akad').value;
+  const _akadSearchAfter=document.getElementById('pay-akad-search').value;
   document.getElementById('pay-jumlah').value='';
   document.getElementById('pay-pokok').value='';
   document.getElementById('pay-margin').value='';
@@ -1571,11 +1611,25 @@ function renderDashStats() {
   const totalPembiayaan = aAkad.reduce((s,a) => s + (a.total_pembiayaan||0), 0);
   const totalSisa = open.reduce((s,a) => s + (a.sisa_angsuran||0), 0);
   const totalTerbayar = aAkad.reduce((s,a) => s + (a.total_angsuran||0), 0);
+  // Breakdown sisa: proporsional ratio pokok/margin per akad
+  const sisaPokok = open.reduce((s,a) => {
+    const total = (a.harga_beli||0) + (a.total_margin||0);
+    if(!total) return s;
+    return s + Math.round((a.sisa_angsuran||0) * (a.harga_beli||0) / total);
+  }, 0);
+  const sisaMargin = totalSisa - sisaPokok;
   el.innerHTML = `
     <div class="stat-card hijau"><div class="stat-lbl">Akad Aktif</div><div class="stat-val hijau">${open.length} akad</div><div style="font-size:11px;color:var(--text-muted)">${lunas.length} sudah lunas</div></div>
     <div class="stat-card amber"><div class="stat-lbl">Total Pembiayaan</div><div class="stat-val amber">${rp(totalPembiayaan)}</div></div>
     <div class="stat-card hijau"><div class="stat-lbl">Total Terbayar</div><div class="stat-val hijau">${rp(totalTerbayar)}</div></div>
-    <div class="stat-card red"><div class="stat-lbl">Total Sisa Tagihan</div><div class="stat-val red">${rp(totalSisa)}</div></div>`;
+    <div class="stat-card red">
+      <div class="stat-lbl">Total Sisa Tagihan</div>
+      <div class="stat-val red">${rp(totalSisa)}</div>
+      <div style="margin-top:6px;font-size:11px;display:flex;gap:8px">
+        <span style="color:var(--text-muted)">Pokok: <strong style="color:#1a2e1a">${rp(sisaPokok)}</strong></span>
+        <span style="color:var(--text-muted)">Margin: <strong style="color:var(--hijau)">${rp(sisaMargin)}</strong></span>
+      </div>
+    </div>`;
 }
 
 function renderDashTunggakan() {
@@ -1777,10 +1831,30 @@ async function renderDashKas() {
   const angsuranMasuk = filtered.filter(m=>m.tipe==='masuk'&&m.keterangan&&m.keterangan.toLowerCase().includes('angsuran')).reduce((s,m)=>s+(m.jumlah||0),0);
   const penyertaanMasuk = filtered.filter(m=>m.tipe==='masuk'&&m.keterangan&&(m.keterangan.toLowerCase().includes('penyertaan')||m.keterangan.toLowerCase().includes('ub harja'))).reduce((s,m)=>s+(m.jumlah||0),0);
   const pencairanKeluar = filtered.filter(m=>m.tipe==='keluar'&&m.keterangan&&m.keterangan.toLowerCase().includes('pencairan')).reduce((s,m)=>s+(m.jumlah||0),0);
-  const koreksiKeluar = filtered.filter(m=>m.tipe==='keluar'&&m.keterangan&&!m.keterangan.toLowerCase().includes('pencairan')&&!m.keterangan.toLowerCase().includes('saldo')).reduce((s,m)=>s+(m.jumlah||0),0);
   const masuk = filtered.filter(m=>m.tipe==='masuk').reduce((s,m)=>s+(m.jumlah||0),0);
   const keluar = filtered.filter(m=>m.tipe==='keluar').reduce((s,m)=>s+(m.jumlah||0),0);
   const keuntungan = masuk - keluar;
+
+  // Hitung keuntungan (margin) dari bmt_angsuran langsung
+  // Breakdown per tahun akad - dari data aAngsuran + aAkad yang sudah di-load
+  const thn = today.getFullYear();
+  const angsuranPeriode = aAngsuran.filter(a => {
+    const d = new Date(a.tanggal);
+    if(kasPeriode==='bulan') return d.getMonth()===bulanIni && d.getFullYear()===thn;
+    return d.getFullYear()===thn;
+  });
+  // Hitung margin per tahun akad
+  const marginByTahun = {};
+  angsuranPeriode.forEach(a => {
+    const akad = aAkad.find(ak=>ak.id===a.akad_id);
+    if(!akad) return;
+    const tahunAkad = new Date(akad.tanggal_akad).getFullYear();
+    const total = (parseFloat(akad.harga_beli)||0) + (parseFloat(akad.total_margin)||0);
+    const marginPorsi = a.margin>0 ? a.margin :
+      (total>0 ? Math.round((a.jumlah||0) * (parseFloat(akad.total_margin)||0) / total) : 0);
+    marginByTahun[tahunAkad] = (marginByTahun[tahunAkad]||0) + marginPorsi;
+  });
+  const totalMarginDiterima = Object.values(marginByTahun).reduce((s,v)=>s+v,0);
 
   const periodeLabel = kasPeriode==='bulan'
     ? today.toLocaleDateString('id-ID',{month:'long',year:'numeric'})
@@ -1793,8 +1867,9 @@ async function renderDashKas() {
         <div style="font-size:18px;font-weight:800;color:var(--hijau);margin-top:4px">${rp(kas.saldo)}</div>
       </div>
       <div style="background:${keuntungan>=0?'#e8f5e9':'#fee2e2'};border-radius:8px;padding:12px">
-        <div style="font-size:11px;color:${keuntungan>=0?'var(--hijau)':'var(--red)'};text-transform:uppercase;font-weight:600">Keuntungan ${periodeLabel}</div>
-        <div style="font-size:18px;font-weight:800;color:${keuntungan>=0?'var(--hijau)':'var(--red)'};margin-top:4px">${rp(keuntungan)}</div>
+        <div style="font-size:11px;color:${keuntungan>=0?'var(--hijau)':'var(--red)'};text-transform:uppercase;font-weight:600">Keuntungan (Margin) ${periodeLabel}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--hijau);margin-top:4px">${rp(totalMarginDiterima)}</div>
+        <div style="margin-top:6px;font-size:10px">${Object.entries(marginByTahun).sort((a,b)=>b[0]-a[0]).map(([thn,val])=>'Akad '+thn+': '+rp(val)).join(' | ')}</div>
       </div>
     </div>
     <div style="display:flex;gap:12px">
@@ -2435,7 +2510,16 @@ async function hapusAngsuran(id,akadId,jumlah){
     await recalcKas(kasBMT.id);
   }
   toast('✅ Angsuran dihapus');
-  await loadAll();bayarPreview();
+  // Simpan akad selection sebelum reload
+  const _akadIdH=document.getElementById('pay-akad').value;
+  const _akadSearchH=document.getElementById('pay-akad-search').value;
+  await loadAll();
+  // Restore akad selection agar riwayat auto-refresh
+  if(_akadIdH){
+    document.getElementById('pay-akad').value=_akadIdH;
+    document.getElementById('pay-akad-search').value=_akadSearchH;
+    bayarPreview();
+  }
 }
 // END EDIT HAPUS ANGSURAN
 </script>
