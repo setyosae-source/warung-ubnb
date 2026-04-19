@@ -230,15 +230,35 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
       <button class="btn-keluar" onclick="keluar()">Keluar</button>
     </div>
   </div>
-  <div class="nav-tabs">
+  <!-- TAB UTAMA: PEMBIAYAAN | TABUNGAN -->
+  <div style="display:flex;background:var(--hijau-tua);border-bottom:2px solid rgba(255,255,255,0.15)">
+    <button id="main-tab-pmb" onclick="switchMainTab('pembiayaan')"
+      style="flex:1;padding:12px;border:none;background:var(--emas);color:var(--hijau-tua);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:0.3px">
+      🏦 PEMBIAYAAN
+    </button>
+    <button id="main-tab-tab" onclick="switchMainTab('tabungan')"
+      style="flex:1;padding:12px;border:none;background:transparent;color:rgba(255,255,255,0.7);font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;letter-spacing:0.3px">
+      💰 TABUNGAN
+    </button>
+  </div>
+
+  <!-- SUB-TABS PEMBIAYAAN -->
+  <div class="nav-tabs" id="subtabs-pembiayaan">
     <button class="nav-tab active" onclick="showPage('dashboard',this)">🏠 Dashboard</button>
     <button class="nav-tab" onclick="showPage('simulasi',this)">📊 Simulasi</button>
     <button class="nav-tab" onclick="showPage('daftar',this)">📋 Daftar</button>
-    <button class="nav-tab" onclick="showPage('baru',this)">➕ Pembiayaan Baru</button>
+    <button class="nav-tab" onclick="showPage('baru',this)">➕ Baru</button>
     <button class="nav-tab" onclick="showPage('angsuran',this)">💳 Angsuran</button>
-    <button class="nav-tab" onclick="showPage('kartu',this)">📄 Kartu Kontrol</button>
+    <button class="nav-tab" onclick="showPage('kartu',this)">📄 Kartu</button>
     <button class="nav-tab" onclick="showPage('pengajuan',this)">📥 Pengajuan</button>
-    <button class="nav-tab" onclick="showPage('tabungan',this)">🏦 Tabungan</button>
+  </div>
+
+  <!-- SUB-TABS TABUNGAN -->
+  <div class="nav-tabs" id="subtabs-tabungan" style="display:none">
+    <button class="nav-tab active" onclick="showTabTab('rekening',this)">📋 Rekening</button>
+    <button class="nav-tab" onclick="showTabTab('buka',this)">➕ Buka</button>
+    <button class="nav-tab" onclick="showTabTab('transaksi',this)">💳 Setor/Tarik</button>
+    <button class="nav-tab" onclick="showTabTab('mutasi',this)">📄 Mutasi</button>
   </div>
   <div class="main">
 
@@ -531,12 +551,7 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
     <!-- PAGE TABUNGAN WADIAH -->
     <div id="page-tabungan" class="page">
       <div class="stat-grid" id="tab-stats" style="margin-bottom:12px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn sm primary" id="tbt-rekening" onclick="showTabTab('rekening',this)">📋 Rekening</button>
-        <button class="btn sm" id="tbt-buka" onclick="showTabTab('buka',this)">➕ Buka</button>
-        <button class="btn sm" id="tbt-transaksi" onclick="showTabTab('transaksi',this)">💳 Setor/Tarik</button>
-        <button class="btn sm" id="tbt-mutasi" onclick="showTabTab('mutasi',this)">📄 Mutasi</button>
-      </div>
+
 
       <!-- DAFTAR REKENING -->
       <div id="tabsub-rekening">
@@ -807,6 +822,38 @@ function kartuPilih(id, label){
 }
 
 // ===== PAGE =====
+function switchMainTab(tab){
+  const isPmb = tab==='pembiayaan';
+  // Update main tab styling
+  const btnPmb=document.getElementById('main-tab-pmb');
+  const btnTab=document.getElementById('main-tab-tab');
+  btnPmb.style.background=isPmb?'var(--emas)':'transparent';
+  btnPmb.style.color=isPmb?'var(--hijau-tua)':'rgba(255,255,255,0.7)';
+  btnTab.style.background=!isPmb?'var(--emas)':'transparent';
+  btnTab.style.color=!isPmb?'var(--hijau-tua)':'rgba(255,255,255,0.7)';
+  // Toggle sub-tabs
+  document.getElementById('subtabs-pembiayaan').style.display=isPmb?'':'none';
+  document.getElementById('subtabs-tabungan').style.display=!isPmb?'':'none';
+  // Toggle pages
+  if(isPmb){
+    // Aktifkan dashboard pembiayaan
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-dashboard').classList.add('active');
+    document.querySelectorAll('#subtabs-pembiayaan .nav-tab').forEach((b,i)=>{b.classList.remove('active');if(i===0)b.classList.add('active');});
+    renderDashboard();
+  } else {
+    // Aktifkan halaman tabungan
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-tabungan').classList.add('active');
+    // Reset subtabs tabungan ke rekening
+    document.querySelectorAll('#subtabs-tabungan .nav-tab').forEach((b,i)=>{b.classList.remove('active');if(i===0)b.classList.add('active');});
+    ['rekening','buka','transaksi','mutasi'].forEach(t=>{
+      const el=document.getElementById('tabsub-'+t);
+      if(el) el.style.display=t==='rekening'?'':'none';
+    });
+    loadTabungan();
+  }
+}
 function showPage(id,btn){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
@@ -1889,9 +1936,10 @@ function renderTabStats(){
 function showTabTab(id, btn){
   ['rekening','buka','transaksi','mutasi'].forEach(t=>{
     document.getElementById('tabsub-'+t).style.display=t===id?'':'none';
-    const b=document.getElementById('tbt-'+t);
-    if(b){b.className=t===id?'btn sm primary':'btn sm';}
   });
+  // Update active nav-tab di subtabs-tabungan
+  document.querySelectorAll('#subtabs-tabungan .nav-tab').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
   if(id==='transaksi'){
     document.getElementById('trx-tgl').value=today();
     document.getElementById('trx-jumlah').value='';
