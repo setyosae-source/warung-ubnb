@@ -273,7 +273,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <button class="btn purple full" onclick="toggleNewJamaah()">➕ Tambah Nama Jamaah Baru</button>
         <div class="new-jamaah" id="new-jamaah">
           <div style="font-size:12px;font-weight:700;color:var(--emas-dark);margin-bottom:10px;">📝 Data akan disimpan ke Jamaah &amp; langsung dicatat Hadir</div>
-          <div class="irow"><label>Nama Lengkap *</label><input type="text" id="nj-nama" placeholder="Nama lengkap"></div>
+          <div class="two-col">
+            <div class="irow"><label>Nama Lengkap *</label><input type="text" id="nj-nama" placeholder="Nama lengkap"></div>
+            <div class="irow"><label>Nama KK / Keluarga</label><input type="text" id="nj-kk" placeholder="Nama kepala keluarga"></div>
+          </div>
           <div class="two-col">
             <div class="irow"><label>Kelompok</label>
               <select id="nj-kel">
@@ -315,11 +318,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <div class="page" id="page-hadiah">
       <div class="card">
         <div class="card-title">🎁 Kelola Daftar Hadiah</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
           <input type="text" id="hadiah-input" placeholder="Nama hadiah (mis: Kipas Angin, Sembako...)"
-            style="flex:1;padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none;"
+            style="flex:2;min-width:160px;padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none;"
             onkeydown="if(event.key==='Enter')tambahHadiah()">
-          <button class="btn gold" onclick="tambahHadiah()">➕</button>
+          <input type="number" id="hadiah-qty" value="1" min="1" max="99" placeholder="Qty"
+            style="width:72px;padding:9px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none;text-align:center;">
+          <button class="btn gold" onclick="tambahHadiah()">➕ Tambah</button>
         </div>
         <div id="hadiah-list"></div>
       </div>
@@ -368,7 +373,26 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           </div>
         </div>
 
+        <!-- UNDIAN PERTAMA HADIR -->
         <div style="border-top:1px solid var(--border-light);padding-top:12px;margin-top:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">⚡ Undian Peserta Pertama Hadir</div>
+          <div style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+            Peserta pertama hadir <strong>laki-laki</strong> dan <strong>perempuan</strong> masing-masing mendapat hadiah khusus.
+          </div>
+          <div class="two-col" style="margin-bottom:10px;">
+            <div class="irow"><label>Hadiah Laki-laki</label>
+              <select id="hadiah-pl"><option value="">— Pilih —</option></select>
+            </div>
+            <div class="irow"><label>Hadiah Perempuan</label>
+              <select id="hadiah-pp"><option value="">— Pilih —</option></select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;" id="pertama-result" style="display:none;"></div>
+          <button class="btn primary full" onclick="undianPertamaHadir()">⚡ Tentukan Peserta Pertama</button>
+        </div>
+
+        <!-- RIWAYAT -->
+        <div style="border-top:1px solid var(--border-light);padding-top:12px;margin-top:12px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">🏆 Riwayat Pemenang</div>
           <div id="riwayat-pemenang"></div>
         </div>
@@ -483,6 +507,7 @@ async function loadAll(){
   // Pemenang
   riwayatPemenang=(pw||[]).map(r=>({
     id:r.id,nama:r.nama,kelompok:r.kelompok,hadiah:r.hadiah,
+    hadiah_id:r.hadiah_id,tipe:r.tipe||'undian',
     waktu:new Date(r.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})
   }));
   const nw=new Set((pw||[]).map(r=>r.nama.toLowerCase().trim()));
@@ -592,7 +617,7 @@ function renderPicker(){
   const el=document.getElementById('picker-list');
   el.innerHTML=shown.length?shown.map(j=>`
     <div class="picker-row${j.sudahHadir?' done':''}"
-      onclick="absenJamaah('${j.nama.replace(/'/g,"\\'")}','${j.kelompok||''}','${j.did||''}',${j.isAnggota})">
+      onclick="absenJamaah('${j.nama.replace(/'/g,"\\'")}','${j.kelompok||''}','${j.did||''}',${j.isAnggota},'${j.jenis_kelamin||''}')">
       <div class="p-avatar" style="background:${j.sudahHadir?'#bbb':avatarColor(j.kelompok,j.isAnggota)}">${initials(j.nama)}</div>
       <div class="p-info">
         <div class="p-nama">${j.nama}</div>
@@ -614,14 +639,15 @@ function renderPicker(){
     `${list.length} jamaah · ${angg} anggota saham · ${sudah} sudah hadir`;
 }
 
-async function absenJamaah(nama,kelompok,did,isAnggota){
+async function absenJamaah(nama,kelompok,did,isAnggota,jk){
   const nk=nama.toLowerCase().trim();
   if(hadirMap[nk]){toast(nama+' sudah hadir pada '+fmtJam(hadirMap[nk].hadir_at),true);return;}
   const nomor='#'+String(aHadir.length+1).padStart(3,'0');
   const{error}=await sb.from('mpps_hadir').insert([{
     nama,kelompok:kelompok||null,nomor,
     jamaah_did:did||null,
-    is_anggota:isAnggota
+    is_anggota:isAnggota,
+    jenis_kelamin:jk||null
   }]);
   if(error){toast('Gagal: '+error.message,true);return;}
   toast(`✅ ${nama} — Hadir! (${nomor})`);
@@ -642,14 +668,16 @@ async function simpanJamaahBaru(){
   if(aJamaah.find(j=>j.nama.toLowerCase().trim()===nama.toLowerCase().trim())){
     toast('Nama sudah ada di data jamaah!',true);return;
   }
+  const kk=document.getElementById('nj-kk').value.trim();
   const did='JD'+Date.now();
   const kelNum=kel?kel.replace('PW',''):null;
-  const{error:ej}=await sb.from('jamaah_desa').insert([{did,nama,kelompok:kelNum,kelompok_nama:kel||null,jenis_kelamin:jk}]);
+  const{error:ej}=await sb.from('jamaah_desa').insert([{did,nama,nama_kk:kk||null,kelompok:kelNum,kelompok_nama:kel||null,jenis_kelamin:jk}]);
   if(ej){toast('Gagal simpan jamaah: '+ej.message,true);return;}
   // Langsung catat hadir
   const nomor='#'+String(aHadir.length+1).padStart(3,'0');
   await sb.from('mpps_hadir').insert([{nama,kelompok:kel||null,nomor,jamaah_did:did,is_anggota:false}]);
   document.getElementById('nj-nama').value='';
+  document.getElementById('nj-kk').value='';
   document.getElementById('new-jamaah').classList.remove('show');
   toast(`✅ ${nama} disimpan ke jamaah & dicatat hadir!`);
   await loadAll();
@@ -719,8 +747,10 @@ function stopScanner(){
 async function tambahHadiah(){
   const nama=document.getElementById('hadiah-input').value.trim();
   if(!nama){toast('Nama wajib diisi',true);return;}
-  await sb.from('mpps_hadiah').insert([{nama}]);
+  const qty=parseInt(document.getElementById('hadiah-qty').value)||1;
+  await sb.from('mpps_hadiah').insert([{nama,qty}]);
   document.getElementById('hadiah-input').value='';
+  document.getElementById('hadiah-qty').value='1';
   toast('Hadiah ditambahkan!');await loadAll();
 }
 async function hapusHadiah(id){
@@ -731,15 +761,36 @@ async function hapusHadiah(id){
 function renderHadiah(){
   const el=document.getElementById('hadiah-list');
   if(!aHadiah.length){el.innerHTML='<div class="empty"><div class="ei">🎁</div>Belum ada hadiah</div>';return;}
-  el.innerHTML=aHadiah.map((h,i)=>`<div class="hadiah-item">
-    <div class="hadiah-no">${i+1}</div>
-    <div style="flex:1;font-weight:600">${h.nama}</div>
-    <button onclick="hapusHadiah(${h.id})" class="btn sm" style="color:var(--red);border-color:var(--red);padding:3px 7px;">✕</button>
-  </div>`).join('');
+  el.innerHTML=aHadiah.map((h,i)=>{
+    const menang=riwayatPemenang.filter(p=>p.hadiah_id===h.id).length;
+    const sisa=(h.qty||1)-menang;
+    const habis=sisa<=0;
+    return`<div class="hadiah-item" style="${habis?'opacity:.5':''}">
+      <div class="hadiah-no" style="background:${habis?'#aaa':'var(--emas)'}">${i+1}</div>
+      <div style="flex:1">
+        <div style="font-weight:600">${h.nama}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+          Qty: ${h.qty||1} &nbsp;·&nbsp;
+          <span style="color:${habis?'var(--red)':'var(--hijau)'};font-weight:700">Sisa: ${sisa}</span>
+          ${habis?'<span style="color:var(--red);font-weight:700"> — HABIS</span>':''}
+        </div>
+      </div>
+      <button onclick="hapusHadiah(${h.id})" class="btn sm" style="color:var(--red);border-color:var(--red);padding:3px 7px;">✕</button>
+    </div>`;
+  }).join('');
 }
 function renderUndianHadiah(){
-  document.getElementById('u-hadiah').innerHTML='<option value="">— Pilih hadiah —</option>'+
-    aHadiah.map(h=>`<option value="${h.id}">${h.nama}</option>`).join('');
+  const opts='<option value="">— Pilih —</option>'+aHadiah.map(h=>{
+    const menang=riwayatPemenang.filter(p=>p.hadiah_id===h.id).length;
+    const sisa=(h.qty||1)-menang;
+    const habis=sisa<=0;
+    return`<option value="${h.id}" ${habis?'disabled':''}>
+      ${h.nama} (sisa ${sisa}/${h.qty||1})${habis?' — HABIS':''}
+    </option>`;
+  }).join('');
+  document.getElementById('u-hadiah').innerHTML=opts;
+  document.getElementById('hadiah-pl').innerHTML=opts;
+  document.getElementById('hadiah-pp').innerHTML=opts;
 }
 
 // ===== UNDIAN =====
@@ -791,10 +842,17 @@ async function mulaiUndian(){
       document.getElementById('pm-hadiah').textContent='🎁 '+hadiah.nama;
       document.getElementById('u-pemenang').style.display='block';
       updatePoolInfo();
-      const{data:dr}=await sb.from('mpps_pemenang').insert([{nama:pm.nama,kelompok:pm.kelompok||null,hadiah:hadiah.nama}]).select().single();
+      // Cek sisa qty sebelum simpan
+      const terpakai=riwayatPemenang.filter(p=>p.hadiah_id===hadiah.id).length;
+      const sisa=(hadiah.qty||1)-terpakai;
+      if(sisa<=0){toast('Hadiah sudah habis!',true);undianRunning=false;btn.disabled=false;renderUndianHadiah();return;}
+      const{data:dr}=await sb.from('mpps_pemenang').insert([{
+        nama:pm.nama,kelompok:pm.kelompok||null,hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian'
+      }]).select().single();
       sudahMenang.add(pm.nama.toLowerCase().trim());
-      riwayatPemenang.unshift({id:dr?.id,nama:pm.nama,kelompok:pm.kelompok,hadiah:hadiah.nama,waktu:new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})});
+      riwayatPemenang.unshift({id:dr?.id,nama:pm.nama,kelompok:pm.kelompok,hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian',waktu:new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})});
       renderRiwayatPemenang();
+      renderHadiah();renderUndianHadiah();
       toast(`🎉 Selamat ${pm.nama}! Menang ${hadiah.nama}`);
       undianRunning=false;btn.disabled=false;
     }
@@ -811,15 +869,92 @@ async function resetUndian(){
 function renderRiwayatPemenang(){
   const el=document.getElementById('riwayat-pemenang');
   if(!riwayatPemenang.length){el.innerHTML='<div style="text-align:center;padding:12px;font-size:12px;color:var(--text-muted)">Belum ada pemenang</div>';return;}
-  el.innerHTML=riwayatPemenang.map((p,i)=>`
-    <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border-light);">
+  el.innerHTML=riwayatPemenang.map((p,i)=>{
+    const tipeLbl={undian:'🎰',pertama_laki:'👨 Pertama',pertama_perempuan:'👩 Pertama'};
+    const tipeBg={undian:'var(--emas-light)',pertama_laki:'#e8f0fb',pertama_perempuan:'#fce7f3'};
+    const tipeClr={undian:'var(--emas-dark)',pertama_laki:'#1e5fa8',pertama_perempuan:'#be185d'};
+    const t=p.tipe||'undian';
+    return`<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border-light);">
       <div style="width:26px;height:26px;background:var(--emas);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">${i+1}</div>
       <div style="flex:1">
         <div style="font-weight:700;font-size:13px">${p.nama} ${p.kelompok?kelBadge(p.kelompok):''}</div>
         <div style="font-size:11px;color:var(--emas-dark)">🎁 ${p.hadiah}</div>
       </div>
-      <div style="font-size:10px;color:var(--text-muted)">${p.waktu}</div>
-    </div>`).join('');
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+        <span style="font-size:10px;padding:1px 7px;border-radius:99px;background:${tipeBg[t]};color:${tipeClr[t]};font-weight:700">${tipeLbl[t]||'🎰'}</span>
+        <span style="font-size:10px;color:var(--text-muted)">${p.waktu}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== UNDIAN PERTAMA HADIR =====
+async function undianPertamaHadir(){
+  const hIdL=document.getElementById('hadiah-pl').value;
+  const hIdP=document.getElementById('hadiah-pp').value;
+  if(!hIdL&&!hIdP){toast('Pilih setidaknya satu hadiah',true);return;}
+
+  // Ambil data hadir urutkan dari yang pertama (hadir_at ascending)
+  const hadirUrut=[...aHadir].sort((a,b)=>new Date(a.hadir_at)-new Date(b.hadir_at));
+
+  // Cari jamaah yang sudah punya jenis_kelamin dari enrichJamaah
+  // Jika tidak ada, cek di aJamaah
+  const getJK=(nama)=>{
+    const j=aJamaah.find(j=>j.nama.toLowerCase().trim()===nama.toLowerCase().trim());
+    return j?.jenis_kelamin||null;
+  };
+
+  // Peserta pertama laki-laki yang belum menang undian pertama
+  const sudahPertamaL=new Set(riwayatPemenang.filter(p=>p.tipe==='pertama_laki').map(p=>p.nama.toLowerCase().trim()));
+  const sudahPertamaP=new Set(riwayatPemenang.filter(p=>p.tipe==='pertama_perempuan').map(p=>p.nama.toLowerCase().trim()));
+
+  const pertamaL=hIdL?hadirUrut.find(h=>{
+    const jk=h.jenis_kelamin||getJK(h.nama);
+    return jk==='L'&&!sudahPertamaL.has(h.nama.toLowerCase().trim());
+  }):null;
+
+  const pertamaP=hIdP?hadirUrut.find(h=>{
+    const jk=h.jenis_kelamin||getJK(h.nama);
+    return jk==='P'&&!sudahPertamaP.has(h.nama.toLowerCase().trim());
+  }):null;
+
+  if(!pertamaL&&!pertamaP){toast('Tidak ada data hadir yang bisa dipilih',true);return;}
+
+  const hadiahL=hIdL?aHadiah.find(h=>String(h.id)===hIdL):null;
+  const hadiahP=hIdP?aHadiah.find(h=>String(h.id)===hIdP):null;
+  const inserts=[];
+  let resultHTML='';
+
+  if(pertamaL&&hadiahL){
+    inserts.push({nama:pertamaL.nama,kelompok:pertamaL.kelompok||null,hadiah:hadiahL.nama,hadiah_id:hadiahL.id,tipe:'pertama_laki'});
+    resultHTML+=`<div style="background:var(--blue-light,#e8f0fb);border:2px solid var(--blue);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+      <div style="font-size:18px">👨</div>
+      <div style="font-size:11px;font-weight:700;color:var(--blue);margin:4px 0">PERTAMA LAKI-LAKI</div>
+      <div style="font-weight:800;font-size:14px">${pertamaL.nama}</div>
+      <div style="font-size:11px;color:var(--text-muted)">${pertamaL.kelompok?kelBadge(pertamaL.kelompok):''} · ${fmtJam(pertamaL.hadir_at)}</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--emas-dark);font-weight:700">🎁 ${hadiahL.nama}</div>
+    </div>`;
+  }
+  if(pertamaP&&hadiahP){
+    inserts.push({nama:pertamaP.nama,kelompok:pertamaP.kelompok||null,hadiah:hadiahP.nama,hadiah_id:hadiahP.id,tipe:'pertama_perempuan'});
+    resultHTML+=`<div style="background:#fce7f3;border:2px solid #be185d;border-radius:var(--radius-sm);padding:12px;text-align:center;">
+      <div style="font-size:18px">👩</div>
+      <div style="font-size:11px;font-weight:700;color:#be185d;margin:4px 0">PERTAMA PEREMPUAN</div>
+      <div style="font-weight:800;font-size:14px">${pertamaP.nama}</div>
+      <div style="font-size:11px;color:var(--text-muted)">${pertamaP.kelompok?kelBadge(pertamaP.kelompok):''} · ${fmtJam(pertamaP.hadir_at)}</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--emas-dark);font-weight:700">🎁 ${hadiahP.nama}</div>
+    </div>`;
+  }
+
+  if(inserts.length){
+    await sb.from('mpps_pemenang').insert(inserts);
+    document.getElementById('pertama-result').innerHTML=resultHTML;
+    document.getElementById('pertama-result').style.display='grid';
+    toast('✅ Peserta pertama hadir dicatat!');
+    await loadAll();
+  } else {
+    toast('Tidak ada peserta yang memenuhi syarat',true);
+  }
 }
 
 // ===== LAPORAN =====
