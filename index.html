@@ -2089,9 +2089,18 @@ function filterSD(k){
   const q=(document.getElementById('sds-'+k)?.value||'').toLowerCase();
   const el=document.getElementById('sdo-'+k);if(!el)return;
   if(k==='pel'){
-    const items=[{id:null,label:'Umum (tanpa pelanggan)',sub:''},...aPel.map(p=>({id:p.id,label:p.nama,sub:(p.telp||'')+(p.poin?' · ⭐'+p.poin+' poin':'')}))];
-    const f=items.filter(i=>i.label.toLowerCase().includes(q));
-    el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:i.id,label:i.label})})'><div><div>${i.label}</div><div class="opt-sub">${i.sub}</div></div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
+    // Tampilkan anggota saham UBNB + opsi Umum
+    const items=[
+      {id:null,anggota_id:null,label:'Umum',sub:'Bukan anggota UBNB'},
+      ...aSahamAnggota.map(a=>({
+        id:null, // tidak pakai pelanggan_id lama
+        anggota_id:a.id,
+        label:a.nama,
+        sub:`${a.no_anggota} · ${a.kelompok} · ${a.jumlah_lembar} lembar`
+      }))
+    ];
+    const f=items.filter(i=>i.label.toLowerCase().includes(q)||(i.sub||'').toLowerCase().includes(q));
+    el.innerHTML=f.map(i=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:i.id,anggota_id:i.anggota_id,label:i.label})})'><div><div>${i.label}${i.anggota_id?` <span style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 6px;border-radius:99px">⭐ Anggota</span>`:''}</div><div class="opt-sub">${i.sub}</div></div></div>`).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }
   if(k==='ppob-pel'){
     const items=aPel.map(p=>({id:p.id,label:p.nama,sub:p.telp||''}));
@@ -2118,7 +2127,7 @@ function selSD(k,item){
   if(k==='pel'){
     // Update pel-chip in new jual UI
     const chip=document.getElementById('pel-chip-label');
-    if(chip)chip.textContent=item.id?item.label:'Umum';
+    if(chip)chip.textContent=item.anggota_id?('⭐ '+item.label):'Umum';
   }
   if(k==='bprod')onBeliBarangChange();
 }
@@ -2301,7 +2310,7 @@ window.addEventListener('popstate', e=>{
 window.addEventListener('load',async()=>{const s=localStorage.getItem('wu');if(!s)return;try{const u=JSON.parse(s);const{data,error}=await sb.from('users').select('*').eq('id',u.id).single();if(error||!data){localStorage.removeItem('wu');return;}loginOK(data);}catch(e){localStorage.removeItem('wu');}});
 
 async function loadAll(){
-  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB(),lLaundry(),lService()]);
+  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB(),lLaundry(),lService(),lAnggota()]);
   filterSD('pel');filterSD('prod');filterSD('sup');filterSD('bprod');
   renderKeranjang();renderStok();renderPaketBuilder();renderPaketList();renderJualPaketGrid();renderVoucherList();renderPel();renderSup();renderHutang();
   loadPesanan(); // Load pesanan count for badge
@@ -2320,6 +2329,8 @@ async function lBatch(){const{data}=await sb.from('stok_batch').select('*').orde
 async function lPaket(){const{data}=await sb.from('paket').select('*').order('nama');aPaket=data||[];}
 async function lVoucher(){const{data}=await sb.from('voucher').select('*').order('kode');aVoucher=data||[];}
 async function lPel(){const{data}=await sb.from('pelanggan').select('*').order('nama');aPel=data||[];}
+let aSahamAnggota=[]; // daftar anggota saham UBNB
+async function lAnggota(){const{data}=await sb.from('ubnb_saham').select('id,no_anggota,nama,kelompok,jumlah_lembar,status').eq('status','Aktif').order('nama');aSahamAnggota=data||[];}
 async function lSup(){const{data}=await sb.from('supplier').select('*').order('nama');aSup=data||[];}
 
 function showPage(id,btn){
@@ -2835,7 +2846,7 @@ async function bayar(){
   const sub=KR.reduce((a,k)=>a+k.hE*k.qty,0);const ongkir=parseInt(document.getElementById('jual-ongkir').value)||0;const total=Math.max(0,sub-dNominal+ongkir);
   const bayarVal=metodeBayar==='belum'?0:parseInt(document.getElementById('jual-bayar').value)||0;
   if(metodeBayar!=='belum'&&bayarVal<total){toast('Uang kurang!',true);return;}
-  const ps=sdSel['pel'];const pelId=ps?.id||null;const pelNama=ps?.label||'Umum';
+  const ps=sdSel['pel'];const pelId=ps?.id||null;const anggotaId=ps?.anggota_id||null;const pelNama=ps?.label||'Umum';
   const tglTx=document.getElementById('jual-tgl').value?new Date(document.getElementById('jual-tgl').value).toISOString():new Date().toISOString();
   let tHpp=0;const allUpd=[];const items=[];
   for(const k of KR){
@@ -2846,7 +2857,7 @@ async function bayar(){
   if(dMode==='persen'){dTipe='persen';dNilaiS=parseFloat(document.getElementById('dv-persen').value)||0;}
   else if(dMode==='nominal'){dTipe='nominal';dNilaiS=dNominal;}
   else if(dMode==='voucher'&&aVoucher_sel){dTipe='voucher';dNilaiS=aVoucher_sel.nilai;vKode=aVoucher_sel.kode;}
-  const payload={items,total,bayar:bayarVal,kembali:Math.max(0,bayarVal-total),kasir:CU.username,pelanggan:pelNama,pelanggan_id:pelId,hpp:tHpp,diskon_tipe:dTipe,diskon_nilai:dNilaiS,diskon_nominal:dNominal,voucher_kode:vKode,ongkir,metode_bayar:metodeBayar,status_bayar:metodeBayar==='belum'?'belum':'lunas',tgl_transaksi:tglTx,waktu:tglTx};
+  const payload={items,total,bayar:bayarVal,kembali:Math.max(0,bayarVal-total),kasir:CU.username,pelanggan:pelNama,pelanggan_id:pelId,anggota_id:anggotaId,hpp:tHpp,diskon_tipe:dTipe,diskon_nilai:dNilaiS,diskon_nominal:dNominal,voucher_kode:vKode,ongkir,metode_bayar:metodeBayar,status_bayar:metodeBayar==='belum'?'belum':'lunas',tgl_transaksi:tglTx,waktu:tglTx};
   const{data,error}=await sb.from('transaksi').insert([payload]).select().single();
   if(error){toast('Gagal simpan: '+error.message,true);return;}
   for(const k of KR){
