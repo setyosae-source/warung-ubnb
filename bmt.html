@@ -1436,9 +1436,15 @@ async function simpanAngsuran(){
   await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah,tanggal:tgl,keterangan:ket,operator:CU.username}]);
   await recalcKas(kasId);
   await loadAll();
+  // Restore akad selection dan refresh riwayat
+  if(_akadIdAfter){
+    document.getElementById('pay-akad').value=_akadIdAfter;
+  }
   bayarPreview(); // refresh preview dengan data terbaru
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   al('bayar-alert','✅ Pembayaran berhasil!'+(newStatus==='Lunas'?' 🎉 Akad LUNAS!':''),'ok');
+  // Simpan akad id sebelum reset, untuk refresh riwayat
+  const _akadIdAfter=document.getElementById('pay-akad').value;
   document.getElementById('pay-jumlah').value='';
   document.getElementById('pay-pokok').value='';
   document.getElementById('pay-margin').value='';
@@ -1741,9 +1747,9 @@ async function renderDashKas() {
   const chartEl = document.getElementById('dash-kas-chart');
   if(!el) return;
 
-  // Ambil kas BMT
-  const {data:kasData} = await sb.from('kas').select('*').ilike('nama','%bmt%').limit(1);
-  const kas = kasData&&kasData.length ? kasData[0] : null;
+  // Ambil kas BMT - query fresh langsung dari DB
+  const {data:kasData} = await sb.from('kas').select('*').eq('id',5).single();
+  const kas = kasData || null;
 
   if(!kas) {
     el.innerHTML = '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:13px">Kas BMT belum dibuat.<br>Buat di Warung → Manajemen Kas dengan nama mengandung "bmt"</div>';
@@ -1767,6 +1773,11 @@ async function renderDashKas() {
     return d.getFullYear() === tahunIni;
   });
 
+  // Pisah jenis transaksi berdasarkan keterangan
+  const angsuranMasuk = filtered.filter(m=>m.tipe==='masuk'&&m.keterangan&&m.keterangan.toLowerCase().includes('angsuran')).reduce((s,m)=>s+(m.jumlah||0),0);
+  const penyertaanMasuk = filtered.filter(m=>m.tipe==='masuk'&&m.keterangan&&(m.keterangan.toLowerCase().includes('penyertaan')||m.keterangan.toLowerCase().includes('ub harja'))).reduce((s,m)=>s+(m.jumlah||0),0);
+  const pencairanKeluar = filtered.filter(m=>m.tipe==='keluar'&&m.keterangan&&m.keterangan.toLowerCase().includes('pencairan')).reduce((s,m)=>s+(m.jumlah||0),0);
+  const koreksiKeluar = filtered.filter(m=>m.tipe==='keluar'&&m.keterangan&&!m.keterangan.toLowerCase().includes('pencairan')&&!m.keterangan.toLowerCase().includes('saldo')).reduce((s,m)=>s+(m.jumlah||0),0);
   const masuk = filtered.filter(m=>m.tipe==='masuk').reduce((s,m)=>s+(m.jumlah||0),0);
   const keluar = filtered.filter(m=>m.tipe==='keluar').reduce((s,m)=>s+(m.jumlah||0),0);
   const keuntungan = masuk - keluar;
@@ -1789,11 +1800,12 @@ async function renderDashKas() {
     <div style="display:flex;gap:12px">
       <div style="flex:1;text-align:center;background:#f0fdf4;border-radius:8px;padding:10px">
         <div style="font-size:11px;color:var(--text-muted)">Angsuran Masuk</div>
-        <div style="font-size:15px;font-weight:700;color:var(--hijau)">${rp(masuk)}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--hijau)">${rp(angsuranMasuk)}</div>
+        ${penyertaanMasuk>0?`<div style="font-size:10px;color:var(--text-muted);margin-top:2px">+${rp(penyertaanMasuk)} penyertaan</div>`:''}
       </div>
       <div style="flex:1;text-align:center;background:#fff5f5;border-radius:8px;padding:10px">
         <div style="font-size:11px;color:var(--text-muted)">Pencairan Keluar</div>
-        <div style="font-size:15px;font-weight:700;color:var(--red)">${rp(keluar)}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--red)">${rp(pencairanKeluar)}</div>
       </div>
     </div>`;
 
