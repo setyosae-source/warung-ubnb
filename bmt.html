@@ -483,8 +483,30 @@ table.bmt-tbl tr.selected td{background:var(--hijau-light);font-weight:700;color
         </div>
         <div id="pay-preview" style="display:none"></div>
         <div class="two-col" style="margin-top:12px">
-          <div class="fg"><label>Tanggal Bayar *</label><input type="date" id="pay-tgl"></div>
-          <div class="fg"><label>Jumlah Bayar (Rp) *</label><input type="number" id="pay-jumlah" placeholder="0"></div>
+          <div class="fg"><label>Tanggal Bayar *</label><input type="date" id="pay-tgl" onchange="hitungAngsuranBreakdown()"></div>
+          <div class="fg"><label>Tgl Jatuh Tempo</label><input type="date" id="pay-jatuh-tempo" readonly style="background:var(--bg)"></div>
+        </div>
+        <div class="two-col">
+          <div class="fg"><label>Pokok (Rp) *</label><input type="number" id="pay-pokok" placeholder="0" oninput="hitungTotalAngsuran()"></div>
+          <div class="fg"><label>Margin (Rp) *</label><input type="number" id="pay-margin" placeholder="0" oninput="hitungTotalAngsuran()"></div>
+        </div>
+        <div class="two-col">
+          <div class="fg"><label>Denda (Rp)</label><input type="number" id="pay-denda" placeholder="0" value="0" oninput="hitungTotalAngsuran()"></div>
+          <div class="fg"><label>Total Bayar</label><input type="text" id="pay-jumlah-display" readonly style="background:var(--bg);font-weight:700;color:var(--hijau)">
+            <input type="hidden" id="pay-jumlah"></div>
+        </div>
+        <div class="two-col">
+          <div class="fg"><label>Kas Penerima *</label>
+            <select id="pay-kas" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+              <option value="">— Pilih Kas —</option>
+            </select>
+          </div>
+          <div class="fg"><label>Status</label>
+            <select id="pay-status" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+              <option value="lunas">✅ Lunas</option>
+              <option value="terlambat">⚠️ Terlambat</option>
+            </select>
+          </div>
         </div>
         <div class="fg"><label>Catatan</label><input type="text" id="pay-catatan" placeholder="Catatan (opsional)"></div>
         <div class="alert" id="bayar-alert"></div>
@@ -676,7 +698,7 @@ const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const sb=supabase.createClient(SURL,SKEY);
 
-let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',simR={},aSahamAnggota=[];
+let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',simR={},aSahamAnggota=[],aKas=[];
 
 function rp(n){return'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');}
 function fmtTgl(v){if(!v)return'-';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});}
@@ -717,12 +739,14 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 // ===== DATA =====
 async function loadAll(){
-  const[{data:a},{data:b},{data:c}]=await Promise.all([
+  const[{data:a},{data:b},{data:c},{data:d}]=await Promise.all([
     sb.from('bmt_akad').select('*').order('created_at',{ascending:false}),
     sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}),
-    sb.from('ubnb_saham').select('id,no_anggota,nama,kelompok,jumlah_lembar,status').eq('status','Aktif').order('nama')
+    sb.from('ubnb_saham').select('id,no_anggota,nama,kelompok,jumlah_lembar,status').eq('status','Aktif').order('nama'),
+    sb.from('kas').select('*').order('id')
   ]);
-  aAkad=a||[];aAngsuran=b||[];aSahamAnggota=c||[];isiDropdownAnggota();
+  aAkad=a||[];aAngsuran=b||[];aSahamAnggota=c||[];aKas=d||[];
+  isiDropdownAnggota();isiKasDropdown();
   isiDropdown();
 }
 function isiDropdownAnggota(){
@@ -1221,8 +1245,62 @@ function baruLagi(){
 }
 
 // ===== ANGSURAN =====
+function hitungTotalAngsuran(){
+  const pokok=parseFloat(document.getElementById('pay-pokok').value)||0;
+  const margin=parseFloat(document.getElementById('pay-margin').value)||0;
+  const denda=parseFloat(document.getElementById('pay-denda').value)||0;
+  const total=pokok+margin+denda;
+  document.getElementById('pay-jumlah').value=total;
+  document.getElementById('pay-jumlah-display').value=total>0?rp(total):'';
+  // Auto-detect terlambat
+  const tgl=document.getElementById('pay-tgl').value;
+  const jatuh=document.getElementById('pay-jatuh-tempo').value;
+  if(tgl&&jatuh&&tgl>jatuh){
+    document.getElementById('pay-status').value='terlambat';
+  } else {
+    document.getElementById('pay-status').value='lunas';
+  }
+}
+function hitungAngsuranBreakdown(){
+  // Otomatis isi breakdown saat tgl bayar diisi
+  const id=parseInt(document.getElementById('pay-akad').value);
+  if(!id) return;
+  const a=aAkad.find(x=>x.id===id);
+  if(!a) return;
+  const angsPerBulan=a.angsuran_perbulan||0;
+  const jangka=a.jangka||1;
+  const totalPokok=a.harga_beli||0;
+  const totalMargin=a.total_margin||0;
+  const pokokPerBulan=Math.round(totalPokok/jangka);
+  const marginPerBulan=Math.round(totalMargin/jangka);
+  // Hitung berapa angsuran sudah masuk
+  const sudahBayar=aAngsuran.filter(x=>x.akad_id===id).length;
+  // Set tgl jatuh tempo: tgl akad + (sudahBayar+1) bulan
+  if(a.tanggal_akad&&a.tgl_rutin){
+    const d=new Date(a.tanggal_akad);
+    d.setMonth(d.getMonth()+(sudahBayar+1));
+    d.setDate(a.tgl_rutin);
+    document.getElementById('pay-jatuh-tempo').value=d.toISOString().slice(0,10);
+  }
+  // Pre-fill pokok dan margin
+  document.getElementById('pay-pokok').value=pokokPerBulan||'';
+  document.getElementById('pay-margin').value=marginPerBulan||'';
+  document.getElementById('pay-denda').value=0;
+  hitungTotalAngsuran();
+}
+function isiKasDropdown(){
+  const sel=document.getElementById('pay-kas');
+  if(!sel||!aKas) return;
+  const kasOptions=aKas.filter(k=>k.modul&&k.modul.includes('bmt'));
+  sel.innerHTML='<option value="">— Pilih Kas —</option>'+
+    kasOptions.map(k=>`<option value="${k.id}">${k.nama} (${rp(k.saldo)})</option>`).join('');
+  // Default ke Kas Pembiayaan BMT
+  const defaultKas=kasOptions.find(k=>k.nama.toLowerCase().includes('pembiayaan'));
+  if(defaultKas) sel.value=defaultKas.id;
+}
 function bayarPreview(){
   const id=parseInt(document.getElementById('pay-akad').value);
+  hitungAngsuranBreakdown();
   const prev=document.getElementById('pay-preview');
   const btn=document.getElementById('btn-bayar');
   if(!id){prev.style.display='none';btn.disabled=true;document.getElementById('riwayat-card').style.display='none';return;}
@@ -1254,37 +1332,62 @@ function tampilRiwayat(akadId){
   if(!al_.length){ri.innerHTML='<div class="empty"><div class="ei">📋</div>Belum ada catatan angsuran</div>';return;}
   const tot=al_.reduce((s,x)=>s+(x.jumlah||0),0);
   ri.innerHTML=`<div class="tbl-wrap"><table class="bmt-tbl">
-    <thead><tr><th>No</th><th>Tanggal</th><th>Catatan</th><th style="text-align:right">Jumlah</th></tr></thead>
-    <tbody>${al_.map((x,i)=>`<tr><td>${i+1}</td><td>${fmtTgl(x.tanggal)}</td><td style="font-size:12px;color:var(--text-muted)">${x.catatan||'-'}</td><td style="text-align:right;font-weight:600;color:var(--hijau)">${rp(x.jumlah)}</td></tr>`).join('')}
-    <tr class="total-row"><td colspan="3">Total Terbayar</td><td style="text-align:right">${rp(tot)}</td></tr>
+    <thead><tr><th>No</th><th>Tanggal</th><th style="text-align:right">Pokok</th><th style="text-align:right">Margin</th><th style="text-align:right">Denda</th><th style="text-align:right">Total</th><th>Status</th></tr></thead>
+    <tbody>${al_.map((x,i)=>`<tr>
+      <td>${i+1}</td>
+      <td>${fmtTgl(x.tanggal)}</td>
+      <td style="text-align:right">${x.pokok?rp(x.pokok):'-'}</td>
+      <td style="text-align:right">${x.margin?rp(x.margin):'-'}</td>
+      <td style="text-align:right;color:var(--red)">${x.denda?rp(x.denda):'-'}</td>
+      <td style="text-align:right;font-weight:700;color:var(--hijau)">${rp(x.jumlah)}</td>
+      <td><span style="font-size:10px;padding:2px 6px;border-radius:99px;background:${x.status==='terlambat'?'#fee2e2':'#dcfce7'};color:${x.status==='terlambat'?'var(--red)':'var(--hijau)'}">${x.status==='terlambat'?'⚠️ Terlambat':'✅ Lunas'}</span></td>
+    </tr>`).join('')}
+    <tr class="total-row"><td colspan="4">Total Terbayar</td><td></td><td style="text-align:right">${rp(tot)}</td><td></td></tr>
     </tbody></table></div>`;
 }
 async function simpanAngsuran(){
   const akadId=parseInt(document.getElementById('pay-akad').value);
   const tgl=document.getElementById('pay-tgl').value;
-  const jumlah=parseFloat(document.getElementById('pay-jumlah').value)||0;
+  const pokok=parseFloat(document.getElementById('pay-pokok').value)||0;
+  const margin=parseFloat(document.getElementById('pay-margin').value)||0;
+  const denda=parseFloat(document.getElementById('pay-denda').value)||0;
+  const jumlah=pokok+margin+denda;
+  const kasId=parseInt(document.getElementById('pay-kas').value)||null;
+  const statusAngsuran=document.getElementById('pay-status').value||'lunas';
+  const tglJatuh=document.getElementById('pay-jatuh-tempo').value||null;
   const catatan=document.getElementById('pay-catatan').value.trim();
-  if(!akadId||!tgl||!jumlah){al('bayar-alert','⚠️ Harap lengkapi semua field','err');return;}
+  if(!akadId||!tgl||(!pokok&&!margin)){al('bayar-alert','⚠️ Isi minimal pokok atau margin','err');return;}
+  if(!kasId){al('bayar-alert','⚠️ Pilih kas penerima','err');return;}
   const a=aAkad.find(x=>x.id===akadId);if(!a)return;
   const btn=document.getElementById('btn-bayar');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menyimpan...';
   al('bayar-alert','⏳ Menyimpan...','info');
-  const{error:e1}=await sb.from('bmt_angsuran').insert([{akad_id:akadId,tanggal:tgl,jumlah,catatan,operator:CU.username}]);
+  const{error:e1}=await sb.from('bmt_angsuran').insert([{
+    akad_id:akadId,tanggal:tgl,jumlah,
+    pokok,margin,denda,
+    tgl_jatuh_tempo:tglJatuh||null,
+    status:statusAngsuran,
+    kas_id:kasId,
+    catatan,operator:CU.username
+  }]);
   if(e1){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';al('bayar-alert','❌ Gagal: '+e1.message,'err');return;}
   const newTotal=(a.total_angsuran||0)+jumlah;
   const newSisa=Math.max(0,(a.total_pembiayaan||0)-newTotal);
   const newStatus=newSisa<=0?'Lunas':'Belum Lunas';
   await sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId);
-  // Catat mutasi kas BMT
-  const kasBMT=await getKasBMT();
-  if(kasBMT){
-    await sb.from('kas_mutasi').insert([{kas_id:kasBMT.id,tipe:'masuk',kategori:'masuk',jumlah,tanggal:tgl,keterangan:'Angsuran BMT: '+a.nama_jamaah+' ('+a.no_akad+')',operator:CU.username}]);
-    await recalcKas(kasBMT.id);
-  }
+  // Catat mutasi ke kas yang dipilih
+  const ket='Angsuran BMT: '+a.nama_jamaah+' ('+a.no_akad+')'+
+    (pokok?' — Pokok: '+rp(pokok):'')+(margin?' | Margin: '+rp(margin):'')+(denda?' | Denda: '+rp(denda):'');
+  await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah,tanggal:tgl,keterangan:ket,operator:CU.username}]);
+  await recalcKas(kasId);
   await loadAll();
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   al('bayar-alert','✅ Pembayaran berhasil!'+(newStatus==='Lunas'?' 🎉 Akad LUNAS!':''),'ok');
-  document.getElementById('pay-jumlah').value='';document.getElementById('pay-catatan').value='';
+  document.getElementById('pay-pokok').value='';
+  document.getElementById('pay-margin').value='';
+  document.getElementById('pay-denda').value='0';
+  document.getElementById('pay-jumlah').value='';
+  document.getElementById('pay-jumlah-display').value='';document.getElementById('pay-catatan').value='';
   bayarPreview();
 }
 
@@ -2117,6 +2220,20 @@ async function simpanMutasiTabungan(){
 
   // Update saldo di bmt_tabungan
   await sb.from('bmt_tabungan').update({saldo:saldoBaru}).eq('id',parseInt(tabId));
+  // Catat ke kas BMT jika setor/tarik
+  const kasBMT=aKas.find(k=>k.modul&&k.modul.includes('bmt')&&k.nama.toLowerCase().includes('pembiayaan'));
+  if(kasBMT){
+    const tipeKas=tipe==='setor'?'masuk':(tipe==='tarik'?'keluar':null);
+    if(tipeKas){
+      await sb.from('kas_mutasi').insert([{
+        kas_id:kasBMT.id,tipe:tipeKas,kategori:tipeKas,
+        jumlah,tanggal:tgl,
+        keterangan:(tipe==='setor'?'Setor':'Tarik')+' Tabungan: '+tab.nama_penabung+' ('+tab.no_rekening+')',
+        operator:CU.username
+      }]);
+      await recalcKas(kasBMT.id);
+    }
+  }
 
   toast('✅ Transaksi berhasil! Saldo baru: '+rp(saldoBaru));
   // Reset
