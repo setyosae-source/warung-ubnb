@@ -1453,27 +1453,38 @@ async function simpanAngsuran(){
   const btn=document.getElementById('btn-bayar');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menyimpan...';
   al('bayar-alert','⏳ Menyimpan...','info');
-  const{error:e1}=await sb.from('bmt_angsuran').insert([{
-    akad_id:akadId,tanggal:tgl,jumlah,
-    pokok,margin,denda,
-    tgl_jatuh_tempo:tglJatuh||null,
-    status:statusAngsuran,
-    kas_id:kasId,
-    catatan,operator:CU.username
-  }]);
-  if(e1){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';al('bayar-alert','❌ Gagal: '+e1.message,'err');return;}
+  // Hitung nilai akad baru dulu
   const newTotal=(a.total_angsuran||0)+jumlah;
   const newSisa=Math.max(0,(a.total_pembiayaan||0)-newTotal);
   const newStatus=newSisa<=0?'Lunas':'Belum Lunas';
-  await sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId);
-  // Catat mutasi ke kas yang dipilih
   const pctPokok=pokok+margin>0?Math.round(pokok/(pokok+margin)*100):0;
   const ket='Angsuran '+a.no_akad+' — '+a.nama_jamaah+
     ' | Pokok: '+rp(pokok)+' ('+pctPokok+'%)'+
     ' | Keuntungan: '+rp(margin)+' ('+(100-pctPokok)+'%)';
-  await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah,tanggal:tgl,keterangan:ket,operator:CU.username}]);
-  await recalcKas(kasId);
-  await loadAll();
+
+  // Jalankan insert angsuran + update akad + insert kas_mutasi secara paralel
+  const [res1,,res3] = await Promise.all([
+    sb.from('bmt_angsuran').insert([{
+      akad_id:akadId,tanggal:tgl,jumlah,
+      pokok,margin,denda:0,
+      tgl_jatuh_tempo:tglJatuh||null,
+      status:statusAngsuran,
+      kas_id:kasId,
+      catatan,operator:CU.username
+    }]),
+    sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId),
+    sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah,tanggal:tgl,keterangan:ket,operator:CU.username}])
+  ]);
+  if(res1.error){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';al('bayar-alert','❌ Gagal: '+res1.error.message,'err');return;}
+
+  // Update kas saldo langsung (increment) — tidak perlu recalc semua mutasi
+  await incrKas(kasId, jumlah, 'masuk');
+
+  // Update local data langsung tanpa loadAll penuh
+  a.total_angsuran=newTotal;a.sisa_angsuran=newSisa;a.status=newStatus;
+  // Reload hanya angsuran (data paling fresh dibutuhkan)
+  const{data:newAngs}=await sb.from('bmt_angsuran').select('*').eq('akad_id',akadId).order('tanggal');
+  if(newAngs) aAngsuran=[...aAngsuran.filter(x=>x.akad_id!==akadId),...newAngs];
   // Restore akad selection dan refresh riwayat
   if(_akadIdAfter){
     document.getElementById('pay-akad').value=_akadIdAfter;
@@ -1500,10 +1511,20 @@ async function getKasBMT(){
   return data&&data.length?data[0]:null;
 }
 async function recalcKas(kasId){
+  // Recalc penuh - dipakai hanya untuk koreksi
   const{data}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',kasId);
   if(!data)return;
-  const saldo=data.reduce((s,m)=>m.tipe==='masuk'?s+m.jumlah:s-m.jumlah,0);
+  const saldo=data.reduce((s,m)=>m.tipe==='masuk'?s+(parseFloat(m.jumlah)||0):s-(parseFloat(m.jumlah)||0),0);
   await sb.from('kas').update({saldo}).eq('id',kasId);
+}
+async function incrKas(kasId, jumlah, tipe='masuk'){
+  // Increment/decrement saldo kas langsung — lebih cepat dari recalcKas
+  const delta = tipe==='masuk' ? jumlah : -jumlah;
+  const kasRow = aKas.find(k=>k.id===kasId);
+  const saldoBaru = (parseFloat(kasRow?.saldo)||0) + delta;
+  await sb.from('kas').update({saldo: saldoBaru}).eq('id',kasId);
+  // Update local data juga
+  if(kasRow) kasRow.saldo = saldoBaru;
 }
 
 // ===== KARTU KONTROL =====
@@ -2491,9 +2512,14 @@ async function simpanEditAngsuran(){
       await recalcKas(kasBMT.id);
     }
   }
+  // Update local data
+  const _idxAngs=aAngsuran.findIndex(x=>x.id===id);
+  if(_idxAngs>-1){aAngsuran[_idxAngs]={...aAngsuran[_idxAngs],tanggal:tgl,jumlah,pokok,margin,catatan:catatan||null};}
+  const _akadEdit=aAkad.find(ak=>ak.id===akadId);
+  if(_akadEdit){_akadEdit.total_angsuran=newTotal;_akadEdit.sisa_angsuran=newSisa;_akadEdit.status=newStatus;}
   document.getElementById('modal-edit-angs').style.display='none';
   toast('✅ Angsuran berhasil diupdate');
-  await loadAll();bayarPreview();
+  bayarPreview();
 }
 async function hapusAngsuran(id,akadId,jumlah){
   if(!confirm('Hapus angsuran ini?\nJumlah: '+rp(jumlah)+'\n\nTidak dapat dibatalkan.'))return;
@@ -2509,12 +2535,13 @@ async function hapusAngsuran(id,akadId,jumlah){
     await sb.from('kas_mutasi').insert([{kas_id:kasBMT.id,tipe:'keluar',kategori:'keluar',jumlah,tanggal:new Date().toISOString().slice(0,10),keterangan:'Hapus Angsuran — '+a.nama_jamaah+' ('+a.no_akad+')',operator:CU.username}]);
     await recalcKas(kasBMT.id);
   }
+  // Update local data langsung
+  aAngsuran = aAngsuran.filter(x=>x.id!==id);
+  a.total_angsuran=newTotal;a.sisa_angsuran=newSisa;a.status=newStatus;
   toast('✅ Angsuran dihapus');
-  // Simpan akad selection sebelum reload
+  // Refresh riwayat dari local data
   const _akadIdH=document.getElementById('pay-akad').value;
   const _akadSearchH=document.getElementById('pay-akad-search').value;
-  await loadAll();
-  // Restore akad selection agar riwayat auto-refresh
   if(_akadIdH){
     document.getElementById('pay-akad').value=_akadIdH;
     document.getElementById('pay-akad-search').value=_akadSearchH;
