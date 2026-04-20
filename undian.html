@@ -720,22 +720,29 @@ function startUndian(){
   document.getElementById('btn-start').textContent='🔄  ROLLING...';
 
   currentIdx=Math.floor(Math.random()*pool.length);
-  const stepsToWinner=((winnerIdx-currentIdx)%pool.length+pool.length)%pool.length;
-  const totalSteps=3*pool.length+stepsToWinner;
+
+  // Fixed 80 steps untuk durasi konsisten ~3.54 detik
+  // Setelah 80 steps, snap ke winner
+  const ROLL_STEPS=80;
   let step=0;
 
+  // Ease: accelerate (0-20%), full speed (20-75%), decelerate (75-100%)
+  // Delay: 88ms -> 16ms -> 160ms, total ~3200-3400ms
+  function getDelay(p){
+    if(p<0.20){const t=p/0.20;return Math.round(88-t*(88-16));}
+    else if(p<0.75){return 16;}
+    else{const t=(p-0.75)/0.25;return Math.round(16+t*(160-16));}
+  }
+
   function doRoll(){
-    if(step>=totalSteps){
+    if(step>=ROLL_STEPS){
+      // Snap ke winner dengan animasi step terakhir
       currentIdx=winnerIdx;
       buildStrip(pool,currentIdx);
-      finishUndian(hadiah,pool[winnerIdx]);
+      setTimeout(()=>finishUndian(hadiah,pool[winnerIdx]),200);
       return;
     }
-    const progress=step/totalSteps;
-    let delay;
-    if(progress<0.2)delay=Math.max(16,80-progress*5*60);
-    else if(progress>0.75)delay=20+(1-(1-progress)/(1-0.75))*120;
-    else delay=20;
+    const delay=getDelay(step/ROLL_STEPS);
     currentIdx=(currentIdx+1)%pool.length;
     buildStrip(pool,currentIdx);
     step++;
