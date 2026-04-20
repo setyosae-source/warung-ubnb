@@ -1803,7 +1803,7 @@ function renderDashTunggakan() {
           style="margin-top:4px;background:var(--hijau);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">
           💳 Bayar
         </button>
-        <span id="tung-wa-${a.id}">${a._no_hp?`<button onclick="kirimWA('${a._no_hp}','${a.nama_jamaah}','${a.no_akad}',${a.angsuran_perbulan},${a.sisa_angsuran})" style="margin-top:4px;margin-left:3px;background:#25D366;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">&#128241; WA</button>`:`<button onclick="inputHpLaluWA(${a.id},'${a.nama_jamaah}','${a.no_akad}',${a.angsuran_perbulan},${a.sisa_angsuran})" style="margin-top:4px;margin-left:3px;background:#888;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">&#9998; Isi HP</button>`}</span>
+        <button onclick="generatePesan(${a.id})" style="margin-top:4px;margin-left:3px;background:#0ea5e9;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">&#128172; Pesan</button>
       </div>
     </div>`;
   }).join('');
@@ -2664,129 +2664,65 @@ function pilihAkadAngsuran(akadId){
     bayarPreview();
   },150);
 }
-var _waState={};
-function inputHpLaluWA(akadId,nama,noAkad,angsuranPerBulan,sisaAngsuran){
-  _waState={akadId:akadId,nama:nama,noAkad:noAkad,angsuranPerBulan:angsuranPerBulan,sisaAngsuran:sisaAngsuran};
-  var modal=document.getElementById('wa-modal');
+// ============================================================
+// GENERATE PESAN PEMBIAYAAN
+// ============================================================
+function generatePesan(akadId){
+  var a=aAkad.find(function(x){return x.id===akadId;});
+  if(!a)return;
+  var angs=aAngsuran.filter(function(x){return x.akad_id===akadId;});
+  var sudahBayar=angs.length;
+  var sisaBulan=Math.max(0,(a.jangka||0)-sudahBayar);
+  var lastAngs=angs.length?angs[angs.length-1]:null;
+  var tglTerakhir=lastAngs?new Date(lastAngs.tanggal).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}):"Belum ada";
+  var pesan=
+    "Update Pembiayaan BMT UBNB Perwira\n"
+    +"================================\n"
+    +"Yth. Bapak/Ibu "+a.nama_jamaah+"\n\n"
+    +"No. Akad  : "+a.no_akad+"\n"
+    +"Objek     : "+(a.objek_pembiayaan||"-")+"\n"
+    +"Angsuran  : "+rp(a.angsuran_perbulan)+"/bulan\n"
+    +"Sudah bayar: "+sudahBayar+" dari "+a.jangka+" bulan\n"
+    +"Bayar terakhir: "+tglTerakhir+"\n"
+    +"Sisa tagihan: "+rp(a.sisa_angsuran)+"\n"
+    +(sisaBulan>0?"Sisa bulan  : "+sisaBulan+" bulan lagi\n":"Status      : LUNAS\n")
+    +"\nTerima kasih atas kepercayaan Anda.\n"
+    +"BMT UBNB Perwira";
+  var modal=document.getElementById("wa-modal");
   if(!modal){
-    modal=document.createElement('div');modal.id='wa-modal';
-    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';
+    modal=document.createElement("div");modal.id="wa-modal";
+    modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:center;justify-content:center;padding:16px";
     document.body.appendChild(modal);
   }
-  modal.style.display='flex';
+  modal.style.display="flex";
   modal.innerHTML=
-    '<div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:20px 16px 28px">'
-    +'<div style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 14px"></div>'
-    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">Input No. HP</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:16px">'+nama+' &mdash; '+noAkad+'</div>'
-    +'<label style="font-size:11px;font-weight:700;color:#6b7c6b;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">No. HP / WhatsApp *</label>'
-    +'<input id="wa-hp-input" type="tel" placeholder="contoh: 08123456789" '
-    +'style="width:100%;padding:12px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;font-family:inherit;outline:none;margin-bottom:20px">'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +'<button onclick="document.getElementById(&quot;wa-modal&quot;).style.display=&quot;none&quot;" '
-    +'style="padding:12px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Batal</button>'
-    +'<button onclick="simpanHpAnggota()" '
-    +'style="padding:12px;border:none;border-radius:8px;background:#1D9E75;color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Simpan</button>'
-    +'</div></div>';
-  setTimeout(function(){var e=document.getElementById('wa-hp-input');if(e)e.focus();},100);
+    "<div style=\"background:white;border-radius:16px;width:100%;max-width:480px;overflow:hidden\">"
+    +"<div style=\"background:#1D9E75;padding:14px 16px;display:flex;align-items:center;justify-content:space-between\">"
+    +"<div style=\"color:white;font-weight:800;font-size:14px\">&#128172; Pesan Pembiayaan</div>"
+    +"<button onclick=\"document.getElementById(&quot;wa-modal&quot;).style.display=&quot;none&quot;\" "
+    +"style=\"background:rgba(255,255,255,0.2);border:none;color:white;border-radius:99px;width:28px;height:28px;font-size:18px;cursor:pointer;line-height:1\">&times;</button>"
+    +"</div>"
+    +"<div style=\"padding:14px 16px\">"
+    +"<div style=\"font-size:11px;font-weight:700;color:#6b7c6b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px\">Pesan (bisa diedit)</div>"
+    +"<textarea id=\"pesan-text\" rows=\"10\" "
+    +"style=\"width:100%;padding:10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;line-height:1.5;outline:none\">"+pesan+"</textarea>"
+    +"<div id=\"copy-status\" style=\"height:22px;font-size:12px;color:#1D9E75;text-align:center;margin-top:6px\"></div>"
+    +"<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px\">"
+    +"<button onclick=\"salinPesan()\" "
+    +"style=\"padding:12px;border:none;border-radius:8px;background:#1D9E75;color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit\">&#128203; Salin Pesan</button>"
+    +"<button onclick=\"document.getElementById(&quot;wa-modal&quot;).style.display=&quot;none&quot;\" "
+    +"style=\"padding:12px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit\">Tutup</button>"
+    +"</div></div></div>";
 }
-async function simpanHpAnggota(){
-  var hp=(document.getElementById('wa-hp-input').value||'').trim();
-  if(!hp){toast('Masukkan nomor HP terlebih dahulu',true);return;}
-
-  var akadId=_waState.akadId,nama=_waState.nama,noAkad=_waState.noAkad;
-  var angsuranPerBulan=_waState.angsuranPerBulan,sisaAngsuran=_waState.sisaAngsuran;
-
-  // Simpan ke DB
-  var akad=aAkad.find(function(a){return a.id===akadId;});
-  if(akad&&akad.anggota_id){
-    var r=await sb.from('ubnb_saham').update({no_hp:hp}).eq('id',akad.anggota_id);
-    if(r.error){toast('Gagal simpan: '+r.error.message,true);return;}
-    // Update local data
-    akad._no_hp=hp;
-    var sam=aSahamAnggota.find(function(s){return s.id===akad.anggota_id;});
-    if(sam)sam.no_hp=hp;
-    // Update tombol di span → berubah jadi WA
-    var span=document.getElementById('tung-wa-'+akadId);
-    if(span){
-      span.innerHTML='<button onclick="kirimWA(&quot;'+hp+'&quot;,&quot;'+nama+'&quot;,&quot;'+noAkad+'&quot;,'+angsuranPerBulan+','+sisaAngsuran+')" '
-        +'style="margin-top:4px;margin-left:3px;background:#25D366;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">&#128241; WA</button>';
-    }
-    toast('No HP berhasil disimpan!');
-  } else {
-    toast('Akad tidak terhubung ke anggota',true);
-  }
-
-  // Tutup modal
-  document.getElementById('wa-modal').style.display='none';
-
-  // Tanya: mau kirim WA sekarang?
-  setTimeout(function(){
-    if(confirm('No HP tersimpan.\nMau kirim pesan WhatsApp sekarang?')){
-      var hpClean=hp.replace(/\D/g,'');
-      if(hpClean.startsWith('0'))hpClean='62'+hpClean.slice(1);
-      kirimWA(hpClean,nama,noAkad,angsuranPerBulan,sisaAngsuran);
-    }
-  },300);
-}
-async function lanjutKirimWA(){
-  // Legacy - redirect ke simpanHpAnggota
-  simpanHpAnggota();
-}
-function kirimWA(noHp,nama,noAkad,angsuranPerBulan,sisaAngsuran){
-  var hp=(noHp||'').replace(/\D/g,'');
-  if(hp.startsWith('0'))hp='62'+hp.slice(1);
-  if(!hp){toast('Nomor HP tidak tersedia',true);return;}
-  var t0='Assalamualaikum Bapak/Ibu *'+nama+'*,\n\nKami dari BMT UBNB Perwira mengingatkan angsuran pembiayaan Anda:\n- No. Akad: *'+noAkad+'*\n- Angsuran/bulan: *'+rp(angsuranPerBulan)+'*\n- Sisa tagihan: *'+rp(sisaAngsuran)+'*\n\nMohon segera melakukan pembayaran.\n_BMT UBNB Perwira_';
-  var t1='Assalamualaikum Bapak/Ibu *'+nama+'*,\n\nAngsuran pembiayaan Anda (*'+noAkad+'*) telah jatuh tempo.\n\nSisa tagihan: *'+rp(sisaAngsuran)+'*\n\nHarap segera melakukan pembayaran.\n_Jazakallah khairan_\n_BMT UBNB Perwira_';
-  var modal=document.getElementById("wa-modal");
-  if(!modal){
-    modal=document.createElement('div');modal.id='wa-modal';
-    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';
-    document.body.appendChild(modal);
-  }
-  modal.style.display='flex';
-  modal.innerHTML='<div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:20px 16px 28px">'
-    +'<div style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 14px"></div>'
-    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">Kirim WA ke '+nama+'</div>'
-    +'<div style="font-size:12px;color:#888;margin-bottom:14px">+'+hp+'</div>'
-    +'<div onclick="kirimWAFinal(\''+hp+'\',0,\''+nama.replace(/\'/g,"\\'")+'\''+',\''+noAkad+'\','+angsuranPerBulan+','+sisaAngsuran+')" '
-    +'style="border:1.5px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer" '
-    +'onmouseover="this.style.borderColor=\'#25D366\'" onmouseout="this.style.borderColor=\'#e0e0e0\'">'
-    +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">Pengingat Angsuran</div>'
-    +'<div style="font-size:11px;color:#888">'+t0.slice(0,100)+'...</div></div>'
-    +'<div onclick="kirimWAFinal(\''+hp+'\',1,\''+nama.replace(/\'/g,"\\'")+'\''+',\''+noAkad+'\','+angsuranPerBulan+','+sisaAngsuran+')" '
-    +'style="border:1.5px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer" '
-    +'onmouseover="this.style.borderColor=\'#25D366\'" onmouseout="this.style.borderColor=\'#e0e0e0\'">'
-    +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">Jatuh Tempo</div>'
-    +'<div style="font-size:11px;color:#888">'+t1.slice(0,100)+'...</div></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'
-    +'<button onclick="document.getElementById(\'wa-modal\').style.display=\'none\'" '
-    +'style="padding:11px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Batal</button>'
-    +'<button onclick="editPesanWA(\''+hp+'\',\''+nama.replace(/\'/g,"\\'")+'\''+',\''+noAkad+'\','+angsuranPerBulan+','+sisaAngsuran+')" '
-    +'style="padding:11px;border:none;border-radius:8px;background:#f0f0f0;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Edit Pesan</button>'
-    +'</div></div>';
-}
-function kirimWAFinal(hp,tmplIdx,nama,noAkad,angsuranPerBulan,sisaAngsuran){
-  var t=[
-    'Assalamualaikum Bapak/Ibu *'+nama+'*,\n\nKami dari BMT UBNB Perwira mengingatkan angsuran pembiayaan Anda:\n- No. Akad: *'+noAkad+'*\n- Angsuran/bulan: *'+rp(angsuranPerBulan)+'*\n- Sisa tagihan: *'+rp(sisaAngsuran)+'*\n\nMohon segera melakukan pembayaran.\n_BMT UBNB Perwira_',
-    'Assalamualaikum Bapak/Ibu *'+nama+'*,\n\nAngsuran pembiayaan Anda (*'+noAkad+'*) telah jatuh tempo.\n\nSisa tagihan: *'+rp(sisaAngsuran)+'*\n\nHarap segera melakukan pembayaran.\n_Jazakallah khairan_\n_BMT UBNB Perwira_'
-  ];
-  document.getElementById('wa-modal').style.display="none";
-  window.open('https://wa.me/'+hp+'?text='+encodeURIComponent(t[tmplIdx]),'_blank');
-}
-function editPesanWA(hp,nama,noAkad,angsuranPerBulan,sisaAngsuran){
-  var modal=document.getElementById("wa-modal");
-  var def='Assalamualaikum Bapak/Ibu *'+nama+'*,\n\nKami dari BMT UBNB Perwira mengingatkan angsuran pembiayaan Anda:\n- No. Akad: *'+noAkad+'*\n- Angsuran/bulan: *'+rp(angsuranPerBulan)+'*\n- Sisa tagihan: *'+rp(sisaAngsuran)+'*\n\nTerima kasih.\n_BMT UBNB Perwira_';
-  modal.innerHTML='<div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:20px 16px 28px">'
-    +'<div style="font-size:15px;font-weight:800;margin-bottom:14px">Edit Pesan WA</div>'
-    +'<textarea id="wa-edit-text" rows="8" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical">'+def+'</textarea>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">'
-    +'<button onclick="document.getElementById(\'wa-modal\').style.display=\'none\'" '
-    +'style="padding:11px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Batal</button>'
-    +'<button onclick="window.open(\'https://wa.me/'+hp+'?text=\'+encodeURIComponent(document.getElementById(\'wa-edit-text\').value),\'_blank\');document.getElementById(\'wa-modal\').style.display=\'none\'" '
-    +'style="padding:11px;border:none;border-radius:8px;background:#25D366;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Kirim WA</button>'
-    +'</div></div>';
+function salinPesan(){
+  var el=document.getElementById("pesan-text");if(!el)return;
+  var s=document.getElementById("copy-status");
+  navigator.clipboard.writeText(el.value).then(function(){
+    if(s){s.textContent="Pesan tersalin ke clipboard!";setTimeout(function(){s.textContent="";},2500);}
+  }).catch(function(){
+    el.select();document.execCommand("copy");
+    if(s){s.textContent="Pesan tersalin!";setTimeout(function(){s.textContent="";},2500);}
+  });
 }
 // END KIRIM WA
 
