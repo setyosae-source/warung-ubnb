@@ -155,6 +155,24 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 @keyframes spin{to{transform:rotate(360deg);}}
 .empty{text-align:center;padding:32px 16px;color:var(--text-muted);}
 .empty .ei{font-size:34px;margin-bottom:8px;}
+
+/* MODAL KONFIRMASI RESET */
+.konfirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;}
+.konfirm-overlay.show{display:flex;}
+.konfirm-box{background:white;border-radius:18px;padding:24px 20px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,.3);}
+.konfirm-icon{font-size:36px;text-align:center;margin-bottom:10px;}
+.konfirm-title{font-size:16px;font-weight:800;text-align:center;color:var(--red);margin-bottom:4px;}
+.konfirm-sub{font-size:12px;text-align:center;color:var(--text-muted);margin-bottom:16px;}
+.konfirm-field{margin-bottom:10px;}
+.konfirm-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:4px;}
+.konfirm-field input{width:100%;padding:11px 13px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;outline:none;transition:border-color .2s;}
+.konfirm-field input:focus{border-color:var(--red);}
+.konfirm-err{color:var(--red);font-size:12px;font-weight:600;text-align:center;margin:6px 0;display:none;}
+.konfirm-btns{display:flex;gap:8px;margin-top:14px;}
+.konfirm-btns button{flex:1;padding:11px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.konfirm-cancel{background:var(--surface2);color:var(--text);}
+.konfirm-ok{background:var(--red);color:white;}
+.konfirm-ok:disabled{opacity:.5;cursor:not-allowed;}
 @media print{body>*{display:none!important;}#print-area{display:block!important;}}
 #print-area{display:none;}
 </style>
@@ -300,6 +318,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="card">
         <div class="card-title">
           ✅ Sudah Hadir (<span id="hadir-count">0</span>)
+          <div style="display:flex;gap:6px;">
+            <button class="btn secondary sm" onclick="loadAll()">↻</button>
+            <button class="btn red sm" onclick="bukaKonfirmReset()" title="Reset semua data hadir">🗑️ Reset</button>
+          </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px;">
           <input type="text" id="cari-hadir" placeholder="🔍 Cari nama..." oninput="renderHadirList()"
@@ -430,6 +452,28 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
   </div><!-- end main -->
 </div><!-- end app -->
+
+<!-- MODAL KONFIRMASI RESET HADIR -->
+<div class="konfirm-overlay" id="konfirm-overlay">
+  <div class="konfirm-box">
+    <div class="konfirm-icon">⚠️</div>
+    <div class="konfirm-title">Reset Data Absensi</div>
+    <div class="konfirm-sub">Semua data hadir akan dihapus permanen.<br>Masukkan username &amp; password untuk konfirmasi.</div>
+    <div class="konfirm-field"><label>Username</label>
+      <input type="text" id="kr-user" placeholder="Username" autocomplete="off"
+        onkeydown="if(event.key==='Enter')document.getElementById('kr-pass').focus()">
+    </div>
+    <div class="konfirm-field"><label>Password</label>
+      <input type="password" id="kr-pass" placeholder="Password"
+        onkeydown="if(event.key==='Enter')doResetHadir()">
+    </div>
+    <div class="konfirm-err" id="konfirm-err"></div>
+    <div class="konfirm-btns">
+      <button class="konfirm-cancel" onclick="tutupKonfirmReset()">Batal</button>
+      <button class="konfirm-ok" id="konfirm-ok-btn" onclick="doResetHadir()">🗑️ Hapus Semua</button>
+    </div>
+  </div>
+</div>
 
 <div id="print-area"></div>
 <div class="toast-wrap" id="toast-wrap"><div class="toast" id="toast-msg"></div></div>
@@ -1101,6 +1145,80 @@ function cetakLaporan(){
     </div>${html}</body></html>`);
   w.document.close();setTimeout(()=>w.print(),400);
 }
+
+// ===== RESET HADIR DENGAN KONFIRMASI =====
+function bukaKonfirmReset(){
+  document.getElementById('kr-user').value='';
+  document.getElementById('kr-pass').value='';
+  document.getElementById('konfirm-err').style.display='none';
+  document.getElementById('konfirm-ok-btn').disabled=false;
+  document.getElementById('konfirm-ok-btn').textContent='🗑️ Hapus Semua';
+  document.getElementById('konfirm-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('kr-user').focus(),100);
+}
+
+function tutupKonfirmReset(){
+  document.getElementById('konfirm-overlay').classList.remove('show');
+}
+
+async function doResetHadir(){
+  const u=document.getElementById('kr-user').value.trim();
+  const p=document.getElementById('kr-pass').value;
+  const errEl=document.getElementById('konfirm-err');
+  const btn=document.getElementById('konfirm-ok-btn');
+
+  if(!u||!p){
+    errEl.textContent='Username dan password wajib diisi';
+    errEl.style.display='block';return;
+  }
+
+  btn.disabled=true;
+  btn.innerHTML='<span style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;"></span>Memverifikasi...';
+  errEl.style.display='none';
+
+  // Verifikasi ke tabel users
+  const{data,error}=await sb.from('users').select('id,role').eq('username',u).eq('password',p).single();
+
+  if(error||!data){
+    errEl.textContent='Username atau password salah';
+    errEl.style.display='block';
+    btn.disabled=false;
+    btn.textContent='🗑️ Hapus Semua';
+    return;
+  }
+
+  // Cek role — hanya pemilik yang bisa reset
+  if(data.role!=='pemilik'){
+    errEl.textContent='Akses ditolak. Hanya pemilik yang bisa reset data hadir.';
+    errEl.style.display='block';
+    btn.disabled=false;
+    btn.textContent='🗑️ Hapus Semua';
+    return;
+  }
+
+  // Hapus semua data hadir
+  btn.innerHTML='<span style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;"></span>Menghapus...';
+
+  const{error:delErr}=await sb.from('mpps_hadir').delete().neq('id',-1);
+
+  btn.disabled=false;
+  btn.textContent='🗑️ Hapus Semua';
+
+  if(delErr){
+    errEl.textContent='Gagal hapus: '+delErr.message;
+    errEl.style.display='block';
+    return;
+  }
+
+  tutupKonfirmReset();
+  toast('✅ Semua data absensi berhasil direset oleh '+u);
+  await loadAll();
+}
+
+// Tutup modal dengan klik overlay
+document.getElementById('konfirm-overlay').addEventListener('click',function(e){
+  if(e.target===this)tutupKonfirmReset();
+});
 </script>
 </body>
 </html>
