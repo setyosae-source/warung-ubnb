@@ -2668,52 +2668,70 @@ var _waState={};
 function inputHpLaluWA(akadId,nama,noAkad,angsuranPerBulan,sisaAngsuran){
   _waState={akadId:akadId,nama:nama,noAkad:noAkad,angsuranPerBulan:angsuranPerBulan,sisaAngsuran:sisaAngsuran};
   var modal=document.getElementById('wa-modal');
-  if(!modal){modal=document.createElement('div');modal.id='wa-modal';modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';document.body.appendChild(modal);}
+  if(!modal){
+    modal=document.createElement('div');modal.id='wa-modal';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';
+    document.body.appendChild(modal);
+  }
   modal.style.display='flex';
-  modal.innerHTML='<div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:20px 16px 28px">'
+  modal.innerHTML=
+    '<div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:20px 16px 28px">'
     +'<div style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 14px"></div>'
-    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">&#9998; Simpan No. HP</div>'
-    +'<div style="font-size:13px;color:#666;margin-bottom:16px">'+nama+' &mdash; '+noAkad+'</div>'
+    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">Input No. HP</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:16px">'+nama+' &mdash; '+noAkad+'</div>'
     +'<label style="font-size:11px;font-weight:700;color:#6b7c6b;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">No. HP / WhatsApp *</label>'
     +'<input id="wa-hp-input" type="tel" placeholder="contoh: 08123456789" '
-    +'<input id="wa-hp-input" type="tel" placeholder="contoh: 08123456789" style="width:100%;padding:12px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;font-family:inherit;outline:none;margin-bottom:16px">'
-    +'<div style="font-size:12px;color:#888;margin-bottom:16px;padding:10px 12px;background:#f8f9fa;border-radius:8px">'
-    +'&#9432; Nomor akan disimpan ke data anggota dan tombol akan berubah menjadi <strong style="color:#25D366">Kirim WA</strong>.</div>'
+    +'style="width:100%;padding:12px 14px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;font-family:inherit;outline:none;margin-bottom:20px">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
     +'<button onclick="document.getElementById(&quot;wa-modal&quot;).style.display=&quot;none&quot;" '
-    +'<button onclick="document.getElementById(&quot;wa-modal&quot;).style.display=&quot;none&quot;" '
-    +'<button onclick="lanjutKirimWA()" '
-    +'style="padding:12px;border:none;border-radius:8px;background:#25D366;color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Simpan &amp; Kirim WA &#128241;</button>'
+    +'style="padding:12px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Batal</button>'
+    +'<button onclick="simpanHpAnggota()" '
+    +'style="padding:12px;border:none;border-radius:8px;background:#1D9E75;color:white;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">Simpan</button>'
     +'</div></div>';
   setTimeout(function(){var e=document.getElementById('wa-hp-input');if(e)e.focus();},100);
 }
-async function lanjutKirimWA(){
-  var akadId=_waState.akadId,nama=_waState.nama,noAkad=_waState.noAkad,angsuranPerBulan=_waState.angsuranPerBulan,sisaAngsuran=_waState.sisaAngsuran;
+async function simpanHpAnggota(){
   var hp=(document.getElementById('wa-hp-input').value||'').trim();
   if(!hp){toast('Masukkan nomor HP terlebih dahulu',true);return;}
-  // Format nomor
-  var hpClean=hp.replace(/\D/g,'');
-  if(hpClean.startsWith('0'))hpClean='62'+hpClean.slice(1);
 
-  // Selalu simpan ke ubnb_saham
+  var akadId=_waState.akadId,nama=_waState.nama,noAkad=_waState.noAkad;
+  var angsuranPerBulan=_waState.angsuranPerBulan,sisaAngsuran=_waState.sisaAngsuran;
+
+  // Simpan ke DB
   var akad=aAkad.find(function(a){return a.id===akadId;});
   if(akad&&akad.anggota_id){
-    await sb.from('ubnb_saham').update({no_hp:hp}).eq('id',akad.anggota_id);
+    var r=await sb.from('ubnb_saham').update({no_hp:hp}).eq('id',akad.anggota_id);
+    if(r.error){toast('Gagal simpan: '+r.error.message,true);return;}
+    // Update local data
     akad._no_hp=hp;
     var sam=aSahamAnggota.find(function(s){return s.id===akad.anggota_id;});
     if(sam)sam.no_hp=hp;
-    // Update tombol di span: ganti Isi HP -> WA
+    // Update tombol di span → berubah jadi WA
     var span=document.getElementById('tung-wa-'+akadId);
     if(span){
-      span.innerHTML='<button onclick="kirimWA(\''+hp+'\',\''+nama+'\',\''+noAkad+'\','+angsuranPerBulan+','+sisaAngsuran+')" style="margin-top:4px;margin-left:3px;background:#25D366;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">&#128241; WA</button>';
+      span.innerHTML='<button onclick="kirimWA(&quot;'+hp+'&quot;,&quot;'+nama+'&quot;,&quot;'+noAkad+'&quot;,'+angsuranPerBulan+','+sisaAngsuran+')" '
+        +'style="margin-top:4px;margin-left:3px;background:#25D366;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">&#128241; WA</button>';
     }
-    toast('No HP disimpan!');
+    toast('No HP berhasil disimpan!');
   } else {
-    toast('Akad tidak terhubung ke anggota, HP tidak disimpan',true);
+    toast('Akad tidak terhubung ke anggota',true);
   }
+
+  // Tutup modal
   document.getElementById('wa-modal').style.display='none';
-  // Langsung buka kirimWA
-  kirimWA(hpClean,nama,noAkad,angsuranPerBulan,sisaAngsuran);
+
+  // Tanya: mau kirim WA sekarang?
+  setTimeout(function(){
+    if(confirm('No HP tersimpan.\nMau kirim pesan WhatsApp sekarang?')){
+      var hpClean=hp.replace(/\D/g,'');
+      if(hpClean.startsWith('0'))hpClean='62'+hpClean.slice(1);
+      kirimWA(hpClean,nama,noAkad,angsuranPerBulan,sisaAngsuran);
+    }
+  },300);
+}
+async function lanjutKirimWA(){
+  // Legacy - redirect ke simpanHpAnggota
+  simpanHpAnggota();
 }
 function kirimWA(noHp,nama,noAkad,angsuranPerBulan,sisaAngsuran){
   var hp=(noHp||'').replace(/\D/g,'');
