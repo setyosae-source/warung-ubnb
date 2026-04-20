@@ -258,7 +258,15 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="card">
         <div class="card-title">
           👥 Pilih dari Data Jamaah Desa Perwira
-          <button class="btn secondary sm" onclick="loadAll()">↻</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn secondary sm" onclick="loadAll()">↻</button>
+            <button class="btn gold sm" onclick="tambahSemuaHadir()" id="btn-semua" title="Test: tambahkan semua jamaah sebagai hadir">⚡ Test Semua</button>
+          </div>
+        </div>
+        <!-- TEST BANNER -->
+        <div id="test-banner" style="display:none;background:var(--amber-light);border:1.5px solid var(--emas);border-radius:var(--radius-sm);padding:9px 13px;font-size:12px;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:16px;">⚠️</span>
+          <span><strong>Mode Test:</strong> Semua jamaah akan dicatat hadir dengan nomor urut otomatis.</span>
         </div>
 
         <!-- Legend -->
@@ -999,6 +1007,63 @@ async function undianPertamaHadir(){
   } else {
     toast('Tidak ada peserta yang memenuhi syarat',true);
   }
+}
+
+// ===== TEST: TAMBAH SEMUA JAMAAH SEBAGAI HADIR =====
+async function tambahSemuaHadir(){
+  const total=aJamaah.length;
+  if(total===0){toast('Data jamaah kosong',true);return;}
+
+  const sudah=Object.keys(hadirMap).length;
+  const belum=aJamaah.filter(j=>!hadirMap[j.nama.toLowerCase().trim()]).length;
+
+  if(belum===0){toast('Semua jamaah sudah hadir!');return;}
+
+  if(!confirm(`Test Mode: Tambahkan ${belum} jamaah yang belum hadir ke daftar hadir?
+
+Ini untuk keperluan testing modul undian.`))return;
+
+  const btn=document.getElementById('btn-semua');
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div>';
+
+  // Ambil nomor terakhir
+  const{count}=await sb.from('mpps_hadir').select('*',{count:'exact',head:true});
+  let nomor=count||0;
+
+  // Batch insert semua yang belum hadir
+  const inserts=[];
+  aJamaah.forEach(j=>{
+    const nk=j.nama.toLowerCase().trim();
+    if(hadirMap[nk])return; // skip yang sudah hadir
+    nomor++;
+    // Resolve kelompok
+    const sd=sahamMap[nk];
+    const kelA=sd?.kelompok||null;
+    let kel=kelA;
+    if(!kel&&j.kelompok){kel=/^\d+$/.test(j.kelompok)?'PW'+j.kelompok:j.kelompok;}
+    inserts.push({
+      nama:j.nama,
+      kelompok:kel||null,
+      nomor:String(nomor).padStart(4,'0'),
+      jamaah_did:j.did||null,
+      is_anggota:!!sd,
+      jenis_kelamin:j.jenis_kelamin||null,
+    });
+  });
+
+  // Insert per batch 50
+  const BATCH=50;
+  let done=0;
+  for(let i=0;i<inserts.length;i+=BATCH){
+    const batch=inserts.slice(i,i+BATCH);
+    const{error}=await sb.from('mpps_hadir').insert(batch);
+    if(error){toast('Gagal batch '+(i/BATCH+1)+': '+error.message,true);break;}
+    done+=batch.length;
+  }
+
+  btn.disabled=false;btn.innerHTML='⚡ Test Semua';
+  toast(`✅ ${done} jamaah ditambahkan sebagai hadir!`);
+  await loadAll();
 }
 
 // ===== LAPORAN =====
