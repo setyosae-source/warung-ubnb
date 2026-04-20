@@ -244,6 +244,29 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .btn-wclose{flex:1;padding:12px;background:transparent;border:1px solid var(--border);
   border-radius:10px;color:var(--text-muted);font-family:inherit;font-size:13px;cursor:pointer;}
 
+/* DRUM NOMOR (Sesi 1) */
+.drum-nomor-wrap{
+  position:relative;height:80px;overflow:hidden;border-radius:12px;
+  background:rgba(0,0,0,.5);border:1px solid rgba(245,200,66,.4);
+  box-shadow:inset 0 0 30px rgba(0,0,0,.6);
+  margin:12px 0;display:none;
+}
+.drum-nomor-wrap.show{display:block;}
+.drum-nomor-wrap::before,.drum-nomor-wrap::after{
+  content:'';position:absolute;left:0;right:0;height:20px;z-index:3;pointer-events:none;
+}
+.drum-nomor-wrap::before{top:0;background:linear-gradient(to bottom,rgba(6,13,8,.95),transparent);}
+.drum-nomor-wrap::after{bottom:0;background:linear-gradient(to top,rgba(6,13,8,.95),transparent);}
+.drum-nomor-center{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);
+  height:40px;z-index:2;border-top:1px solid rgba(245,200,66,.5);
+  border-bottom:1px solid rgba(245,200,66,.5);background:rgba(245,200,66,.04);}
+.drum-nomor-strip{position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;}
+.drum-nomor-item{height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.drum-nomor-val{font-family:'Cinzel',serif;font-size:28px;font-weight:900;
+  letter-spacing:4px;color:var(--text);}
+.drum-nomor-item.center-item .drum-nomor-val{
+  color:var(--gold);text-shadow:0 0 20px rgba(245,200,66,.7);font-size:32px;}
+
 /* TOAST */
 .toast-w{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:200;pointer-events:none;display:none;}
 .toast{background:#1a3a20;border:1px solid var(--border2);color:var(--text);
@@ -313,6 +336,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <select class="pc-hadiah-sel" id="hdl-laki" style="border-color:rgba(30,95,168,.4);">
           <option value="">— Pilih hadiah —</option>
         </select>
+        <div class="drum-nomor-wrap" id="drum-nomor-laki">
+          <div class="drum-nomor-center"></div>
+          <div class="drum-nomor-strip" id="dns-laki"></div>
+        </div>
         <div class="pc-result" id="res-laki">
           <div class="pc-result-nama" id="res-laki-nama"></div>
           <div class="pc-result-info" id="res-laki-kel"></div>
@@ -331,6 +358,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <select class="pc-hadiah-sel" id="hdl-perempuan" style="border-color:rgba(190,24,93,.4);">
           <option value="">— Pilih hadiah —</option>
         </select>
+        <div class="drum-nomor-wrap" id="drum-nomor-perempuan">
+          <div class="drum-nomor-center"></div>
+          <div class="drum-nomor-strip" id="dns-perempuan"></div>
+        </div>
         <div class="pc-result" id="res-perempuan">
           <div class="pc-result-nama" id="res-perempuan-nama"></div>
           <div class="pc-result-info" id="res-perempuan-kel"></div>
@@ -360,7 +391,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     </div>
 
     <div class="drum-machine">
-      <div class="drum-lbl">✦ &nbsp; Rolling Drum &nbsp; ✦</div>
+      <div class="drum-lbl">✦ &nbsp; Rolling Nomor Undian &nbsp; ✦</div>
       <div class="drum-window">
         <div class="drum-center"></div>
         <div class="drum-strip" id="drum-strip"></div>
@@ -628,28 +659,88 @@ async function tarikPertama(jk){
   }
 
   const btn=document.getElementById(isL?'btn-laki':'btn-perempuan');
-  btn.innerHTML='<span class="spinner"></span>Memproses...';btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span>Rolling...';btn.disabled=true;
 
   const winner=hadirJK[0]; // yang paling awal hadir
+  const nomorWinner=winner.nomor||'0000';
 
-  const{error}=await sb.from('mpps_pemenang').insert([{
-    nama:winner.nama,kelompok:winner.kelompok||null,
-    hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe
-  }]);
+  // Tampil drum nomor rolling di card
+  const drumWrap=document.getElementById(isL?'drum-nomor-laki':'drum-nomor-perempuan');
+  const drumStrip=document.getElementById(isL?'dns-laki':'dns-perempuan');
+  drumWrap.classList.add('show');
 
-  btn.innerHTML='⚡ Tarik Pemenang';
+  // Buat pool nomor palsu untuk rolling (semua nomor hadir)
+  const allNomors=aHadir
+    .filter(h=>{const v=(h.jenis_kelamin||'').toUpperCase();return v===jk||v.startsWith(jk);})
+    .map(h=>h.nomor||'0000');
+  if(allNomors.length<3){allNomors.push('0000','0000','0000');}
 
-  if(error){toast('Gagal simpan: '+error.message,true);btn.disabled=false;return;}
+  // Rolling drum nomor
+  const STEPS_P=80;
+  let stepP=0;
+  let cidxP=Math.floor(Math.random()*allNomors.length);
+  const winIdxP=allNomors.indexOf(nomorWinner)>=0?allNomors.indexOf(nomorWinner):0;
 
-  await loadAll();
+  function buildNomorStrip(items,ci){
+    const total=items.length;
+    let h='';
+    for(let i=-1;i<=1;i++){
+      const idx=((ci+i)%total+total)%total;
+      h+=`<div class="drum-nomor-item${i===0?' center-item':''}" style="height:40px;">
+        <div class="drum-nomor-val">${items[idx]}</div>
+      </div>`;
+    }
+    drumStrip.innerHTML=h;
+    drumStrip.style.transform=`translateY(-${1*40}px)`;
+  }
 
-  // Tampil winner modal
-  tampilWinner({
-    nama:winner.nama,kelompok:winner.kelompok,
-    hadiah:hadiah.nama,nomor:winner.nomor,
-    hadir_at:winner.hadir_at,
-    tipe,
-  });
+  function getDelayP(p){
+    if(p<0.20){const t=p/0.20;return Math.round(88-t*(88-16));}
+    else if(p<0.75){return 16;}
+    else{const t=(p-0.75)/0.25;return Math.round(16+t*(160-16));}
+  }
+
+  function doRollP(){
+    if(stepP>=STEPS_P){
+      // Snap ke nomor winner
+      const wi=allNomors.indexOf(nomorWinner)>=0?allNomors.indexOf(nomorWinner):0;
+      buildNomorStrip(allNomors,wi);
+      // Blink nomor 3 detik
+      let blink=0;
+      const blinkP=setInterval(()=>{
+        blink++;
+        const on=blink%2===0;
+        drumStrip.innerHTML=`<div class="drum-nomor-item center-item" style="height:80px;align-items:center;">
+          <div class="drum-nomor-val" style="${on?'font-size:36px;color:var(--gold);text-shadow:0 0 30px rgba(245,200,66,.8);':'font-size:32px;color:var(--gold2);'}">
+            ${nomorWinner}
+          </div>
+        </div>`;
+        drumStrip.style.transform='translateY(0)';
+      },250);
+
+      setTimeout(async()=>{
+        clearInterval(blinkP);
+        const{error}=await sb.from('mpps_pemenang').insert([{
+          nama:winner.nama,kelompok:winner.kelompok||null,
+          hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe
+        }]);
+        btn.innerHTML='⚡ Tarik Pemenang';
+        if(error){toast('Gagal simpan: '+error.message,true);btn.disabled=false;return;}
+        await loadAll();
+        tampilWinner({
+          nama:winner.nama,kelompok:winner.kelompok,
+          hadiah:hadiah.nama,nomor:winner.nomor,
+          hadir_at:winner.hadir_at,tipe,
+        });
+      },3000);
+      return;
+    }
+    buildNomorStrip(allNomors,cidxP);
+    cidxP=(cidxP+1)%allNomors.length;
+    stepP++;
+    setTimeout(doRollP,getDelayP(stepP/STEPS_P));
+  }
+  doRollP();
 }
 
 // ============================
@@ -699,8 +790,9 @@ function buildStrip(items,centerIdx){
   let html='';
   for(let i=-2;i<=2;i++){
     const idx=((centerIdx+i)%total+total)%total;
+    const nomor=items[idx].nomor||String(idx+1).padStart(4,'0');
     html+=`<div class="drum-item${i===0?' center-item':''}">
-      <div class="drum-item-name">${items[idx].nama}</div>
+      <div class="drum-item-name" style="font-family:'Cinzel',serif;letter-spacing:4px;">${nomor}</div>
     </div>`;
   }
   strip.innerHTML=html;
@@ -760,16 +852,40 @@ async function finishUndian(hadiah,winner){
     document.getElementById('btn-start').textContent='🎰  MULAI UNDIAN';
     updatePool();return;
   }
-  const{error}=await sb.from('mpps_pemenang').insert([{
-    nama:winner.nama,kelompok:winner.kelompok||null,
-    hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian'
-  }]);
-  document.getElementById('btn-start').textContent='🎰  MULAI UNDIAN';
-  if(error){toast('Gagal simpan: '+error.message,true);updatePool();return;}
-  sudahMenang.add(winner.nama.toLowerCase().trim());
-  await loadAll();
-  tampilWinner({nama:winner.nama,kelompok:winner.kelompok,hadiah:hadiah.nama,
-    nomor:winner.nomor,hadir_at:winner.hadir_at,tipe:'undian'});
+
+  // Tampil nomor pemenang di drum selama 3 detik — blink effect
+  const strip=document.getElementById('drum-strip');
+  const nomor=winner.nomor||'0000';
+  let blink=0;
+  const blinkInterval=setInterval(()=>{
+    blink++;
+    const on=blink%2===0;
+    strip.innerHTML=`
+      <div class="drum-item" style="height:25px;"></div>
+      <div class="drum-item center-item" style="height:50px;">
+        <div class="drum-item-name" style="font-family:'Cinzel',serif;letter-spacing:6px;font-size:clamp(20px,4vw,30px);
+          ${on?'color:var(--gold);text-shadow:0 0 30px rgba(245,200,66,.8);':'color:var(--gold2);'}">
+          ${nomor}
+        </div>
+      </div>
+      <div class="drum-item" style="height:25px;"></div>`;
+    strip.style.transform='translateY(0)';
+  },250);
+
+  // Setelah 3 detik, simpan ke DB dan tampil modal
+  setTimeout(async()=>{
+    clearInterval(blinkInterval);
+    const{error}=await sb.from('mpps_pemenang').insert([{
+      nama:winner.nama,kelompok:winner.kelompok||null,
+      hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian'
+    }]);
+    document.getElementById('btn-start').textContent='🎰  MULAI UNDIAN';
+    if(error){toast('Gagal simpan: '+error.message,true);updatePool();return;}
+    sudahMenang.add(winner.nama.toLowerCase().trim());
+    await loadAll();
+    tampilWinner({nama:winner.nama,kelompok:winner.kelompok,hadiah:hadiah.nama,
+      nomor:winner.nomor,hadir_at:winner.hadir_at,tipe:'undian'});
+  },3000);
 }
 
 async function resetUndian(){
