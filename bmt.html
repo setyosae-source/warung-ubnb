@@ -1624,6 +1624,33 @@ async function renderDashboard() {
   await renderDashKas();
 }
 
+function hitungProyeksiKeuntungan(){
+  // Proyeksi margin per tahun dari semua akad open
+  // Asumsi: semua bayar tepat waktu dari bulan ini
+  const today = new Date();
+  const proyeksi = {}; // {tahun: marginTotal}
+
+  aAkad.filter(a=>a.status==='Belum Lunas').forEach(a=>{
+    const totalPmb = parseFloat(a.total_pembiayaan)||0;
+    if(!totalPmb) return;
+    const pctMargin = (parseFloat(a.total_margin)||0) / totalPmb;
+    const angs = parseFloat(a.angsuran_perbulan)||0;
+    const jangka = parseInt(a.jangka)||0;
+    // Hitung sisa bulan dari angsuran yang sudah masuk
+    const sudahBayar = aAngsuran.filter(x=>x.akad_id===a.id).length;
+    const sisaBulan = Math.max(0, jangka - sudahBayar);
+
+    // Proyeksi mulai bulan depan dari hari ini
+    for(let i=0; i<sisaBulan; i++){
+      const d = new Date(today.getFullYear(), today.getMonth()+1+i, 1);
+      const thn = d.getFullYear();
+      const marginBulan = Math.round(angs * pctMargin);
+      proyeksi[thn] = (proyeksi[thn]||0) + marginBulan;
+    }
+  });
+  return proyeksi;
+}
+
 function renderDashStats() {
   const el = document.getElementById('dash-stats');
   if(!el) return;
@@ -1639,6 +1666,21 @@ function renderDashStats() {
     return s + Math.round((a.sisa_angsuran||0) * (a.harga_beli||0) / total);
   }, 0);
   const sisaMargin = totalSisa - sisaPokok;
+  // Hitung proyeksi
+  const proyeksi = hitungProyeksiKeuntungan();
+  const tahunIni = new Date().getFullYear();
+  // Margin sudah diterima tahun ini (dari aAngsuran)
+  const marginSudahThnIni = aAngsuran
+    .filter(a=>new Date(a.tanggal).getFullYear()===tahunIni)
+    .reduce((s,a)=>{
+      const akad=aAkad.find(ak=>ak.id===a.akad_id);
+      if(!akad) return s;
+      const totalPmb=(parseFloat(akad.harga_beli)||0)+(parseFloat(akad.total_margin)||0);
+      const marginPorsi=a.margin>0?a.margin:(totalPmb>0?Math.round((a.jumlah||0)*(parseFloat(akad.total_margin)||0)/totalPmb):0);
+      return s+marginPorsi;
+    },0);
+  const proyeksiThnIni = (proyeksi[tahunIni]||0) + marginSudahThnIni;
+
   el.innerHTML = `
     <div class="stat-card hijau"><div class="stat-lbl">Akad Aktif</div><div class="stat-val hijau">${open.length} akad</div><div style="font-size:11px;color:var(--text-muted)">${lunas.length} sudah lunas</div></div>
     <div class="stat-card amber"><div class="stat-lbl">Total Pembiayaan</div><div class="stat-val amber">${rp(totalPembiayaan)}</div></div>
@@ -1646,9 +1688,38 @@ function renderDashStats() {
     <div class="stat-card red">
       <div class="stat-lbl">Total Sisa Tagihan</div>
       <div class="stat-val red">${rp(totalSisa)}</div>
-      <div style="margin-top:6px;font-size:11px;display:flex;gap:8px">
-        <span style="color:var(--text-muted)">Pokok: <strong style="color:#1a2e1a">${rp(sisaPokok)}</strong></span>
-        <span style="color:var(--text-muted)">Margin: <strong style="color:var(--hijau)">${rp(sisaMargin)}</strong></span>
+      <div style="margin-top:8px;font-size:11px;border-top:1px solid rgba(0,0,0,0.08);padding-top:6px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:var(--text-muted)">Sisa Pokok</span>
+          <strong style="color:#1a2e1a">${rp(sisaPokok)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Sisa Margin</span>
+          <strong style="color:var(--hijau)">${rp(sisaMargin)}</strong>
+        </div>
+      </div>
+    </div>
+    <!-- PROYEKSI KEUNTUNGAN -->
+    <div style="background:white;border-radius:10px;padding:14px;margin-top:2px;border:1.5px solid var(--emas-muda)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--amber);letter-spacing:0.5px;margin-bottom:10px">
+        📈 Proyeksi Keuntungan (Margin) — Asumsi Bayar Tepat Waktu
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">
+        <div style="background:var(--hijau-light);border-radius:8px;padding:10px 12px">
+          <div style="font-size:11px;color:var(--hijau)">Total ${tahunIni} (Proyeksi)</div>
+          <div style="font-size:16px;font-weight:800;color:var(--hijau);margin-top:3px">${rp(proyeksiThnIni)}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Sudah: ${rp(marginSudahThnIni)}</div>
+        </div>
+        ${Object.entries(proyeksi).filter(([t])=>parseInt(t)>${tahunIni}).sort((a,b)=>a[0]-b[0]).map(([thn,val])=>`
+        <div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">
+          <div style="font-size:11px;color:var(--text-muted)">${thn}</div>
+          <div style="font-size:16px;font-weight:800;color:#1a2e1a;margin-top:3px">${rp(val)}</div>
+        </div>`).join('')}
+        <div style="background:#fff3cd;border-radius:8px;padding:10px 12px">
+          <div style="font-size:11px;color:var(--amber)">Total Sisa Margin</div>
+          <div style="font-size:16px;font-weight:800;color:var(--amber);margin-top:3px">${rp(Object.values(proyeksi).reduce((s,v)=>s+v,0)+marginSudahThnIni)}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">dari ${open.length} akad aktif</div>
+        </div>
       </div>
     </div>`;
 }
