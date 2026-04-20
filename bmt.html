@@ -1477,32 +1477,37 @@ async function simpanAngsuran(){
   ]);
   if(res1.error){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';al('bayar-alert','❌ Gagal: '+res1.error.message,'err');return;}
 
-  // Update kas saldo langsung (increment) — tidak perlu recalc semua mutasi
+  // Update kas saldo langsung (increment)
   await incrKas(kasId, jumlah, 'masuk');
 
-  // Update local data langsung tanpa loadAll penuh
-  a.total_angsuran=newTotal;a.sisa_angsuran=newSisa;a.status=newStatus;
-  // Reload hanya angsuran (data paling fresh dibutuhkan)
-  const{data:newAngs}=await sb.from('bmt_angsuran').select('*').eq('akad_id',akadId).order('tanggal');
-  if(newAngs) aAngsuran=[...aAngsuran.filter(x=>x.akad_id!==akadId),...newAngs];
-  // Restore akad selection dan refresh riwayat
-  if(_akadIdAfter){
-    document.getElementById('pay-akad').value=_akadIdAfter;
-    document.getElementById('pay-akad-search').value=_akadSearchAfter;
-    bayarPreview();
-  } // refresh preview dengan data terbaru
-  btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
-  al('bayar-alert','✅ Pembayaran berhasil!'+(newStatus==='Lunas'?' 🎉 Akad LUNAS!':''),'ok');
-  // Simpan akad id & search text sebelum reset, untuk refresh riwayat
+  // Simpan akad selection DULU sebelum apapun
   const _akadIdAfter=document.getElementById('pay-akad').value;
   const _akadSearchAfter=document.getElementById('pay-akad-search').value;
+
+  // Update local data tanpa loadAll
+  a.total_angsuran=newTotal;a.sisa_angsuran=newSisa;a.status=newStatus;
+
+  // Reload angsuran akad ini saja (1 query)
+  const{data:newAngs}=await sb.from('bmt_angsuran').select('*').eq('akad_id',akadId).order('tanggal');
+  if(newAngs) aAngsuran=[...aAngsuran.filter(x=>x.akad_id!==akadId),...newAngs];
+
+  // Reset form
   document.getElementById('pay-jumlah').value='';
   document.getElementById('pay-pokok').value='';
   document.getElementById('pay-margin').value='';
   document.getElementById('pay-denda').value='0';
   const bb=document.getElementById('pay-breakdown-box');
-  if(bb) bb.style.display='none';document.getElementById('pay-catatan').value='';
-  bayarPreview();
+  if(bb) bb.style.display='none';
+  document.getElementById('pay-catatan').value='';
+
+  // Restore akad & refresh riwayat dari local data
+  if(_akadIdAfter){
+    document.getElementById('pay-akad').value=_akadIdAfter;
+    document.getElementById('pay-akad-search').value=_akadSearchAfter;
+    bayarPreview();
+  }
+  btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
+  al('bayar-alert','✅ Pembayaran berhasil!'+(newStatus==='Lunas'?' 🎉 Akad LUNAS!':''),'ok');
 }
 
 // ===== KAS =====
