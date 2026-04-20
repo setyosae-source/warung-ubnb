@@ -1803,7 +1803,9 @@ function renderDashTunggakan() {
           style="margin-top:4px;background:var(--hijau);color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">
           💳 Bayar
         </button>
-        ${a._no_hp?`<button onclick="kirimWA('${a._no_hp}','${a.nama_jamaah}','${a.no_akad}',${a.angsuran_perbulan},${a.sisa_angsuran})" style="margin-top:4px;margin-left:3px;background:#25D366;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">📱 WA</button>`:''}
+        ${a._no_hp
+          ?`<button onclick="kirimWA('${a._no_hp}','${a.nama_jamaah}','${a.no_akad}',${a.angsuran_perbulan},${a.sisa_angsuran})" style="margin-top:4px;margin-left:3px;background:#25D366;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">📱 WA</button>`
+          :`<button onclick="inputHpLaluWA(${a.id},'${a.nama_jamaah}','${a.no_akad}',${a.angsuran_perbulan},${a.sisa_angsuran})" style="margin-top:4px;margin-left:3px;background:#888;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">📱 Isi HP</button>`}
       </div>
     </div>`;
   }).join('');
@@ -2663,6 +2665,47 @@ function pilihAkadAngsuran(akadId){
     if(ps)ps.value=a.nama_jamaah+' -- '+a.no_akad;
     bayarPreview();
   },150);
+}
+function inputHpLaluWA(akadId,nama,noAkad,angsuranPerBulan,sisaAngsuran){
+  var modal=document.getElementById('wa-modal');
+  if(!modal){modal=document.createElement('div');modal.id='wa-modal';modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:700;display:flex;align-items:flex-end;justify-content:center';document.body.appendChild(modal);}
+  modal.style.display='flex';
+  modal.innerHTML='<div style="background:white;border-radius:20px 20px 0 0;width:100%;max-width:500px;padding:20px 16px 28px">'
+    +'<div style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 14px"></div>'
+    +'<div style="font-size:15px;font-weight:800;margin-bottom:4px">Input No. HP</div>'
+    +'<div style="font-size:13px;color:#666;margin-bottom:14px">'+nama+' &mdash; '+noAkad+'</div>'
+    +'<div style="margin-bottom:14px">'
+    +'<label style="font-size:11px;font-weight:700;color:#6b7c6b;display:block;margin-bottom:5px;text-transform:uppercase">Nomor HP / WhatsApp *</label>'
+    +'<input id="wa-hp-input" type="tel" placeholder="contoh: 08123456789" style="width:100%;padding:11px 13px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;font-family:inherit;outline:none" oninput="this.style.borderColor='#25D366'">'
+    +'</div>'
+    +'<label style="font-size:11px;margin-bottom:8px;display:flex;align-items:center;gap:8px;cursor:pointer">'
+    +'<input type="checkbox" id="wa-hp-save" style="width:16px;height:16px"> Simpan no HP ke data anggota</label>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">'
+    +'<button onclick="document.getElementById('wa-modal').style.display='none'" style="padding:11px;border:1.5px solid #ddd;border-radius:8px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Batal</button>'
+    +'<button onclick="lanjutKirimWA('+akadId+',''+nama.replace(/'/g,"\'")+'',''+noAkad+'','+angsuranPerBulan+','+sisaAngsuran+')" style="padding:11px;border:none;border-radius:8px;background:#25D366;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Lanjut Kirim WA</button>'
+    +'</div></div>';
+  setTimeout(function(){var e=document.getElementById('wa-hp-input');if(e)e.focus();},100);
+}
+async function lanjutKirimWA(akadId,nama,noAkad,angsuranPerBulan,sisaAngsuran){
+  var hp=(document.getElementById('wa-hp-input').value||'').trim();
+  if(!hp){alert('Masukkan nomor HP terlebih dahulu');return;}
+  var save=document.getElementById('wa-hp-save').checked;
+  // Simpan ke ubnb_saham jika diminta
+  if(save){
+    var akad=aAkad.find(function(a){return a.id===akadId;});
+    if(akad&&akad.anggota_id){
+      await sb.from('ubnb_saham').update({no_hp:hp}).eq('id',akad.anggota_id);
+      akad._no_hp=hp;
+      // Update local aSahamAnggota
+      var sam=aSahamAnggota.find(function(s){return s.id===akad.anggota_id;});
+      if(sam)sam.no_hp=hp;
+      toast('No HP disimpan ke data anggota');
+    } else {
+      toast('Tidak dapat simpan: akad tidak terhubung ke anggota',true);
+    }
+  }
+  document.getElementById('wa-modal').style.display='none';
+  kirimWA(hp,nama,noAkad,angsuranPerBulan,sisaAngsuran);
 }
 function kirimWA(noHp,nama,noAkad,angsuranPerBulan,sisaAngsuran){
   var hp=(noHp||'').replace(/\D/g,'');
