@@ -734,8 +734,22 @@ let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',s
 function rp(n){return'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');}
 function fmtTgl(v){if(!v)return'-';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});}
 function today(){return new Date().toISOString().split('T')[0];}
-function al(id,msg,type){const e=document.getElementById(id);e.className='alert show '+type;e.innerHTML=msg;}
-function ahl(id){document.getElementById(id).className='alert';}
+function al(id,msg,type){const e=document.getElementById(id);if(!e)return;e.className='alert show '+type;e.innerHTML=msg;}
+function ahl(id){const e=document.getElementById(id);if(e)e.className='alert';}
+function toast(msg,isErr=false){
+  let el=document.getElementById('bmt-toast');
+  if(!el){
+    el=document.createElement('div');el.id='bmt-toast';
+    el.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:99px;font-size:13px;font-weight:700;z-index:9999;transition:opacity 0.3s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg;
+  el.style.background=isErr?'#e44':'#1D9E75';
+  el.style.color='white';
+  el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.style.opacity='0',2500);
+}
 
 // ===== LOGIN =====
 async function doLogin(){
@@ -1524,11 +1538,10 @@ async function recalcKas(kasId){
 }
 async function incrKas(kasId, jumlah, tipe='masuk'){
   // Increment/decrement saldo kas langsung — lebih cepat dari recalcKas
-  const delta = tipe==='masuk' ? jumlah : -jumlah;
+  const delta = (tipe==='masuk' && jumlah>0) ? jumlah : (typeof jumlah==='number'&&jumlah<0 ? jumlah : -Math.abs(jumlah));
   const kasRow = aKas.find(k=>k.id===kasId);
-  const saldoBaru = (parseFloat(kasRow?.saldo)||0) + delta;
+  const saldoBaru = (parseFloat(kasRow?.saldo)||0) + (tipe==='masuk'?Math.abs(jumlah):-Math.abs(jumlah));
   await sb.from('kas').update({saldo: saldoBaru}).eq('id',kasId);
-  // Update local data juga
   if(kasRow) kasRow.saldo = saldoBaru;
 }
 
@@ -2602,25 +2615,25 @@ async function simpanEditAngsuran(){
   const _akadEdit=aAkad.find(ak=>ak.id===akadId);
   if(_akadEdit){_akadEdit.total_angsuran=newTotal;_akadEdit.sisa_angsuran=newSisa;_akadEdit.status=newStatus;}
   document.getElementById('modal-edit-angs').style.display='none';
-  toast('✅ Angsuran berhasil diupdate');
+  toast('✅ Angsuran diupdate');
   bayarPreview();
 }
 async function hapusAngsuran(id,akadId,jumlah){
   if(!confirm('Hapus angsuran ini?\nJumlah: '+rp(jumlah)+'\n\nTidak dapat dibatalkan.'))return;
   const a=aAkad.find(ak=>ak.id===akadId);if(!a)return;
   const{error}=await sb.from('bmt_angsuran').delete().eq('id',id);
-  if(error){toast('❌ Gagal: '+error.message,true);return;}
+  if(error){toast('❌ Gagal hapus: '+error.message,true);return;}
   const newTotal=Math.max(0,(a.total_angsuran||0)-jumlah);
   const newSisa=Math.max(0,(a.total_pembiayaan||0)-newTotal);
   const newStatus=newSisa<=0?'Lunas':'Belum Lunas';
-  await sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId);
+  // Paralel: update akad + catat koreksi kas
   const kasBMT=aKas.find(k=>k.modul&&k.modul.includes('bmt'));
-  if(kasBMT){
-    await sb.from('kas_mutasi').insert([{kas_id:kasBMT.id,tipe:'keluar',kategori:'keluar',jumlah,tanggal:new Date().toISOString().slice(0,10),keterangan:'Hapus Angsuran — '+a.nama_jamaah+' ('+a.no_akad+')',operator:CU.username}]);
-    await recalcKas(kasBMT.id);
-  }
-  // Update local data langsung
-  aAngsuran = aAngsuran.filter(x=>x.id!==id);
+  const ops=[sb.from('bmt_akad').update({total_angsuran:newTotal,sisa_angsuran:newSisa,status:newStatus}).eq('id',akadId)];
+  if(kasBMT) ops.push(sb.from('kas_mutasi').insert([{kas_id:kasBMT.id,tipe:'keluar',kategori:'keluar',jumlah,tanggal:new Date().toISOString().slice(0,10),keterangan:'Hapus Angsuran — '+a.nama_jamaah+' ('+a.no_akad+')',operator:CU.username}]));
+  await Promise.all(ops);
+  if(kasBMT) await incrKas(kasBMT.id,jumlah,'keluar');
+  // Update local data langsung tanpa loadAll
+  aAngsuran=aAngsuran.filter(x=>x.id!==id);
   a.total_angsuran=newTotal;a.sisa_angsuran=newSisa;a.status=newStatus;
   toast('✅ Angsuran dihapus');
   // Refresh riwayat dari local data
