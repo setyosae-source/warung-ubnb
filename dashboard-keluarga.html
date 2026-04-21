@@ -284,11 +284,15 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
     <div class="login-error" id="loginErr">Kode akses salah. Hubungi admin untuk mendapatkan kode.</div>
 
     <div class="login-info">
-      Belum punya kode akses?<br>
-      <button onclick="mintaKodeAkses()" id="btnMintaKode"
-        style="margin-top:10px;width:100%;padding:10px;background:rgba(245,200,66,0.15);border:1.5px solid rgba(245,200,66,0.4);color:var(--gold);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;">
-        📱 Minta Kode Akses via WhatsApp
-      </button>
+      Belum punya kode akses?
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
+        <input type="text" id="inpWaMinta" placeholder="📱 No. WhatsApp Anda (08xxxxxxxx)"
+          style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.3);border:1.5px solid rgba(245,200,66,0.3);border-radius:8px;color:white;font-family:inherit;font-size:13px;outline:none;">
+        <button onclick="mintaKodeAkses()" id="btnMintaKode"
+          style="width:100%;padding:10px;background:rgba(245,200,66,0.15);border:1.5px solid rgba(245,200,66,0.4);color:var(--gold);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;">
+          📱 Minta Kode Akses via WhatsApp
+        </button>
+      </div>
       <div id="mintaKodeMsg" style="margin-top:8px;font-size:11px;display:none;"></div>
     </div>
   </div>
@@ -440,8 +444,11 @@ const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID');
 // ===== MINTA KODE AKSES =====
 async function mintaKodeAkses() {
   const nama = document.getElementById('selKeluarga').value;
+  const noWa = document.getElementById('inpWaMinta').value.trim();
   const msgEl = document.getElementById('mintaKodeMsg');
   const btn = document.getElementById('btnMintaKode');
+
+  msgEl.style.display = 'none';
 
   if (!nama) {
     msgEl.style.display = 'block';
@@ -449,10 +456,16 @@ async function mintaKodeAkses() {
     msgEl.textContent = '⚠️ Pilih nama keluarga terlebih dahulu.';
     return;
   }
+  if (!noWa) {
+    msgEl.style.display = 'block';
+    msgEl.style.color = '#fca5a5';
+    msgEl.textContent = '⚠️ Masukkan nomor WhatsApp Anda.';
+    document.getElementById('inpWaMinta').focus();
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = '⏳ Memproses...';
-  msgEl.style.display = 'none';
 
   // Cek apakah sudah ada kode
   const { data: existing } = await sb.from('keluarga_akses')
@@ -463,8 +476,9 @@ async function mintaKodeAkses() {
   let kode;
 
   if (existing) {
-    // Sudah ada — pakai kode yang ada (tidak generate ulang)
     kode = existing.kode_akses;
+    // Update no_wa jika berubah
+    await sb.from('keluarga_akses').update({ no_wa: noWa }).eq('nama_keluarga', nama);
   } else {
     // Generate kode baru: 6 digit angka
     kode = String(Math.floor(100000 + Math.random() * 900000));
@@ -472,6 +486,7 @@ async function mintaKodeAkses() {
     const { error } = await sb.from('keluarga_akses').insert([{
       nama_keluarga: nama,
       kode_akses: kode,
+      no_wa: noWa,
       aktif: true
     }]);
 
@@ -492,7 +507,8 @@ async function mintaKodeAkses() {
 Saya ingin meminta kode akses Dashboard Keluarga:
 
 👤 *Nama Keluarga:* ${nama}
-🔑 *Kode Akses:* ${kode} _(sudah ter-generate otomatis)_
+📱 *No. WhatsApp:* ${noWa}
+🔑 *Kode:* ${kode} _(sudah ter-generate otomatis)_
 
 Mohon dikonfirmasi. Terima kasih 🙏`;
 
@@ -500,7 +516,7 @@ Mohon dikonfirmasi. Terima kasih 🙏`;
 
   msgEl.style.display = 'block';
   msgEl.style.color = '#86efac';
-  msgEl.innerHTML = `✅ Kode sudah di-generate. WhatsApp ke admin terbuka.<br>Masukkan kode yang admin konfirmasi untuk login.`;
+  msgEl.innerHTML = `✅ Kode sudah di-generate. WhatsApp ke admin terbuka.<br>Tunggu konfirmasi dari admin untuk login.`;
 
   btn.disabled = false;
   btn.textContent = '📱 Minta Kode Akses via WhatsApp';
