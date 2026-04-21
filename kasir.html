@@ -361,6 +361,19 @@ html,body{overflow-x:hidden;max-width:100%;min-height:100vh;background:var(--bg)
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+
+// ===== HELPER FUNCTIONS =====
+function fmtQty(q) {
+  if (!q) return '0';
+  return q % 1 === 0 ? q.toString() : q.toFixed(1);
+}
+
+function isSatuanDesimal(satuan) {
+  if (!satuan) return false;
+  const desimalUnits = ['kg', 'gram', 'ons', 'liter', 'ml', 'meter', 'cm'];
+  return desimalUnits.includes(satuan.toLowerCase());
+}
+
 const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const {createClient}=supabase;
@@ -508,10 +521,14 @@ function pilihProduk(id){
 function tambahKR(item){
   const ex=KR.find(x=>x.id===item.id&&x._lvIdx===item._lvIdx);
   if(ex){
-    const isDecimal = item.satuan && ['kg', 'gram', 'ons', 'liter', 'ml', 'meter', 'cm'].includes(item.satuan.toLowerCase());
-    ex.qty += isDecimal ? 0.5 : 1;
+    const step = isSatuanDesimal(item.satuan) ? 0.5 : 1;
+    ex.qty += step;
   }
   else{KR.push({...item,qty:item.qty||1});}
+  renderKeranjang();
+  toast(item.nama+' ditambahkan');
+  updateFAB();
+});}
   renderKeranjang();
   toast(item.nama+' ditambahkan');
   updateFAB();
@@ -738,12 +755,7 @@ function renderKeranjangBeli(){
     </div>`).join('');
 }
 
-function ubahQtyBeli(i,d){
-  KB[i].qty = Math.max(0.1, KB[i].qty + (d * 0.5));
-  KB[i].total = KB[i].qty * KB[i].hb;
-  if(KB[i].qty < 0.1) KB.splice(i,1);
-  renderKeranjangBeli();
-}
+function ubahQtyBeli(i,d){KB[i].qty+=d;KB[i].total=KB[i].qty*KB[i].hb;if(KB[i].qty<=0)KB.splice(i,1);renderKeranjangBeli();}
 function resetKeranjangBeli(){KB=[];sdSel.sup=null;document.getElementById('sdd-sup').textContent='Tanpa supplier';document.getElementById('beli-catatan').value='';renderKeranjangBeli();}
 
 function updateMarginBeli(){
