@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Keluarga — UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #f5c842;
+  --gold2: #d4a617;
+  --gold3: #fde68a;
+  --navy: #1e3a5f;
+  --navy-dark: #0f1d2f;
+  --green: #1D9E75;
+  --green-dark: #0F6E56;
+  --green-light: #e8f5ee;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --text: #1c1a16;
+  --text-muted: #6b7280;
+  --bg: #f0f4f8;
+  --surface: #fff;
+  --border: #e5e7eb;
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; font-size:14px; }
+
+/* LOGIN */
+.login-wrap {
+  min-height:100vh;
+  background: linear-gradient(180deg,#0a1628 0%,#1e3a5f 50%,#2a5298 100%);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.login-box {
+  background:rgba(15,29,47,0.95);
+  border:2px solid var(--gold);
+  border-radius:24px;
+  padding:40px 32px;
+  width:100%; max-width:420px;
+  backdrop-filter:blur(12px);
+}
+.login-logo { text-align:center; margin-bottom:28px; }
+.login-logo .icon { font-size:56px; margin-bottom:8px; }
+.login-logo h1 { font-family:'Cinzel',serif; font-size:20px; color:var(--gold); margin-bottom:4px; }
+.login-logo p { font-size:12px; color:rgba(255,255,255,0.5); }
+.login-logo .sub { font-size:11px; color:rgba(245,200,66,0.6); margin-top:6px; }
+.form-group { margin-bottom:16px; }
+.form-group label { display:block; font-size:12px; font-weight:700; color:var(--gold); margin-bottom:6px; letter-spacing:.5px; }
+.form-group select, .form-group input {
+  width:100%; padding:12px 14px;
+  border:2px solid rgba(245,200,66,0.3);
+  border-radius:var(--radius-sm);
+  background:rgba(0,0,0,0.3);
+  color:white; font-size:14px;
+  font-family:inherit; outline:none;
+  transition:border-color .2s;
+}
+.form-group select option { background:#0f1d2f; color:white; }
+.form-group select:focus, .form-group input:focus { border-color:var(--gold); }
+.btn-login {
+  width:100%; padding:14px;
+  background:linear-gradient(135deg,var(--gold2),var(--gold));
+  color:var(--navy-dark); border:none;
+  border-radius:var(--radius-sm);
+  font-family:'Cinzel',serif; font-size:15px; font-weight:900;
+  cursor:pointer; letter-spacing:1px;
+  transition:all .3s; margin-top:8px;
+}
+.btn-login:hover { transform:scale(1.02); box-shadow:0 8px 24px rgba(245,200,66,.4); }
+.login-error {
+  background:rgba(239,68,68,.2); border:1px solid var(--red);
+  color:#fca5a5; padding:10px 14px; border-radius:8px;
+  font-size:12px; margin-top:12px; display:none; text-align:center;
+}
+.login-info {
+  margin-top:20px; padding:14px;
+  background:rgba(245,200,66,.08); border:1px solid rgba(245,200,66,.2);
+  border-radius:10px; font-size:12px; color:rgba(255,255,255,.6);
+  text-align:center; line-height:1.6;
+}
+.login-info strong { color:var(--gold); }
+.login-info a { color:var(--gold); text-decoration:none; }
+
+/* TOPBAR */
+.topbar {
+  background:linear-gradient(135deg,var(--navy-dark),var(--navy));
+  color:white; padding:0 20px;
+  display:flex; align-items:center; justify-content:space-between;
+  height:56px; position:sticky; top:0; z-index:100;
+  box-shadow:0 2px 12px rgba(0,0,0,.2);
+}
+.topbar-left { display:flex; align-items:center; gap:10px; }
+.topbar-title { font-size:16px; font-weight:800; }
+.topbar-sub { font-size:10px; opacity:.6; }
+.topbar-right { display:flex; align-items:center; gap:8px; }
+.keluarga-badge {
+  background:rgba(245,200,66,.2); border:1px solid rgba(245,200,66,.4);
+  color:var(--gold); padding:4px 12px; border-radius:99px;
+  font-size:11px; font-weight:700; max-width:160px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.btn-keluar {
+  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+  color:white; padding:6px 12px; border-radius:8px;
+  font-size:11px; font-weight:600; cursor:pointer; font-family:inherit;
+}
+
+/* APP BODY */
+.app { display:none; flex-direction:column; min-height:100vh; }
+.main { padding:16px; max-width:800px; margin:0 auto; width:100%; }
+
+/* CARDS */
+.card {
+  background:var(--surface); border-radius:var(--radius);
+  padding:20px; margin-bottom:14px;
+  box-shadow:0 2px 12px rgba(0,0,0,.06);
+  border:1px solid var(--border);
+}
+.card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.card-title { font-size:14px; font-weight:800; color:var(--text); display:flex; align-items:center; gap:8px; }
+.card-badge { font-size:10px; font-weight:700; padding:3px 10px; border-radius:99px; }
+.badge-gold { background:#fef9c3; color:#92400e; }
+.badge-green { background:var(--green-light); color:var(--green-dark); }
+.badge-red { background:#fee2e2; color:#991b1b; }
+.badge-blue { background:#dbeafe; color:#1e40af; }
+
+/* STAT GRID */
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
+.stat-card { padding:14px; border-radius:var(--radius-sm); border-left:4px solid var(--green); background:var(--bg); }
+.stat-label { font-size:10px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+.stat-value { font-size:20px; font-weight:800; color:var(--green); }
+.stat-card.gold { border-color:var(--gold2); }
+.stat-card.gold .stat-value { color:var(--gold2); }
+.stat-card.navy { border-color:var(--navy); }
+.stat-card.navy .stat-value { color:var(--navy); }
+.stat-card.red { border-color:var(--red); }
+.stat-card.red .stat-value { color:var(--red); }
+
+/* ANGGOTA LIST */
+.anggota-item {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 0; border-bottom:1px solid var(--border);
+}
+.anggota-item:last-child { border-bottom:none; }
+.anggota-info { flex:1; }
+.anggota-nama { font-weight:700; font-size:13px; color:var(--text); }
+.anggota-sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.anggota-lembar { font-size:13px; font-weight:800; color:var(--navy); text-align:right; }
+.anggota-lembar span { display:block; font-size:10px; font-weight:500; color:var(--text-muted); }
+
+/* HADIR ITEM */
+.hadir-item {
+  display:flex; align-items:center; gap:12px;
+  padding:10px; border-radius:var(--radius-sm);
+  background:var(--bg); margin-bottom:8px;
+}
+.nomor-badge {
+  width:44px; height:44px; border-radius:50%;
+  background:linear-gradient(135deg,var(--navy),var(--navy-dark));
+  color:var(--gold); font-family:'Cinzel',serif;
+  font-size:14px; font-weight:900;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; border:2px solid var(--gold);
+}
+.hadir-info { flex:1; }
+.hadir-nama { font-weight:700; font-size:13px; }
+.hadir-sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.hadir-jk { font-size:16px; }
+
+/* PEMENANG ITEM */
+.pemenang-item {
+  display:flex; align-items:center; gap:12px;
+  padding:12px; border-radius:var(--radius-sm);
+  background:linear-gradient(135deg,#fef9c3,#fef3c7);
+  border:1.5px solid var(--gold); margin-bottom:8px;
+  position:relative; overflow:hidden;
+}
+.pemenang-item::before {
+  content:'🏆';
+  position:absolute; right:12px; top:50%; transform:translateY(-50%);
+  font-size:28px; opacity:.15;
+}
+.pemenang-hadiah { font-weight:800; font-size:13px; color:#92400e; }
+.pemenang-nama { font-size:11px; color:#b45309; margin-top:2px; font-weight:600; }
+
+/* SHU ITEM */
+.shu-item {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 0; border-bottom:1px solid var(--border);
+}
+.shu-item:last-child { border-bottom:none; }
+.shu-periode { font-weight:700; font-size:13px; }
+.shu-sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.shu-nilai { text-align:right; }
+.shu-amount { font-size:14px; font-weight:800; color:var(--green); }
+.shu-status { font-size:10px; margin-top:2px; font-weight:600; }
+
+/* EMPTY STATE */
+.empty-state { text-align:center; padding:32px 20px; color:var(--text-muted); }
+.empty-state .ei { font-size:40px; margin-bottom:8px; }
+.empty-state p { font-size:13px; }
+
+/* TAMBAH SAHAM */
+.btn-primary {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:10px 20px; background:var(--green);
+  color:white; border:none; border-radius:var(--radius-sm);
+  font-family:inherit; font-size:13px; font-weight:700;
+  cursor:pointer; transition:all .2s;
+}
+.btn-primary:hover { background:var(--green-dark); }
+
+/* COMING SOON */
+.coming-soon {
+  padding:20px; background:var(--bg); border-radius:var(--radius-sm);
+  text-align:center; border:2px dashed var(--border);
+}
+.coming-soon .cs-icon { font-size:32px; margin-bottom:8px; }
+.coming-soon p { font-size:12px; color:var(--text-muted); }
+.coming-soon strong { color:var(--text); }
+
+/* MODAL */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.6);
+  display:none; align-items:center; justify-content:center;
+  z-index:200; padding:20px;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+  background:var(--surface); border-radius:var(--radius);
+  padding:28px 24px; width:100%; max-width:420px;
+  box-shadow:0 20px 60px rgba(0,0,0,.2);
+}
+.modal-title { font-size:16px; font-weight:800; margin-bottom:16px; }
+.irow { margin-bottom:12px; }
+.irow label { display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px; }
+.irow input, .irow select, .irow textarea {
+  width:100%; padding:10px 12px;
+  border:1.5px solid var(--border); border-radius:var(--radius-sm);
+  font-family:inherit; font-size:13px; outline:none;
+  transition:border-color .2s;
+}
+.irow input:focus, .irow select:focus { border-color:var(--green); }
+.btn-row { display:flex; gap:8px; margin-top:16px; }
+.btn-cancel { flex:1; padding:10px; border:1.5px solid var(--border); border-radius:var(--radius-sm); background:white; font-family:inherit; font-size:13px; cursor:pointer; font-weight:600; }
+.btn-save { flex:2; padding:10px; background:var(--green); color:white; border:none; border-radius:var(--radius-sm); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+
+@media (max-width:480px) {
+  .stat-grid { grid-template-columns:repeat(2,1fr); }
+  .topbar-title { font-size:14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="loginWrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="icon">🏠</div>
+      <h1>Dashboard Keluarga</h1>
+      <p>UBNB Desa Perwira</p>
+      <p class="sub">✦ Pemegang & Pemilik Saham ✦</p>
+    </div>
+
+    <div class="form-group">
+      <label>Nama Keluarga</label>
+      <select id="selKeluarga">
+        <option value="">— Pilih nama keluarga —</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Kode Akses</label>
+      <input type="password" id="inpKode" placeholder="Masukkan kode akses" autocomplete="current-password">
+    </div>
+
+    <button class="btn-login" onclick="doLogin()">Masuk →</button>
+    <div class="login-error" id="loginErr">Kode akses salah. Hubungi admin untuk mendapatkan kode.</div>
+
+    <div class="login-info">
+      Belum punya kode akses?<br>
+      Hubungi Admin via WhatsApp:<br>
+      <strong><a href="https://wa.me/6285718264782" target="_blank">📱 +62 857-1826-4782</a></strong>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span style="font-size:22px;">🏠</span>
+      <div>
+        <div class="topbar-title">Dashboard Keluarga</div>
+        <div class="topbar-sub">UBNB Desa Perwira</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="keluarga-badge" id="keluargaBadge">—</div>
+      <button class="btn-keluar" onclick="doLogout()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- RINGKASAN SAHAM -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📊 Kepemilikan Saham</div>
+        <span class="card-badge badge-gold" id="statusSahamBadge">Aktif</span>
+      </div>
+      <div class="stat-grid" style="margin-bottom:16px;">
+        <div class="stat-card gold">
+          <div class="stat-label">Total Lembar</div>
+          <div class="stat-value" id="totalLembar">—</div>
+        </div>
+        <div class="stat-card navy">
+          <div class="stat-label">Nilai Saham</div>
+          <div class="stat-value" id="totalNilai" style="font-size:14px;">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Anggota</div>
+          <div class="stat-value" id="totalAnggota">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Kelompok</div>
+          <div class="stat-value" id="infoKelompok" style="font-size:14px;">—</div>
+        </div>
+      </div>
+      <div id="anggotaList"></div>
+    </div>
+
+    <!-- MPPS KEHADIRAN -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🗳️ Kehadiran MPPS 2026</div>
+        <span class="card-badge" id="hadirBadge">—</span>
+      </div>
+      <div id="hadirList"></div>
+    </div>
+
+    <!-- PEMENANG UNDIAN -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🏆 Undian & Doorprize</div>
+      </div>
+      <div id="pemenangList"></div>
+    </div>
+
+    <!-- SHU / BAGI HASIL -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">💰 SHU & Bagi Hasil</div>
+      </div>
+      <div id="shuList"></div>
+    </div>
+
+    <!-- TAMBAH KEPESERTAAN -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">➕ Tambah Kepesertaan Saham</div>
+      </div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Ingin menambah kepemilikan saham? Isi formulir pengajuan di bawah — pengurus akan menghubungi Anda.
+      </p>
+      <button class="btn-primary" onclick="openModalTambah()">➕ Ajukan Tambah Saham</button>
+    </div>
+
+    <!-- FITUR MENDATANG -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px;">🔮 Segera Hadir</div>
+      <div style="display:grid;gap:10px;">
+        <div class="coming-soon">
+          <div class="cs-icon">🏦</div>
+          <p><strong>Tabungan Wadiah</strong><br>Lihat saldo & mutasi tabungan wadiah Anda</p>
+        </div>
+        <div class="coming-soon">
+          <div class="cs-icon">📈</div>
+          <p><strong>Deposito Syariah</strong><br>Informasi deposito dan jadwal jatuh tempo</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:20px;font-size:12px;color:var(--text-muted);">
+      © 2026 UBNB Desa Perwira · <a href="index.html" style="color:var(--green);">← Kembali ke Halaman MPPS</a>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL TAMBAH SAHAM -->
+<div class="modal-overlay" id="modalTambah" onclick="if(event.target===this)closeModalTambah()">
+  <div class="modal-box">
+    <div class="modal-title">➕ Pengajuan Tambah Saham</div>
+    <div class="irow">
+      <label>Nama Anggota</label>
+      <input type="text" id="t-nama" placeholder="Nama lengkap anggota baru">
+    </div>
+    <div class="irow">
+      <label>Jumlah Lembar</label>
+      <input type="number" id="t-lembar" placeholder="Contoh: 5" min="1">
+    </div>
+    <div class="irow">
+      <label>No. WhatsApp</label>
+      <input type="text" id="t-wa" placeholder="08xxxxxxxxxx">
+    </div>
+    <div class="irow">
+      <label>Keterangan</label>
+      <textarea id="t-ket" rows="2" placeholder="Keterangan tambahan (opsional)" style="padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;width:100%;outline:none;resize:none;"></textarea>
+    </div>
+    <div id="tambahMsg"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModalTambah()">Batal</button>
+      <button class="btn-save" onclick="submitTambahSaham()">Kirim Pengajuan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SURL = 'https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const { createClient } = supabase;
+const sb = createClient(SURL, SKEY);
+
+let CK = null; // current keluarga nama
+
+const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID');
+
+// ===== LOGIN =====
+async function loadKeluargaList() {
+  const { data } = await sb.from('ubnb_saham')
+    .select('nama_keluarga')
+    .eq('status','Aktif')
+    .not('nama_keluarga','is',null)
+    .neq('nama_keluarga','');
+
+  const unique = [...new Set((data||[]).map(d => d.nama_keluarga))].sort();
+  const sel = document.getElementById('selKeluarga');
+  unique.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    sel.appendChild(opt);
+  });
+}
+
+async function doLogin() {
+  const nama = document.getElementById('selKeluarga').value;
+  const kode = document.getElementById('inpKode').value.trim();
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+
+  if (!nama) { errEl.textContent = 'Pilih nama keluarga terlebih dahulu.'; errEl.style.display = 'block'; return; }
+  if (!kode) { errEl.textContent = 'Masukkan kode akses.'; errEl.style.display = 'block'; return; }
+
+  const { data, error } = await sb.from('keluarga_akses')
+    .select('*')
+    .eq('nama_keluarga', nama)
+    .eq('kode_akses', kode)
+    .eq('aktif', true)
+    .single();
+
+  if (error || !data) {
+    errEl.textContent = 'Kode akses salah. Hubungi admin untuk mendapatkan kode.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  CK = nama;
+  localStorage.setItem('dk_keluarga', nama);
+  showApp();
+}
+
+function doLogout() {
+  localStorage.removeItem('dk_keluarga');
+  CK = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginWrap').style.display = 'flex';
+  document.getElementById('inpKode').value = '';
+}
+
+// ===== APP =====
+async function showApp() {
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('keluargaBadge').textContent = '🏠 ' + CK;
+  await Promise.all([loadSaham(), loadHadir(), loadPemenang(), loadSHU()]);
+}
+
+// ===== SAHAM =====
+async function loadSaham() {
+  const { data } = await sb.from('ubnb_saham')
+    .select('*').eq('nama_keluarga', CK).eq('status','Aktif').order('nama');
+
+  if (!data || !data.length) {
+    document.getElementById('anggotaList').innerHTML = '<div class="empty-state"><div class="ei">📭</div><p>Tidak ada data saham ditemukan.</p></div>';
+    return;
+  }
+
+  const totalLembar = data.reduce((s,d) => s + (d.jumlah_lembar||0), 0);
+  const totalNilai = data.reduce((s,d) => s + (parseFloat(d.total_nilai)||0), 0);
+  const kelompok = [...new Set(data.map(d=>d.kelompok).filter(Boolean))].join(', ');
+
+  document.getElementById('totalLembar').textContent = totalLembar;
+  document.getElementById('totalNilai').textContent = fmt(totalNilai);
+  document.getElementById('totalAnggota').textContent = data.length;
+  document.getElementById('infoKelompok').textContent = kelompok || '—';
+
+  document.getElementById('anggotaList').innerHTML = data.map(a => `
+    <div class="anggota-item">
+      <div class="anggota-info">
+        <div class="anggota-nama">${a.nama}</div>
+        <div class="anggota-sub">No. ${a.no_anggota||'—'} · ${a.no_saham||'—'} · ${a.jenis||'—'}</div>
+      </div>
+      <div class="anggota-lembar">
+        ${a.jumlah_lembar} lembar
+        <span>${fmt(a.total_nilai||0)}</span>
+      </div>
+    </div>`).join('');
+}
+
+// ===== HADIR MPPS =====
+async function loadHadir() {
+  // Ambil jamaah_did dari saham keluarga
+  const { data: saham } = await sb.from('ubnb_saham')
+    .select('jamaah_did,nama').eq('nama_keluarga', CK).eq('status','Aktif');
+
+  const jamaahDids = (saham||[]).map(s => s.jamaah_did).filter(Boolean);
+  const namaList = (saham||[]).map(s => s.nama);
+
+  // Cari di mpps_hadir berdasarkan jamaah_did atau nama
+  let hadir = [];
+  if (jamaahDids.length) {
+    const { data: h1 } = await sb.from('mpps_hadir').select('*').in('jamaah_did', jamaahDids);
+    hadir = h1 || [];
+  }
+  // Fallback: cari by nama jika belum ada jamaah_did
+  if (hadir.length === 0 && namaList.length) {
+    const { data: h2 } = await sb.from('mpps_hadir').select('*').in('nama', namaList);
+    hadir = h2 || [];
+  }
+
+  const hadirBadge = document.getElementById('hadirBadge');
+  if (!hadir.length) {
+    hadirBadge.textContent = 'Belum Hadir';
+    hadirBadge.className = 'card-badge badge-red';
+    document.getElementById('hadirList').innerHTML = `
+      <div class="empty-state">
+        <div class="ei">📋</div>
+        <p>Belum ada anggota keluarga ini yang tercatat hadir di MPPS 2026.</p>
+      </div>`;
+    return;
+  }
+
+  hadirBadge.textContent = hadir.length + ' Hadir';
+  hadirBadge.className = 'card-badge badge-green';
+
+  document.getElementById('hadirList').innerHTML = hadir.map(h => `
+    <div class="hadir-item">
+      <div class="nomor-badge">${h.nomor||'—'}</div>
+      <div class="hadir-info">
+        <div class="hadir-nama">${h.nama}</div>
+        <div class="hadir-sub">Nomor Undian: <strong>${h.nomor||'—'}</strong> · Kelompok ${h.kelompok||'—'}</div>
+      </div>
+      <div class="hadir-jk">${h.jenis_kelamin==='L'?'👨':'👩'}</div>
+    </div>`).join('');
+}
+
+// ===== PEMENANG =====
+async function loadPemenang() {
+  const { data: saham } = await sb.from('ubnb_saham')
+    .select('nama').eq('nama_keluarga', CK).eq('status','Aktif');
+  const namaList = (saham||[]).map(s => s.nama);
+
+  // Cari di mpps_pemenang by nama
+  const { data: pemenang } = await sb.from('mpps_pemenang')
+    .select('*').in('nama', namaList);
+
+  if (!pemenang || !pemenang.length) {
+    document.getElementById('pemenangList').innerHTML = `
+      <div class="empty-state">
+        <div class="ei">🎰</div>
+        <p>Belum ada anggota keluarga ini yang memenangkan undian.<br>Semoga beruntung! 🤞</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('pemenangList').innerHTML = pemenang.map(p => `
+    <div class="pemenang-item">
+      <div>
+        <div class="pemenang-hadiah">🎁 ${p.hadiah||'—'}</div>
+        <div class="pemenang-nama">Pemenang: ${p.nama}</div>
+        <div style="font-size:10px;color:#b45309;margin-top:2px;">${p.tipe||''} · ${p.waktu ? new Date(p.waktu).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ===== SHU =====
+async function loadSHU() {
+  // Ambil ID saham keluarga
+  const { data: saham } = await sb.from('ubnb_saham')
+    .select('id,nama').eq('nama_keluarga', CK).eq('status','Aktif');
+
+  if (!saham || !saham.length) {
+    document.getElementById('shuList').innerHTML = '<div class="empty-state"><div class="ei">💰</div><p>Tidak ada data SHU.</p></div>';
+    return;
+  }
+
+  const sahamIds = saham.map(s => s.id);
+
+  // Ambil detail bagi hasil per anggota
+  const { data: detail } = await sb.from('ubnb_saham_bagi_hasil_detail')
+    .select('*, ubnb_saham_bagi_hasil(periode,tanggal_bagi)')
+    .in('saham_id', sahamIds)
+    .order('created_at', { ascending: false });
+
+  if (!detail || !detail.length) {
+    document.getElementById('shuList').innerHTML = `
+      <div class="empty-state">
+        <div class="ei">💰</div>
+        <p>Belum ada perhitungan SHU yang selesai untuk keluarga ini.</p>
+      </div>`;
+    return;
+  }
+
+  // Group by periode bagi hasil
+  const byPeriode = {};
+  detail.forEach(d => {
+    const periode = d.ubnb_saham_bagi_hasil?.periode || '—';
+    if (!byPeriode[periode]) byPeriode[periode] = { total: 0, tgl: d.ubnb_saham_bagi_hasil?.tanggal_bagi, sudah: true };
+    byPeriode[periode].total += parseFloat(d.jumlah_diterima || 0);
+    if (!d.sudah_dibayar) byPeriode[periode].sudah = false;
+  });
+
+  document.getElementById('shuList').innerHTML = Object.entries(byPeriode).map(([periode, v]) => `
+    <div class="shu-item">
+      <div>
+        <div class="shu-periode">📅 Periode ${periode}</div>
+        <div class="shu-sub">${v.tgl ? 'Dibagi: ' + new Date(v.tgl).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : ''}</div>
+      </div>
+      <div class="shu-nilai">
+        <div class="shu-amount">${fmt(v.total)}</div>
+        <div class="shu-status" style="color:${v.sudah ? 'var(--green)' : 'var(--amber)'}">
+          ${v.sudah ? '✅ Sudah Dibayar' : '⏳ Belum Dibayar'}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ===== MODAL TAMBAH SAHAM =====
+function openModalTambah() { document.getElementById('modalTambah').classList.add('open'); }
+function closeModalTambah() {
+  document.getElementById('modalTambah').classList.remove('open');
+  document.getElementById('tambahMsg').innerHTML = '';
+  ['t-nama','t-lembar','t-wa','t-ket'].forEach(id => document.getElementById(id).value = '');
+}
+
+async function submitTambahSaham() {
+  const nama = document.getElementById('t-nama').value.trim();
+  const lembar = document.getElementById('t-lembar').value;
+  const wa = document.getElementById('t-wa').value.trim();
+  const ket = document.getElementById('t-ket').value.trim();
+  const msgEl = document.getElementById('tambahMsg');
+
+  if (!nama || !lembar) {
+    msgEl.innerHTML = '<p style="color:var(--red);font-size:12px;margin-top:8px;">⚠️ Nama dan jumlah lembar wajib diisi.</p>';
+    return;
+  }
+
+  // Simpan sebagai pengajuan
+  const { error } = await sb.from('pengajuan_saham').insert([{
+    nama_keluarga: CK,
+    nama_anggota: nama,
+    jumlah_lembar: parseInt(lembar),
+    no_wa: wa,
+    keterangan: ket,
+    status: 'pending'
+  }]);
+
+  if (error) {
+    // Tabel mungkin belum ada, fallback WA
+    const msg = `Pengajuan Tambah Saham:\nKeluarga: ${CK}\nNama: ${nama}\nLembar: ${lembar}\nWA: ${wa}\nKet: ${ket}`;
+    window.open(`https://wa.me/6285718264782?text=${encodeURIComponent(msg)}`, '_blank');
+    closeModalTambah();
+    return;
+  }
+
+  msgEl.innerHTML = '<p style="color:var(--green);font-size:12px;margin-top:8px;">✅ Pengajuan terkirim! Pengurus akan menghubungi Anda segera.</p>';
+  setTimeout(closeModalTambah, 2000);
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadKeluargaList();
+
+  // Auto-login jika ada sesi
+  const saved = localStorage.getItem('dk_keluarga');
+  if (saved) {
+    CK = saved;
+    document.getElementById('selKeluarga').value = saved;
+    showApp();
+  }
+
+  document.getElementById('inpKode').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+</script>
+</body>
+</html>
