@@ -235,13 +235,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .ticker-track {
   display: flex;
   align-items: center;
-  animation: ticker-scroll 20s linear infinite;
   white-space: nowrap;
-}
-.ticker-track:hover { animation-play-state: paused; }
-@keyframes ticker-scroll {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  will-change: transform;
 }
 .ticker-item {
   display: inline-flex;
@@ -1608,22 +1603,102 @@ async function tutupMRO(){
 // SPONSOR TICKER
 // ============================
 
-// Speed presets: durasi animasi dalam detik (makin kecil = makin cepat)
+// Speed presets: pixel per frame (makin besar = makin cepat)
 const SPONSOR_SPEEDS = {
-  1: { dur: 6,  label: 'XX' },
-  2: { dur: 12, label: 'X'  },
-  3: { dur: 20, label: 'N'  },
-  4: { dur: 35, label: 'S'  },
-  5: { dur: 60, label: 'XS' },
+  1: { ppf: 0.3, label: 'XS' },
+  2: { ppf: 0.6, label: 'S'  },
+  3: { ppf: 1.0, label: 'N'  },
+  4: { ppf: 1.8, label: 'X'  },
+  5: { ppf: 3.0, label: 'XX' },
 };
+
+let tickerRAF = null;
+let tickerX = 0;
+let tickerPPF = 1.0;
+let tickerPaused = false;
+let tickerHalfW = 0;
 
 function updateSponsorSpeed(val) {
   const s = SPONSOR_SPEEDS[val];
   if (!s) return;
-  const track = document.getElementById('tickerTrack');
-  if (track) track.style.animationDuration = s.dur + 's';
+  tickerPPF = s.ppf;
   document.getElementById('speedVal').textContent = s.label;
   localStorage.setItem('sponsor_speed', val);
+}
+
+function startTickerRAF() {
+  if (tickerRAF) cancelAnimationFrame(tickerRAF);
+  const track = document.getElementById('tickerTrack');
+  if (!track) return;
+
+  // Hitung lebar setengah track (satu set item)
+  // Kita duplikat content, jadi reset saat sudah geser sejauh setengahnya
+  function measure() {
+    tickerHalfW = track.scrollWidth / 2;
+  }
+  measure();
+
+  function tick() {
+    if (!tickerPaused) {
+      tickerX -= tickerPPF;
+      // Reset seamless: saat sudah geser sejauh 1 set, kembali ke 0
+      if (Math.abs(tickerX) >= tickerHalfW) {
+        tickerX = 0;
+      }
+      track.style.transform = `translateX(${tickerX}px)`;
+    }
+    tickerRAF = requestAnimationFrame(tick);
+  }
+  tickerRAF = requestAnimationFrame(tick);
+}
+
+async function loadSponsors() {
+  const { data } = await sb.from('mpps_sponsor')
+    .select('nama_usaha,logo_url')
+    .eq('status','aktif')
+    .order('urutan');
+
+  const sponsors = data || [];
+  if (!sponsors.length) return;
+
+  const ticker = document.getElementById('sponsorTicker');
+  const track = document.getElementById('tickerTrack');
+
+  const makeItems = () => sponsors.map(s => `
+    <div class="ticker-item">
+      ${s.logo_url ? `<img src="${s.logo_url}" alt="${s.nama_usaha}" class="ticker-logo" onerror="this.style.display='none'">` : ''}
+      <span class="ticker-name">${s.nama_usaha}</span>
+    </div>
+    <span class="ticker-sep">✦</span>
+  `).join('');
+
+  // Duplikat untuk seamless loop
+  track.innerHTML = makeItems() + makeItems();
+  tickerX = 0;
+
+  ticker.style.display = 'flex';
+
+  // Pause on hover
+  const wrap = document.getElementById('sponsorTicker');
+  wrap.addEventListener('mouseenter', () => { tickerPaused = true; });
+  wrap.addEventListener('mouseleave', () => { tickerPaused = false; });
+
+  // Apply saved settings
+  const savedSize = localStorage.getItem('sponsor_size') || '3';
+  document.getElementById('sponsorSize').value = savedSize;
+  updateSponsorSize(savedSize);
+
+  const savedSpeed = localStorage.getItem('sponsor_speed') || '3';
+  document.getElementById('sponsorSpeed').value = savedSpeed;
+  updateSponsorSpeed(savedSpeed);
+
+  // Tunggu render selesai lalu mulai animasi
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      tickerHalfW = track.scrollWidth / 2;
+      startTickerRAF();
+    });
+  });
 }
 const SPONSOR_SIZES = {
   1: { logoH:24, nameSize:11, labelSize:9,  sepSize:10, itemPad:'0 16px', tickerPadY:'4px',  label:'XS', minW:180 },
@@ -1666,44 +1741,6 @@ function updateSponsorSize(val) {
 
   // Simpan ke localStorage
   localStorage.setItem('sponsor_size', val);
-}
-
-async function loadSponsors() {
-  const { data } = await sb.from('mpps_sponsor')
-    .select('nama_usaha,logo_url')
-    .eq('status','aktif')
-    .order('urutan');
-
-  const sponsors = data || [];
-  if (!sponsors.length) return;
-
-  const ticker = document.getElementById('sponsorTicker');
-  const track = document.getElementById('tickerTrack');
-
-  const makeItems = () => sponsors.map(s => `
-    <div class="ticker-item">
-      ${s.logo_url ? `<img src="${s.logo_url}" alt="${s.nama_usaha}" class="ticker-logo" onerror="this.style.display='none'">` : ''}
-      <span class="ticker-name">${s.nama_usaha}</span>
-    </div>
-    <span class="ticker-sep">✦</span>
-  `).join('');
-
-  track.innerHTML = makeItems() + makeItems();
-
-  const dur = Math.max(15, sponsors.length * 6);
-  track.style.animationDuration = dur + 's';
-
-  ticker.style.display = 'flex';
-
-  // Apply saved size atau default
-  const savedSize = localStorage.getItem('sponsor_size') || '3';
-  document.getElementById('sponsorSize').value = savedSize;
-  updateSponsorSize(savedSize);
-
-  // Apply saved speed atau default
-  const savedSpeed = localStorage.getItem('sponsor_speed') || '3';
-  document.getElementById('sponsorSpeed').value = savedSpeed;
-  updateSponsorSpeed(savedSpeed);
 }
 
 // ============================
