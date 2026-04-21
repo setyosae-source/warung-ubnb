@@ -484,6 +484,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           </select>
           <input type="text" id="sp-search" placeholder="🔍 Cari nama usaha..." oninput="renderSponsorList()" style="flex:1;min-width:140px;padding:8px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;outline:none;">
           <button class="btn secondary" onclick="lSponsor()">🔄 Refresh</button>
+          <button class="btn gold" onclick="openModalTambahSponsor()">➕ Tambah Sponsor</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;" id="sp-stats"></div>
         <div id="sp-list"></div>
@@ -1609,6 +1610,120 @@ function kirimWASponsor(nama, telepon, status) {
     : 'Assalamualaikum Bpk/Ibu ' + nama + '. Kami mengkonfirmasi pendaftaran sponsor MPPS UBNB Perwira 2026. Pengurus sedang memverifikasi dan akan segera menghubungi. Terima kasih.';
   window.open('https://wa.me/' + no + '?text=' + encodeURIComponent(pesan), '_blank');
 }
+
+// ===== TAMBAH SPONSOR (ADMIN) =====
+function openModalTambahSponsor() {
+  ['msp-usaha','msp-kontak','msp-telp','msp-ket','msp-logo'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('msp-jenis').value = 'uang';
+  document.getElementById('msp-status').value = 'aktif';
+  document.getElementById('msp-err').style.display = 'none';
+  document.getElementById('modal-tambah-sponsor').classList.add('show');
+  setTimeout(function(){ document.getElementById('msp-usaha').focus(); }, 100);
+}
+
+function closeModalTambahSponsor() {
+  document.getElementById('modal-tambah-sponsor').classList.remove('show');
+}
+
+async function simpanSponsorBaru() {
+  var usaha = document.getElementById('msp-usaha').value.trim();
+  var kontak = document.getElementById('msp-kontak').value.trim();
+  var telp = document.getElementById('msp-telp').value.trim();
+  var jenis = document.getElementById('msp-jenis').value;
+  var ket = document.getElementById('msp-ket').value.trim();
+  var logo = document.getElementById('msp-logo').value.trim();
+  var status = document.getElementById('msp-status').value;
+  var errEl = document.getElementById('msp-err');
+
+  if (!usaha) {
+    errEl.textContent = 'Nama usaha wajib diisi';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var btn = document.querySelector('#modal-tambah-sponsor .konfirm-ok');
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan...';
+  errEl.style.display = 'none';
+
+  var payload = {
+    nama_usaha: usaha,
+    nama_kontak: kontak || null,
+    telepon: telp || null,
+    jenis_kontribusi: jenis,
+    keterangan_kontribusi: ket || null,
+    logo_url: logo || null,
+    status: status,
+    urutan: 99
+  };
+
+  var result = await sb.from('mpps_sponsor').insert([payload]);
+  btn.disabled = false;
+  btn.textContent = 'Simpan';
+
+  if (result.error) {
+    errEl.textContent = 'Gagal menyimpan: ' + result.error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  closeModalTambahSponsor();
+  toast('Sponsor berhasil ditambahkan!');
+  await lSponsor();
+}
+
 </script>
+
+<!-- MODAL TAMBAH SPONSOR -->
+<div class="konfirm-overlay" id="modal-tambah-sponsor" onclick="if(event.target===this)closeModalTambahSponsor()">
+  <div class="konfirm-box" style="max-width:460px;">
+    <div class="konfirm-icon">🤝</div>
+    <div class="konfirm-title" style="color:var(--hijau);">Tambah Sponsor</div>
+    <div class="konfirm-sub">Input data sponsor baru</div>
+
+    <div class="konfirm-field">
+      <label>Nama Usaha *</label>
+      <input type="text" id="msp-usaha" placeholder="Contoh: Toko Sembako Pak Joko" style="border-color:var(--border);">
+    </div>
+    <div class="konfirm-field">
+      <label>Nama Kontak</label>
+      <input type="text" id="msp-kontak" placeholder="Nama perwakilan" style="border-color:var(--border);">
+    </div>
+    <div class="konfirm-field">
+      <label>No. WhatsApp</label>
+      <input type="text" id="msp-telp" placeholder="08xxxxxxxxxx" style="border-color:var(--border);">
+    </div>
+    <div class="konfirm-field">
+      <label>Jenis Kontribusi</label>
+      <select id="msp-jenis" style="width:100%;padding:11px 13px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;outline:none;">
+        <option value="uang">💰 Uang</option>
+        <option value="hadiah">🎁 Hadiah / Voucher</option>
+      </select>
+    </div>
+    <div class="konfirm-field">
+      <label>Keterangan Kontribusi</label>
+      <input type="text" id="msp-ket" placeholder="Contoh: Rp 500.000 / Voucher Makan 10 pcs" style="border-color:var(--border);">
+    </div>
+    <div class="konfirm-field">
+      <label>URL Logo <span style="font-weight:400;opacity:.6">(opsional)</span></label>
+      <input type="text" id="msp-logo" placeholder="https://..." style="border-color:var(--border);">
+    </div>
+    <div class="konfirm-field">
+      <label>Status Awal</label>
+      <select id="msp-status" style="width:100%;padding:11px 13px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;outline:none;">
+        <option value="aktif">✅ Aktif (langsung tampil)</option>
+        <option value="pending">⏳ Pending (perlu verifikasi)</option>
+      </select>
+    </div>
+    <div class="konfirm-err" id="msp-err"></div>
+    <div class="konfirm-btns">
+      <button class="konfirm-cancel" onclick="closeModalTambahSponsor()">Batal</button>
+      <button class="konfirm-ok" style="background:var(--hijau);" onclick="simpanSponsorBaru()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
