@@ -159,9 +159,12 @@ body {
 }
 .tab-content {
   display: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 .tab-content.active {
   display: block;
+  opacity: 1;
 }
 
 /* PRODUK GRID */
@@ -170,6 +173,8 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
   margin-top: 16px;
+  will-change: contents;
+  contain: layout style paint;
 }
 .produk-card {
   background: white;
@@ -177,6 +182,8 @@ body {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   transition: transform 0.2s;
+  will-change: transform;
+  contain: layout style paint;
 }
 .produk-card:hover {
   transform: translateY(-2px);
@@ -186,6 +193,7 @@ body {
   height: 140px;
   object-fit: cover;
   background: var(--bg);
+  will-change: auto;
 }
 .produk-info {
   padding: 12px;
@@ -917,6 +925,18 @@ async function init() {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(filterProduk, 300); // Wait 300ms after user stops typing
   });
+  
+  // Event delegation for add to cart buttons
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('btn-add-cart') && !e.target.disabled) {
+      const produkId = e.target.getAttribute('data-id');
+      const kategori = e.target.getAttribute('data-kategori');
+      if (produkId && kategori) {
+        addToCartById(produkId, kategori);
+      }
+    }
+  });
+  
   loadCart();
 }
 
@@ -988,11 +1008,13 @@ function renderProduk(kategori) {
   const outStock = produk.filter(p => p.stok <= 0).sort((a,b) => a.nama.localeCompare(b.nama));
   const sorted = [...inStock, ...outStock];
   
+  // Use data-id instead of inline onclick with JSON.stringify
   grid.innerHTML = sorted.map(p => `
     <div class="produk-card">
       <img src="${p.foto_url || 'https://via.placeholder.com/200x140?text=' + encodeURIComponent(p.nama)}" 
            class="produk-img" 
            alt="${p.nama}"
+           loading="lazy"
            onerror="this.src='https://via.placeholder.com/200x140?text=Produk'">
       <div class="produk-info">
         <div class="produk-nama">${p.nama}</div>
@@ -1000,7 +1022,7 @@ function renderProduk(kategori) {
         <div class="produk-stok ${p.stok <= 0 ? 'habis' : ''}">
           ${p.stok > 0 ? `Stok: ${p.stok}` : 'Stok habis'}
         </div>
-        <button class="btn-add-cart" onclick='addToCart(${JSON.stringify(p)})' ${p.stok <= 0 ? 'disabled' : ''}>
+        <button class="btn-add-cart" data-id="${p.id}" data-kategori="${kategori}" ${p.stok <= 0 ? 'disabled' : ''}>
           ${p.stok > 0 ? '🛒 Tambah ke Keranjang' : 'Stok Habis'}
         </button>
       </div>
@@ -1042,6 +1064,7 @@ function filterProduk() {
       <img src="${p.foto_url || 'https://via.placeholder.com/200x140?text=' + encodeURIComponent(p.nama)}" 
            class="produk-img" 
            alt="${p.nama}"
+           loading="lazy"
            onerror="this.src='https://via.placeholder.com/200x140?text=Produk'">
       <div class="produk-info">
         <div class="produk-nama">${p.nama}</div>
@@ -1049,7 +1072,7 @@ function filterProduk() {
         <div class="produk-stok ${p.stok <= 0 ? 'habis' : ''}">
           ${p.stok > 0 ? `Stok: ${p.stok}` : 'Stok habis'}
         </div>
-        <button class="btn-add-cart" onclick='addToCart(${JSON.stringify(p)})' ${p.stok <= 0 ? 'disabled' : ''}>
+        <button class="btn-add-cart" data-id="${p.id}" data-kategori="${currentTab}" ${p.stok <= 0 ? 'disabled' : ''}>
           ${p.stok > 0 ? '🛒 Tambah ke Keranjang' : 'Stok Habis'}
         </button>
       </div>
@@ -1058,7 +1081,16 @@ function filterProduk() {
 }
 
 // CART FUNCTIONS
-function addToCart(produk) {
+function addToCartById(produkId, kategori) {
+  // Find produk dari allProduk
+  const produkList = allProduk[kategori] || [];
+  const produk = produkList.find(p => p.id == produkId);
+  
+  if (!produk) {
+    console.error('Produk tidak ditemukan:', produkId);
+    return;
+  }
+  
   const existing = cart.find(item => item.id === produk.id);
   
   if (existing) {
@@ -1086,12 +1118,52 @@ function addToCart(produk) {
   // Show feedback
   const btn = event.target;
   const originalText = btn.textContent;
+  const originalBg = btn.style.background;
   btn.textContent = '✓ Ditambahkan!';
   btn.style.background = '#10b981';
   setTimeout(() => {
     btn.textContent = originalText;
-    btn.style.background = '';
+    btn.style.background = originalBg;
   }, 1000);
+}
+
+// Keep old function for backward compatibility
+function addToCart(produk) {
+  const existing = cart.find(item => item.id === produk.id);
+  
+  if (existing) {
+    if (existing.qty < produk.stok) {
+      existing.qty++;
+    } else {
+      alert(`Stok ${produk.nama} hanya tersedia ${produk.stok}`);
+      return;
+    }
+  } else {
+    cart.push({
+      id: produk.id,
+      nama: produk.nama,
+      harga: produk.harga,
+      foto_url: produk.foto_url,
+      stok: produk.stok,
+      qty: 1,
+      kategori: produk.kategori
+    });
+  }
+  
+  saveCart();
+  updateCartUI();
+  
+  // Show feedback
+  if (event && event.target) {
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '✓ Ditambahkan!';
+    btn.style.background = '#10b981';
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.background = '';
+    }, 1000);
+  }
 }
 
 function removeFromCart(id) {
