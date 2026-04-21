@@ -285,8 +285,11 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 
     <div class="login-info">
       Belum punya kode akses?<br>
-      Hubungi Admin via WhatsApp:<br>
-      <strong><a href="https://wa.me/6285718264782" target="_blank">📱 +62 857-1826-4782</a></strong>
+      <button onclick="mintaKodeAkses()" id="btnMintaKode"
+        style="margin-top:10px;width:100%;padding:10px;background:rgba(245,200,66,0.15);border:1.5px solid rgba(245,200,66,0.4);color:var(--gold);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;">
+        📱 Minta Kode Akses via WhatsApp
+      </button>
+      <div id="mintaKodeMsg" style="margin-top:8px;font-size:11px;display:none;"></div>
     </div>
   </div>
 </div>
@@ -433,6 +436,75 @@ const sb = createClient(SURL, SKEY);
 let CK = null; // current keluarga nama
 
 const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID');
+
+// ===== MINTA KODE AKSES =====
+async function mintaKodeAkses() {
+  const nama = document.getElementById('selKeluarga').value;
+  const msgEl = document.getElementById('mintaKodeMsg');
+  const btn = document.getElementById('btnMintaKode');
+
+  if (!nama) {
+    msgEl.style.display = 'block';
+    msgEl.style.color = '#fca5a5';
+    msgEl.textContent = '⚠️ Pilih nama keluarga terlebih dahulu.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Memproses...';
+  msgEl.style.display = 'none';
+
+  // Cek apakah sudah ada kode
+  const { data: existing } = await sb.from('keluarga_akses')
+    .select('id,kode_akses,aktif')
+    .eq('nama_keluarga', nama)
+    .single();
+
+  let kode;
+
+  if (existing) {
+    // Sudah ada — pakai kode yang ada (tidak generate ulang)
+    kode = existing.kode_akses;
+  } else {
+    // Generate kode baru: 6 digit angka
+    kode = String(Math.floor(100000 + Math.random() * 900000));
+
+    const { error } = await sb.from('keluarga_akses').insert([{
+      nama_keluarga: nama,
+      kode_akses: kode,
+      aktif: true
+    }]);
+
+    if (error) {
+      msgEl.style.display = 'block';
+      msgEl.style.color = '#fca5a5';
+      msgEl.textContent = '❌ Gagal generate kode. Coba lagi.';
+      btn.disabled = false;
+      btn.textContent = '📱 Minta Kode Akses via WhatsApp';
+      return;
+    }
+  }
+
+  // Buka WA ke admin dengan template
+  const pesan =
+`Assalamu'alaikum Admin UBNB 🙏
+
+Saya ingin meminta kode akses Dashboard Keluarga:
+
+👤 *Nama Keluarga:* ${nama}
+🔑 *Kode Akses:* ${kode} _(sudah ter-generate otomatis)_
+
+Mohon dikonfirmasi. Terima kasih 🙏`;
+
+  window.open(`https://wa.me/6285718264782?text=${encodeURIComponent(pesan)}`, '_blank');
+
+  msgEl.style.display = 'block';
+  msgEl.style.color = '#86efac';
+  msgEl.innerHTML = `✅ Kode sudah di-generate. WhatsApp ke admin terbuka.<br>Masukkan kode yang admin konfirmasi untuk login.`;
+
+  btn.disabled = false;
+  btn.textContent = '📱 Minta Kode Akses via WhatsApp';
+}
 
 // ===== LOGIN =====
 async function loadKeluargaList() {
