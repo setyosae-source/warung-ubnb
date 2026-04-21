@@ -893,9 +893,12 @@ let allProduk = {
   laundry: []
 };
 let cart = [];
+let renderedTabs = {}; // Cache untuk menghindari re-render
 
 // Init
 window.addEventListener('DOMContentLoaded', init);
+
+let searchTimeout; // Debounce timer
 
 async function init() {
   const params = new URLSearchParams(window.location.search);
@@ -909,7 +912,11 @@ async function init() {
   
   await loadAllProduk();
   
-  document.getElementById('searchInput').addEventListener('input', filterProduk);
+  // Add debounced search
+  document.getElementById('searchInput').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(filterProduk, 300); // Wait 300ms after user stops typing
+  });
   loadCart();
 }
 
@@ -934,8 +941,10 @@ function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
   document.getElementById(`tab-${tabName}`).classList.add('active');
   
-  if (tabName !== 'bmt') {
+  // Only render if not BMT and not already rendered
+  if (tabName !== 'bmt' && !renderedTabs[tabName]) {
     renderProduk(tabName);
+    renderedTabs[tabName] = true; // Mark as rendered
   }
 }
 
@@ -956,6 +965,7 @@ async function loadAllProduk() {
     allProduk.laundry = data.filter(p => p.kategori === 'laundry');
     
     renderProduk('warung');
+    renderedTabs.warung = true; // Mark warung as rendered
     document.getElementById('loadingState').style.display = 'none';
   } catch (err) {
     console.error('Error loading produk:', err);
@@ -1001,7 +1011,16 @@ function renderProduk(kategori) {
 function filterProduk() {
   const query = document.getElementById('searchInput').value.toLowerCase();
   if (!query) {
-    renderProduk(currentTab);
+    // Only re-render if not already cached
+    if (!renderedTabs[currentTab]) {
+      renderProduk(currentTab);
+      renderedTabs[currentTab] = true;
+    } else {
+      // Just show the already rendered content
+      const gridId = currentTab === 'warung' ? 'produkGrid' : `${currentTab}Grid`;
+      const grid = document.getElementById(gridId);
+      grid.style.display = 'grid'; // Make sure it's visible
+    }
     return;
   }
   
