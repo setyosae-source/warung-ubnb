@@ -206,7 +206,77 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   font-weight:600;cursor:pointer;transition:all .2s;}
 .btn-reset:hover{border-color:var(--border2);color:var(--text);}
 
-/* ===== RIWAYAT ===== */
+/* ===== SPONSOR TICKER ===== */
+.sponsor-ticker {
+  background: rgba(245,200,66,.06);
+  border-bottom: 1px solid rgba(245,200,66,.15);
+  padding: 5px 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.ticker-label {
+  flex-shrink: 0;
+  padding: 0 14px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gold2);
+  border-right: 1px solid rgba(245,200,66,.2);
+  white-space: nowrap;
+}
+.ticker-track-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.ticker-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  animation: ticker-scroll 20s linear infinite;
+  white-space: nowrap;
+}
+.ticker-track:hover { animation-play-state: paused; }
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px;
+  border-right: 1px solid rgba(245,200,66,.15);
+}
+.ticker-logo {
+  height: 22px;
+  width: auto;
+  max-width: 60px;
+  object-fit: contain;
+  filter: brightness(1.1);
+  border-radius: 3px;
+}
+.ticker-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold3);
+  letter-spacing: .5px;
+}
+.ticker-sep {
+  font-size: 10px;
+  color: var(--gold2);
+  opacity: .5;
+  padding: 0 8px;
+}
+
+/* Grid jadi 3 baris: header + ticker + body */
+.app {
+  grid-template-rows: auto auto 1fr;
+}
 .riwayat-wrap{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;}
 .riwayat-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;
   color:var(--text-muted);font-weight:600;display:flex;align-items:center;gap:8px;flex-shrink:0;}
@@ -446,6 +516,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <div class="stat-val" id="stat-pool">—</div>
         <div class="stat-lbl">Sisa Pool</div>
       </div>
+    </div>
+  </div>
+
+  <!-- SPONSOR TICKER -->
+  <div class="sponsor-ticker" id="sponsorTicker" style="display:none;">
+    <div class="ticker-label">✦ Sponsor</div>
+    <div class="ticker-track-wrap">
+      <div class="ticker-track" id="tickerTrack"></div>
     </div>
   </div>
 
@@ -1492,6 +1570,40 @@ async function tutupMRO(){
 // simpanMultiPemenang moved to tutupMRO
 
 // ============================
+// SPONSOR TICKER
+// ============================
+async function loadSponsors() {
+  const { data } = await sb.from('mpps_sponsor')
+    .select('nama_usaha,logo_url')
+    .eq('status','aktif')
+    .order('urutan');
+
+  const sponsors = data || [];
+  if (!sponsors.length) return;
+
+  const ticker = document.getElementById('sponsorTicker');
+  const track = document.getElementById('tickerTrack');
+
+  // Buat item + duplikat untuk seamless loop
+  const makeItems = () => sponsors.map(s => `
+    <div class="ticker-item">
+      ${s.logo_url ? `<img src="${s.logo_url}" alt="${s.nama_usaha}" class="ticker-logo" onerror="this.style.display='none'">` : ''}
+      <span class="ticker-name">${s.nama_usaha}</span>
+    </div>
+    <span class="ticker-sep">✦</span>
+  `).join('');
+
+  // Duplikat agar animasi seamless
+  track.innerHTML = makeItems() + makeItems();
+
+  // Sesuaikan durasi dengan jumlah sponsor
+  const dur = Math.max(15, sponsors.length * 6);
+  track.style.animationDuration = dur + 's';
+
+  ticker.style.display = 'flex';
+}
+
+// ============================
 // INIT
 // ============================
 // Aktifkan audio context saat user berinteraksi pertama kali
@@ -1507,6 +1619,7 @@ document.addEventListener('keydown',e=>{
 });
 
 loadAll();
+loadSponsors();
 setInterval(loadAll,30000);
 </script>
 </body>
