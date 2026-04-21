@@ -159,12 +159,9 @@ body {
 }
 .tab-content {
   display: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
 }
 .tab-content.active {
   display: block;
-  opacity: 1;
 }
 
 /* PRODUK GRID */
@@ -173,8 +170,6 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
   margin-top: 16px;
-  will-change: contents;
-  contain: layout style paint;
 }
 .produk-card {
   background: white;
@@ -182,8 +177,6 @@ body {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   transition: transform 0.2s;
-  will-change: transform;
-  contain: layout style paint;
 }
 .produk-card:hover {
   transform: translateY(-2px);
@@ -193,7 +186,6 @@ body {
   height: 140px;
   object-fit: cover;
   background: var(--bg);
-  will-change: auto;
 }
 .produk-info {
   padding: 12px;
@@ -961,6 +953,20 @@ function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
   document.getElementById(`tab-${tabName}`).classList.add('active');
   
+  // Clear search when switching tabs
+  document.getElementById('searchInput').value = '';
+  
+  // Update search placeholder based on tab
+  const searchInput = document.getElementById('searchInput');
+  const tabNames = {
+    'warung': 'Cari produk warung...',
+    'ppob': 'Cari layanan PPOB...',
+    'service': 'Cari layanan service...',
+    'laundry': 'Cari layanan laundry...',
+    'bmt': 'Cari...'
+  };
+  searchInput.placeholder = '🔍 ' + (tabNames[tabName] || 'Cari produk...');
+  
   // Only render if not BMT and not already rendered
   if (tabName !== 'bmt' && !renderedTabs[tabName]) {
     renderProduk(tabName);
@@ -999,7 +1005,9 @@ function renderProduk(kategori) {
   const produk = allProduk[kategori] || [];
   
   if (produk.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Tidak ada produk</div></div>';
+    requestAnimationFrame(() => {
+      grid.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Tidak ada produk</div></div>';
+    });
     return;
   }
   
@@ -1009,7 +1017,7 @@ function renderProduk(kategori) {
   const sorted = [...inStock, ...outStock];
   
   // Use data-id instead of inline onclick with JSON.stringify
-  grid.innerHTML = sorted.map(p => `
+  const html = sorted.map(p => `
     <div class="produk-card">
       <img src="${p.foto_url || 'https://via.placeholder.com/200x140?text=' + encodeURIComponent(p.nama)}" 
            class="produk-img" 
@@ -1028,20 +1036,23 @@ function renderProduk(kategori) {
       </div>
     </div>
   `).join('');
+  
+  // Batch DOM update with requestAnimationFrame
+  requestAnimationFrame(() => {
+    grid.innerHTML = html;
+  });
 }
 
 function filterProduk() {
   const query = document.getElementById('searchInput').value.toLowerCase();
+  const gridId = currentTab === 'warung' ? 'produkGrid' : `${currentTab}Grid`;
+  const grid = document.getElementById(gridId);
+  
   if (!query) {
     // Only re-render if not already cached
     if (!renderedTabs[currentTab]) {
       renderProduk(currentTab);
       renderedTabs[currentTab] = true;
-    } else {
-      // Just show the already rendered content
-      const gridId = currentTab === 'warung' ? 'produkGrid' : `${currentTab}Grid`;
-      const grid = document.getElementById(gridId);
-      grid.style.display = 'grid'; // Make sure it's visible
     }
     return;
   }
@@ -1051,15 +1062,14 @@ function filterProduk() {
     p.nama.toLowerCase().includes(query)
   );
   
-  const gridId = currentTab === 'warung' ? 'produkGrid' : `${currentTab}Grid`;
-  const grid = document.getElementById(gridId);
-  
   if (filtered.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Produk tidak ditemukan</div></div>';
+    requestAnimationFrame(() => {
+      grid.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Produk tidak ditemukan</div></div>';
+    });
     return;
   }
   
-  grid.innerHTML = filtered.map(p => `
+  const html = filtered.map(p => `
     <div class="produk-card">
       <img src="${p.foto_url || 'https://via.placeholder.com/200x140?text=' + encodeURIComponent(p.nama)}" 
            class="produk-img" 
@@ -1078,6 +1088,10 @@ function filterProduk() {
       </div>
     </div>
   `).join('');
+  
+  requestAnimationFrame(() => {
+    grid.innerHTML = html;
+  });
 }
 
 // CART FUNCTIONS
