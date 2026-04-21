@@ -895,6 +895,15 @@ let allProduk = {
 let cart = [];
 let renderedTabs = {}; // Cache untuk menghindari re-render
 
+// Pagination state
+let currentPage = {
+  warung: 1,
+  ppob: 1,
+  service: 1,
+  laundry: 1
+};
+const ITEMS_PER_PAGE = 24; // 24 produk per halaman
+
 // Init
 window.addEventListener('DOMContentLoaded', init);
 
@@ -1005,9 +1014,7 @@ function renderProduk(kategori) {
   const produk = allProduk[kategori] || [];
   
   if (produk.length === 0) {
-    requestAnimationFrame(() => {
-      grid.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Tidak ada produk</div></div>';
-    });
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Tidak ada produk</div></div>';
     return;
   }
   
@@ -1016,8 +1023,15 @@ function renderProduk(kategori) {
   const outStock = produk.filter(p => p.stok <= 0).sort((a,b) => a.nama.localeCompare(b.nama));
   const sorted = [...inStock, ...outStock];
   
-  // Use data-id instead of inline onclick with JSON.stringify
-  const html = sorted.map(p => `
+  // PAGINATION: Only render first page (24 items)
+  const page = currentPage[kategori] || 1;
+  const startIdx = (page - 1) * ITEMS_PER_PAGE;
+  const endIdx = startIdx + ITEMS_PER_PAGE;
+  const pagedProduk = sorted.slice(startIdx, endIdx);
+  const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE);
+  
+  // Render only 24 items instead of 335!
+  const html = pagedProduk.map(p => `
     <div class="produk-card">
       <img src="${p.foto_url || 'https://via.placeholder.com/200x140?text=' + encodeURIComponent(p.nama)}" 
            class="produk-img" 
@@ -1037,10 +1051,35 @@ function renderProduk(kategori) {
     </div>
   `).join('');
   
-  // Batch DOM update with requestAnimationFrame
-  requestAnimationFrame(() => {
-    grid.innerHTML = html;
-  });
+  // Add pagination controls if needed
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    paginationHtml = `
+      <div style="grid-column: 1 / -1; display: flex; justify-content: center; gap: 8px; padding: 20px 0;">
+        <button onclick="changePage('${kategori}', ${page - 1})" ${page === 1 ? 'disabled' : ''} 
+                style="padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px; background: white; cursor: pointer;">
+          ← Sebelumnya
+        </button>
+        <span style="padding: 8px 16px; display: flex; align-items: center;">
+          Hal ${page} dari ${totalPages} (${sorted.length} produk)
+        </span>
+        <button onclick="changePage('${kategori}', ${page + 1})" ${page === totalPages ? 'disabled' : ''}
+                style="padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px; background: white; cursor: pointer;">
+          Selanjutnya →
+        </button>
+      </div>
+    `;
+  }
+  
+  grid.innerHTML = html + paginationHtml;
+}
+
+// Function to change page
+function changePage(kategori, newPage) {
+  currentPage[kategori] = newPage;
+  renderProduk(kategori);
+  // Scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function filterProduk() {
