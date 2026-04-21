@@ -502,12 +502,15 @@ function pilihProduk(id){
   if(b.kategori==='service'){openServiceForm(b);return;}
   if(b.harga_levels&&b.harga_levels.length>0){openLevelPicker(b);return;}
 
-  tambahKR({id:b.id,nama:b.nama,harga:b.harga,hE:b.harga,qty:1,kategori:b.kategori});
+  tambahKR({id:b.id,nama:b.nama,harga:b.harga,hE:b.harga,qty:1,kategori:b.kategori,satuan:b.satuan||'pcs'});
 }
 
 function tambahKR(item){
   const ex=KR.find(x=>x.id===item.id&&x._lvIdx===item._lvIdx);
-  if(ex){ex.qty++;}
+  if(ex){
+    const isDecimal = item.satuan && ['kg', 'gram', 'ons', 'liter', 'ml', 'meter', 'cm'].includes(item.satuan.toLowerCase());
+    ex.qty += isDecimal ? 0.5 : 1;
+  }
   else{KR.push({...item,qty:item.qty||1});}
   renderKeranjang();
   toast(item.nama+' ditambahkan');
@@ -595,7 +598,7 @@ function renderKeranjang(){
       </div>
       <div class="qty-ctrl">
         <button class="qbtn" onclick="ubahQty(${i},-1)">−</button>
-        <span style="font-weight:700;min-width:20px;text-align:center">${fmtQty(k.qty)}</span>
+        <span>${fmtQty(k.qty)}</span>
         <button class="qbtn" onclick="ubahQty(${i},1)">+</button>
       </div>
     </div>`).join('');
@@ -729,13 +732,18 @@ function renderKeranjangBeli(){
       </div>
       <div class="qty-ctrl">
         <button class="qbtn" onclick="ubahQtyBeli(${i},-1)">−</button>
-        <span style="font-weight:700;min-width:20px;text-align:center">${fmtQty(k.qty)}</span>
+        <span>${fmtQty(k.qty)}</span>
         <button class="qbtn" onclick="ubahQtyBeli(${i},1)">+</button>
       </div>
     </div>`).join('');
 }
 
-function ubahQtyBeli(i,d){KB[i].qty=Math.max(0.1,KB[i].qty+d);KB[i].total=KB[i].qty*KB[i].hb;if(KB[i].qty<=0)KB.splice(i,1);renderKeranjangBeli();}
+function ubahQtyBeli(i,d){
+  KB[i].qty = Math.max(0.1, KB[i].qty + (d * 0.5));
+  KB[i].total = KB[i].qty * KB[i].hb;
+  if(KB[i].qty < 0.1) KB.splice(i,1);
+  renderKeranjangBeli();
+}
 function resetKeranjangBeli(){KB=[];sdSel.sup=null;document.getElementById('sdd-sup').textContent='Tanpa supplier';document.getElementById('beli-catatan').value='';renderKeranjangBeli();}
 
 function updateMarginBeli(){
