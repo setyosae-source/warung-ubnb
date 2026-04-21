@@ -394,17 +394,10 @@ body {
 
 .carousel-container {
   position: relative;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   padding: 20px 0;
   cursor: grab;
   user-select: none;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.carousel-container::-webkit-scrollbar {
-  display: none;
 }
 
 .carousel-container:active {
@@ -414,13 +407,7 @@ body {
 .carousel-track {
   display: flex;
   gap: 20px;
-  animation: scroll-left 10s linear infinite;
   will-change: transform;
-}
-
-@keyframes scroll-left {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
 }
 
 .hadiah-card {
@@ -1670,73 +1657,83 @@ document.addEventListener('DOMContentLoaded', function() {
 function initCarousel() {
   const container = document.querySelector('.carousel-container');
   const track = document.querySelector('.carousel-track');
-  
-  let isDown = false;
-  let startX;
-  let scrollLeft;
-  
-  container.addEventListener('mousedown', (e) => {
-    isDown = true;
-    container.style.cursor = 'grabbing';
-    startX = e.pageX - container.offsetLeft;
-    scrollLeft = container.scrollLeft;
-    track.style.animationPlayState = 'paused';
+
+  let rafId = null;
+  let carX = 0;
+  const PPF = 0.8; // pixel per frame
+  let paused = false;
+  let halfW = 0;
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartCarX = 0;
+
+  function measure() {
+    // Hitung lebar satu set item (setengah dari total karena duplikat)
+    halfW = track.scrollWidth / 2;
+  }
+
+  function tick() {
+    if (!paused && !dragging) {
+      carX -= PPF;
+      if (Math.abs(carX) >= halfW) carX = 0;
+      track.style.transform = `translateX(${carX}px)`;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  // Mulai setelah render
+  requestAnimationFrame(() => {
+    measure();
+    rafId = requestAnimationFrame(tick);
   });
-  
-  container.addEventListener('mouseleave', () => {
-    isDown = false;
-    container.style.cursor = 'grab';
-  });
-  
-  container.addEventListener('mouseup', () => {
-    isDown = false;
-    container.style.cursor = 'grab';
-    setTimeout(() => {
-      track.style.animationPlayState = 'running';
-    }, 2000);
-  });
-  
-  container.addEventListener('mousemove', (e) => {
-    if (!isDown) return;
-    e.preventDefault();
-    const x = e.pageX - container.offsetLeft;
-    const walk = (x - startX) * 2;
-    container.scrollLeft = scrollLeft - walk;
-  });
-  
-  // Touch events for mobile
-  let touchStartX = 0;
-  let touchScrollLeft = 0;
-  
-  container.addEventListener('touchstart', (e) => {
-    touchStartX = e.touches[0].pageX - container.offsetLeft;
-    touchScrollLeft = container.scrollLeft;
-    track.style.animationPlayState = 'paused';
-  }, { passive: true });
-  
-  container.addEventListener('touchmove', (e) => {
-    const x = e.touches[0].pageX - container.offsetLeft;
-    const walk = (x - touchStartX) * 2;
-    container.scrollLeft = touchScrollLeft - walk;
-  }, { passive: true });
-  
-  container.addEventListener('touchend', () => {
-    setTimeout(() => {
-      track.style.animationPlayState = 'running';
-    }, 2000);
-  });
-  
+
   // Pause on hover
-  container.addEventListener('mouseenter', () => {
-    if (!isDown) {
-      track.style.animationPlayState = 'paused';
-    }
-  });
-  
+  container.addEventListener('mouseenter', () => { paused = true; });
   container.addEventListener('mouseleave', () => {
-    if (!isDown) {
-      track.style.animationPlayState = 'running';
-    }
+    if (!dragging) paused = false;
+  });
+
+  // Drag mouse
+  container.addEventListener('mousedown', (e) => {
+    dragging = true;
+    paused = true;
+    dragStartX = e.pageX;
+    dragStartCarX = carX;
+    container.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.pageX - dragStartX;
+    carX = dragStartCarX + dx;
+    // Wrap
+    if (carX > 0) carX -= halfW;
+    if (Math.abs(carX) >= halfW) carX = 0;
+    track.style.transform = `translateX(${carX}px)`;
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    container.style.cursor = 'grab';
+    setTimeout(() => { paused = false; }, 1500);
+  });
+
+  // Touch
+  let touchStartX = 0;
+  let touchStartCarX = 0;
+  container.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].pageX;
+    touchStartCarX = carX;
+    paused = true;
+  }, { passive: true });
+  container.addEventListener('touchmove', (e) => {
+    const dx = e.touches[0].pageX - touchStartX;
+    carX = touchStartCarX + dx;
+    if (carX > 0) carX -= halfW;
+    if (Math.abs(carX) >= halfW) carX = 0;
+    track.style.transform = `translateX(${carX}px)`;
+  }, { passive: true });
+  container.addEventListener('touchend', () => {
+    setTimeout(() => { paused = false; }, 1500);
   });
 }
 
