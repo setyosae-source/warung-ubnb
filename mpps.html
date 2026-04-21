@@ -211,6 +211,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dashboard',this)">🏠 Dashboard</button>
     <button class="nav-tab" onclick="showPage('absen',this)">✅ Absensi <span class="tc" id="tc-hadir">0</span></button>
+    <button class="nav-tab" onclick="showPage('konfirmasi',this)">📝 Konfirmasi <span class="tc" id="tc-konfirmasi">0</span></button>
     <button class="nav-tab" onclick="showPage('hadiah',this)">🎁 Hadiah</button>
     <button class="nav-tab" onclick="showPage('undian',this)">🎰 Undian</button>
     <button class="nav-tab" onclick="showPage('laporan',this)">📋 Laporan</button>
@@ -341,6 +342,42 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           </select>
         </div>
         <div id="hadir-list"></div>
+      </div>
+    </div>
+
+    <!-- KONFIRMASI KEHADIRAN -->
+    <div class="page" id="page-konfirmasi">
+      <div class="card">
+        <div class="card-title">
+          📝 Daftar Konfirmasi Kehadiran
+          <button class="btn secondary sm" onclick="loadKonfirmasi()">↻ Refresh</button>
+        </div>
+        
+        <div style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;font-size:12px;color:var(--text-muted);">
+          ℹ️ Data konfirmasi kehadiran dari landing page (index.html). Total: <strong id="total-konfirmasi" style="color:var(--hijau-dark);">0</strong>
+        </div>
+        
+        <div style="margin-bottom:12px;">
+          <input type="text" id="search-konfirmasi" placeholder="🔍 Cari nama atau kelompok..." 
+            style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"
+            oninput="filterKonfirmasi()">
+        </div>
+        
+        <div id="konfirmasi-list"></div>
+      </div>
+      
+      <div class="card">
+        <div class="card-title">📊 Statistik Konfirmasi</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+            <div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px;">SUDAH SAHAM</div>
+            <div style="font-size:24px;font-weight:800;color:var(--hijau);" id="stat-sudah">0</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;text-align:center;">
+            <div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:4px;">BELUM SAHAM</div>
+            <div style="font-size:24px;font-weight:800;color:var(--amber);" id="stat-belum">0</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -574,6 +611,7 @@ async function loadAll(){
   renderUndianHadiah();
   renderRiwayatPemenang();
   renderLaporan();
+  loadKonfirmasi();
 }
 
 // ===== PAGE NAV =====
@@ -1284,6 +1322,105 @@ async function doResetHadir(){
 document.getElementById('konfirm-overlay').addEventListener('click',function(e){
   if(e.target===this)tutupKonfirmReset();
 });
+
+// ===== KONFIRMASI KEHADIRAN =====
+let aKonfirmasi = [];
+let filteredKonfirmasi = [];
+
+async function loadKonfirmasi() {
+  const { data, error } = await sb
+    .from('mpps_konfirmasi')
+    .select('*')
+    .order('waktu_konfirmasi', { ascending: false });
+  
+  if (error) {
+    console.error('Error loading konfirmasi:', error);
+    document.getElementById('konfirmasi-list').innerHTML = '<div class="empty"><div class="ei">❌</div>Gagal memuat data</div>';
+    return;
+  }
+  
+  aKonfirmasi = data || [];
+  filteredKonfirmasi = aKonfirmasi;
+  
+  // Update counter di tab
+  document.getElementById('tc-konfirmasi').textContent = aKonfirmasi.length;
+  document.getElementById('total-konfirmasi').textContent = aKonfirmasi.length;
+  
+  // Update statistik
+  const sudah = aKonfirmasi.filter(k => k.status_saham === 'Sudah').length;
+  const belum = aKonfirmasi.filter(k => k.status_saham === 'Belum').length;
+  document.getElementById('stat-sudah').textContent = sudah;
+  document.getElementById('stat-belum').textContent = belum;
+  
+  renderKonfirmasi();
+}
+
+function renderKonfirmasi() {
+  const list = filteredKonfirmasi;
+  
+  if (!list || list.length === 0) {
+    document.getElementById('konfirmasi-list').innerHTML = '<div class="empty"><div class="ei">📝</div>Belum ada konfirmasi kehadiran</div>';
+    return;
+  }
+  
+  const html = `
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:30px">#</th>
+            <th>Nama</th>
+            <th>Kelompok</th>
+            <th>Status Saham</th>
+            <th>Waktu</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map((k, idx) => `
+            <tr>
+              <td>${idx + 1}</td>
+              <td><strong>${k.nama}</strong></td>
+              <td>${k.kelompok}</td>
+              <td>
+                <span style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;
+                  ${k.status_saham === 'Sudah' 
+                    ? 'background:var(--hijau-light);color:var(--hijau-dark)' 
+                    : 'background:var(--amber-light);color:var(--amber)'}">
+                  ${k.status_saham === 'Sudah' ? '✅ Sudah' : '⏳ Belum'}
+                </span>
+              </td>
+              <td style="font-size:11px;color:var(--text-muted);">
+                ${new Date(k.waktu_konfirmasi).toLocaleString('id-ID', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  
+  document.getElementById('konfirmasi-list').innerHTML = html;
+}
+
+function filterKonfirmasi() {
+  const q = (document.getElementById('search-konfirmasi')?.value || '').toLowerCase().trim();
+  
+  if (!q) {
+    filteredKonfirmasi = aKonfirmasi;
+  } else {
+    filteredKonfirmasi = aKonfirmasi.filter(k => 
+      k.nama.toLowerCase().includes(q) || 
+      k.kelompok.toLowerCase().includes(q)
+    );
+  }
+  
+  renderKonfirmasi();
+}
 </script>
 </body>
 </html>
