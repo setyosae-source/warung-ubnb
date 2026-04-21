@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics — UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hijau:#1a6640;--hijau-dark:#0f4428;--hijau-light:#e8f5ee;
+  --emas:#c9a84c;--bg:#f5f3ee;--surface:#fff;
+  --border:#e0d8cc;--text:#1c1a16;--text-muted:#8a8078;
+  --radius:12px;--shadow:0 2px 12px rgba(0,0,0,.07);
+  --blue:#1d4ed8;--purple:#7c3aed;--amber:#b45309;--red:#dc2626;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+
+.topbar{background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.topbar-left{display:flex;align-items:center;gap:10px;}
+.topbar-title{font-size:18px;font-weight:800;}
+.topbar-sub{font-size:11px;opacity:.7;}
+.btn-back{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:white;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;}
+
+.main{max-width:1100px;margin:0 auto;padding:0 16px 40px;}
+
+/* STAT CARDS */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+.stat-card{background:var(--surface);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border:1px solid var(--border);border-left:4px solid var(--hijau);}
+.stat-card.blue{border-color:var(--blue);}
+.stat-card.purple{border-color:var(--purple);}
+.stat-card.amber{border-color:var(--amber);}
+.stat-card.red{border-color:var(--red);}
+.stat-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px;}
+.stat-value{font-size:28px;font-weight:800;color:var(--hijau);}
+.stat-card.blue .stat-value{color:var(--blue);}
+.stat-card.purple .stat-value{color:var(--purple);}
+.stat-card.amber .stat-value{color:var(--amber);}
+.stat-card.red .stat-value{color:var(--red);}
+.stat-sub{font-size:11px;color:var(--text-muted);margin-top:4px;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:var(--shadow);border:1px solid var(--border);}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.card-title{font-size:14px;font-weight:700;}
+
+/* FILTER */
+.filter-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.filter-btn{padding:5px 14px;border:1.5px solid var(--border);border-radius:99px;background:white;font-size:11px;font-weight:700;color:var(--text-muted);cursor:pointer;font-family:inherit;transition:all .15s;}
+.filter-btn.active{background:var(--hijau);color:white;border-color:var(--hijau);}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl thead{background:var(--hijau);color:white;}
+.tbl th{padding:9px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--border);}
+.tbl tr:hover td{background:var(--hijau-light);}
+
+/* BAR CHART */
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.bar-label{font-size:12px;font-weight:600;min-width:120px;text-align:right;color:var(--text-muted);}
+.bar-wrap{flex:1;background:#f3f4f6;border-radius:99px;height:10px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:99px;background:var(--hijau);transition:width .6s ease;}
+.bar-count{font-size:11px;font-weight:700;color:var(--hijau);min-width:36px;}
+
+/* BADGE */
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-mobile{background:#dbeafe;color:#1e40af;}
+.badge-desktop{background:var(--hijau-light);color:var(--hijau-dark);}
+.badge-tablet{background:#fef3c7;color:#92400e;}
+
+/* EMPTY */
+.empty{text-align:center;padding:32px;color:var(--text-muted);}
+.empty-icon{font-size:40px;margin-bottom:8px;}
+
+/* REFRESH */
+.btn-refresh{padding:6px 14px;background:var(--hijau);color:white;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
+.last-update{font-size:11px;color:var(--text-muted);}
+
+/* GRID 2 COL */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:640px){.grid2{grid-template-columns:1fr;}.bar-label{min-width:80px;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span style="font-size:22px;">📊</span>
+    <div>
+      <div class="topbar-title">Web Analytics</div>
+      <div class="topbar-sub">Monitor pengunjung ubnb.pw</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span class="last-update" id="lastUpdate" style="color:rgba(255,255,255,.7);">—</span>
+    <button class="btn-refresh" onclick="loadAll()">🔄 Refresh</button>
+    <a href="portal.html" class="btn-back">← Portal</a>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- FILTER PERIODE -->
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setPeriode(1,this)">Hari Ini</button>
+    <button class="filter-btn" onclick="setPeriode(7,this)">7 Hari</button>
+    <button class="filter-btn" onclick="setPeriode(30,this)">30 Hari</button>
+    <button class="filter-btn" onclick="setPeriode(0,this)">Semua</button>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Kunjungan</div>
+      <div class="stat-value" id="st-total">—</div>
+      <div class="stat-sub">Semua page view</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label">Pengunjung Unik</div>
+      <div class="stat-value" id="st-unik">—</div>
+      <div class="stat-sub">Visitor berbeda</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Mobile</div>
+      <div class="stat-value" id="st-mobile">—</div>
+      <div class="stat-sub">Akses dari HP</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label">Hari Ini</div>
+      <div class="stat-value" id="st-hari">—</div>
+      <div class="stat-sub">Kunjungan hari ini</div>
+    </div>
+  </div>
+
+  <!-- CHART HALAMAN & PERANGKAT -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📄 Halaman Terpopuler</div>
+      </div>
+      <div id="chart-halaman">
+        <div class="empty"><div class="empty-icon">📭</div><p>Memuat...</p></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📱 Perangkat</div>
+      </div>
+      <div id="chart-perangkat">
+        <div class="empty"><div class="empty-icon">📭</div><p>Memuat...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHART BROWSER & REFERRER -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🌐 Browser</div>
+      </div>
+      <div id="chart-browser"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🔗 Sumber Pengunjung</div>
+      </div>
+      <div id="chart-referrer"></div>
+    </div>
+  </div>
+
+  <!-- TABEL KUNJUNGAN TERBARU -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🕐 Kunjungan Terbaru</div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Waktu</th>
+            <th>Halaman</th>
+            <th>Perangkat</th>
+            <th>Browser</th>
+            <th>Dari</th>
+            <th>Layar</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-recent"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TREN HARIAN -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📈 Tren Kunjungan Harian</div>
+    </div>
+    <div id="chart-tren"></div>
+  </div>
+
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase;
+const sb=createClient(SURL,SKEY);
+
+let periodeHari=1;
+
+function setPeriode(hari,btn){
+  periodeHari=hari;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAll();
+}
+
+function getFromDate(){
+  if(!periodeHari) return null;
+  const d=new Date();
+  d.setDate(d.getDate()-periodeHari);
+  return d.toISOString();
+}
+
+async function fetchData(){
+  let q=sb.from('web_analytics').select('*').order('created_at',{ascending:false}).limit(2000);
+  const from=getFromDate();
+  if(from) q=q.gte('created_at',from);
+  const{data}=await q;
+  return data||[];
+}
+
+function countBy(arr,key){
+  const map={};
+  arr.forEach(r=>{
+    const v=r[key]||'unknown';
+    map[v]=(map[v]||0)+1;
+  });
+  return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+}
+
+function renderBar(containerId, entries, color='var(--hijau)'){
+  const el=document.getElementById(containerId);
+  if(!entries.length){el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><p>Belum ada data</p></div>';return;}
+  const max=entries[0][1];
+  el.innerHTML=entries.slice(0,8).map(([label,count])=>`
+    <div class="bar-row">
+      <div class="bar-label">${label}</div>
+      <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(count/max*100)}%;background:${color}"></div></div>
+      <div class="bar-count">${count}</div>
+    </div>`).join('');
+}
+
+function renderTren(data){
+  const el=document.getElementById('chart-tren');
+  // Group by tanggal
+  const byDate={};
+  data.forEach(r=>{
+    const tgl=r.created_at.substring(0,10);
+    byDate[tgl]=(byDate[tgl]||0)+1;
+  });
+  const entries=Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0])).slice(-14);
+  if(!entries.length){el.innerHTML='<div class="empty"><div class="empty-icon">📈</div><p>Belum ada data</p></div>';return;}
+  const max=Math.max(...entries.map(e=>e[1]));
+  el.innerHTML=`<div style="display:flex;align-items:flex-end;gap:6px;height:80px;padding:0 4px;">
+    ${entries.map(([tgl,cnt])=>`
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <div style="font-size:10px;font-weight:700;color:var(--hijau)">${cnt}</div>
+        <div style="width:100%;background:var(--hijau);border-radius:4px 4px 0 0;height:${Math.max(4,Math.round(cnt/max*60))}px;"></div>
+        <div style="font-size:9px;color:var(--text-muted);white-space:nowrap;">${tgl.substring(5)}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+async function loadAll(){
+  document.getElementById('lastUpdate').textContent='Memuat...';
+  const data=await fetchData();
+
+  // Stats
+  const today=new Date().toISOString().substring(0,10);
+  const hariIni=data.filter(r=>r.created_at.startsWith(today)).length;
+  const unik=new Set(data.map(r=>r.visitor_id)).size;
+  const mobile=data.filter(r=>r.perangkat==='mobile').length;
+
+  document.getElementById('st-total').textContent=data.length.toLocaleString('id-ID');
+  document.getElementById('st-unik').textContent=unik.toLocaleString('id-ID');
+  document.getElementById('st-mobile').textContent=mobile.toLocaleString('id-ID');
+  document.getElementById('st-hari').textContent=hariIni.toLocaleString('id-ID');
+
+  // Charts
+  renderBar('chart-halaman', countBy(data,'halaman'));
+  renderBar('chart-perangkat', countBy(data,'perangkat'), '#7c3aed');
+  renderBar('chart-browser', countBy(data,'browser'), '#1d4ed8');
+  renderBar('chart-referrer', countBy(data,'referrer'), '#b45309');
+  renderTren(data);
+
+  // Tabel terbaru
+  const tbody=document.getElementById('tbl-recent');
+  if(!data.length){
+    tbody.innerHTML='<tr><td colspan="6" class="empty">Belum ada data kunjungan</td></tr>';
+  } else {
+    tbody.innerHTML=data.slice(0,50).map(r=>{
+      const tgl=new Date(r.created_at).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      const badge=r.perangkat==='mobile'?'badge-mobile':r.perangkat==='tablet'?'badge-tablet':'badge-desktop';
+      return `<tr>
+        <td style="white-space:nowrap;font-size:11px;">${tgl}</td>
+        <td><strong>${r.halaman||'—'}</strong></td>
+        <td><span class="badge ${badge}">${r.perangkat||'—'}</span></td>
+        <td>${r.browser||'—'}</td>
+        <td style="font-size:11px;">${r.referrer||'direct'}</td>
+        <td style="font-size:11px;color:var(--text-muted);">${r.layar||'—'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('lastUpdate').textContent='Update: '+new Date().toLocaleTimeString('id-ID');
+}
+
+// Auth check
+window.addEventListener('load',()=>{
+  const cu=localStorage.getItem('portal_cu');
+  if(!cu){window.location.href='portal.html';return;}
+  loadAll();
+  // Auto refresh tiap 60 detik
+  setInterval(loadAll,60000);
+});
+</script>
+</body>
+</html>
