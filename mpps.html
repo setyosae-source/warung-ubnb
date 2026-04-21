@@ -214,6 +214,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     <button class="nav-tab" onclick="showPage('konfirmasi',this)">📝 Konfirmasi <span class="tc" id="tc-konfirmasi">0</span></button>
     <button class="nav-tab" onclick="showPage('hadiah',this)">🎁 Hadiah</button>
     <button class="nav-tab" onclick="showPage('undian',this)">🎰 Undian</button>
+    <button class="nav-tab" onclick="showPage('sponsor',this)">🤝 Sponsor <span class="tc" id="tc-sponsor">0</span></button>
     <button class="nav-tab" onclick="showPage('laporan',this)">📋 Laporan</button>
   </div>
 
@@ -469,6 +470,34 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       </div>
     </div>
 
+    <!-- SPONSOR -->
+    <div class="page" id="page-sponsor">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:14px;">🤝 Kelola Sponsor MPPS</div>
+
+        <!-- FILTER & SEARCH -->
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <select id="sp-filter" onchange="renderSponsorList()"
+            style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;outline:none;">
+            <option value="">Semua Status</option>
+            <option value="pending">⏳ Pending</option>
+            <option value="aktif">✅ Aktif</option>
+            <option value="ditolak">❌ Ditolak</option>
+          </select>
+          <input type="text" id="sp-search" placeholder="🔍 Cari nama usaha..."
+            oninput="renderSponsorList()"
+            style="flex:1;min-width:140px;padding:8px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;outline:none;">
+          <button class="btn secondary" onclick="lSponsor()">🔄 Refresh</button>
+        </div>
+
+        <!-- STAT MINI -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;" id="sp-stats"></div>
+
+        <!-- LIST -->
+        <div id="sp-list"></div>
+      </div>
+    </div>
+
     <!-- LAPORAN -->
     <div class="page" id="page-laporan">
       <div class="card">
@@ -615,6 +644,7 @@ async function loadAll(){
   renderRiwayatPemenang();
   renderLaporan();
   loadKonfirmasi();
+  lSponsor();
 }
 
 // ===== PAGE NAV =====
@@ -625,6 +655,7 @@ function showPage(id,btn){
   if(btn)btn.classList.add('active');
   if(id==='undian')setTimeout(updatePoolInfo,80);
   if(id==='laporan')renderLaporan();
+  if(id==='sponsor')lSponsor();
   if(scannerActive&&id!=='absen')stopScanner();
 }
 
@@ -1464,6 +1495,141 @@ async function resetKonfirmasi() {
     console.error('Error resetting konfirmasi:', err);
     alert('❌ Gagal menghapus data: ' + err.message);
   }
+// ===== SPONSOR =====
+let aSponsor = [];
+
+async function lSponsor() {
+  const { data } = await sb.from('mpps_sponsor').select('*').order('urutan').order('created_at');
+  aSponsor = data || [];
+
+  // Update badge counter (pending)
+  const pending = aSponsor.filter(s => s.status === 'pending').length;
+  document.getElementById('tc-sponsor').textContent = pending;
+
+  renderSponsorStats();
+  renderSponsorList();
+}
+
+function renderSponsorStats() {
+  const aktif   = aSponsor.filter(s => s.status === 'aktif').length;
+  const pending  = aSponsor.filter(s => s.status === 'pending').length;
+  const ditolak  = aSponsor.filter(s => s.status === 'ditolak').length;
+
+  document.getElementById('sp-stats').innerHTML = `
+    <div style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:10px;text-align:center;border-left:3px solid var(--hijau);">
+      <div style="font-size:20px;font-weight:800;color:var(--hijau);">${aktif}</div>
+      <div style="font-size:10px;color:var(--text-muted);font-weight:600;">✅ AKTIF</div>
+    </div>
+    <div style="background:#fef9c3;border-radius:var(--radius-sm);padding:10px;text-align:center;border-left:3px solid #ca8a04;">
+      <div style="font-size:20px;font-weight:800;color:#ca8a04;">${pending}</div>
+      <div style="font-size:10px;color:var(--text-muted);font-weight:600;">⏳ PENDING</div>
+    </div>
+    <div style="background:#fee2e2;border-radius:var(--radius-sm);padding:10px;text-align:center;border-left:3px solid #dc2626;">
+      <div style="font-size:20px;font-weight:800;color:#dc2626;">${ditolak}</div>
+      <div style="font-size:10px;color:var(--text-muted);font-weight:600;">❌ DITOLAK</div>
+    </div>`;
+}
+
+function renderSponsorList() {
+  const filter = document.getElementById('sp-filter').value;
+  const search = document.getElementById('sp-search').value.toLowerCase();
+
+  let list = aSponsor.filter(s => {
+    const matchFilter = !filter || s.status === filter;
+    const matchSearch = !search || s.nama_usaha.toLowerCase().includes(search);
+    return matchFilter && matchSearch;
+  });
+
+  if (!list.length) {
+    document.getElementById('sp-list').innerHTML =
+      `<div style="text-align:center;padding:32px;color:var(--text-muted);">
+        <div style="font-size:36px;margin-bottom:8px;">🤝</div>
+        <div>Belum ada data sponsor</div>
+      </div>`;
+    return;
+  }
+
+  const fmt = n => n ? 'Rp ' + Number(n).toLocaleString('id-ID') : '—';
+
+  document.getElementById('sp-list').innerHTML = list.map(s => {
+    const statusColor = s.status === 'aktif' ? 'var(--hijau)' : s.status === 'pending' ? '#ca8a04' : '#dc2626';
+    const statusBg    = s.status === 'aktif' ? 'var(--hijau-light)' : s.status === 'pending' ? '#fef9c3' : '#fee2e2';
+    const statusLabel = s.status === 'aktif' ? '✅ Aktif' : s.status === 'pending' ? '⏳ Pending' : '❌ Ditolak';
+
+    return `<div style="border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;background:white;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        ${s.logo_url
+          ? `<img src="${s.logo_url}" style="height:40px;width:auto;max-width:80px;object-fit:contain;border-radius:6px;border:1px solid var(--border);" onerror="this.style.display='none'">`
+          : `<div style="width:40px;height:40px;background:var(--surface2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px;">🏢</div>`
+        }
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:14px;">${s.nama_usaha}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+            ${s.nama_kontak ? '👤 ' + s.nama_kontak : ''}
+            ${s.telepon ? ' · 📱 ' + s.telepon : ''}
+          </div>
+        </div>
+        <span style="background:${statusBg};color:${statusColor};padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;flex-shrink:0;">${statusLabel}</span>
+      </div>
+
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+        ${s.jenis_kontribusi === 'hadiah' ? '🎁' : '💰'}
+        <strong>${s.jenis_kontribusi === 'hadiah' ? 'Hadiah/Voucher' : 'Uang'}</strong>
+        ${s.keterangan_kontribusi ? ' · ' + s.keterangan_kontribusi : ''}
+        <span style="color:#9ca3af;margin-left:8px;font-size:10px;">${new Date(s.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</span>
+      </div>
+
+      <!-- AKSI -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${s.status !== 'aktif'
+          ? `<button class="btn primary sm" onclick="setSponsorStatus(${s.id},'aktif')">✅ Aktifkan</button>`
+          : `<button class="btn secondary sm" onclick="setSponsorStatus(${s.id},'pending')">⏸ Nonaktifkan</button>`
+        }
+        ${s.status !== 'ditolak'
+          ? `<button class="btn sm" style="background:#fee2e2;color:#dc2626;" onclick="setSponsorStatus(${s.id},'ditolak')">❌ Tolak</button>`
+          : `<button class="btn primary sm" onclick="setSponsorStatus(${s.id},'aktif')">↩ Pulihkan</button>`
+        }
+        <button class="btn sm" style="background:var(--emas-light);color:var(--emas-dark);" onclick="editUrutan(${s.id},${s.urutan||99})">↕ Urutan</button>
+        ${s.telepon
+          ? `<button class="btn sm" style="background:#dcfce7;color:#166534;" onclick="kirimWASponsor('${s.nama_usaha}','${s.telepon}','${s.status}')">📱 WA</button>`
+          : ''
+        }
+        <button class="btn sm" style="background:#fee2e2;color:#dc2626;margin-left:auto;" onclick="hapusSponsor(${s.id})">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function setSponsorStatus(id, status) {
+  const { error } = await sb.from('mpps_sponsor').update({ status }).eq('id', id);
+  if (error) { toast('Gagal update: ' + error.message, true); return; }
+  toast(status === 'aktif' ? '✅ Sponsor diaktifkan!' : status === 'ditolak' ? '❌ Sponsor ditolak' : '⏸ Sponsor dinonaktifkan');
+  await lSponsor();
+}
+
+async function hapusSponsor(id) {
+  if (!confirm('Hapus data sponsor ini?')) return;
+  const { error } = await sb.from('mpps_sponsor').delete().eq('id', id);
+  if (error) { toast('Gagal hapus', true); return; }
+  toast('🗑️ Sponsor dihapus');
+  await lSponsor();
+}
+
+async function editUrutan(id, current) {
+  const val = prompt(`Urutan tampil sponsor (angka kecil = tampil lebih dulu):\nUrutan saat ini: ${current}`, current);
+  if (val === null || isNaN(parseInt(val))) return;
+  const { error } = await sb.from('mpps_sponsor').update({ urutan: parseInt(val) }).eq('id', id);
+  if (error) { toast('Gagal update urutan', true); return; }
+  toast('↕ Urutan diperbarui');
+  await lSponsor();
+}
+
+function kirimWASponsor(nama, telepon, status) {
+  const no = telepon.replace(/[^0-9]/g, '').replace(/^0/, '62');
+  const pesan = status === 'aktif'
+    ? `Assalamu'alaikum Bpk/Ibu *${nama}* 🙏\n\nTerima kasih telah menjadi sponsor MPPS UBNB Perwira 2026! Logo/nama usaha Anda sudah ditampilkan di halaman acara.\n\nJazakumullah khairan 🙏`
+    : `Assalamu'alaikum Bpk/Ibu *${nama}* 🙏\n\nKami mengkonfirmasi pendaftaran sponsor MPPS UBNB Perwira 2026 dari usaha Anda. Pengurus sedang memverifikasi, kami akan segera menghubungi kembali.\n\nTerima kasih 🙏`;
+  window.open(`https://wa.me/${no}?text=${encodeURIComponent(pesan)}`, '_blank');
 }
 </script>
 </body>
