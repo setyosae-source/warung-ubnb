@@ -149,14 +149,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <!-- OPERASIONAL HARIAN -->
     <div class="section-title">🏪 Operasional Warung</div>
     <div class="module-grid">
-      <a href="warung.html" class="module-card green">
+      <a href="warung.html" class="module-card green" data-module="warung">
         <div class="module-icon">🏪</div>
         <div>
           <div class="module-name">Warung Utama</div>
           <div class="module-desc">Penjualan, PPOB, stok, laporan</div>
         </div>
       </a>
-      <a href="kasir.html" class="module-card green">
+      <a href="kasir.html" class="module-card green" data-module="kasir">
         <div class="module-icon">🛒</div>
         <div>
           <div class="module-name">Kasir</div>
@@ -168,14 +168,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <!-- BMT -->
     <div class="section-title">🏦 BMT & Keuangan</div>
     <div class="module-grid">
-      <a href="bmt.html" class="module-card gold">
+      <a href="bmt.html" class="module-card gold" data-module="bmt">
         <div class="module-icon">🏦</div>
         <div>
           <div class="module-name">BMT</div>
           <div class="module-desc">Pembiayaan, angsuran, tabungan wadiah</div>
         </div>
       </a>
-      <a href="saham.html" class="module-card gold">
+      <a href="saham.html" class="module-card gold" data-module="saham">
         <div class="module-icon">📊</div>
         <div>
           <div class="module-name">Saham UBNB</div>
@@ -187,7 +187,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <!-- DATA JAMAAH -->
     <div class="section-title">👥 Data Jamaah</div>
     <div class="module-grid">
-      <a href="jamaah.html" class="module-card purple">
+      <a href="jamaah.html" class="module-card purple" data-module="jamaah">
         <div class="module-icon">🕌</div>
         <div>
           <div class="module-name">Data Jamaah</div>
@@ -195,7 +195,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
           <div style="margin-top:4px"><span class="module-badge new">Baru</span></div>
         </div>
       </a>
-      <a href="pengajuan.html" class="module-card blue">
+      <a href="pengajuan.html" class="module-card blue" data-module="pengajuan">
         <div class="module-icon">📋</div>
         <div>
           <div class="module-name">Form Pengajuan</div>
@@ -207,14 +207,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <!-- LAINNYA -->
     <div class="section-title">🔧 Modul Lainnya</div>
     <div class="module-grid">
-      <a href="mpps.html" class="module-card blue">
+      <a href="mpps.html" class="module-card blue" data-module="mpps">
         <div class="module-icon">🎯</div>
         <div>
           <div class="module-name">MPPS</div>
           <div class="module-desc">Manajemen program & peserta</div>
         </div>
       </a>
-      <a href="toko.html" class="module-card red">
+      <a href="toko.html" class="module-card red" data-module="toko">
         <div class="module-icon">🏬</div>
         <div>
           <div class="module-name">Toko</div>
@@ -226,7 +226,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <!-- PENGATURAN SISTEM -->
     <div class="section-title">⚙️ Pengaturan Sistem</div>
     <div class="module-grid">
-      <a href="users.html" class="module-card purple">
+      <a href="users.html" class="module-card purple" data-module="portal">
         <div class="module-icon">👥</div>
         <div>
           <div class="module-name">User Management</div>
@@ -323,7 +323,75 @@ function showApp(){
   // Info tanggal
   const tgl=new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('info-tanggal').textContent=tgl;
+
+  // Filter module cards based on permissions
+  applyPermissionFilter();
 }
+
+function applyPermissionFilter(){
+  // Parse user permissions
+  let userPermissions = [];
+  try {
+    userPermissions = CU.permissions ? JSON.parse(CU.permissions) : [];
+  } catch(e) {
+    console.error('Error parsing permissions:', e);
+    userPermissions = [];
+  }
+
+  // If pemilik, show all modules (no need to hide anything)
+  if(CU.role === 'pemilik') {
+    return; // Show all
+  }
+
+  // Get all module cards
+  const allCards = document.querySelectorAll('.module-card');
+  
+  allCards.forEach(card => {
+    const moduleId = card.getAttribute('data-module');
+    if(!moduleId) {
+      // No module ID, hide by default for safety
+      card.style.display = 'none';
+      return;
+    }
+
+    // Check if this module is in user's permissions
+    if(userPermissions.includes(moduleId)) {
+      card.style.display = 'flex';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+
+  // Hide empty sections
+  hideEmptySections();
+}
+
+function hideEmptySections(){
+  // Get all module-grid containers
+  const grids = document.querySelectorAll('.module-grid');
+  
+  grids.forEach(grid => {
+    const visibleCards = Array.from(grid.querySelectorAll('.module-card')).filter(
+      card => card.style.display !== 'none'
+    );
+    
+    // If no visible cards, hide the section title above
+    if(visibleCards.length === 0) {
+      const prevElement = grid.previousElementSibling;
+      if(prevElement && prevElement.classList.contains('section-title')) {
+        prevElement.style.display = 'none';
+      }
+      grid.style.display = 'none';
+    } else {
+      const prevElement = grid.previousElementSibling;
+      if(prevElement && prevElement.classList.contains('section-title')) {
+        prevElement.style.display = 'block';
+      }
+      grid.style.display = 'grid';
+    }
+  });
+}
+
 </script>
 </body>
 </html>
