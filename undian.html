@@ -210,22 +210,22 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .sponsor-ticker {
   background: rgba(245,200,66,.08);
   border-bottom: 1px solid rgba(245,200,66,.25);
-  padding: 8px 0;
   overflow: hidden;
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  transition: padding .3s, height .3s;
 }
 .ticker-label {
   flex-shrink: 0;
-  padding: 0 18px;
-  font-size: 11px;
+  padding: 0 16px;
   font-weight: 800;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--gold);
   border-right: 1px solid rgba(245,200,66,.3);
   white-space: nowrap;
+  transition: font-size .3s;
 }
 .ticker-track-wrap {
   flex: 1;
@@ -247,27 +247,53 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 0 32px;
   border-right: 1px solid rgba(245,200,66,.2);
+  transition: padding .3s;
 }
 .ticker-logo {
-  height: 36px;
-  width: auto;
-  max-width: 80px;
   object-fit: contain;
   border-radius: 4px;
+  transition: height .3s;
 }
 .ticker-name {
-  font-size: 15px;
   font-weight: 800;
   color: var(--gold3);
   letter-spacing: 1px;
+  transition: font-size .3s;
 }
 .ticker-sep {
-  font-size: 14px;
   color: var(--gold2);
   opacity: .5;
-  padding: 0 12px;
+  transition: font-size .3s, padding .3s;
+}
+
+/* SIZE CONTROL */
+.sponsor-size-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-left: 1px solid rgba(245,200,66,.2);
+  flex-shrink: 0;
+}
+.sponsor-size-ctrl label {
+  font-size: 9px;
+  color: var(--gold2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sponsor-size-ctrl input[type=range] {
+  width: 70px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+.sponsor-size-val {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gold);
+  min-width: 20px;
+  text-align: center;
 }
 
 /* Grid jadi 3 baris: header + ticker + body */
@@ -518,9 +544,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
   <!-- SPONSOR TICKER -->
   <div class="sponsor-ticker" id="sponsorTicker" style="display:none;">
-    <div class="ticker-label">✦ Sponsor</div>
+    <div class="ticker-label" id="tickerLabel">✦ Sponsor</div>
     <div class="ticker-track-wrap">
       <div class="ticker-track" id="tickerTrack"></div>
+    </div>
+    <div class="sponsor-size-ctrl">
+      <label>Size</label>
+      <input type="range" id="sponsorSize" min="1" max="5" value="3" step="1" oninput="updateSponsorSize(this.value)">
+      <span class="sponsor-size-val" id="sizeVal">M</span>
     </div>
   </div>
 
@@ -1569,6 +1600,50 @@ async function tutupMRO(){
 // ============================
 // SPONSOR TICKER
 // ============================
+
+// Size presets: [logoH, fontSize, labelSize, sepSize, padding, tickerPadY]
+const SPONSOR_SIZES = {
+  1: { logoH:24, nameSize:11, labelSize:9,  sepSize:10, itemPad:'0 16px', tickerPadY:'4px',  label:'XS' },
+  2: { logoH:32, nameSize:13, labelSize:10, sepSize:11, itemPad:'0 24px', tickerPadY:'6px',  label:'S'  },
+  3: { logoH:42, nameSize:16, labelSize:11, sepSize:13, itemPad:'0 32px', tickerPadY:'8px',  label:'M'  },
+  4: { logoH:56, nameSize:20, labelSize:13, sepSize:16, itemPad:'0 44px', tickerPadY:'10px', label:'L'  },
+  5: { logoH:72, nameSize:26, labelSize:15, sepSize:20, itemPad:'0 56px', tickerPadY:'14px', label:'XL' },
+};
+
+function updateSponsorSize(val) {
+  const s = SPONSOR_SIZES[val];
+  if (!s) return;
+
+  // Update ticker bar padding
+  const ticker = document.getElementById('sponsorTicker');
+  ticker.style.padding = `${s.tickerPadY} 0`;
+
+  // Update label size
+  document.getElementById('tickerLabel').style.fontSize = s.labelSize + 'px';
+
+  // Update semua ticker items
+  document.querySelectorAll('.ticker-logo').forEach(el => {
+    el.style.height = s.logoH + 'px';
+    el.style.maxWidth = (s.logoH * 2.5) + 'px';
+  });
+  document.querySelectorAll('.ticker-name').forEach(el => {
+    el.style.fontSize = s.nameSize + 'px';
+  });
+  document.querySelectorAll('.ticker-item').forEach(el => {
+    el.style.padding = s.itemPad;
+  });
+  document.querySelectorAll('.ticker-sep').forEach(el => {
+    el.style.fontSize = s.sepSize + 'px';
+    el.style.padding = `0 ${parseInt(s.itemPad.split(' ')[1])/2}px`;
+  });
+
+  // Update label size indicator
+  document.getElementById('sizeVal').textContent = s.label;
+
+  // Simpan ke localStorage
+  localStorage.setItem('sponsor_size', val);
+}
+
 async function loadSponsors() {
   const { data } = await sb.from('mpps_sponsor')
     .select('nama_usaha,logo_url')
@@ -1581,7 +1656,6 @@ async function loadSponsors() {
   const ticker = document.getElementById('sponsorTicker');
   const track = document.getElementById('tickerTrack');
 
-  // Buat item + duplikat untuk seamless loop
   const makeItems = () => sponsors.map(s => `
     <div class="ticker-item">
       ${s.logo_url ? `<img src="${s.logo_url}" alt="${s.nama_usaha}" class="ticker-logo" onerror="this.style.display='none'">` : ''}
@@ -1590,14 +1664,17 @@ async function loadSponsors() {
     <span class="ticker-sep">✦</span>
   `).join('');
 
-  // Duplikat agar animasi seamless
   track.innerHTML = makeItems() + makeItems();
 
-  // Sesuaikan durasi dengan jumlah sponsor
   const dur = Math.max(15, sponsors.length * 6);
   track.style.animationDuration = dur + 's';
 
   ticker.style.display = 'flex';
+
+  // Apply saved size atau default
+  const savedSize = localStorage.getItem('sponsor_size') || '3';
+  document.getElementById('sponsorSize').value = savedSize;
+  updateSponsorSize(savedSize);
 }
 
 // ============================
