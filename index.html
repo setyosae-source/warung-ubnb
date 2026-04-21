@@ -263,9 +263,13 @@ body {
   background: rgba(0,0,0,0.4);
   border: 2px solid var(--gold);
   border-radius: 12px;
-  padding: 16px 24px;
-  min-width: 90px;
+  padding: 16px 20px;
+  width: 100px;
   backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .countdown-value {
@@ -275,6 +279,9 @@ body {
   color: var(--gold);
   line-height: 1;
   text-shadow: 0 0 20px rgba(245,200,66,0.6);
+  width: 100%;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .countdown-label {
@@ -283,6 +290,8 @@ body {
   text-transform: uppercase;
   margin-top: 6px;
   letter-spacing: 1px;
+  width: 100%;
+  text-align: center;
 }
 
 /* INFO GRID */
@@ -364,29 +373,28 @@ body {
 
 .carousel-container {
   position: relative;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 20px 0;
   cursor: grab;
   user-select: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.carousel-container::-webkit-scrollbar {
+  display: none;
 }
 
 .carousel-container:active {
   cursor: grabbing;
 }
 
-.carousel-container.dragging {
-  scroll-behavior: auto;
-}
-
 .carousel-track {
   display: flex;
   gap: 20px;
-  animation: scroll-left 20s linear infinite;
+  animation: scroll-left 15s linear infinite;
   will-change: transform;
-}
-
-.carousel-track.paused {
-  animation-play-state: paused;
 }
 
 @keyframes scroll-left {
@@ -675,8 +683,8 @@ body {
   }
   
   .countdown-item {
-    padding: 12px 18px;
-    min-width: 75px;
+    padding: 12px 16px;
+    width: 85px;
   }
   
   .countdown-value {
@@ -1137,75 +1145,76 @@ document.addEventListener('DOMContentLoaded', function() {
   initCarousel();
 });
 
-// Carousel Drag/Swipe
+// Carousel Drag/Swipe - Simple & Working Version
 function initCarousel() {
   const container = document.querySelector('.carousel-container');
   const track = document.querySelector('.carousel-track');
   
-  let isDragging = false;
-  let startPos = 0;
-  let currentTranslate = 0;
-  let prevTranslate = 0;
-  let animationID;
+  let isDown = false;
+  let startX;
+  let scrollLeft;
   
-  // Mouse events
-  container.addEventListener('mousedown', dragStart);
-  container.addEventListener('mousemove', drag);
-  container.addEventListener('mouseup', dragEnd);
-  container.addEventListener('mouseleave', dragEnd);
-  
-  // Touch events
-  container.addEventListener('touchstart', dragStart);
-  container.addEventListener('touchmove', drag);
-  container.addEventListener('touchend', dragEnd);
-  
-  function dragStart(e) {
-    isDragging = true;
-    startPos = getPositionX(e);
-    animationID = requestAnimationFrame(animation);
-    container.classList.add('dragging');
-    track.classList.add('paused');
-  }
-  
-  function drag(e) {
-    if (!isDragging) return;
-    const currentPosition = getPositionX(e);
-    currentTranslate = prevTranslate + currentPosition - startPos;
-  }
-  
-  function dragEnd() {
-    isDragging = false;
-    cancelAnimationFrame(animationID);
-    prevTranslate = currentTranslate;
-    container.classList.remove('dragging');
-    
-    // Resume auto-scroll after 3 seconds
-    setTimeout(() => {
-      track.classList.remove('paused');
-    }, 3000);
-  }
-  
-  function getPositionX(e) {
-    return e.type.includes('mouse') ? e.pageX : e.touches[0].clientX;
-  }
-  
-  function animation() {
-    setSliderPosition();
-    if (isDragging) requestAnimationFrame(animation);
-  }
-  
-  function setSliderPosition() {
-    track.style.transform = `translateX(${currentTranslate}px)`;
-  }
-  
-  // Pause on hover
-  container.addEventListener('mouseenter', () => {
-    track.classList.add('paused');
+  container.addEventListener('mousedown', (e) => {
+    isDown = true;
+    container.style.cursor = 'grabbing';
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+    track.style.animationPlayState = 'paused';
   });
   
   container.addEventListener('mouseleave', () => {
-    if (!isDragging) {
-      track.classList.remove('paused');
+    isDown = false;
+    container.style.cursor = 'grab';
+  });
+  
+  container.addEventListener('mouseup', () => {
+    isDown = false;
+    container.style.cursor = 'grab';
+    setTimeout(() => {
+      track.style.animationPlayState = 'running';
+    }, 2000);
+  });
+  
+  container.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 2;
+    container.scrollLeft = scrollLeft - walk;
+  });
+  
+  // Touch events for mobile
+  let touchStartX = 0;
+  let touchScrollLeft = 0;
+  
+  container.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].pageX - container.offsetLeft;
+    touchScrollLeft = container.scrollLeft;
+    track.style.animationPlayState = 'paused';
+  }, { passive: true });
+  
+  container.addEventListener('touchmove', (e) => {
+    const x = e.touches[0].pageX - container.offsetLeft;
+    const walk = (x - touchStartX) * 2;
+    container.scrollLeft = touchScrollLeft - walk;
+  }, { passive: true });
+  
+  container.addEventListener('touchend', () => {
+    setTimeout(() => {
+      track.style.animationPlayState = 'running';
+    }, 2000);
+  });
+  
+  // Pause on hover
+  container.addEventListener('mouseenter', () => {
+    if (!isDown) {
+      track.style.animationPlayState = 'paused';
+    }
+  });
+  
+  container.addEventListener('mouseleave', () => {
+    if (!isDown) {
+      track.style.animationPlayState = 'running';
     }
   });
 }
