@@ -362,32 +362,48 @@ body {
 
 .permissions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
 }
 
 .permission-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: 8px;
-  cursor: pointer;
+}
+
+.permission-module-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.permission-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
   transition: all 0.2s;
-  user-select: none;
-}
-
-.permission-item:hover {
-  border-color: var(--hijau);
-  background: var(--hijau-light);
-}
-
-.permission-item input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  background: white;
   cursor: pointer;
+}
+
+.permission-select:focus {
+  border-color: var(--hijau);
+}
+
+.permission-select option {
+  padding: 6px;
 }
 
 .permission-label {
@@ -654,10 +670,20 @@ const MODULES = [
 ];
 
 // Role default permissions
+// Role default permissions with levels
 const ROLE_DEFAULTS = {
-  pemilik: MODULES.map(m => m.id), // Full access
-  admin: ['warung', 'kasir', 'bmt', 'saham', 'mpps', 'portal', 'pengajuan'], // Management
-  kasir: ['warung', 'kasir', 'toko'] // Operational
+  pemilik: {
+    warung: 'full', kasir: 'full', bmt: 'full', saham: 'full', 
+    mpps: 'full', portal: 'full', toko: 'full', pengajuan: 'full', 
+    jamaah: 'full', absen: 'full', undian: 'full'
+  },
+  admin: {
+    warung: 'full', kasir: 'full', bmt: 'full', saham: 'full', 
+    mpps: 'read', portal: 'full', pengajuan: 'full'
+  },
+  kasir: {
+    warung: 'full', kasir: 'full', toko: 'read_edit'
+  }
 };
 
 // Init
@@ -724,14 +750,28 @@ async function loadUsers() {
 function renderUserTable() {
   const tbody = document.getElementById('user-tbody');
   
+  // Permission level labels
+  const levelLabels = {
+    'none': '❌',
+    'read': '📖',
+    'read_edit': '📖✏️',
+    'read_add': '📖➕',
+    'full': '✅'
+  };
+  
   tbody.innerHTML = users.map((user, idx) => {
-    const permissions = user.permissions ? JSON.parse(user.permissions) : [];
-    const permissionText = permissions.length > 0 
-      ? permissions.slice(0, 3).map(p => {
-          const mod = MODULES.find(m => m.id === p);
-          return mod ? mod.name : p;
-        }).join(', ') + (permissions.length > 3 ? ` +${permissions.length - 3} lagi` : '')
-      : 'Tidak ada akses';
+    const permissions = user.permissions ? JSON.parse(user.permissions) : {};
+    const permEntries = Object.entries(permissions);
+    
+    let permissionText = 'Tidak ada akses';
+    if (permEntries.length > 0) {
+      const preview = permEntries.slice(0, 3).map(([moduleId, level]) => {
+        const mod = MODULES.find(m => m.id === moduleId);
+        const icon = levelLabels[level] || level;
+        return mod ? `${mod.name} ${icon}` : moduleId;
+      }).join(', ');
+      permissionText = preview + (permEntries.length > 3 ? ` +${permEntries.length - 3} lagi` : '');
+    }
     
     return `
       <tr>
@@ -754,27 +794,34 @@ function renderPermissionsGrid() {
   const grid = document.getElementById('permissions-grid');
   
   grid.innerHTML = MODULES.map(mod => `
-    <label class="permission-item">
-      <input type="checkbox" name="permission" value="${mod.id}">
-      <span class="permission-label">${mod.name}</span>
-    </label>
+    <div class="permission-item">
+      <div class="permission-module-name">${mod.name}</div>
+      <select class="permission-select" data-module="${mod.id}">
+        <option value="none">❌ No Access</option>
+        <option value="read">📖 Read Only</option>
+        <option value="read_edit">📖✏️ Read + Edit</option>
+        <option value="read_add">📖➕ Read + Add</option>
+        <option value="full">✅ Full Access (CRUD)</option>
+      </select>
+    </div>
   `).join('');
 }
 
 // Update permissions by role
 function updatePermissionsByRole() {
   const role = document.getElementById('user-role').value;
-  const checkboxes = document.querySelectorAll('input[name="permission"]');
+  const selects = document.querySelectorAll('.permission-select');
   
   if (!role) {
-    checkboxes.forEach(cb => cb.checked = false);
+    selects.forEach(sel => sel.value = 'none');
     return;
   }
   
-  const defaults = ROLE_DEFAULTS[role] || [];
+  const defaults = ROLE_DEFAULTS[role] || {};
   
-  checkboxes.forEach(cb => {
-    cb.checked = defaults.includes(cb.value);
+  selects.forEach(sel => {
+    const moduleId = sel.getAttribute('data-module');
+    sel.value = defaults[moduleId] || 'none';
   });
 }
 
@@ -797,10 +844,11 @@ function openModalUser(userId = null) {
     document.getElementById('user-role').value = user.role;
     
     // Set permissions
-    const permissions = user.permissions ? JSON.parse(user.permissions) : [];
-    const checkboxes = document.querySelectorAll('input[name="permission"]');
-    checkboxes.forEach(cb => {
-      cb.checked = permissions.includes(cb.value);
+    const permissions = user.permissions ? JSON.parse(user.permissions) : {};
+    const selects = document.querySelectorAll('.permission-select');
+    selects.forEach(sel => {
+      const moduleId = sel.getAttribute('data-module');
+      sel.value = permissions[moduleId] || 'none';
     });
     
   } else {
@@ -832,9 +880,16 @@ async function saveUser(e) {
   const password = document.getElementById('user-password').value;
   const role = document.getElementById('user-role').value;
   
-  // Get selected permissions
-  const checkboxes = document.querySelectorAll('input[name="permission"]:checked');
-  const permissions = Array.from(checkboxes).map(cb => cb.value);
+  // Get selected permissions from dropdowns
+  const selects = document.querySelectorAll('.permission-select');
+  const permissions = {};
+  selects.forEach(sel => {
+    const moduleId = sel.getAttribute('data-module');
+    const level = sel.value;
+    if (level !== 'none') {
+      permissions[moduleId] = level;
+    }
+  });
   
   // Validation
   if (!username || !nama || !role) {
