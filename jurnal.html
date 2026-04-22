@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jurnal Umum & Aset | UBNB Desa Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --hijau:#1a6b47;--hijau2:#2d9b6a;--hijau-light:#e8f5ef;--hijau-dark:#0f3d28;
+  --gold:#c9a84c;--gold2:#f5e6b8;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1565c0;--blue-light:#e3eef9;
+  --purple:#6b21a8;--purple-light:#f3e8ff;
+  --gray:#6b7280;--gray2:#f3f4f6;--gray3:#e5e7eb;
+  --text:#1a1a2e;--white:#fff;
+  --sidebar-w:240px;--radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font-size:14px;}
+
+/* LOGIN */
+#login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0a2e1a,#1a6b47);}
+.login-card{background:white;border-radius:16px;padding:40px 36px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .licon{font-size:48px;}
+.login-logo h1{font-size:20px;font-weight:800;color:var(--hijau);}
+.login-logo p{font-size:12px;color:var(--gray);}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:12px;font-weight:600;color:var(--gray);margin-bottom:5px;}
+.lfield input{width:100%;padding:10px 14px;border:1.5px solid var(--gray3);border-radius:8px;font-size:14px;outline:none;transition:.2s;}
+.lfield input:focus{border-color:var(--hijau);}
+.btn-login{width:100%;padding:12px;background:var(--hijau);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;}
+#login-err{color:var(--red);font-size:12px;text-align:center;margin-top:10px;}
+
+/* LAYOUT */
+#app{display:none;}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);background:var(--hijau-dark);color:white;z-index:200;display:flex;flex-direction:column;overflow-y:auto;}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.1);}
+.sb-logo h1{font-size:14px;font-weight:800;color:var(--gold);}
+.sb-logo p{font-size:11px;opacity:.55;margin-top:2px;}
+.nav-items{flex:1;padding:8px 0;}
+.nav-section{padding:10px 16px 4px;font-size:10px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;font-size:13px;font-weight:500;color:rgba(255,255,255,.72);transition:.15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,.07);color:white;}
+.nav-item.active{background:rgba(201,168,76,.15);color:var(--gold);border-left-color:var(--gold);}
+.nav-icon{font-size:15px;width:20px;text-align:center;}
+.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;color:rgba(255,255,255,.45);}
+.sb-footer a{color:rgba(255,255,255,.45);text-decoration:none;}
+
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:54px;background:white;border-bottom:1px solid var(--gray3);display:flex;align-items:center;padding:0 18px;gap:12px;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.hamburger{display:none;background:none;border:none;font-size:22px;cursor:pointer;}
+.topbar-title{font-size:15px;font-weight:700;color:var(--hijau);}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.user-badge{font-size:12px;font-weight:600;color:var(--gray);background:var(--gray2);padding:4px 12px;border-radius:99px;}
+.btn-keluar{font-size:12px;color:var(--red);background:var(--red-light);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:600;}
+
+.main-wrap{margin-left:var(--sidebar-w);padding-top:54px;min-height:100vh;}
+.page{display:none;padding:20px;}
+.page.active{display:block;}
+
+/* CARDS */
+.card{background:white;border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+.card-title h3{font-size:14px;font-weight:700;}
+
+/* STAT */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+.stat-card{background:white;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-left:4px solid var(--gray3);}
+.stat-card.hijau{border-left-color:var(--hijau);}
+.stat-card.gold{border-left-color:var(--gold);}
+.stat-card.red{border-left-color:var(--red);}
+.stat-card.blue{border-left-color:var(--blue);}
+.stat-lbl{font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.stat-val{font-size:17px;font-weight:800;margin:3px 0 1px;}
+.stat-val.hijau{color:var(--hijau);}
+.stat-val.gold{color:var(--gold);}
+.stat-val.red{color:var(--red);}
+.stat-val.blue{color:var(--blue);}
+.stat-sub{font-size:10px;color:var(--gray);}
+
+/* BTN */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:.15s;}
+.btn.primary{background:var(--hijau);color:white;}
+.btn.primary:hover{background:var(--hijau2);}
+.btn.gold{background:var(--gold);color:#1a1a1a;}
+.btn.secondary{background:var(--gray2);color:var(--text);}
+.btn.danger{background:var(--red-light);color:var(--red);}
+.btn.blue{background:var(--blue-light);color:var(--blue);}
+.btn.sm{padding:5px 10px;font-size:11px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;}
+
+/* TABEL */
+.tbl{width:100%;border-collapse:collapse;}
+.tbl th{background:var(--hijau);color:white;padding:9px 11px;text-align:left;font-size:11px;font-weight:700;position:sticky;top:54px;}
+.tbl th.right{text-align:right;}
+.tbl td{padding:8px 11px;border-bottom:1px solid var(--gray3);font-size:13px;vertical-align:middle;}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tr:hover td{background:#fafafa;}
+.tbl .total-row td{background:var(--hijau-light);font-weight:800;color:var(--hijau);}
+.tbl .debit-row td{background:#fff9e6;}
+.tbl .kredit-row td{background:#f0f9ff;}
+.rp{text-align:right;font-family:'Courier New',monospace;font-weight:600;font-size:12px;}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:12px;padding:22px;width:700px;max-width:98vw;margin:auto;}
+.modal-lg{width:900px;}
+.modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.modal-title h3{font-size:15px;font-weight:700;}
+.btn-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray);}
+
+/* FORM */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;}
+.field input,.field select,.field textarea{padding:8px 11px;border:1.5px solid var(--gray3);border-radius:7px;font-size:13px;outline:none;transition:.2s;font-family:inherit;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--hijau);}
+.field.full{grid-column:1/-1;}
+
+/* JURNAL ENTRY TABLE */
+.je-table{width:100%;border-collapse:collapse;margin-top:10px;}
+.je-table th{background:var(--gray2);padding:8px 10px;font-size:11px;font-weight:700;text-align:left;}
+.je-table td{padding:5px 7px;border-bottom:1px solid var(--gray3);}
+.je-table input,.je-table select{width:100%;padding:6px 9px;border:1.5px solid var(--gray3);border-radius:6px;font-size:12px;outline:none;}
+.je-table input:focus,.je-table select:focus{border-color:var(--hijau);}
+.je-table input[type=number]{text-align:right;}
+.je-table .del-btn{background:var(--red-light);color:var(--red);border:none;padding:4px 8px;border-radius:5px;cursor:pointer;font-size:11px;}
+.je-total{display:flex;justify-content:flex-end;gap:20px;padding:10px 12px;background:var(--gray2);border-radius:8px;margin-top:8px;font-size:13px;font-weight:700;}
+.je-total .ok{color:var(--hijau);}
+.je-total .err{color:var(--red);}
+.je-balance-note{font-size:11px;color:var(--gray);margin-top:6px;text-align:right;}
+
+/* ASET TABLE */
+.aset-bar{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--gold2);border-radius:8px;margin-bottom:12px;font-size:12px;}
+.penyusutan-badge{background:var(--red-light);color:var(--red);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;}
+.aktif-badge{background:var(--hijau-light);color:var(--hijau);padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;}
+
+/* LABA DITAHAN */
+.ld-box{background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));color:white;border-radius:12px;padding:20px;margin-bottom:14px;}
+.ld-box h3{font-size:13px;opacity:.8;margin-bottom:6px;}
+.ld-val{font-size:28px;font-weight:900;}
+.ld-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.15);font-size:13px;}
+.ld-row:last-child{border-bottom:none;}
+.ld-label{opacity:.8;}
+.ld-amount{font-weight:700;font-family:'Courier New',monospace;}
+.ld-plus{color:#86efac;}
+.ld-minus{color:#fca5a5;}
+
+/* COA */
+.coa-kelompok{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
+.kel-aktiva_lancar{background:#dbeafe;color:#1565c0;}
+.kel-aktiva_tetap{background:#ede9fe;color:#6b21a8;}
+.kel-kewajiban{background:#fee2e2;color:#c0392b;}
+.kel-modal{background:#d1fae5;color:#065f46;}
+.kel-pendapatan{background:#fef3c7;color:#92400e;}
+.kel-hpp{background:#ffe4e6;color:#9f1239;}
+.kel-biaya{background:#fdecea;color:#c0392b;}
+.kel-zakat{background:#e8f5ef;color:#1a6b47;}
+
+/* BUKU BESAR */
+.bb-card{background:white;border-radius:10px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.bb-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.bb-akun{font-size:14px;font-weight:700;color:var(--hijau);}
+.bb-saldo{font-size:14px;font-weight:800;}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--hijau);color:white;padding:11px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;display:none;box-shadow:0 4px 16px rgba(0,0,0,.2);}
+#toast.err{background:var(--red);}
+#toast.show{display:block;}
+
+/* FILTER BAR */
+.filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.filter-bar input,.filter-bar select{padding:7px 11px;border:1.5px solid var(--gray3);border-radius:7px;font-size:12px;outline:none;}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--hijau);}
+
+/* SPINNER */
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* EMPTY */
+.empty{text-align:center;padding:36px;color:var(--gray);}
+.empty .ei{font-size:36px;margin-bottom:8px;}
+
+/* MOBILE */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;}
+.sb-overlay.show{display:block;}
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-240px);width:240px;transition:.25s;}
+  .sidebar.open{transform:translateX(0);}
+  .topbar{left:0;}
+  .main-wrap{margin-left:0;}
+  .hamburger{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .form-grid{grid-template-columns:1fr;}
+}
+
+@media print{
+  .sidebar,.topbar,.btn-row,.filter-bar,.no-print,button{display:none!important;}
+  .main-wrap{margin-left:0;padding-top:0;}
+  .page{display:block!important;padding:8mm;}
+  .card{box-shadow:none;border:1px solid #ddd;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">📒</div>
+      <h1>Jurnal Umum & Aset</h1>
+      <p>UB Nambah Barokah Desa Perwira</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <h1>📒 Jurnal & Aset</h1>
+      <p>UBNB Desa Perwira</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+
+      <div class="nav-section">Jurnal</div>
+      <div class="nav-item" onclick="showPage('jurnal',this)"><span class="nav-icon">📒</span>Jurnal Umum</div>
+      <div class="nav-item" onclick="showPage('buku-besar',this)"><span class="nav-icon">📗</span>Buku Besar</div>
+      <div class="nav-item" onclick="showPage('coa',this)"><span class="nav-icon">📋</span>Daftar Akun (COA)</div>
+
+      <div class="nav-section">Aset</div>
+      <div class="nav-item" onclick="showPage('aset',this)"><span class="nav-icon">🏗️</span>Aset Tetap</div>
+      <div class="nav-item" onclick="showPage('penyusutan',this)"><span class="nav-icon">📉</span>Penyusutan</div>
+
+      <div class="nav-section">Ekuitas</div>
+      <div class="nav-item" onclick="showPage('laba-ditahan',this)"><span class="nav-icon">💰</span>Laba Ditahan</div>
+    </div>
+    <div class="sb-footer">
+      <div id="sb-user" style="margin-bottom:5px;color:rgba(255,255,255,.6);"></div>
+      <a href="portal.html">← Kembali ke Portal</a>
+    </div>
+  </div>
+
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="topbar-right">
+      <div class="user-badge" id="user-badge">—</div>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- ===== DASHBOARD ===== -->
+    <div class="page active" id="page-dashboard">
+      <div class="stat-grid" id="dash-stats">
+        <div class="stat-card hijau"><div class="stat-lbl">Total Jurnal</div><div class="stat-val hijau">—</div><div class="stat-sub">entri tercatat</div></div>
+        <div class="stat-card gold"><div class="stat-lbl">Total Aset Tetap</div><div class="stat-val gold">—</div><div class="stat-sub">nilai perolehan</div></div>
+        <div class="stat-card red"><div class="stat-lbl">Akum. Penyusutan</div><div class="stat-val red">—</div><div class="stat-sub">s/d sekarang</div></div>
+        <div class="stat-card blue"><div class="stat-lbl">Nilai Buku Aset</div><div class="stat-val blue">—</div><div class="stat-sub">nett book value</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="card">
+          <div class="card-title"><h3>📒 Jurnal Terbaru</h3><button class="btn primary sm" onclick="showPage('jurnal',document.querySelectorAll('.nav-item')[1])">Lihat Semua</button></div>
+          <div id="dash-jurnal-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><h3>🏗️ Aset Tetap Aktif</h3><button class="btn primary sm" onclick="showPage('aset',document.querySelectorAll('.nav-item')[4])">Kelola</button></div>
+          <div id="dash-aset-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== JURNAL UMUM ===== -->
+    <div class="page" id="page-jurnal">
+      <div class="card">
+        <div class="card-title">
+          <h3>📒 Jurnal Umum</h3>
+          <div class="btn-row">
+            <button class="btn primary" onclick="openModalJurnal()">+ Jurnal Baru</button>
+            <button class="btn gold" onclick="exportJurnal()">📥 Export Excel</button>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <input type="month" id="filter-bulan" onchange="renderJurnal()">
+          <input type="text" id="filter-search" placeholder="🔍 Cari keterangan..." oninput="renderJurnal()" style="width:220px;">
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="tbl" id="jurnal-table">
+            <thead><tr>
+              <th>No. Jurnal</th><th>Tanggal</th><th>Keterangan</th>
+              <th class="right">Total Debit</th><th class="right">Total Kredit</th>
+              <th>Status</th><th class="no-print">Aksi</th>
+            </tr></thead>
+            <tbody id="jurnal-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BUKU BESAR ===== -->
+    <div class="page" id="page-buku-besar">
+      <div class="card">
+        <div class="card-title"><h3>📗 Buku Besar</h3></div>
+        <div class="filter-bar">
+          <select id="bb-akun" onchange="renderBukuBesar()" style="width:280px;">
+            <option value="">— Pilih Akun —</option>
+          </select>
+          <input type="month" id="bb-bulan" onchange="renderBukuBesar()">
+        </div>
+        <div id="buku-besar-content"></div>
+      </div>
+    </div>
+
+    <!-- ===== COA ===== -->
+    <div class="page" id="page-coa">
+      <div class="card">
+        <div class="card-title">
+          <h3>📋 Daftar Akun (Chart of Accounts)</h3>
+          <button class="btn primary" onclick="openModalCOA()">+ Tambah Akun</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="tbl">
+            <thead><tr><th>Kode</th><th>Nama Akun</th><th>Kelompok</th><th>Jenis</th><th class="no-print">Aksi</th></tr></thead>
+            <tbody id="coa-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ASET TETAP ===== -->
+    <div class="page" id="page-aset">
+      <div class="card">
+        <div class="card-title">
+          <h3>🏗️ Daftar Aset Tetap</h3>
+          <button class="btn primary" onclick="openModalAset()">+ Tambah Aset</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="tbl">
+            <thead><tr>
+              <th>Kode</th><th>Nama Aset</th><th>Kategori</th><th>Tgl Beli</th>
+              <th class="right">Harga Beli</th><th>Umur</th>
+              <th class="right">Akum. Penyusutan</th><th class="right">Nilai Buku</th>
+              <th>Status</th><th class="no-print">Aksi</th>
+            </tr></thead>
+            <tbody id="aset-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PENYUSUTAN ===== -->
+    <div class="page" id="page-penyusutan">
+      <div class="card">
+        <div class="card-title">
+          <h3>📉 Jadwal Penyusutan Aset</h3>
+          <div class="btn-row">
+            <select id="peny-tahun" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:7px;font-size:13px;font-weight:700;outline:none;">
+              <option>2025</option><option>2024</option><option>2026</option>
+            </select>
+            <button class="btn primary" onclick="hitungPenyusutan()">⚙️ Hitung & Simpan</button>
+            <button class="btn gold" onclick="cetakPenyusutan()">🖨️ Cetak</button>
+          </div>
+        </div>
+        <div id="penyusutan-content"></div>
+      </div>
+    </div>
+
+    <!-- ===== LABA DITAHAN ===== -->
+    <div class="page" id="page-laba-ditahan">
+      <div class="card">
+        <div class="card-title">
+          <h3>💰 Laba Ditahan (Retained Earnings)</h3>
+          <button class="btn primary" onclick="openModalLD()">+ Input Periode</button>
+        </div>
+
+        <!-- Penjelasan konsep -->
+        <div style="background:var(--blue-light);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;color:var(--blue);">
+          <strong>📚 Cara Kerja Laba Ditahan:</strong><br>
+          Laba Ditahan = Saldo Awal + Laba Bersih Tahun Ini − SHU Dibagikan ± Penyesuaian<br>
+          <em>Contoh: Laba 2024 Rp32,8 jt − SHU dibagi Rp28,8 jt = Laba Ditahan 2024: Rp4,0 jt → menjadi saldo awal 2025</em>
+        </div>
+
+        <div id="ld-content"></div>
+      </div>
+    </div>
+
+  </div><!-- end main-wrap -->
+</div><!-- end app -->
+
+<!-- ===== MODAL JURNAL ===== -->
+<div class="overlay" id="modal-jurnal">
+  <div class="modal modal-lg">
+    <div class="modal-title">
+      <h3>📒 <span id="jurnal-modal-title">Jurnal Baru</span></h3>
+      <button class="btn-close" onclick="closeModal('modal-jurnal')">✕</button>
+    </div>
+    <input type="hidden" id="jurnal-edit-id">
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field"><label>No. Jurnal</label><input type="text" id="jurnal-no" placeholder="Auto: JU-2025-001"></div>
+      <div class="field"><label>Tanggal</label><input type="date" id="jurnal-tgl"></div>
+      <div class="field full"><label>Keterangan</label><input type="text" id="jurnal-ket" placeholder="Deskripsi transaksi..."></div>
+      <div class="field"><label>Referensi Dokumen</label><input type="text" id="jurnal-ref" placeholder="No. kwitansi / bukti..."></div>
+      <div class="field"><label>Status</label>
+        <select id="jurnal-status"><option value="posted">Posted</option><option value="draft">Draft</option></select>
+      </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px;">Entri Debit / Kredit</div>
+    <div style="overflow-x:auto;">
+      <table class="je-table">
+        <thead><tr>
+          <th style="width:30%">Akun</th>
+          <th style="width:30%">Keterangan Baris</th>
+          <th style="width:17%">Debit (Rp)</th>
+          <th style="width:17%">Kredit (Rp)</th>
+          <th style="width:6%"></th>
+        </tr></thead>
+        <tbody id="jurnal-entries"></tbody>
+      </table>
+    </div>
+    <button onclick="addJurnalEntry()" style="background:var(--hijau-light);color:var(--hijau);border:1px dashed var(--hijau);padding:7px;width:100%;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;margin-top:7px;">+ Tambah Baris</button>
+    <div class="je-total" id="je-total-display">
+      <span>Debit: <strong id="je-total-debit">Rp 0</strong></span>
+      <span>Kredit: <strong id="je-total-kredit">Rp 0</strong></span>
+      <span id="je-balance-status" class="ok">✅ Seimbang</span>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn secondary" onclick="closeModal('modal-jurnal')">Batal</button>
+      <button class="btn primary" style="flex:1" onclick="simpanJurnal()" id="btn-simpan-jurnal">💾 Simpan Jurnal</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL ASET ===== -->
+<div class="overlay" id="modal-aset">
+  <div class="modal">
+    <div class="modal-title">
+      <h3>🏗️ <span id="aset-modal-title">Tambah Aset Tetap</span></h3>
+      <button class="btn-close" onclick="closeModal('modal-aset')">✕</button>
+    </div>
+    <input type="hidden" id="aset-edit-id">
+    <div class="form-grid">
+      <div class="field"><label>Kode Aset</label><input type="text" id="aset-kode" placeholder="AT-001 (auto)"></div>
+      <div class="field"><label>Nama Aset</label><input type="text" id="aset-nama" placeholder="Laptop, Rak, dll..."></div>
+      <div class="field"><label>Kategori</label>
+        <select id="aset-kategori">
+          <option value="elektronik">Elektronik & Komputer</option>
+          <option value="furnitur">Furnitur & Peralatan</option>
+          <option value="kendaraan">Kendaraan</option>
+          <option value="bangunan">Bangunan</option>
+          <option value="lainnya">Lainnya</option>
+        </select>
+      </div>
+      <div class="field"><label>Tanggal Beli</label><input type="date" id="aset-tgl"></div>
+      <div class="field"><label>Harga Beli (Rp)</label><input type="number" id="aset-harga" placeholder="0"></div>
+      <div class="field"><label>Umur Manfaat (Tahun)</label>
+        <select id="aset-umur">
+          <option value="2">2 tahun</option><option value="4" selected>4 tahun</option>
+          <option value="5">5 tahun</option><option value="8">8 tahun</option>
+          <option value="10">10 tahun</option><option value="20">20 tahun</option>
+        </select>
+      </div>
+      <div class="field"><label>Nilai Residu (Rp)</label><input type="number" id="aset-residu" value="0"></div>
+      <div class="field"><label>Metode Penyusutan</label>
+        <select id="aset-metode">
+          <option value="garis_lurus">Garis Lurus (Straight Line)</option>
+          <option value="saldo_menurun">Saldo Menurun (Declining)</option>
+        </select>
+      </div>
+      <div class="field full"><label>Keterangan</label><input type="text" id="aset-ket" placeholder="Opsional..."></div>
+    </div>
+    <div style="background:var(--gold2);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px;color:#92400e;">
+      💡 Penyusutan akan dihitung otomatis di menu <strong>Penyusutan</strong> berdasarkan umur manfaat
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn secondary" onclick="closeModal('modal-aset')">Batal</button>
+      <button class="btn primary" style="flex:1" onclick="simpanAset()">💾 Simpan Aset</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL COA ===== -->
+<div class="overlay" id="modal-coa">
+  <div class="modal">
+    <div class="modal-title">
+      <h3>📋 Tambah / Edit Akun</h3>
+      <button class="btn-close" onclick="closeModal('modal-coa')">✕</button>
+    </div>
+    <input type="hidden" id="coa-edit-id">
+    <div class="form-grid">
+      <div class="field"><label>Kode Akun</label><input type="text" id="coa-kode" placeholder="mis: 6-113"></div>
+      <div class="field"><label>Nama Akun</label><input type="text" id="coa-nama" placeholder="Nama akun..."></div>
+      <div class="field"><label>Kelompok</label>
+        <select id="coa-kelompok">
+          <option value="aktiva_lancar">Aktiva Lancar</option>
+          <option value="aktiva_tetap">Aktiva Tetap</option>
+          <option value="kewajiban">Kewajiban</option>
+          <option value="modal">Modal</option>
+          <option value="pendapatan">Pendapatan</option>
+          <option value="hpp">HPP</option>
+          <option value="biaya">Biaya Operasional</option>
+          <option value="zakat">Zakat</option>
+        </select>
+      </div>
+      <div class="field"><label>Saldo Normal</label>
+        <select id="coa-jenis">
+          <option value="debit">Debit (Aktiva, Biaya, HPP)</option>
+          <option value="kredit">Kredit (Pasiva, Modal, Pendapatan)</option>
+        </select>
+      </div>
+      <div class="field"><label>Urutan Tampil</label><input type="number" id="coa-urutan" value="0"></div>
+      <div class="field"><label>Keterangan</label><input type="text" id="coa-ket" placeholder="Opsional..."></div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn secondary" onclick="closeModal('modal-coa')">Batal</button>
+      <button class="btn primary" style="flex:1" onclick="simpanCOA()">💾 Simpan Akun</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL LABA DITAHAN ===== -->
+<div class="overlay" id="modal-ld">
+  <div class="modal">
+    <div class="modal-title">
+      <h3>💰 Input Laba Ditahan</h3>
+      <button class="btn-close" onclick="closeModal('modal-ld')">✕</button>
+    </div>
+    <input type="hidden" id="ld-edit-id">
+    <div style="background:var(--blue-light);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--blue);">
+      <strong>Formula:</strong> Laba Ditahan Akhir = Saldo Awal + Laba Bersih − SHU Dibagikan ± Penyesuaian
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>Tahun</label><input type="number" id="ld-tahun" placeholder="2025" min="2020" max="2030"></div>
+      <div class="field"><label>Laba Ditahan Awal (Saldo Awal Tahun)</label><input type="number" id="ld-awal" value="0" placeholder="Rp"></div>
+      <div class="field"><label>Laba Bersih Tahun Ini</label><input type="number" id="ld-laba" value="0" placeholder="Rp" oninput="hitungLD()"></div>
+      <div class="field"><label>SHU Dibagikan ke Anggota</label><input type="number" id="ld-shu" value="0" placeholder="Rp" oninput="hitungLD()"></div>
+      <div class="field"><label>Penyesuaian (±)</label><input type="number" id="ld-sesuai" value="0" placeholder="+ atau -" oninput="hitungLD()"></div>
+      <div class="field"><label>Catatan</label><input type="text" id="ld-catatan" placeholder="Opsional..."></div>
+    </div>
+    <div style="background:var(--hijau-light);border-radius:8px;padding:12px;margin-top:12px;">
+      <div style="font-size:12px;color:var(--gray);margin-bottom:4px;">Laba Ditahan Akhir (Otomatis):</div>
+      <div style="font-size:22px;font-weight:900;color:var(--hijau);" id="ld-preview">Rp 0</div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn secondary" onclick="closeModal('modal-ld')">Batal</button>
+      <button class="btn primary" style="flex:1" onclick="simpanLD()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LIHAT JURNAL DETAIL -->
+<div class="overlay" id="modal-view-jurnal">
+  <div class="modal modal-lg">
+    <div class="modal-title">
+      <h3 id="view-jurnal-title">Detail Jurnal</h3>
+      <button class="btn-close" onclick="closeModal('modal-view-jurnal')">✕</button>
+    </div>
+    <div id="view-jurnal-content"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMjMyNDksImV4cCI6MjA1OTg5OTI0OX0.HFBmOjMCEqNFaGANFr2-0BNvVqoq3RQ1_cVLNDLQAL4';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+let CU=null;
+let aCOA=[],aJurnal=[],aJurnalDetail=[],aAset=[],aPenyusutan=[],aLD=[];
+
+// ===== AUTH =====
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  if(!u||!p){document.getElementById('login-err').textContent='Isi username dan password';return;}
+  const btn=document.getElementById('btn-login');btn.textContent='Memverifikasi...';btn.disabled=true;
+  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.textContent='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
+  CU=data;
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username;
+  document.getElementById('sb-user').textContent='👤 '+CU.username;
+  // Set tanggal default
+  document.getElementById('jurnal-tgl').value=new Date().toISOString().split('T')[0];
+  document.getElementById('aset-tgl').value=new Date().toISOString().split('T')[0];
+  const ym=new Date().toISOString().slice(0,7);
+  document.getElementById('filter-bulan').value=ym;
+  document.getElementById('bb-bulan').value=ym;
+  await refreshAll();
+}
+function keluar(){CU=null;document.getElementById('login-wrap').style.display='flex';document.getElementById('app').style.display='none';}
+
+// ===== LOAD =====
+async function refreshAll(){
+  const[{data:coa},{data:j},{data:jd},{data:a},{data:p},{data:ld}]=await Promise.all([
+    sb.from('coa').select('*').eq('is_aktif',true).order('kode'),
+    sb.from('jurnal_umum').select('*').order('tanggal',{ascending:false}),
+    sb.from('jurnal_detail').select('*'),
+    sb.from('aset_tetap').select('*').order('tanggal_beli',{ascending:false}),
+    sb.from('aset_penyusutan').select('*').order('tahun'),
+    sb.from('laba_ditahan').select('*').order('tahun',{ascending:false}),
+  ]);
+  aCOA=coa||[];aJurnal=j||[];aJurnalDetail=jd||[];aAset=a||[];aPenyusutan=p||[];aLD=ld||[];
+  populateBBSelect();
+  renderDashboard();
+  renderJurnal();
+  renderCOA();
+  renderAset();
+  renderLD();
+}
+
+function populateBBSelect(){
+  const sel=document.getElementById('bb-akun');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— Pilih Akun —</option>'+
+    aCOA.map(c=>`<option value="${c.id}">${c.kode} - ${c.nama}</option>`).join('');
+  if(cur)sel.value=cur;
+}
+
+// ===== PAGE NAV =====
+function showPage(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if(el)el.classList.add('active');
+  const titles={dashboard:'Dashboard',jurnal:'Jurnal Umum','buku-besar':'Buku Besar',coa:'Daftar Akun (COA)',aset:'Aset Tetap',penyusutan:'Jadwal Penyusutan','laba-ditahan':'Laba Ditahan'};
+  document.getElementById('topbar-title').textContent=titles[name]||name;
+  closeSidebar();
+  if(name==='penyusutan')renderPenyusutan();
+  if(name==='buku-besar')renderBukuBesar();
+}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sb-overlay').classList.toggle('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+
+// ===== TOAST =====
+function toast(msg,err=false){
+  const t=document.getElementById('toast');t.textContent=msg;t.className='show'+(err?' err':'');
+  setTimeout(()=>t.className='',3000);
+}
+
+// ===== FORMAT =====
+function rp(n){if(!n&&n!==0)return'-';return'Rp '+Math.abs(parseFloat(n)||0).toLocaleString('id-ID');}
+function fmtTgl(t){if(!t)return'-';return new Date(t).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const totalAset=aAset.reduce((s,a)=>s+parseFloat(a.harga_beli||0),0);
+  const totalAkum=aAset.reduce((s,a)=>s+parseFloat(a.akumulasi_penyusutan||0),0);
+  const nilaiBuku=totalAset-totalAkum;
+  document.getElementById('dash-stats').innerHTML=`
+    <div class="stat-card hijau"><div class="stat-lbl">Total Jurnal</div><div class="stat-val hijau">${aJurnal.length}</div><div class="stat-sub">entri tercatat</div></div>
+    <div class="stat-card gold"><div class="stat-lbl">Total Aset Tetap</div><div class="stat-val gold">${rp(totalAset)}</div><div class="stat-sub">nilai perolehan</div></div>
+    <div class="stat-card red"><div class="stat-lbl">Akum. Penyusutan</div><div class="stat-val red">${rp(totalAkum)}</div><div class="stat-sub">s/d sekarang</div></div>
+    <div class="stat-card blue"><div class="stat-lbl">Nilai Buku Aset</div><div class="stat-val blue">${rp(nilaiBuku)}</div><div class="stat-sub">nett book value</div></div>
+  `;
+  // Jurnal terbaru
+  const jList=aJurnal.slice(0,5);
+  document.getElementById('dash-jurnal-list').innerHTML=jList.length?jList.map(j=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray3);">
+      <div><div style="font-weight:700;font-size:13px;">${j.no_jurnal}</div><div style="font-size:11px;color:var(--gray);">${fmtTgl(j.tanggal)} · ${j.keterangan}</div></div>
+      <div style="font-size:12px;font-weight:700;color:var(--hijau);">${rp(j.total_debit)}</div>
+    </div>`).join(''):'<div class="empty"><div class="ei">📒</div>Belum ada jurnal</div>';
+  // Aset aktif
+  const aAktif=aAset.filter(a=>a.status==='aktif').slice(0,5);
+  document.getElementById('dash-aset-list').innerHTML=aAktif.length?aAktif.map(a=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--gray3);">
+      <div><div style="font-weight:700;font-size:13px;">${a.nama}</div><div style="font-size:11px;color:var(--gray);">${a.kategori} · ${a.umur_manfaat} thn</div></div>
+      <div style="text-align:right;"><div style="font-size:12px;font-weight:700;color:var(--hijau);">${rp(a.nilai_buku)}</div><div style="font-size:10px;color:var(--gray);">nilai buku</div></div>
+    </div>`).join(''):'<div class="empty"><div class="ei">🏗️</div>Belum ada aset</div>';
+}
+
+// ===== JURNAL =====
+function renderJurnal(){
+  const bulan=document.getElementById('filter-bulan')?.value||'';
+  const search=(document.getElementById('filter-search')?.value||'').toLowerCase();
+  let rows=aJurnal;
+  if(bulan)rows=rows.filter(j=>j.tanggal&&j.tanggal.startsWith(bulan));
+  if(search)rows=rows.filter(j=>j.keterangan?.toLowerCase().includes(search)||j.no_jurnal?.toLowerCase().includes(search));
+  const tbody=document.getElementById('jurnal-body');
+  if(!rows.length){tbody.innerHTML=`<tr><td colspan="7"><div class="empty"><div class="ei">📒</div>Tidak ada jurnal</div></td></tr>`;return;}
+  tbody.innerHTML=rows.map(j=>`<tr>
+    <td><strong>${j.no_jurnal}</strong></td>
+    <td>${fmtTgl(j.tanggal)}</td>
+    <td>${j.keterangan}</td>
+    <td class="rp">${rp(j.total_debit)}</td>
+    <td class="rp">${rp(j.total_kredit)}</td>
+    <td><span style="padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;background:${j.status==='posted'?'var(--hijau-light)':'var(--gold2)'};color:${j.status==='posted'?'var(--hijau)':'#92400e'}">${j.status}</span></td>
+    <td class="no-print">
+      <button class="btn blue sm" onclick="lihatJurnal(${j.id})">👁️</button>
+      <button class="btn secondary sm" onclick="editJurnal(${j.id})">✏️</button>
+      <button class="btn danger sm" onclick="hapusJurnal(${j.id},'${j.no_jurnal}')">🗑️</button>
+    </td>
+  </tr>`).join('');
+}
+
+function openModalJurnal(){
+  document.getElementById('jurnal-edit-id').value='';
+  document.getElementById('jurnal-modal-title').textContent='Jurnal Baru';
+  document.getElementById('jurnal-no').value='';
+  document.getElementById('jurnal-tgl').value=new Date().toISOString().split('T')[0];
+  document.getElementById('jurnal-ket').value='';
+  document.getElementById('jurnal-ref').value='';
+  document.getElementById('jurnal-status').value='posted';
+  document.getElementById('jurnal-entries').innerHTML='';
+  // Auto generate no jurnal
+  const tahun=new Date().getFullYear();
+  const count=aJurnal.filter(j=>j.no_jurnal?.startsWith('JU-'+tahun)).length+1;
+  document.getElementById('jurnal-no').value=`JU-${tahun}-${String(count).padStart(3,'0')}`;
+  // Tambah 2 baris default
+  addJurnalEntry();addJurnalEntry();
+  openModal('modal-jurnal');
+}
+
+function addJurnalEntry(data={}){
+  const tbody=document.getElementById('jurnal-entries');
+  const tr=document.createElement('tr');
+  tr.innerHTML=`
+    <td>
+      <select class="je-akun" onchange="updateJETotals()" style="width:100%;padding:6px;border:1.5px solid var(--gray3);border-radius:6px;font-size:12px;">
+        <option value="">— Pilih Akun —</option>
+        ${aCOA.map(c=>`<option value="${c.id}" data-kode="${c.kode}" data-nama="${c.nama}" ${data.coa_id==c.id?'selected':''}>${c.kode} - ${c.nama}</option>`).join('')}
+      </select>
+    </td>
+    <td><input type="text" value="${data.keterangan||''}" placeholder="Ket. baris..." style="width:100%;padding:6px;border:1.5px solid var(--gray3);border-radius:6px;font-size:12px;"></td>
+    <td><input type="number" class="je-debit" value="${data.debit||0}" oninput="updateJETotals()" style="width:100%;padding:6px;border:1.5px solid var(--gray3);border-radius:6px;font-size:12px;text-align:right;"></td>
+    <td><input type="number" class="je-kredit" value="${data.kredit||0}" oninput="updateJETotals()" style="width:100%;padding:6px;border:1.5px solid var(--gray3);border-radius:6px;font-size:12px;text-align:right;"></td>
+    <td><button class="del-btn" onclick="this.closest('tr').remove();updateJETotals()">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+  updateJETotals();
+}
+
+function updateJETotals(){
+  let totalD=0,totalK=0;
+  document.querySelectorAll('.je-debit').forEach(i=>totalD+=parseFloat(i.value)||0);
+  document.querySelectorAll('.je-kredit').forEach(i=>totalK+=parseFloat(i.value)||0);
+  document.getElementById('je-total-debit').textContent=rp(totalD);
+  document.getElementById('je-total-kredit').textContent=rp(totalK);
+  const bal=document.getElementById('je-balance-status');
+  if(Math.abs(totalD-totalK)<1){bal.className='ok';bal.textContent='✅ Seimbang';}
+  else{bal.className='err';bal.textContent='⚠️ Tidak seimbang (selisih: '+rp(Math.abs(totalD-totalK))+')';}
+}
+
+async function simpanJurnal(){
+  const id=document.getElementById('jurnal-edit-id').value;
+  const noJurnal=document.getElementById('jurnal-no').value.trim();
+  const tgl=document.getElementById('jurnal-tgl').value;
+  const ket=document.getElementById('jurnal-ket').value.trim();
+  if(!noJurnal||!tgl||!ket){toast('Isi No. Jurnal, Tanggal, dan Keterangan',true);return;}
+  
+  // Kumpulkan entries
+  const entries=[];
+  document.querySelectorAll('#jurnal-entries tr').forEach(tr=>{
+    const sel=tr.querySelector('.je-akun');
+    const d=parseFloat(tr.querySelector('.je-debit')?.value)||0;
+    const k=parseFloat(tr.querySelector('.je-kredit')?.value)||0;
+    const ket2=tr.querySelectorAll('input')[0]?.value||'';
+    if(sel?.value&&(d||k)){
+      const opt=sel.options[sel.selectedIndex];
+      entries.push({coa_id:parseInt(sel.value),kode_akun:opt.dataset.kode,nama_akun:opt.dataset.nama,debit:d,kredit:k,keterangan:ket2});
+    }
+  });
+  if(!entries.length){toast('Minimal 1 baris entri',true);return;}
+  const totalD=entries.reduce((s,e)=>s+e.debit,0);
+  const totalK=entries.reduce((s,e)=>s+e.kredit,0);
+  if(Math.abs(totalD-totalK)>1){toast('Jurnal harus seimbang (Debit = Kredit)',true);return;}
+
+  const btn=document.getElementById('btn-simpan-jurnal');
+  btn.innerHTML='<div class="spinner"></div> Menyimpan...';btn.disabled=true;
+
+  const payload={no_jurnal:noJurnal,tanggal:tgl,keterangan:ket,referensi:document.getElementById('jurnal-ref').value,status:document.getElementById('jurnal-status').value,total_debit:totalD,total_kredit:totalK,operator:CU.username};
+
+  let jurnalId;
+  if(id){
+    await sb.from('jurnal_detail').delete().eq('jurnal_id',id);
+    await sb.from('jurnal_umum').update(payload).eq('id',id);
+    jurnalId=parseInt(id);
+  } else {
+    const{data,error}=await sb.from('jurnal_umum').insert([payload]).select('id').single();
+    if(error){toast('Gagal: '+error.message,true);btn.innerHTML='💾 Simpan Jurnal';btn.disabled=false;return;}
+    jurnalId=data.id;
+  }
+  await sb.from('jurnal_detail').insert(entries.map(e=>({...e,jurnal_id:jurnalId})));
+  btn.innerHTML='💾 Simpan Jurnal';btn.disabled=false;
+  closeModal('modal-jurnal');
+  await refreshAll();
+  toast('✅ Jurnal berhasil disimpan!');
+}
+
+async function editJurnal(id){
+  const j=aJurnal.find(x=>x.id===id);
+  const details=aJurnalDetail.filter(d=>d.jurnal_id===id);
+  if(!j)return;
+  document.getElementById('jurnal-edit-id').value=id;
+  document.getElementById('jurnal-modal-title').textContent='Edit Jurnal';
+  document.getElementById('jurnal-no').value=j.no_jurnal;
+  document.getElementById('jurnal-tgl').value=j.tanggal;
+  document.getElementById('jurnal-ket').value=j.keterangan;
+  document.getElementById('jurnal-ref').value=j.referensi||'';
+  document.getElementById('jurnal-status').value=j.status;
+  document.getElementById('jurnal-entries').innerHTML='';
+  details.forEach(d=>addJurnalEntry(d));
+  if(!details.length){addJurnalEntry();addJurnalEntry();}
+  openModal('modal-jurnal');
+}
+
+function lihatJurnal(id){
+  const j=aJurnal.find(x=>x.id===id);
+  const details=aJurnalDetail.filter(d=>d.jurnal_id===id);
+  if(!j)return;
+  document.getElementById('view-jurnal-title').textContent=j.no_jurnal+' — '+j.keterangan;
+  const totalD=details.reduce((s,d)=>s+parseFloat(d.debit||0),0);
+  const totalK=details.reduce((s,d)=>s+parseFloat(d.kredit||0),0);
+  document.getElementById('view-jurnal-content').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;font-size:13px;">
+      <div><span style="color:var(--gray);font-size:11px;">TANGGAL</span><br><strong>${fmtTgl(j.tanggal)}</strong></div>
+      <div><span style="color:var(--gray);font-size:11px;">REFERENSI</span><br><strong>${j.referensi||'-'}</strong></div>
+      <div><span style="color:var(--gray);font-size:11px;">STATUS</span><br><strong>${j.status}</strong></div>
+    </div>
+    <table class="tbl" style="margin-bottom:12px;">
+      <thead><tr><th>Akun</th><th>Keterangan</th><th class="right">Debit</th><th class="right">Kredit</th></tr></thead>
+      <tbody>
+        ${details.map(d=>`<tr>
+          <td><span style="font-size:11px;color:var(--gray);">${d.kode_akun}</span><br><strong>${d.nama_akun}</strong></td>
+          <td style="font-size:12px;color:var(--gray);">${d.keterangan||'-'}</td>
+          <td class="rp">${d.debit>0?rp(d.debit):''}</td>
+          <td class="rp">${d.kredit>0?rp(d.kredit):''}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="2"><strong>TOTAL</strong></td>
+          <td class="rp"><strong>${rp(totalD)}</strong></td>
+          <td class="rp"><strong>${rp(totalK)}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+  openModal('modal-view-jurnal');
+}
+
+async function hapusJurnal(id,no){
+  if(!confirm('Hapus jurnal '+no+'?'))return;
+  await sb.from('jurnal_umum').delete().eq('id',id);
+  await refreshAll();
+  toast('✅ Jurnal dihapus!');
+}
+
+function exportJurnal(){
+  const XLSX=window.XLSX;
+  const rows=[['No. Jurnal','Tanggal','Keterangan','Referensi','Kode Akun','Nama Akun','Debit','Kredit','Status']];
+  aJurnal.forEach(j=>{
+    const details=aJurnalDetail.filter(d=>d.jurnal_id===j.id);
+    details.forEach((d,i)=>rows.push([i===0?j.no_jurnal:'',i===0?j.tanggal:'',i===0?j.keterangan:'',i===0?j.referensi||'':'',d.kode_akun,d.nama_akun,d.debit,d.kredit,i===0?j.status:'']));
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Jurnal Umum');
+  XLSX.writeFile(wb,'UBNB_JurnalUmum_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+// ===== BUKU BESAR =====
+function renderBukuBesar(){
+  const coaId=parseInt(document.getElementById('bb-akun')?.value);
+  const bulan=document.getElementById('bb-bulan')?.value||'';
+  if(!coaId){document.getElementById('buku-besar-content').innerHTML='<div class="empty"><div class="ei">📗</div>Pilih akun untuk melihat buku besar</div>';return;}
+  const akun=aCOA.find(c=>c.id===coaId);
+  let details=aJurnalDetail.filter(d=>d.coa_id===coaId);
+  if(bulan){
+    const jIds=aJurnal.filter(j=>j.tanggal?.startsWith(bulan)).map(j=>j.id);
+    details=details.filter(d=>jIds.includes(d.jurnal_id));
+  }
+  if(!details.length){document.getElementById('buku-besar-content').innerHTML=`<div class="empty"><div class="ei">📗</div>Tidak ada transaksi untuk akun <strong>${akun?.nama}</strong></div>`;return;}
+
+  let saldo=0;
+  const rows=details.map(d=>{
+    const j=aJurnal.find(x=>x.id===d.jurnal_id);
+    if(akun?.jenis==='debit')saldo+=parseFloat(d.debit||0)-parseFloat(d.kredit||0);
+    else saldo+=parseFloat(d.kredit||0)-parseFloat(d.debit||0);
+    return{...d,tanggal:j?.tanggal,no_jurnal:j?.no_jurnal,keterangan_jurnal:j?.keterangan,saldo};
+  }).sort((a,b)=>new Date(a.tanggal)-new Date(b.tanggal));
+
+  const totalD=rows.reduce((s,r)=>s+parseFloat(r.debit||0),0);
+  const totalK=rows.reduce((s,r)=>s+parseFloat(r.kredit||0),0);
+  const saldoAkhir=rows[rows.length-1]?.saldo||0;
+
+  document.getElementById('buku-besar-content').innerHTML=`
+    <div class="bb-card">
+      <div class="bb-header">
+        <div class="bb-akun">${akun?.kode} — ${akun?.nama}</div>
+        <div class="bb-saldo" style="color:${saldoAkhir>=0?'var(--hijau)':'var(--red)'};">${rp(saldoAkhir)}</div>
+      </div>
+      <div style="overflow-x:auto;">
+      <table class="tbl">
+        <thead><tr><th>Tanggal</th><th>No. Jurnal</th><th>Keterangan</th><th class="right">Debit</th><th class="right">Kredit</th><th class="right">Saldo</th></tr></thead>
+        <tbody>
+          ${rows.map(r=>`<tr>
+            <td>${fmtTgl(r.tanggal)}</td>
+            <td><strong>${r.no_jurnal}</strong></td>
+            <td>${r.keterangan||r.keterangan_jurnal||'-'}</td>
+            <td class="rp">${r.debit>0?rp(r.debit):''}</td>
+            <td class="rp">${r.kredit>0?rp(r.kredit):''}</td>
+            <td class="rp" style="font-weight:700;color:${r.saldo>=0?'var(--hijau)':'var(--red)'};">${rp(r.saldo)}</td>
+          </tr>`).join('')}
+          <tr class="total-row">
+            <td colspan="3"><strong>TOTAL</strong></td>
+            <td class="rp"><strong>${rp(totalD)}</strong></td>
+            <td class="rp"><strong>${rp(totalK)}</strong></td>
+            <td class="rp"><strong>${rp(saldoAkhir)}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>`;
+}
+
+// ===== COA =====
+function renderCOA(){
+  const kelLabels={aktiva_lancar:'Aktiva Lancar',aktiva_tetap:'Aktiva Tetap',kewajiban:'Kewajiban',modal:'Modal',pendapatan:'Pendapatan',hpp:'HPP',biaya:'Biaya',zakat:'Zakat'};
+  const tbody=document.getElementById('coa-body');
+  tbody.innerHTML=aCOA.map(c=>`<tr>
+    <td><strong>${c.kode}</strong></td>
+    <td>${c.nama}</td>
+    <td><span class="coa-kelompok kel-${c.kelompok}">${kelLabels[c.kelompok]||c.kelompok}</span></td>
+    <td><span style="font-size:11px;font-weight:700;color:${c.jenis==='debit'?'var(--blue)':'var(--red)'};">${c.jenis.toUpperCase()}</span></td>
+    <td class="no-print">
+      <button class="btn secondary sm" onclick="editCOA(${c.id})">✏️</button>
+      <button class="btn danger sm" onclick="hapusCOA(${c.id})">🗑️</button>
+    </td>
+  </tr>`).join('');
+}
+
+function openModalCOA(data=null){
+  document.getElementById('coa-edit-id').value=data?.id||'';
+  document.getElementById('coa-kode').value=data?.kode||'';
+  document.getElementById('coa-nama').value=data?.nama||'';
+  document.getElementById('coa-kelompok').value=data?.kelompok||'biaya';
+  document.getElementById('coa-jenis').value=data?.jenis||'debit';
+  document.getElementById('coa-urutan').value=data?.urutan||0;
+  document.getElementById('coa-ket').value=data?.keterangan||'';
+  openModal('modal-coa');
+}
+function editCOA(id){openModalCOA(aCOA.find(c=>c.id===id));}
+async function simpanCOA(){
+  const id=document.getElementById('coa-edit-id').value;
+  const payload={kode:document.getElementById('coa-kode').value.trim(),nama:document.getElementById('coa-nama').value.trim(),kelompok:document.getElementById('coa-kelompok').value,jenis:document.getElementById('coa-jenis').value,urutan:parseInt(document.getElementById('coa-urutan').value)||0,keterangan:document.getElementById('coa-ket').value.trim()};
+  if(!payload.kode||!payload.nama){toast('Isi kode dan nama akun',true);return;}
+  if(id){await sb.from('coa').update(payload).eq('id',id);}
+  else{await sb.from('coa').insert([payload]);}
+  closeModal('modal-coa');await refreshAll();toast('✅ Akun disimpan!');
+}
+async function hapusCOA(id){
+  if(!confirm('Hapus akun ini?'))return;
+  await sb.from('coa').update({is_aktif:false}).eq('id',id);
+  await refreshAll();toast('✅ Akun dinonaktifkan!');
+}
+
+// ===== ASET TETAP =====
+function renderAset(){
+  const tbody=document.getElementById('aset-body');
+  if(!aAset.length){tbody.innerHTML='<tr><td colspan="10"><div class="empty"><div class="ei">🏗️</div>Belum ada aset tetap</div></td></tr>';return;}
+  tbody.innerHTML=aAset.map(a=>`<tr>
+    <td><strong>${a.kode||'-'}</strong></td>
+    <td>${a.nama}</td>
+    <td style="font-size:11px;text-transform:capitalize;">${a.kategori}</td>
+    <td>${fmtTgl(a.tanggal_beli)}</td>
+    <td class="rp">${rp(a.harga_beli)}</td>
+    <td style="text-align:center;">${a.umur_manfaat} thn</td>
+    <td class="rp" style="color:var(--red);">${rp(a.akumulasi_penyusutan)}</td>
+    <td class="rp" style="color:var(--hijau);font-weight:800;">${rp(a.nilai_buku)}</td>
+    <td><span class="${a.status==='aktif'?'aktif-badge':'penyusutan-badge'}">${a.status}</span></td>
+    <td class="no-print">
+      <button class="btn secondary sm" onclick="editAset(${a.id})">✏️</button>
+      <button class="btn danger sm" onclick="hapusAset(${a.id})">🗑️</button>
+    </td>
+  </tr>`).join('');
+}
+
+function openModalAset(data=null){
+  document.getElementById('aset-edit-id').value=data?.id||'';
+  document.getElementById('aset-modal-title').textContent=data?'Edit Aset':'Tambah Aset Tetap';
+  document.getElementById('aset-kode').value=data?.kode||'AT-'+String(aAset.length+1).padStart(3,'0');
+  document.getElementById('aset-nama').value=data?.nama||'';
+  document.getElementById('aset-kategori').value=data?.kategori||'elektronik';
+  document.getElementById('aset-tgl').value=data?.tanggal_beli||new Date().toISOString().split('T')[0];
+  document.getElementById('aset-harga').value=data?.harga_beli||0;
+  document.getElementById('aset-umur').value=data?.umur_manfaat||4;
+  document.getElementById('aset-residu').value=data?.nilai_residu||0;
+  document.getElementById('aset-metode').value=data?.metode||'garis_lurus';
+  document.getElementById('aset-ket').value=data?.keterangan||'';
+  openModal('modal-aset');
+}
+function editAset(id){openModalAset(aAset.find(a=>a.id===id));}
+async function simpanAset(){
+  const id=document.getElementById('aset-edit-id').value;
+  const payload={kode:document.getElementById('aset-kode').value.trim(),nama:document.getElementById('aset-nama').value.trim(),kategori:document.getElementById('aset-kategori').value,tanggal_beli:document.getElementById('aset-tgl').value,harga_beli:parseFloat(document.getElementById('aset-harga').value)||0,umur_manfaat:parseInt(document.getElementById('aset-umur').value)||4,nilai_residu:parseFloat(document.getElementById('aset-residu').value)||0,metode:document.getElementById('aset-metode').value,keterangan:document.getElementById('aset-ket').value.trim(),operator:CU.username};
+  if(!payload.nama||!payload.tanggal_beli){toast('Isi nama dan tanggal beli',true);return;}
+  if(id){await sb.from('aset_tetap').update(payload).eq('id',id);}
+  else{await sb.from('aset_tetap').insert([payload]);}
+  closeModal('modal-aset');await refreshAll();toast('✅ Aset disimpan!');
+}
+async function hapusAset(id){
+  if(!confirm('Hapus aset ini? Semua data penyusutan ikut terhapus!'))return;
+  await sb.from('aset_penyusutan').delete().eq('aset_id',id);
+  await sb.from('aset_tetap').delete().eq('id',id);
+  await refreshAll();toast('✅ Aset dihapus!');
+}
+
+// ===== PENYUSUTAN =====
+function renderPenyusutan(){
+  const tahun=parseInt(document.getElementById('peny-tahun')?.value||new Date().getFullYear());
+  const asetAktif=aAset.filter(a=>a.status==='aktif');
+  if(!asetAktif.length){document.getElementById('penyusutan-content').innerHTML='<div class="empty"><div class="ei">🏗️</div>Belum ada aset tetap aktif</div>';return;}
+  
+  let totalBeban=0;
+  const rows=asetAktif.map(a=>{
+    const tglBeli=new Date(a.tanggal_beli);
+    const thnBeli=tglBeli.getFullYear();
+    const umur=a.umur_manfaat||4;
+    const harga=parseFloat(a.harga_beli||0);
+    const residu=parseFloat(a.nilai_residu||0);
+    const dasar=harga-residu;
+    let beban=0;
+    if(a.metode==='garis_lurus'){
+      beban=dasar/umur;
+      // Proporsional tahun pertama
+      if(tahun===thnBeli){const bulan=12-tglBeli.getMonth();beban=beban*(bulan/12);}
+    } else {
+      // Saldo menurun: rate = 2/umur
+      const rate=2/umur;
+      const akumSblm=aPenyusutan.filter(p=>p.aset_id===a.id&&p.tahun<tahun).reduce((s,p)=>s+parseFloat(p.beban_penyusutan||0),0);
+      const nilaiAwal=harga-akumSblm;
+      beban=nilaiAwal*rate;
+    }
+    beban=Math.min(beban,Math.max(0,harga-residu-parseFloat(a.akumulasi_penyusutan||0)));
+    beban=Math.round(beban);
+    totalBeban+=beban;
+    const akumBaru=parseFloat(a.akumulasi_penyusutan||0)+beban;
+    const nilaiBukuBaru=harga-akumBaru;
+    const existing=aPenyusutan.find(p=>p.aset_id===a.id&&p.tahun===tahun);
+    return{...a,beban_tahun:beban,akum_baru:akumBaru,nilai_buku_baru:nilaiBukuBaru,sudah_dihitung:!!existing,existing};
+  });
+
+  document.getElementById('penyusutan-content').innerHTML=`
+    <div style="background:var(--gold2);border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;">
+      <strong>📅 Tahun ${tahun}</strong> — Total Beban Penyusutan: <strong style="color:var(--red);font-size:16px;">${rp(totalBeban)}</strong>
+      <br><span style="font-size:11px;color:var(--gray);">Jurnal: Debit "Biaya Penyusutan Aset" → Kredit "Akumulasi Penyusutan" sejumlah total di atas</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="tbl">
+      <thead><tr>
+        <th>Kode</th><th>Nama Aset</th><th>Metode</th>
+        <th class="right">Harga Beli</th><th class="right">Akum. Lama</th>
+        <th class="right">Beban ${tahun}</th>
+        <th class="right">Akum. Baru</th><th class="right">Nilai Buku</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td>${r.kode||'-'}</td>
+          <td>${r.nama}</td>
+          <td style="font-size:11px;">${r.metode==='garis_lurus'?'Garis Lurus':'Saldo Menurun'}</td>
+          <td class="rp">${rp(r.harga_beli)}</td>
+          <td class="rp" style="color:var(--red);">${rp(r.akumulasi_penyusutan)}</td>
+          <td class="rp" style="color:var(--red);font-weight:800;">${rp(r.beban_tahun)}</td>
+          <td class="rp" style="color:var(--red);">${rp(r.akum_baru)}</td>
+          <td class="rp" style="color:var(--hijau);font-weight:800;">${rp(r.nilai_buku_baru)}</td>
+          <td>${r.sudah_dihitung?'<span class="aktif-badge">Sudah</span>':'<span class="penyusutan-badge">Belum</span>'}</td>
+        </tr>`).join('')}
+        <tr class="total-row">
+          <td colspan="5"><strong>TOTAL BEBAN PENYUSUTAN ${tahun}</strong></td>
+          <td class="rp"><strong style="color:var(--red);">${rp(totalBeban)}</strong></td>
+          <td colspan="3"></td>
+        </tr>
+      </tbody>
+    </table></div>
+  `;
+  window._penyusutanRows=rows;window._penyusutanTahun=tahun;window._totalBeban=totalBeban;
+}
+
+async function hitungPenyusutan(){
+  const rows=window._penyusutanRows;const tahun=window._penyusutanTahun;
+  if(!rows){toast('Render dulu halaman penyusutan',true);return;}
+  if(!confirm('Simpan penyusutan tahun '+tahun+'? Akumulasi aset akan diupdate.'))return;
+  for(const r of rows){
+    // Upsert penyusutan
+    await sb.from('aset_penyusutan').upsert({aset_id:r.id,tahun,beban_penyusutan:r.beban_tahun,akumulasi_sd_tahun:r.akum_baru,nilai_buku_akhir:r.nilai_buku_baru,operator:CU.username},{onConflict:'aset_id,tahun'});
+    // Update akumulasi di aset
+    await sb.from('aset_tetap').update({akumulasi_penyusutan:r.akum_baru}).eq('id',r.id);
+  }
+  await refreshAll();renderPenyusutan();
+  toast('✅ Penyusutan tahun '+tahun+' disimpan! Buat juga jurnal penyusutan.');
+}
+
+function cetakPenyusutan(){window.print();}
+
+// ===== LABA DITAHAN =====
+function hitungLD(){
+  const awal=parseFloat(document.getElementById('ld-awal').value)||0;
+  const laba=parseFloat(document.getElementById('ld-laba').value)||0;
+  const shu=parseFloat(document.getElementById('ld-shu').value)||0;
+  const sesuai=parseFloat(document.getElementById('ld-sesuai').value)||0;
+  const akhir=awal+laba-shu+sesuai;
+  document.getElementById('ld-preview').textContent=rp(akhir);
+}
+
+function renderLD(){
+  const el=document.getElementById('ld-content');
+  if(!aLD.length){el.innerHTML='<div class="empty"><div class="ei">💰</div>Belum ada data laba ditahan. Input periode pertama.</div>';return;}
+  el.innerHTML=aLD.map(ld=>{
+    const akhir=parseFloat(ld.laba_ditahan_akhir||0);
+    return`<div class="ld-box" style="margin-bottom:12px;">
+      <h3>📅 Tahun ${ld.tahun}</h3>
+      <div class="ld-val">${rp(akhir)}</div>
+      <div style="margin-top:14px;">
+        <div class="ld-row"><span class="ld-label">Saldo Awal</span><span class="ld-amount">${rp(ld.laba_ditahan_awal)}</span></div>
+        <div class="ld-row"><span class="ld-label ld-plus">+ Laba Bersih ${ld.tahun}</span><span class="ld-amount ld-plus">+ ${rp(ld.laba_bersih_tahun)}</span></div>
+        <div class="ld-row"><span class="ld-label ld-minus">− SHU Dibagikan</span><span class="ld-amount ld-minus">− ${rp(ld.shu_dibagikan)}</span></div>
+        ${parseFloat(ld.penyesuaian||0)?`<div class="ld-row"><span class="ld-label">± Penyesuaian</span><span class="ld-amount">${rp(ld.penyesuaian)}</span></div>`:''}
+        <div class="ld-row" style="border-top:1px solid rgba(255,255,255,.3);padding-top:10px;margin-top:4px;font-size:15px;"><span style="font-weight:800;">Laba Ditahan Akhir</span><span class="ld-amount" style="font-size:18px;">${rp(akhir)}</span></div>
+      </div>
+      ${ld.catatan?`<div style="font-size:11px;opacity:.7;margin-top:10px;">📝 ${ld.catatan}</div>`:''}
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn secondary sm" style="background:rgba(255,255,255,.15);color:white;" onclick="editLD(${ld.id})">✏️ Edit</button>
+        <button class="btn danger sm" style="background:rgba(255,0,0,.2);color:#fca5a5;" onclick="hapusLD(${ld.id},${ld.tahun})">🗑️ Hapus</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openModalLD(data=null){
+  document.getElementById('ld-edit-id').value=data?.id||'';
+  document.getElementById('ld-tahun').value=data?.tahun||new Date().getFullYear();
+  document.getElementById('ld-awal').value=data?.laba_ditahan_awal||0;
+  document.getElementById('ld-laba').value=data?.laba_bersih_tahun||0;
+  document.getElementById('ld-shu').value=data?.shu_dibagikan||0;
+  document.getElementById('ld-sesuai').value=data?.penyesuaian||0;
+  document.getElementById('ld-catatan').value=data?.catatan||'';
+  hitungLD();
+  openModal('modal-ld');
+}
+function editLD(id){openModalLD(aLD.find(l=>l.id===id));}
+
+async function simpanLD(){
+  const id=document.getElementById('ld-edit-id').value;
+  const payload={tahun:parseInt(document.getElementById('ld-tahun').value),laba_ditahan_awal:parseFloat(document.getElementById('ld-awal').value)||0,laba_bersih_tahun:parseFloat(document.getElementById('ld-laba').value)||0,shu_dibagikan:parseFloat(document.getElementById('ld-shu').value)||0,penyesuaian:parseFloat(document.getElementById('ld-sesuai').value)||0,catatan:document.getElementById('ld-catatan').value.trim(),operator:CU.username};
+  if(!payload.tahun){toast('Isi tahun',true);return;}
+  if(id){await sb.from('laba_ditahan').update(payload).eq('id',id);}
+  else{
+    const{error}=await sb.from('laba_ditahan').insert([payload]);
+    if(error){toast('Gagal: '+error.message,true);return;}
+  }
+  closeModal('modal-ld');await refreshAll();toast('✅ Laba Ditahan disimpan!');
+}
+
+async function hapusLD(id,tahun){
+  if(!confirm('Hapus data laba ditahan tahun '+tahun+'?'))return;
+  await sb.from('laba_ditahan').delete().eq('id',id);
+  await refreshAll();toast('✅ Data dihapus!');
+}
+</script>
+</body>
+</html>

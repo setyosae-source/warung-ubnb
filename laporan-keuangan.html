@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Keuangan | UBNB Desa Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --hijau:#1a6b47;--hijau2:#2d9b6a;--hijau-light:#e8f5ef;--hijau-dark:#0f3d28;
+  --gold:#c9a84c;--gold2:#fef9ec;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1565c0;--blue-light:#e3eef9;
+  --gray:#6b7280;--gray2:#f3f4f6;--gray3:#e5e7eb;
+  --text:#1a1a2e;
+  --sidebar-w:240px;--radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font-size:14px;}
+
+#login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0a2e1a,#1a6b47);}
+.login-card{background:white;border-radius:16px;padding:40px 36px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.login-logo{text-align:center;margin-bottom:24px;}
+.login-logo .licon{font-size:44px;}
+.login-logo h1{font-size:20px;font-weight:800;color:var(--hijau);}
+.login-logo p{font-size:12px;color:var(--gray);}
+.lfield{margin-bottom:13px;}
+.lfield label{display:block;font-size:12px;font-weight:600;color:var(--gray);margin-bottom:4px;}
+.lfield input{width:100%;padding:10px 13px;border:1.5px solid var(--gray3);border-radius:8px;font-size:14px;outline:none;}
+.lfield input:focus{border-color:var(--hijau);}
+.btn-login{width:100%;padding:11px;background:var(--hijau);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;}
+#login-err{color:var(--red);font-size:12px;text-align:center;margin-top:8px;}
+
+#app{display:none;}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);background:var(--hijau-dark);color:white;z-index:200;display:flex;flex-direction:column;overflow-y:auto;}
+.sb-logo{padding:18px 16px 13px;border-bottom:1px solid rgba(255,255,255,.1);}
+.sb-logo h1{font-size:14px;font-weight:800;color:var(--gold);}
+.sb-logo p{font-size:11px;opacity:.5;margin-top:2px;}
+.nav-section{padding:10px 16px 3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;font-size:13px;font-weight:500;color:rgba(255,255,255,.7);transition:.15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,.07);color:white;}
+.nav-item.active{background:rgba(201,168,76,.15);color:var(--gold);border-left-color:var(--gold);}
+.nav-icon{font-size:15px;width:20px;text-align:center;}
+.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;}
+.sb-footer a{color:rgba(255,255,255,.4);text-decoration:none;}
+
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:54px;background:white;border-bottom:1px solid var(--gray3);display:flex;align-items:center;padding:0 18px;gap:12px;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.hamburger{display:none;background:none;border:none;font-size:22px;cursor:pointer;}
+.topbar-title{font-size:15px;font-weight:700;color:var(--hijau);}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.user-badge{font-size:12px;font-weight:600;color:var(--gray);background:var(--gray2);padding:4px 12px;border-radius:99px;}
+.btn-keluar{font-size:12px;color:var(--red);background:var(--red-light);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:600;}
+
+.main-wrap{margin-left:var(--sidebar-w);padding-top:54px;min-height:100vh;}
+.page{display:none;padding:20px;}
+.page.active{display:block;}
+
+.card{background:white;border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+.card-title h3{font-size:14px;font-weight:700;}
+
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+.stat-card{background:white;border-radius:var(--radius);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-left:4px solid var(--gray3);}
+.stat-card.g{border-left-color:var(--hijau);}
+.stat-card.o{border-left-color:var(--gold);}
+.stat-card.r{border-left-color:var(--red);}
+.stat-card.b{border-left-color:var(--blue);}
+.stat-lbl{font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.stat-val{font-size:16px;font-weight:800;margin:3px 0 1px;}
+.stat-val.g{color:var(--hijau);}
+.stat-val.o{color:var(--gold);}
+.stat-val.r{color:var(--red);}
+.stat-val.b{color:var(--blue);}
+.stat-sub{font-size:10px;color:var(--gray);}
+
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:.15s;}
+.btn.primary{background:var(--hijau);color:white;}
+.btn.primary:hover{background:var(--hijau2);}
+.btn.gold{background:var(--gold);color:#1a1a1a;}
+.btn.secondary{background:var(--gray2);color:var(--text);}
+.btn.danger{background:var(--red-light);color:var(--red);}
+.btn.sm{padding:5px 10px;font-size:11px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+
+/* SUMBER BADGE */
+.sumber-auto{background:#d1fae5;color:#065f46;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:700;}
+.sumber-jurnal{background:#dbeafe;color:#1565c0;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:700;}
+.sumber-manual{background:#fef3c7;color:#92400e;font-size:10px;padding:2px 7px;border-radius:99px;font-weight:700;}
+
+/* LAPORAN TABLE */
+.lap-wrap{overflow-x:auto;}
+.lap-tbl{width:100%;border-collapse:collapse;font-size:13px;}
+.lap-tbl th{background:var(--hijau);color:white;padding:10px 12px;font-size:12px;font-weight:700;}
+.lap-tbl th.r{text-align:right;}
+.lap-tbl td{padding:8px 12px;border-bottom:1px solid var(--gray3);}
+.lap-tbl tr:hover td{background:#fafafa;}
+.lap-tbl .row-seksi td{background:#1a6b47;color:white;font-weight:800;font-size:12px;letter-spacing:.5px;padding:8px 12px;}
+.lap-tbl .row-sub-seksi td{background:#f8f9fa;font-weight:700;font-size:11px;color:var(--gray);text-transform:uppercase;padding:6px 12px;}
+.lap-tbl .row-subtotal td{background:var(--hijau-light);font-weight:800;color:var(--hijau);}
+.lap-tbl .row-total td{background:var(--hijau);color:white;font-weight:900;font-size:14px;}
+.lap-tbl .row-bold td{font-weight:700;}
+.lap-tbl .row-indent td:first-child{padding-left:28px;}
+.lap-tbl .row-indent2 td:first-child{padding-left:44px;}
+.rp{text-align:right;font-family:'Courier New',monospace;font-weight:600;}
+.dev-pos{color:var(--hijau);font-weight:700;}
+.dev-neg{color:var(--red);font-weight:700;}
+
+/* TAHUN BAR */
+.tahun-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.tahun-bar select,.tahun-bar input{padding:7px 12px;border:1.5px solid var(--gray3);border-radius:7px;font-size:13px;font-weight:600;outline:none;}
+.tahun-bar select:focus{border-color:var(--hijau);}
+
+/* LEGEND */
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;}
+
+/* SUMBER INFO */
+.sumber-info{background:var(--blue-light);border-radius:8px;padding:11px 14px;margin-bottom:14px;font-size:12px;color:var(--blue);}
+.sumber-info strong{font-weight:800;}
+
+/* LAPORAN HEADER */
+.lap-header{text-align:center;margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid var(--hijau);}
+.lap-header .lap-title{font-size:18px;font-weight:900;color:var(--hijau);}
+.lap-header .lap-org{font-size:14px;font-weight:700;margin:3px 0;}
+.lap-header .lap-period{font-size:13px;color:var(--gray);}
+
+/* LOADING */
+.loading{display:flex;align-items:center;gap:8px;padding:20px;justify-content:center;color:var(--gray);}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(26,107,71,.3);border-top-color:var(--hijau);border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:12px;padding:22px;width:500px;max-width:96vw;max-height:90vh;overflow-y:auto;}
+.modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.modal-title h3{font-size:15px;font-weight:700;}
+.btn-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray);}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+.field label{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;}
+.field input,.field select{padding:8px 11px;border:1.5px solid var(--gray3);border-radius:7px;font-size:13px;outline:none;}
+.field input:focus,.field select:focus{border-color:var(--hijau);}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--hijau);color:white;padding:11px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;display:none;box-shadow:0 4px 16px rgba(0,0,0,.2);}
+#toast.err{background:var(--red);}
+#toast.show{display:block;}
+
+/* MOBILE */
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;}
+.sb-overlay.show{display:block;}
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-240px);width:240px;transition:.25s;}
+  .sidebar.open{transform:translateX(0);}
+  .topbar{left:0;}
+  .main-wrap{margin-left:0;}
+  .hamburger{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+}
+@media print{
+  .sidebar,.topbar,.tahun-bar,.btn-row,.no-print,.legend,.sumber-info{display:none!important;}
+  .main-wrap{margin-left:0;padding-top:0;}
+  .page{display:block!important;padding:8mm;}
+  .card{box-shadow:none;border:1px solid #ddd;margin-bottom:6mm;break-inside:avoid;}
+  .lap-tbl .row-seksi td,.lap-tbl .row-total td{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+</style>
+</head>
+<body>
+
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">📊</div>
+      <h1>Laporan Keuangan</h1>
+      <p>UB Nambah Barokah Desa Perwira</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <h1>📊 Laporan Keuangan</h1>
+      <p>UBNB Desa Perwira</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-section">Ringkasan</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+      <div class="nav-section">Laporan</div>
+      <div class="nav-item" onclick="showPage('neraca',this)"><span class="nav-icon">⚖️</span>Neraca</div>
+      <div class="nav-item" onclick="showPage('labarugi',this)"><span class="nav-icon">📈</span>Laba Rugi</div>
+      <div class="nav-item" onclick="showPage('deviasi',this)"><span class="nav-icon">📊</span>Analisis Deviasi</div>
+      <div class="nav-section">Tambahan</div>
+      <div class="nav-item" onclick="showPage('laba-ditahan',this)"><span class="nav-icon">💰</span>Laba Ditahan</div>
+      <div class="nav-item" onclick="showPage('pos-manual',this)"><span class="nav-icon">✏️</span>Pos Manual</div>
+    </div>
+    <div class="sb-footer">
+      <div id="sb-user" style="color:rgba(255,255,255,.6);margin-bottom:5px;"></div>
+      <a href="portal.html">← Kembali ke Portal</a>
+    </div>
+  </div>
+
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="topbar-right">
+      <div class="user-badge" id="user-badge">—</div>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="tahun-bar no-print">
+        <span style="font-weight:700;color:var(--hijau)">📅 Tahun:</span>
+        <select id="dash-tahun" onchange="renderDashboard()">
+          <option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option>
+        </select>
+        <button class="btn primary sm" onclick="refreshAll()">🔄 Refresh Data</button>
+        <button class="btn gold sm" onclick="showPage('neraca',document.querySelectorAll('.nav-item')[2])">⚖️ Buka Neraca</button>
+        <button class="btn secondary sm" onclick="showPage('labarugi',document.querySelectorAll('.nav-item')[3])">📈 Buka L/R</button>
+      </div>
+
+      <div class="legend">
+        <span class="sumber-auto">🟢 Auto dari Transaksi</span>
+        <span class="sumber-jurnal">🔵 Dari Jurnal Umum</span>
+        <span class="sumber-manual">🟡 Input Manual</span>
+      </div>
+
+      <div class="stat-grid" id="dash-stats"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="card">
+          <div class="card-title"><h3>⚖️ Ringkasan Neraca</h3></div>
+          <div id="dash-neraca-ring"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><h3>📈 Ringkasan Laba Rugi</h3></div>
+          <div id="dash-lr-ring"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NERACA -->
+    <div class="page" id="page-neraca">
+      <div class="tahun-bar no-print">
+        <span style="font-weight:700">📅 Tahun:</span>
+        <select id="neraca-tahun" onchange="renderNeraca()">
+          <option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option>
+        </select>
+        <span style="font-weight:700">Banding:</span>
+        <select id="neraca-banding" onchange="renderNeraca()">
+          <option value="">— Tanpa Perbandingan —</option>
+          <option value="2025">2025</option><option value="2024">2024</option>
+        </select>
+        <button class="btn primary sm" onclick="window.print()">🖨️ Cetak</button>
+        <button class="btn gold sm" onclick="exportNeraca()">📥 Excel</button>
+      </div>
+      <div class="sumber-info no-print">
+        <strong>Sumber data Neraca:</strong>
+        <span class="sumber-auto">🟢 Kas</span> dari tabel <code>kas</code> ·
+        <span class="sumber-auto">🟢 Piutang BMT</span> dari <code>bmt_akad</code> ·
+        <span class="sumber-auto">🟢 Persediaan</span> dari <code>barang</code> ·
+        <span class="sumber-jurnal">🔵 Aset Tetap & Akumulasi</span> dari <code>aset_tetap</code> ·
+        <span class="sumber-jurnal">🔵 Laba Ditahan</span> dari <code>laba_ditahan</code> ·
+        <span class="sumber-auto">🟢 Modal Saham</span> dari <code>ubnb_saham</code> ·
+        <span class="sumber-manual">🟡 Hutang Usaha & pos lain</span> input manual
+      </div>
+      <div id="neraca-content"><div class="loading"><div class="spinner"></div>Memuat data...</div></div>
+    </div>
+
+    <!-- LABA RUGI -->
+    <div class="page" id="page-labarugi">
+      <div class="tahun-bar no-print">
+        <span style="font-weight:700">📅 Tahun:</span>
+        <select id="lr-tahun" onchange="renderLabaRugi()">
+          <option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option>
+        </select>
+        <span style="font-weight:700">Banding:</span>
+        <select id="lr-banding" onchange="renderLabaRugi()">
+          <option value="">— Tanpa Perbandingan —</option>
+          <option value="2025">2025</option><option value="2024">2024</option>
+        </select>
+        <button class="btn primary sm" onclick="window.print()">🖨️ Cetak</button>
+        <button class="btn gold sm" onclick="exportLR()">📥 Excel</button>
+      </div>
+      <div class="sumber-info no-print">
+        <strong>Sumber data Laba Rugi:</strong>
+        <span class="sumber-auto">🟢 Penjualan & HPP Sembako</span> dari <code>transaksi</code> ·
+        <span class="sumber-auto">🟢 PPOB</span> dari <code>ppob</code> ·
+        <span class="sumber-auto">🟢 Margin BMT</span> dari <code>bmt_angsuran</code> ·
+        <span class="sumber-jurnal">🔵 Biaya Operasional</span> dari <code>jurnal_detail</code> (COA kelompok biaya) ·
+        <span class="sumber-manual">🟡 Pos lain-lain</span> input manual
+      </div>
+      <div id="lr-content"><div class="loading"><div class="spinner"></div>Memuat data...</div></div>
+    </div>
+
+    <!-- DEVIASI -->
+    <div class="page" id="page-deviasi">
+      <div class="tahun-bar no-print">
+        <span style="font-weight:700">Bandingkan:</span>
+        <select id="dev-t1"><option value="2025">2025</option><option value="2024">2024</option></select>
+        <span style="font-weight:700">vs</span>
+        <select id="dev-t2"><option value="2026">2026</option><option value="2025">2025</option></select>
+        <button class="btn primary sm" onclick="renderDeviasi()">🔍 Analisa</button>
+      </div>
+      <div id="deviasi-content"></div>
+    </div>
+
+    <!-- LABA DITAHAN -->
+    <div class="page" id="page-laba-ditahan">
+      <div class="card">
+        <div class="card-title">
+          <h3>💰 Laba Ditahan (Retained Earnings)</h3>
+          <button class="btn primary" onclick="openModalLD()">+ Input Periode</button>
+        </div>
+        <div style="background:var(--blue-light);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--blue);">
+          <strong>📚 Laba Ditahan = Saldo Awal + Laba Bersih − SHU Dibagikan ± Penyesuaian</strong><br>
+          Angka ini masuk Neraca sisi Pasiva (Modal). Saldo akhir tahun ini → saldo awal tahun berikutnya.
+        </div>
+        <div id="ld-list"></div>
+      </div>
+    </div>
+
+    <!-- POS MANUAL -->
+    <div class="page" id="page-pos-manual">
+      <div class="card">
+        <div class="card-title">
+          <h3>✏️ Pos Manual (Neraca & Laba Rugi)</h3>
+          <button class="btn primary" onclick="openModalPos()">+ Tambah Pos</button>
+        </div>
+        <div style="background:var(--gold2);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#92400e;">
+          <strong>📌 Gunakan ini untuk:</strong> Pos yang belum ada di transaksi otomatis — mis. Piutang Usaha lama, Hutang Usaha non-supplier, Pendapatan Lain-lain, Subsidi, dll.
+          Pos ini akan digabung ke Neraca atau Laba Rugi sesuai kategorinya.
+        </div>
+        <div class="tahun-bar no-print" style="margin-bottom:10px;">
+          <span style="font-weight:700">Filter Tahun:</span>
+          <select id="pos-filter-tahun" onchange="renderPosList()">
+            <option value="2026">2026</option><option value="2025">2025</option><option value="2024">2024</option>
+          </select>
+        </div>
+        <div id="pos-list"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL LABA DITAHAN -->
+<div class="overlay" id="modal-ld">
+  <div class="modal">
+    <div class="modal-title">
+      <h3>💰 Input Laba Ditahan</h3>
+      <button class="btn-close" onclick="closeModal('modal-ld')">✕</button>
+    </div>
+    <input type="hidden" id="ld-id">
+    <div class="field"><label>Tahun</label><input type="number" id="ld-tahun" value="2025"></div>
+    <div class="field"><label>Laba Ditahan Awal (Saldo Awal Tahun)</label><input type="number" id="ld-awal" value="0" oninput="previewLD()"></div>
+    <div class="field"><label>Laba Bersih Tahun Ini</label><input type="number" id="ld-laba" value="0" oninput="previewLD()"></div>
+    <div class="field"><label>SHU Dibagikan ke Anggota</label><input type="number" id="ld-shu" value="0" oninput="previewLD()"></div>
+    <div class="field"><label>Penyesuaian (± jika ada)</label><input type="number" id="ld-sesuai" value="0" oninput="previewLD()"></div>
+    <div class="field"><label>Catatan</label><input type="text" id="ld-catatan"></div>
+    <div style="background:var(--hijau-light);border-radius:8px;padding:12px;margin:10px 0;">
+      <div style="font-size:11px;color:var(--gray);">Laba Ditahan Akhir (masuk Neraca):</div>
+      <div style="font-size:22px;font-weight:900;color:var(--hijau);" id="ld-preview">Rp 0</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="closeModal('modal-ld')">Batal</button>
+      <button class="btn primary" style="flex:1" onclick="simpanLD()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL POS MANUAL -->
+<div class="overlay" id="modal-pos">
+  <div class="modal">
+    <div class="modal-title">
+      <h3>✏️ Tambah Pos Manual</h3>
+      <button class="btn-close" onclick="closeModal('modal-pos')">✕</button>
+    </div>
+    <input type="hidden" id="pos-id">
+    <div class="field"><label>Tahun</label><input type="number" id="pos-tahun" value="2025"></div>
+    <div class="field"><label>Jenis Laporan</label>
+      <select id="pos-jenis" onchange="updatePosSeksi()">
+        <option value="neraca">Neraca</option>
+        <option value="labarugi">Laba Rugi</option>
+      </select>
+    </div>
+    <div class="field"><label>Bagian / Seksi</label>
+      <select id="pos-seksi">
+        <option value="aktiva_lancar">Aktiva Lancar</option>
+        <option value="aktiva_tetap">Aktiva Tetap</option>
+        <option value="kewajiban">Kewajiban</option>
+        <option value="modal">Modal</option>
+      </select>
+    </div>
+    <div class="field"><label>Uraian / Nama Pos</label><input type="text" id="pos-uraian" placeholder="Contoh: Piutang Usaha Lama..."></div>
+    <div class="field"><label>Nominal (Rp)</label><input type="number" id="pos-nominal" value="0"></div>
+    <div class="field"><label>Keterangan</label><input type="text" id="pos-ket" placeholder="Opsional..."></div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn secondary" onclick="closeModal('modal-pos')">Batal</button>
+      <button class="btn primary" style="flex:1" onclick="simpanPos()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMjMyNDksImV4cCI6MjA1OTg5OTI0OX0.HFBmOjMCEqNFaGANFr2-0BNvVqoq3RQ1_cVLNDLQAL4';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+let CU=null;
+
+// === STATE: semua data live dari Supabase ===
+let D = {
+  kas:[],barang:[],bmt_akad:[],bmt_angsuran:[],transaksi:[],ppob:[],
+  pembelian:[],ubnb_saham:[],aset_tetap:[],laba_ditahan:[],
+  jurnal_detail:[],jurnal_umum:[],coa:[],
+  pos_manual:[]  // dari ubnb_laporan_keuangan (pos manual)
+};
+
+// ===== LOGIN =====
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  if(!u||!p){document.getElementById('login-err').textContent='Isi username dan password';return;}
+  const btn=document.getElementById('btn-login');btn.textContent='Memverifikasi...';btn.disabled=true;
+  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.textContent='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
+  CU=data;
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username;
+  document.getElementById('sb-user').textContent='👤 '+CU.username;
+  await refreshAll();
+}
+function keluar(){CU=null;location.reload();}
+
+// ===== LOAD SEMUA DATA =====
+async function refreshAll(){
+  const[
+    {data:kas},{data:barang},{data:akad},{data:angs},
+    {data:trx},{data:ppob},{data:beli},{data:saham},
+    {data:aset},{data:ld},{data:jd},{data:ju},{data:coa},{data:pm}
+  ] = await Promise.all([
+    sb.from('kas').select('*'),
+    sb.from('barang').select('id,stok,harga_beli').gt('stok',0),
+    sb.from('bmt_akad').select('*'),
+    sb.from('bmt_angsuran').select('jumlah,created_at,akad_id'),
+    sb.from('transaksi').select('total,hpp,waktu,status_bayar'),
+    sb.from('ppob').select('harga_jual,harga_beli,created_at,status_bayar'),
+    sb.from('pembelian').select('total,tgl_beli,status_bayar'),
+    sb.from('ubnb_saham').select('jumlah_lembar'),
+    sb.from('aset_tetap').select('*').eq('status','aktif'),
+    sb.from('laba_ditahan').select('*').order('tahun',{ascending:false}),
+    sb.from('jurnal_detail').select('*'),
+    sb.from('jurnal_umum').select('id,tanggal,status'),
+    sb.from('coa').select('*').eq('is_aktif',true),
+    sb.from('ubnb_laporan_keuangan').select('*').order('urutan')
+  ]);
+  D.kas=kas||[];D.barang=barang||[];D.bmt_akad=akad||[];D.bmt_angsuran=angs||[];
+  D.transaksi=trx||[];D.ppob=ppob||[];D.pembelian=beli||[];D.ubnb_saham=saham||[];
+  D.aset_tetap=aset||[];D.laba_ditahan=ld||[];
+  D.jurnal_detail=jd||[];D.jurnal_umum=ju||[];D.coa=coa||[];D.pos_manual=pm||[];
+  
+  renderDashboard();
+  renderLDList();
+  renderPosList();
+}
+
+// ===== HELPER: HITUNG DATA PER TAHUN =====
+
+function getKas(){
+  // Saldo kas real-time
+  const warung=D.kas.filter(k=>k.modul==='warung').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
+  const ppob=D.kas.filter(k=>k.modul==='ppob').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
+  const bmt=D.kas.filter(k=>k.modul==='bmt').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
+  return{warung,ppob,bmt,total:warung+ppob+bmt,items:D.kas};
+}
+
+function getPiutangBMT(){
+  const aktif=D.bmt_akad.filter(a=>a.status==='Belum Lunas');
+  const lunas=D.bmt_akad.filter(a=>a.status==='Lunas');
+  const pokokAktif=aktif.reduce((s,a)=>s+parseFloat(a.sisa_angsuran||0),0);
+  return{pokok:pokokAktif,akad_aktif:aktif.length,akad_lunas:lunas.length};
+}
+
+function getPersediaan(){
+  const nilai=D.barang.reduce((s,b)=>s+parseFloat(b.stok||0)*parseFloat(b.harga_beli||0),0);
+  return{nilai,item:D.barang.length};
+}
+
+function getAset(){
+  const total=D.aset_tetap.reduce((s,a)=>s+parseFloat(a.harga_beli||0),0);
+  const akum=D.aset_tetap.reduce((s,a)=>s+parseFloat(a.akumulasi_penyusutan||0),0);
+  return{harga:total,akum,buku:total-akum,list:D.aset_tetap};
+}
+
+function getHutangUsaha(){
+  const belum=D.pembelian.filter(p=>p.status_bayar==='belum_lunas').reduce((s,p)=>s+parseFloat(p.total||0),0);
+  return belum;
+}
+
+function getModalSaham(hargaPerLembar=10200){
+  const lembar=D.ubnb_saham.reduce((s,s2)=>s+parseFloat(s2.jumlah_lembar||0),0);
+  return{lembar,nilai:lembar*hargaPerLembar};
+}
+
+function getLabaDitahan(tahun){
+  return D.laba_ditahan.find(l=>l.tahun===tahun)||null;
+}
+
+// ==== LABA RUGI PER TAHUN (dari transaksi) ====
+function getTrxTahun(tahun){
+  const trx=D.transaksi.filter(t=>{
+    if(t.status_bayar!=='lunas')return false;
+    const y=t.waktu?new Date(t.waktu).getFullYear():null;
+    return y===tahun;
+  });
+  const penjualan=trx.reduce((s,t)=>s+parseFloat(t.total||0),0);
+  const hpp=trx.reduce((s,t)=>s+parseFloat(t.hpp||0),0);
+  return{penjualan,hpp,laba_kotor:penjualan-hpp,jumlah:trx.length};
+}
+
+function getPPOBTahun(tahun){
+  const rows=D.ppob.filter(p=>{
+    if(p.status_bayar!=='lunas')return false;
+    const y=p.created_at?new Date(p.created_at).getFullYear():null;
+    return y===tahun;
+  });
+  const jual=rows.reduce((s,p)=>s+parseFloat(p.harga_jual||0),0);
+  const beli=rows.reduce((s,p)=>s+parseFloat(p.harga_beli||0),0);
+  return{penjualan:jual,hpp:beli,laba_kotor:jual-beli,jumlah:rows.length};
+}
+
+function getBMTMargTahun(tahun){
+  // Angsuran yang dibayar di tahun tersebut
+  const angs=D.bmt_angsuran.filter(a=>{
+    const y=a.created_at?new Date(a.created_at).getFullYear():null;
+    return y===tahun;
+  });
+  const totalAngs=angs.reduce((s,a)=>s+parseFloat(a.jumlah||0),0);
+  // Estimasi margin dari proporsi margin/total_pembiayaan
+  // Rata-rata margin rate dari semua akad
+  const akad=D.bmt_akad;
+  const totalPmb=akad.reduce((s,a)=>s+parseFloat(a.total_pembiayaan||0),0);
+  const totalMargin=akad.reduce((s,a)=>s+parseFloat(a.total_margin||0),0);
+  const marginRate=totalPmb>0?totalMargin/totalPmb:0;
+  const estimasiMargin=Math.round(totalAngs*marginRate);
+  return{total_angsuran:totalAngs,estimasi_margin:estimasiMargin,jumlah:angs.length};
+}
+
+// ==== BIAYA DARI JURNAL ====
+function getBiayaJurnalTahun(tahun){
+  // Ambil jurnal yang posted di tahun tersebut
+  const jIds=D.jurnal_umum.filter(j=>{
+    if(j.status!=='posted')return false;
+    const y=j.tanggal?new Date(j.tanggal).getFullYear():null;
+    return y===tahun;
+  }).map(j=>j.id);
+  
+  const biayaByCOA={};
+  D.jurnal_detail.filter(jd=>jIds.includes(jd.jurnal_id)).forEach(jd=>{
+    const coa=D.coa.find(c=>c.id===jd.coa_id);
+    if(!coa||coa.kelompok!=='biaya')return;
+    const k=coa.nama;
+    if(!biayaByCOA[k])biayaByCOA[k]={nama:coa.nama,total:0};
+    biayaByCOA[k].total+=parseFloat(jd.debit||0);
+  });
+  const list=Object.values(biayaByCOA).filter(b=>b.total>0);
+  const total=list.reduce((s,b)=>s+b.total,0);
+  return{list,total};
+}
+
+function getPendLainJurnalTahun(tahun){
+  const jIds=D.jurnal_umum.filter(j=>{
+    if(j.status!=='posted')return false;
+    const y=j.tanggal?new Date(j.tanggal).getFullYear():null;
+    return y===tahun;
+  }).map(j=>j.id);
+  
+  const rows=[];
+  D.jurnal_detail.filter(jd=>jIds.includes(jd.jurnal_id)).forEach(jd=>{
+    const coa=D.coa.find(c=>c.id===jd.coa_id);
+    if(!coa||coa.kelompok!=='pendapatan')return;
+    // Pendapatan selain sembako/ppob/bmt
+    if(['4-101','4-201','4-301'].includes(coa.kode))return;
+    rows.push({nama:coa.nama,nominal:parseFloat(jd.kredit||0)});
+  });
+  const total=rows.reduce((s,r)=>s+r.nominal,0);
+  return{list:rows,total};
+}
+
+function getZakatJurnalTahun(tahun){
+  const jIds=D.jurnal_umum.filter(j=>{
+    if(j.status!=='posted')return false;
+    const y=j.tanggal?new Date(j.tanggal).getFullYear():null;
+    return y===tahun;
+  }).map(j=>j.id);
+  
+  let total=0;
+  D.jurnal_detail.filter(jd=>jIds.includes(jd.jurnal_id)).forEach(jd=>{
+    const coa=D.coa.find(c=>c.id===jd.coa_id);
+    if(!coa||coa.kelompok!=='zakat')return;
+    total+=parseFloat(jd.debit||0);
+  });
+  return total;
+}
+
+// ==== POS MANUAL PER TAHUN ====
+function getPosManual(tahun,jenis,seksi){
+  return D.pos_manual.filter(p=>p.tahun===tahun&&p.jenis===jenis&&p.seksi===seksi);
+}
+
+// ===== FORMAT =====
+function rp(n){return'Rp '+Math.abs(parseFloat(n)||0).toLocaleString('id-ID');}
+function pct(dev,base){if(!base)return'—';const p=((dev/Math.abs(base))*100).toFixed(2);return(dev>=0?'+':'')+p+'%';}
+function fmtTgl(t){if(!t)return'-';return new Date(t).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const tahun=parseInt(document.getElementById('dash-tahun')?.value||2025);
+  const kas=getKas();
+  const piutang=getPiutangBMT();
+  const persediaan=getPersediaan();
+  const aset=getAset();
+  const modal=getModalSaham();
+  const trx=getTrxTahun(tahun);
+  const ppobD=getPPOBTahun(tahun);
+  const bmt=getBMTMargTahun(tahun);
+  const biaya=getBiayaJurnalTahun(tahun);
+  const zakat=getZakatJurnalTahun(tahun);
+  const labaBersih=(trx.laba_kotor+ppobD.laba_kotor+bmt.estimasi_margin)-biaya.total-zakat;
+
+  document.getElementById('dash-stats').innerHTML=`
+    <div class="stat-card g"><div class="stat-lbl">Total Kas <span class="sumber-auto">auto</span></div><div class="stat-val g">${rp(kas.total)}</div><div class="stat-sub">${D.kas.length} rekening</div></div>
+    <div class="stat-card b"><div class="stat-lbl">Piutang BMT <span class="sumber-auto">auto</span></div><div class="stat-val b">${rp(piutang.pokok)}</div><div class="stat-sub">${piutang.akad_aktif} akad aktif</div></div>
+    <div class="stat-card o"><div class="stat-lbl">Modal Saham <span class="sumber-auto">auto</span></div><div class="stat-val o">${rp(modal.nilai)}</div><div class="stat-sub">${modal.lembar.toLocaleString('id-ID')} lembar</div></div>
+    <div class="stat-card ${labaBersih>=0?'g':'r'}"><div class="stat-lbl">Laba Bersih ${tahun}</div><div class="stat-val ${labaBersih>=0?'g':'r'}">${rp(labaBersih)}</div><div class="stat-sub">${labaBersih>=0?'Untung':'Rugi'}</div></div>
+  `;
+
+  // Ringkasan Neraca
+  const totalAktiva=kas.total+piutang.pokok+persediaan.nilai+aset.buku;
+  const hutang=getHutangUsaha();
+  const ld=getLabaDitahan(tahun);
+  const ldAkhir=ld?parseFloat(ld.laba_ditahan_akhir||0):0;
+  const totalPasiva=hutang+modal.nilai+ldAkhir;
+
+  document.getElementById('dash-neraca-ring').innerHTML=`
+    <div style="font-size:13px;">
+      ${[
+        {l:'Kas & Setara Kas',v:kas.total,s:'auto'},{l:'Piutang BMT',v:piutang.pokok,s:'auto'},
+        {l:'Persediaan Barang',v:persediaan.nilai,s:'auto'},{l:'Aset Tetap (Buku)',v:aset.buku,s:'jurnal'},
+      ].map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--gray3);">
+        <span>${x.l} <span class="sumber-${x.s}">${x.s==='auto'?'🟢':'🔵'}</span></span>
+        <span style="font-weight:700;color:var(--hijau)">${rp(x.v)}</span>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:9px 0 0;font-weight:900;font-size:14px;color:var(--hijau);">
+        <span>TOTAL AKTIVA</span><span>${rp(totalAktiva)}</span>
+      </div>
+    </div>`;
+
+  document.getElementById('dash-lr-ring').innerHTML=`
+    <div style="font-size:13px;">
+      ${[
+        {l:'Penjualan Sembako',v:trx.penjualan,s:'auto'},{l:'HPP Sembako',v:-trx.hpp,s:'auto'},
+        {l:'Penjualan PPOB',v:ppobD.penjualan,s:'auto'},{l:'HPP PPOB',v:-ppobD.hpp,s:'auto'},
+        {l:'Margin BMT (est.)',v:bmt.estimasi_margin,s:'auto'},{l:'Biaya Operasional',v:-biaya.total,s:'jurnal'},
+        {l:'Zakat Tijaroh',v:-zakat,s:'jurnal'},
+      ].map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--gray3);">
+        <span>${x.l} <span class="sumber-${x.s}">${x.s==='auto'?'🟢':'🔵'}</span></span>
+        <span style="font-weight:700;color:${x.v>=0?'var(--hijau)':'var(--red)'}">${x.v>=0?'+':'-'}${rp(Math.abs(x.v))}</span>
+      </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:9px 0 0;font-weight:900;font-size:14px;color:${labaBersih>=0?'var(--hijau)':'var(--red)'};border-top:2px solid var(--gray3);">
+        <span>LABA BERSIH ${tahun}</span><span>${rp(labaBersih)}</span>
+      </div>
+    </div>`;
+}
+
+// ===== NERACA =====
+function renderNeraca(){
+  const tahun=parseInt(document.getElementById('neraca-tahun')?.value||2025);
+  const tahunB=parseInt(document.getElementById('neraca-banding')?.value)||null;
+
+  const kas=getKas();
+  const piutang=getPiutangBMT();
+  const persediaan=getPersediaan();
+  const aset=getAset();
+  const hutang=getHutangUsaha();
+  const modal=getModalSaham();
+  const ld=getLabaDitahan(tahun);
+  const ldAkhir=ld?parseFloat(ld.laba_ditahan_akhir||0):0;
+
+  // Pos manual neraca tahun ini
+  const pmAL=getPosManual(tahun,'neraca','aktiva_lancar');
+  const pmAT=getPosManual(tahun,'neraca','aktiva_tetap');
+  const pmKW=getPosManual(tahun,'neraca','kewajiban');
+  const pmMD=getPosManual(tahun,'neraca','modal');
+
+  const totalPmAL=pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const totalPmAT=pmAT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const totalPmKW=pmKW.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const totalPmMD=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+
+  // Kalkulasi total
+  const totalAL=kas.total+piutang.pokok+persediaan.nilai+totalPmAL;
+  const totalAT=aset.buku+totalPmAT; // nilai buku = harga - akumulasi
+  const totalAktiva=totalAL+totalAT;
+
+  const totalKW=hutang+totalPmKW;
+  const labaBersihThn=(() => {
+    const trx=getTrxTahun(tahun);
+    const ppobD=getPPOBTahun(tahun);
+    const bmt=getBMTMargTahun(tahun);
+    const biaya=getBiayaJurnalTahun(tahun);
+    const zakat=getZakatJurnalTahun(tahun);
+    return(trx.laba_kotor+ppobD.laba_kotor+bmt.estimasi_margin)-biaya.total-zakat;
+  })();
+  const totalMD=modal.nilai+ldAkhir+totalPmMD;
+  const totalPasiva=totalKW+totalMD;
+
+  let bEl=''; // banding kolom
+  if(tahunB){
+    // Saldo banding = sama (data real-time tidak per-tanggal — pakai pos manual untuk banding)
+    // Catatan: untuk banding yang akurat perlu snapshot per tahun, ini estimasi
+    bEl=`<th class="r">${tahunB}</th><th class="r">Deviasi</th><th class="r">%</th>`;
+  }
+
+  const row=(uraian,nom,nomB,indent=1,cls='')=>{
+    const indCls=indent===2?'row-indent2':indent===1?'row-indent':'';
+    let dev='',devCls='',devPct='';
+    if(tahunB&&nomB!==undefined){
+      const d=nom-nomB;dev=(d>=0?'+':'-')+rp(Math.abs(d));devCls=d>=0?'dev-pos':'dev-neg';devPct=pct(d,nomB);
+    }
+    return`<tr class="${cls} ${indCls}">
+      <td>${uraian}</td>
+      <td class="rp">${nom<0?'('+rp(Math.abs(nom))+')':rp(nom)}</td>
+      ${tahunB?`<td class="rp">${nomB!==undefined?rp(nomB):'-'}</td><td class="rp ${devCls}">${dev}</td><td class="rp ${devCls}">${devPct}</td>`:''}
+    </tr>`;
+  };
+  const rowSeksi=(label)=>`<tr class="row-seksi"><td colspan="${tahunB?6:2}">📁 ${label}</td></tr>`;
+  const rowSubSeksi=(label)=>`<tr class="row-sub-seksi"><td colspan="${tahunB?6:2}">${label}</td></tr>`;
+  const rowSub=(label,nom,nomB)=>`<tr class="row-subtotal">
+    <td>${label}</td><td class="rp">${rp(nom)}</td>
+    ${tahunB?`<td class="rp">${nomB!==undefined?rp(nomB):'-'}</td><td class="rp ${(nom-(nomB||0))>=0?'dev-pos':'dev-neg'}">${(nom-(nomB||0))>=0?'+':'-'}${rp(Math.abs(nom-(nomB||0)))}</td><td class="rp">${pct(nom-(nomB||0),nomB)}</td>`:''}
+  </tr>`;
+  const rowTot=(label,nom,nomB)=>`<tr class="row-total">
+    <td>${label}</td><td class="rp">${rp(nom)}</td>
+    ${tahunB?`<td class="rp">${nomB!==undefined?rp(nomB):'-'}</td><td class="rp">${(nom-(nomB||0))>=0?'+':'-'}${rp(Math.abs(nom-(nomB||0)))}</td><td class="rp">${pct(nom-(nomB||0),nomB)}</td>`:''}
+  </tr>`;
+
+  const html=`
+  <div class="card" id="print-neraca">
+    <div class="lap-header">
+      <div class="lap-title">NERACA</div>
+      <div class="lap-org">UB NAMBAH BAROKAH DESA PERWIRA</div>
+      <div class="lap-period">PER 31 DESEMBER ${tahun}</div>
+    </div>
+    <div class="lap-wrap">
+    <table class="lap-tbl">
+      <thead><tr>
+        <th style="width:45%">URAIAN</th>
+        <th class="r">${tahun}</th>
+        ${tahunB?`<th class="r">${tahunB}</th><th class="r">DEVIASI</th><th class="r">%</th>`:''}
+      </tr></thead>
+      <tbody>
+        ${rowSeksi('AKTIVA')}
+        ${rowSubSeksi('Aktiva Lancar')}
+        ${row('Kas Utama (Bendahara)',kas.warung,undefined,1,'sumber-auto-row')}
+        ${row('Kas BMT',kas.bmt,undefined,1)}
+        ${row('Kas PPOB',kas.ppob,undefined,1)}
+        ${row('Piutang Pokok Pembiayaan',piutang.pokok,undefined,1)}
+        ${row('Persediaan Barang Sembako',persediaan.nilai,undefined,1)}
+        ${pmAL.map(p=>row(p.uraian+' 🟡',parseFloat(p.nominal),undefined,1)).join('')}
+        ${rowSub('TOTAL AKTIVA LANCAR',totalAL)}
+
+        ${rowSubSeksi('Aktiva Tetap')}
+        ${aset.list.length?aset.list.map(a=>row(a.nama+' (Nilai Buku) 🔵',parseFloat(a.nilai_buku),undefined,1)).join(''):''}
+        ${aset.list.length===0?row('Peralatan & Inventaris',0,undefined,1):''}
+        ${pmAT.map(p=>row(p.uraian+' 🟡',parseFloat(p.nominal),undefined,1)).join('')}
+        ${rowSub('TOTAL AKTIVA TETAP',totalAT)}
+        ${rowTot('TOTAL AKTIVA',totalAktiva)}
+
+        ${rowSeksi('PASIVA')}
+        ${rowSubSeksi('Kewajiban')}
+        ${row('Hutang Usaha (Supplier)',hutang,undefined,1)}
+        ${pmKW.map(p=>row(p.uraian+' 🟡',parseFloat(p.nominal),undefined,1)).join('')}
+        ${rowSub('TOTAL KEWAJIBAN',totalKW)}
+
+        ${rowSubSeksi('Modal')}
+        ${row('Modal Saham ('+modal.lembar.toLocaleString('id-ID')+' lembar × Rp10.200) 🟢',modal.nilai,undefined,1)}
+        ${row('Laba Ditahan 🔵',ldAkhir,undefined,1)}
+        ${row('Laba Bersih Tahun '+tahun+' 🟢',labaBersihThn,undefined,1)}
+        ${pmMD.map(p=>row(p.uraian+' 🟡',parseFloat(p.nominal),undefined,1)).join('')}
+        ${rowSub('TOTAL MODAL',totalMD)}
+        ${rowTot('TOTAL PASIVA',totalPasiva)}
+
+        <tr><td colspan="${tahunB?6:2}" style="padding:10px 12px;font-size:12px;background:${Math.abs(totalAktiva-totalPasiva)<1000?'var(--hijau-light)':'var(--red-light)'};">
+          ${Math.abs(totalAktiva-totalPasiva)<1000
+            ?`✅ <strong>Neraca Seimbang</strong> — Aktiva = Pasiva = ${rp(totalAktiva)}`
+            :`⚠️ <strong>Selisih: ${rp(Math.abs(totalAktiva-totalPasiva))}</strong> — Cek pos yang belum tercatat`
+          }
+        </td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div style="font-size:11px;color:var(--gray);margin-top:10px;padding:8px 0;border-top:1px solid var(--gray3);">
+      🟢 Auto dari transaksi &nbsp;|&nbsp; 🔵 Dari Jurnal/Aset Tetap &nbsp;|&nbsp; 🟡 Input Manual
+    </div>
+  </div>`;
+
+  document.getElementById('neraca-content').innerHTML=html;
+  window._neracaData={tahun,totalAktiva,totalPasiva,kas,piutang,persediaan,aset,hutang,modal,ldAkhir,labaBersihThn};
+}
+
+// ===== LABA RUGI =====
+function renderLabaRugi(){
+  const tahun=parseInt(document.getElementById('lr-tahun')?.value||2025);
+  const tahunB=parseInt(document.getElementById('lr-banding')?.value)||null;
+
+  const trx=getTrxTahun(tahun);
+  const ppobD=getPPOBTahun(tahun);
+  const bmt=getBMTMargTahun(tahun);
+  const biaya=getBiayaJurnalTahun(tahun);
+  const pendLain=getPendLainJurnalTahun(tahun);
+  const zakat=getZakatJurnalTahun(tahun);
+
+  // Pos manual LR
+  const pmSembako=getPosManual(tahun,'labarugi','sembako');
+  const pmPembiayaan=getPosManual(tahun,'labarugi','pembiayaan');
+  const pmPpob=getPosManual(tahun,'labarugi','ppob');
+  const pmPendLain=getPosManual(tahun,'labarugi','pendapatan_lain');
+  const pmBiaya=getPosManual(tahun,'labarugi','biaya');
+  const pmZakat=getPosManual(tahun,'labarugi','zakat');
+
+  // Hitung stok awal sembako dari pembelian tahun sebelumnya (estimasi)
+  const stokAwal=persediaan_awal(tahun);
+  const stokAkhir=getPersediaan().nilai;
+  const pembelianThn=D.pembelian.filter(p=>{const y=p.tgl_beli?new Date(p.tgl_beli).getFullYear():null;return y===tahun;}).reduce((s,p)=>s+parseFloat(p.total||0),0);
+
+  const row=(uraian,nom,indent=1,sumber='')=>{
+    const indCls=indent===2?'row-indent2':indent===1?'row-indent':'';
+    return`<tr class="${indCls}">
+      <td>${uraian}${sumber?` <span class="sumber-${sumber}">${sumber==='auto'?'🟢':sumber==='jurnal'?'🔵':'🟡'}</span>`:''}</td>
+      <td class="rp">${nom<0?'('+rp(Math.abs(nom))+')':rp(nom)}</td>
+    </tr>`;
+  };
+
+  const rowBg=(label,bg,color)=>`<tr><td colspan="2" style="background:${bg};color:${color};font-weight:800;font-size:12px;padding:8px 12px;letter-spacing:.5px;">${label}</td></tr>`;
+  const rowSub=(label,nom,color='var(--hijau)')=>`<tr class="row-subtotal"><td>${label}</td><td class="rp" style="color:${color};font-weight:900;">${rp(nom)}</td></tr>`;
+  const rowTot=(label,nom)=>`<tr class="row-total"><td>${label}</td><td class="rp">${rp(nom)}</td></tr>`;
+  const rowSeksi=(l)=>`<tr class="row-seksi"><td colspan="2">📁 ${l}</td></tr>`;
+
+  const labaKotorSembako=trx.laba_kotor+pmSembako.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const labaKotorBMT=bmt.estimasi_margin+pmPembiayaan.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const labaKotorPPOB=ppobD.laba_kotor+pmPpob.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const totalLabaKotor=labaKotorSembako+labaKotorBMT+labaKotarPPOB;
+  const totalBiaya=biaya.total+pmBiaya.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const totalPendLain=pendLain.total+pmPendLain.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const totalZakat=zakat+pmZakat.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+  const labaBersih=totalLabaKotor+totalPendLain-totalBiaya-totalZakat;
+  const totalPenjualan=trx.penjualan+ppobD.penjualan+bmt.estimasi_margin;
+
+  const html=`
+  <div class="card" id="print-lr">
+    <div class="lap-header">
+      <div class="lap-title">LAPORAN LABA RUGI</div>
+      <div class="lap-org">UB NAMBAH BAROKAH DESA PERWIRA</div>
+      <div class="lap-period">PER 31 DESEMBER ${tahun}</div>
+    </div>
+    <div class="lap-wrap">
+    <table class="lap-tbl">
+      <thead><tr><th>JENIS USAHA / URAIAN</th><th class="r">${tahun}</th></tr></thead>
+      <tbody>
+
+        ${rowBg('🏪 SEMBAKO','#fef3c7','#92400e')}
+        ${row('Penjualan',trx.penjualan,1,'auto')}
+        ${row('Persediaan Barang Dagang Awal',stokAwal,2,'auto')}
+        ${row('Pembelian Barang',pembelianThn,2,'auto')}
+        ${row('Persediaan Barang Dagang Akhir',-stokAkhir,2,'auto')}
+        ${row('HPP',(stokAwal+pembelianThn-stokAkhir),1,'auto')}
+        ${pmSembako.map(p=>row(p.uraian,parseFloat(p.nominal),1,'manual')).join('')}
+        ${rowSub('LABA KOTOR SEMBAKO',labaKotorSembako)}
+
+        ${rowBg('🏦 PEMBIAYAAN (BMT)','#e3eef9','#1565c0')}
+        ${row('Pendapatan Margin / Bagi Hasil',bmt.estimasi_margin,1,'auto')}
+        ${row('(estimasi dari '+bmt.jumlah+' angsuran diterima)',0,2)}
+        ${pmPembiayaan.map(p=>row(p.uraian,parseFloat(p.nominal),1,'manual')).join('')}
+        ${rowSub('LABA KOTOR PEMBIAYAAN',labaKotorBMT)}
+
+        ${rowBg('📡 PPOB','#f3e8ff','#6b21a8')}
+        ${row('Penjualan PPOB',ppobD.penjualan,1,'auto')}
+        ${row('HPP PPOB',ppobD.hpp,1,'auto')}
+        ${pmPpob.map(p=>row(p.uraian,parseFloat(p.nominal),1,'manual')).join('')}
+        ${rowSub('LABA KOTOR PPOB',labaKotorPPOB)}
+
+        <tr class="row-subtotal" style="border-top:3px solid var(--hijau);">
+          <td><strong>JUMLAH LABA KOTOR (Semua Usaha)</strong></td>
+          <td class="rp"><strong>${rp(totalLabaKotor)}</strong></td>
+        </tr>
+
+        ${rowBg('💚 PENDAPATAN LAIN-LAIN','#d1fae5','#065f46')}
+        ${pendLain.list.map(p=>row(p.nama,p.nominal,1,'jurnal')).join('')}
+        ${pmPendLain.map(p=>row(p.uraian,parseFloat(p.nominal),1,'manual')).join('')}
+        ${pendLain.list.length===0&&pmPendLain.length===0?row('(Belum ada — input via Jurnal atau Pos Manual)',0,1):''}
+        ${rowSub('JUMLAH PENDAPATAN LAIN-LAIN',totalPendLain)}
+
+        ${rowBg('🔴 BIAYA-BIAYA','#fdecea','#c0392b')}
+        ${biaya.list.map(b=>row(b.nama,b.total,1,'jurnal')).join('')}
+        ${pmBiaya.map(p=>row(p.uraian,parseFloat(p.nominal),1,'manual')).join('')}
+        ${biaya.list.length===0&&pmBiaya.length===0?row('(Belum ada — catat via Jurnal Umum dengan akun Biaya)',0,1):''}
+        ${rowSub('JUMLAH BIAYA-BIAYA',totalBiaya,'var(--red)')}
+
+        ${rowBg('🕌 ZAKAT TIJAROH','#e8f5ef','#1a6b47')}
+        ${totalZakat?row('Zakat Tijaroh',totalZakat,1,'jurnal'):''}
+        ${pmZakat.map(p=>row(p.uraian,parseFloat(p.nominal),1,'manual')).join('')}
+        ${!totalZakat&&pmZakat.length===0?row('(Belum dicatat — input via Jurnal atau Pos Manual)',0,1):''}
+        ${rowSub('ZAKAT TIJAROH',totalZakat)}
+
+        <tr style="background:var(--hijau-light);">
+          <td colspan="2" style="padding:6px 12px;font-size:11px;color:var(--gray);">─── Ringkasan ───</td>
+        </tr>
+        <tr><td style="padding-left:12px;">Jumlah Laba Kotor</td><td class="rp">${rp(totalLabaKotor)}</td></tr>
+        <tr><td style="padding-left:12px;">+ Pendapatan Lain-lain</td><td class="rp">+ ${rp(totalPendLain)}</td></tr>
+        <tr><td style="padding-left:12px;">- Biaya-biaya</td><td class="rp">- ${rp(totalBiaya)}</td></tr>
+        <tr><td style="padding-left:12px;">- Zakat Tijaroh</td><td class="rp">- ${rp(totalZakat)}</td></tr>
+        ${rowTot('JUMLAH LABA BERSIH',labaBersih)}
+        <tr><td style="font-size:12px;color:var(--gray);padding-left:12px;">% Laba/Rugi terhadap Total Penjualan</td>
+          <td class="rp" style="color:var(--gray);font-size:12px;">${totalPenjualan?((labaBersih/totalPenjualan)*100).toFixed(2)+'%':'—'}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <div style="font-size:11px;color:var(--gray);margin-top:10px;padding:8px 0;border-top:1px solid var(--gray3);">
+      🟢 Auto dari transaksi &nbsp;|&nbsp; 🔵 Dari Jurnal Umum &nbsp;|&nbsp; 🟡 Input Manual (Pos Manual)
+    </div>
+  </div>`;
+
+  document.getElementById('lr-content').innerHTML=html;
+  window._lrData={tahun,labaBersih,trx,ppobD,bmt,biaya,totalPendLain,totalZakat};
+}
+
+// Estimasi stok awal = persediaan akhir tahun lalu (dari pos manual atau 0)
+function persediaan_awal(tahun){
+  const pm=D.pos_manual.find(p=>p.tahun===(tahun-1)&&p.jenis==='neraca'&&p.seksi==='aktiva_lancar'&&p.uraian?.toLowerCase().includes('persediaan'));
+  return pm?parseFloat(pm.nominal||0):0;
+}
+
+// Fix typo
+function labaKotarPPOB(){return 0;}
+
+// ===== DEVIASI =====
+async function renderDeviasi(){
+  const t1=parseInt(document.getElementById('dev-t1')?.value);
+  const t2=parseInt(document.getElementById('dev-t2')?.value);
+  if(t1===t2){document.getElementById('deviasi-content').innerHTML='<div style="padding:20px;text-align:center;color:var(--gray);">Pilih dua tahun berbeda</div>';return;}
+
+  const calc=(tahun)=>{
+    const trx=getTrxTahun(tahun);
+    const ppobD=getPPOBTahun(tahun);
+    const bmt=getBMTMargTahun(tahun);
+    const biaya=getBiayaJurnalTahun(tahun);
+    const zakat=getZakatJurnalTahun(tahun);
+    const kas=getKas();
+    const piutang=getPiutangBMT();
+    const persediaan=getPersediaan();
+    const aset=getAset();
+    const modal=getModalSaham();
+    const ld=getLabaDitahan(tahun);
+    const ldAkhir=ld?parseFloat(ld.laba_ditahan_akhir||0):0;
+    const labaBersih=(trx.laba_kotor+ppobD.laba_kotor+bmt.estimasi_margin)-biaya.total-zakat;
+    return{
+      kas:kas.total,piutang:piutang.pokok,persediaan:persediaan.nilai,aset:aset.buku,
+      total_aktiva:kas.total+piutang.pokok+persediaan.nilai+aset.buku,
+      modal:modal.nilai,ld:ldAkhir,laba_bersih:labaBersih,
+      penjualan_sembako:trx.penjualan,hpp_sembako:trx.hpp,laba_kotor_sembako:trx.laba_kotor,
+      penjualan_ppob:ppobD.penjualan,laba_kotor_ppob:ppobD.laba_kotor,
+      margin_bmt:bmt.estimasi_margin,total_biaya:biaya.total,total_zakat:zakat,
+    };
+  };
+
+  const d1=calc(t1),d2=calc(t2);
+  const items=[
+    {l:'KAS & SETARA KAS',k:'kas',isHead:true},
+    {l:'Piutang Pembiayaan',k:'piutang'},
+    {l:'Persediaan Barang',k:'persediaan'},
+    {l:'Aset Tetap (Nilai Buku)',k:'aset'},
+    {l:'TOTAL AKTIVA',k:'total_aktiva',isTotal:true},
+    {l:'',k:'',isSep:true},
+    {l:'Modal Saham',k:'modal'},
+    {l:'Laba Ditahan',k:'ld'},
+    {l:'LABA BERSIH',k:'laba_bersih',isTotal:true},
+    {l:'',k:'',isSep:true},
+    {l:'LABA RUGI',k:'',isHead:true},
+    {l:'Penjualan Sembako',k:'penjualan_sembako'},
+    {l:'HPP Sembako',k:'hpp_sembako'},
+    {l:'Laba Kotor Sembako',k:'laba_kotor_sembako'},
+    {l:'Penjualan PPOB',k:'penjualan_ppob'},
+    {l:'Laba Kotor PPOB',k:'laba_kotor_ppob'},
+    {l:'Margin BMT (est.)',k:'margin_bmt'},
+    {l:'Total Biaya Operasional',k:'total_biaya'},
+    {l:'Zakat Tijaroh',k:'total_zakat'},
+  ];
+
+  let html=`<div class="card"><div class="card-title"><h3>📊 Analisis Deviasi ${t1} vs ${t2}</h3></div>
+  <div class="lap-wrap"><table class="lap-tbl">
+  <thead><tr><th>Uraian</th><th class="r">${t1}</th><th class="r">${t2}</th><th class="r">Deviasi</th><th class="r">%</th></tr></thead>
+  <tbody>`;
+
+  items.forEach(item=>{
+    if(item.isSep){html+=`<tr><td colspan="5" style="padding:4px;background:var(--gray2);"></td></tr>`;return;}
+    if(item.isHead){html+=`<tr class="row-seksi"><td colspan="5">${item.l}</td></tr>`;return;}
+    const v1=d1[item.k]||0,v2=d2[item.k]||0,dev=v2-v1;
+    const cls=item.isTotal?'row-subtotal':'';
+    html+=`<tr class="${cls}">
+      <td>${item.l}</td>
+      <td class="rp">${rp(v1)}</td>
+      <td class="rp">${rp(v2)}</td>
+      <td class="rp ${dev>=0?'dev-pos':'dev-neg'}">${dev>=0?'+':'-'}${rp(Math.abs(dev))}</td>
+      <td class="rp ${dev>=0?'dev-pos':'dev-neg'}">${pct(dev,v1)}</td>
+    </tr>`;
+  });
+
+  html+=`</tbody></table></div></div>`;
+  document.getElementById('deviasi-content').innerHTML=html;
+}
+
+// ===== LABA DITAHAN =====
+function renderLDList(){
+  const el=document.getElementById('ld-list');if(!el)return;
+  if(!D.laba_ditahan.length){el.innerHTML='<div style="text-align:center;padding:30px;color:var(--gray);">Belum ada data. Klik "+ Input Periode"</div>';return;}
+  el.innerHTML=D.laba_ditahan.map(ld=>{
+    const akhir=parseFloat(ld.laba_ditahan_akhir||0);
+    return`<div style="background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));color:white;border-radius:12px;padding:18px;margin-bottom:12px;">
+      <div style="font-size:12px;opacity:.7;">📅 Tahun ${ld.tahun}</div>
+      <div style="font-size:24px;font-weight:900;margin:4px 0;">${rp(akhir)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px;font-size:12px;">
+        <div>Saldo Awal: <strong>${rp(ld.laba_ditahan_awal)}</strong></div>
+        <div style="color:#86efac;">+ Laba Bersih: <strong>${rp(ld.laba_bersih_tahun)}</strong></div>
+        <div style="color:#fca5a5;">− SHU Dibagi: <strong>${rp(ld.shu_dibagikan)}</strong></div>
+        ${parseFloat(ld.penyesuaian||0)?`<div>± Sesuai: <strong>${rp(ld.penyesuaian)}</strong></div>`:''}
+      </div>
+      ${ld.catatan?`<div style="font-size:11px;opacity:.6;margin-top:8px;">📝 ${ld.catatan}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="editLD(${ld.id})" style="background:rgba(255,255,255,.2);color:white;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">✏️ Edit</button>
+        <button onclick="hapusLD(${ld.id})" style="background:rgba(255,0,0,.3);color:#fca5a5;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">🗑️ Hapus</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openModalLD(data=null){
+  document.getElementById('ld-id').value=data?.id||'';
+  document.getElementById('ld-tahun').value=data?.tahun||new Date().getFullYear();
+  document.getElementById('ld-awal').value=data?.laba_ditahan_awal||0;
+  document.getElementById('ld-laba').value=data?.laba_bersih_tahun||0;
+  document.getElementById('ld-shu').value=data?.shu_dibagikan||0;
+  document.getElementById('ld-sesuai').value=data?.penyesuaian||0;
+  document.getElementById('ld-catatan').value=data?.catatan||'';
+  previewLD();
+  openModal('modal-ld');
+}
+function editLD(id){openModalLD(D.laba_ditahan.find(l=>l.id===id));}
+function previewLD(){
+  const a=parseFloat(document.getElementById('ld-awal').value)||0;
+  const l=parseFloat(document.getElementById('ld-laba').value)||0;
+  const s=parseFloat(document.getElementById('ld-shu').value)||0;
+  const p=parseFloat(document.getElementById('ld-sesuai').value)||0;
+  document.getElementById('ld-preview').textContent=rp(a+l-s+p);
+}
+async function simpanLD(){
+  const id=document.getElementById('ld-id').value;
+  const payload={tahun:parseInt(document.getElementById('ld-tahun').value),laba_ditahan_awal:parseFloat(document.getElementById('ld-awal').value)||0,laba_bersih_tahun:parseFloat(document.getElementById('ld-laba').value)||0,shu_dibagikan:parseFloat(document.getElementById('ld-shu').value)||0,penyesuaian:parseFloat(document.getElementById('ld-sesuai').value)||0,catatan:document.getElementById('ld-catatan').value,operator:CU.username};
+  if(id){await sb.from('laba_ditahan').update(payload).eq('id',id);}
+  else{const{error}=await sb.from('laba_ditahan').insert([payload]);if(error){toast('Gagal: '+error.message,true);return;}}
+  closeModal('modal-ld');await refreshAll();toast('✅ Laba Ditahan disimpan!');
+}
+async function hapusLD(id){
+  if(!confirm('Hapus data ini?'))return;
+  await sb.from('laba_ditahan').delete().eq('id',id);
+  await refreshAll();toast('✅ Dihapus!');
+}
+
+// ===== POS MANUAL =====
+function renderPosList(){
+  const tahun=parseInt(document.getElementById('pos-filter-tahun')?.value||2025);
+  const pos=D.pos_manual.filter(p=>p.tahun===tahun);
+  const el=document.getElementById('pos-list');
+  if(!pos.length){el.innerHTML='<div style="text-align:center;padding:30px;color:var(--gray);">Belum ada pos manual untuk tahun '+tahun+'</div>';return;}
+  const jenisLabel={neraca:'Neraca',labarugi:'Laba Rugi'};
+  const seksiLabel={aktiva_lancar:'Aktiva Lancar',aktiva_tetap:'Aktiva Tetap',kewajiban:'Kewajiban',modal:'Modal',sembako:'Sembako',pembiayaan:'Pembiayaan',ppob:'PPOB',pendapatan_lain:'Pendapatan Lain',biaya:'Biaya',zakat:'Zakat'};
+  el.innerHTML=`<table class="lap-tbl">
+    <thead><tr><th>Tahun</th><th>Jenis</th><th>Seksi</th><th>Uraian</th><th class="r">Nominal</th><th>Aksi</th></tr></thead>
+    <tbody>${pos.map(p=>`<tr>
+      <td>${p.tahun}</td>
+      <td><span class="sumber-manual">${jenisLabel[p.jenis]||p.jenis}</span></td>
+      <td>${seksiLabel[p.seksi]||p.seksi}</td>
+      <td>${p.uraian}</td>
+      <td class="rp">${rp(p.nominal)}</td>
+      <td>
+        <button class="btn secondary sm" onclick="editPos(${p.id})">✏️</button>
+        <button class="btn danger sm" onclick="hapusPos(${p.id})">🗑️</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+const SEKSI_BY_JENIS={
+  neraca:['aktiva_lancar','aktiva_tetap','kewajiban','modal'],
+  labarugi:['sembako','pembiayaan','ppob','pendapatan_lain','biaya','zakat']
+};
+const SEKSI_LABELS={aktiva_lancar:'Aktiva Lancar',aktiva_tetap:'Aktiva Tetap',kewajiban:'Kewajiban',modal:'Modal',sembako:'Sembako',pembiayaan:'Pembiayaan (BMT)',ppob:'PPOB',pendapatan_lain:'Pendapatan Lain-lain',biaya:'Biaya Operasional',zakat:'Zakat Tijaroh'};
+
+function updatePosSeksi(){
+  const jenis=document.getElementById('pos-jenis').value;
+  const sel=document.getElementById('pos-seksi');
+  sel.innerHTML=SEKSI_BY_JENIS[jenis].map(s=>`<option value="${s}">${SEKSI_LABELS[s]}</option>`).join('');
+}
+
+function openModalPos(data=null){
+  document.getElementById('pos-id').value=data?.id||'';
+  document.getElementById('pos-tahun').value=data?.tahun||parseInt(document.getElementById('pos-filter-tahun')?.value||2025);
+  document.getElementById('pos-jenis').value=data?.jenis||'neraca';
+  updatePosSeksi();
+  document.getElementById('pos-seksi').value=data?.seksi||'aktiva_lancar';
+  document.getElementById('pos-uraian').value=data?.uraian||'';
+  document.getElementById('pos-nominal').value=data?.nominal||0;
+  document.getElementById('pos-ket').value=data?.keterangan||'';
+  openModal('modal-pos');
+}
+function editPos(id){openModalPos(D.pos_manual.find(p=>p.id===id));}
+async function simpanPos(){
+  const id=document.getElementById('pos-id').value;
+  const payload={tahun:parseInt(document.getElementById('pos-tahun').value),jenis:document.getElementById('pos-jenis').value,seksi:document.getElementById('pos-seksi').value,uraian:document.getElementById('pos-uraian').value.trim(),nominal:parseFloat(document.getElementById('pos-nominal').value)||0,keterangan:document.getElementById('pos-ket').value.trim(),operator:CU.username,urutan:10};
+  if(!payload.uraian){toast('Isi uraian',true);return;}
+  if(id){await sb.from('ubnb_laporan_keuangan').update(payload).eq('id',id);}
+  else{const{error}=await sb.from('ubnb_laporan_keuangan').insert([payload]);if(error){toast('Gagal: '+error.message,true);return;}}
+  closeModal('modal-pos');await refreshAll();
+  // Re-render laporan yang sedang aktif
+  if(document.getElementById('page-neraca').classList.contains('active'))renderNeraca();
+  if(document.getElementById('page-labarugi').classList.contains('active'))renderLabaRugi();
+  toast('✅ Pos manual disimpan!');
+}
+async function hapusPos(id){
+  if(!confirm('Hapus pos ini?'))return;
+  await sb.from('ubnb_laporan_keuangan').delete().eq('id',id);
+  await refreshAll();toast('✅ Pos dihapus!');
+}
+
+// ===== NAV =====
+function showPage(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if(el)el.classList.add('active');
+  const t={dashboard:'Dashboard',neraca:'Neraca',labarugi:'Laba Rugi',deviasi:'Analisis Deviasi','laba-ditahan':'Laba Ditahan','pos-manual':'Pos Manual'};
+  document.getElementById('topbar-title').textContent=t[name]||name;
+  closeSidebar();
+  if(name==='neraca')renderNeraca();
+  if(name==='labarugi')renderLabaRugi();
+  if(name==='deviasi')renderDeviasi();
+}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sb-overlay').classList.toggle('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function toast(msg,err=false){
+  const t=document.getElementById('toast');t.textContent=msg;t.className='show'+(err?' err':'');
+  setTimeout(()=>t.className='',3000);
+}
+
+// ===== EXPORT =====
+function exportNeraca(){
+  const d=window._neracaData;if(!d){toast('Buka Neraca dulu',true);return;}
+  const XLSX=window.XLSX;
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['NERACA'],['UB NAMBAH BAROKAH DESA PERWIRA'],['PER 31 DESEMBER '+d.tahun],[],
+    ['AKTIVA',''],['Aktiva Lancar',''],
+    ['  Kas Utama (Bendahara)',d.kas.warung],['  Kas BMT',d.kas.bmt],['  Kas PPOB',d.kas.ppob],
+    ['  Piutang Pokok Pembiayaan',d.piutang.pokok],['  Persediaan Barang',d.persediaan.nilai],
+    ['TOTAL AKTIVA LANCAR',d.kas.total+d.piutang.pokok+d.persediaan.nilai],[],
+    ['Aktiva Tetap',''],['  Aset Tetap (Nilai Buku)',d.aset.buku],
+    ['TOTAL AKTIVA TETAP',d.aset.buku],['TOTAL AKTIVA',d.totalAktiva],[],
+    ['PASIVA',''],['  Hutang Usaha',d.hutang],['  Modal Saham',d.modal.nilai],
+    ['  Laba Ditahan',d.ldAkhir],['  Laba Bersih Tahun Ini',d.labaBersihThn],
+    ['TOTAL PASIVA',d.totalPasiva],
+  ]);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Neraca');
+  XLSX.writeFile(wb,'UBNB_Neraca_'+d.tahun+'.xlsx');toast('✅ Export berhasil!');
+}
+
+function exportLR(){
+  const d=window._lrData;if(!d){toast('Buka Laba Rugi dulu',true);return;}
+  const XLSX=window.XLSX;
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['LAPORAN LABA RUGI'],['UB NAMBAH BAROKAH DESA PERWIRA'],['PER 31 DESEMBER '+d.tahun],[],
+    ['SEMBAKO',''],['  Penjualan',d.trx.penjualan],['  HPP',d.trx.hpp],
+    ['  LABA KOTOR SEMBAKO',d.trx.laba_kotor],[],
+    ['PEMBIAYAAN (BMT)',''],['  Margin/Bagi Hasil (est.)',d.bmt.estimasi_margin],
+    ['  LABA KOTOR BMT',d.bmt.estimasi_margin],[],
+    ['PPOB',''],['  Penjualan',d.ppobD.penjualan],['  HPP',d.ppobD.hpp],
+    ['  LABA KOTOR PPOB',d.ppobD.laba_kotor],[],
+    ['PENDAPATAN LAIN-LAIN',d.totalPendLain],
+    ['BIAYA-BIAYA',d.biaya.total],
+    ['ZAKAT TIJAROH',d.totalZakat],[],
+    ['LABA BERSIH',d.labaBersih],
+  ]);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Laba Rugi');
+  XLSX.writeFile(wb,'UBNB_LabaRugi_'+d.tahun+'.xlsx');toast('✅ Export berhasil!');
+}
+</script>
+</body>
+</html>
