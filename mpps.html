@@ -1274,18 +1274,17 @@ function cetakLaporan(){
       <button onclick="window.print()" style="background:#1a6640;color:white;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer;margin-right:8px">🖨️ Cetak</button>
       <button onclick="window.close()" style="background:#666;color:white;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer">✕ Tutup</button>
     </div>${html}
+
 <!-- MODAL EDIT SPONSOR -->
 <div class="konfirm-overlay" id="modal-edit-sponsor" onclick="if(event.target===this)closeModalEditSponsor()">
   <div class="konfirm-box" style="max-width:460px;">
     <div class="konfirm-icon">✏️</div>
     <div class="konfirm-title" style="color:var(--hijau);">Edit Sponsor</div>
     <div class="konfirm-sub">Ubah nama usaha atau logo</div>
-
     <div class="konfirm-field">
       <label>Nama Usaha *</label>
       <input type="text" id="mes-usaha" placeholder="Nama usaha sponsor" style="border-color:var(--border);">
     </div>
-
     <div class="konfirm-field">
       <label>Logo Usaha <span style="font-weight:400;opacity:.6">(opsional)</span></label>
       <div id="mes-logo-wrap" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center;cursor:pointer;transition:border-color .2s;"
@@ -1308,7 +1307,6 @@ function cetakLaporan(){
         <button type="button" id="mes-logo-clear" style="display:none;font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0;" onclick="clearLogoUploadEdit()">✕ Hapus</button>
       </div>
     </div>
-
     <div class="konfirm-err" id="mes-err"></div>
     <div class="konfirm-btns">
       <button class="konfirm-cancel" onclick="closeModalEditSponsor()">Batal</button>
@@ -1607,7 +1605,7 @@ function renderSponsorList() {
       ? '<button class="btn sm" style="background:#dcfce7;color:#166534;" data-nm="' + s.nama_usaha.replace(/"/g,'&quot;') + '" data-hp="' + s.telepon + '" data-st="' + s.status + '" onclick="kirimWASponsor(this.dataset.nm,this.dataset.hp,this.dataset.st)">&#x1F4F1; WA</button>'
       : '';
     var btn5 = '<button class="btn sm" style="background:#fee2e2;color:#dc2626;margin-left:auto;" data-id="' + s.id + '" onclick="hapusSponsor(+this.dataset.id)">&#x1F5D1;</button>';
-    var btn0 = '<button class="btn sm" style="background:#e0f2fe;color:#0369a1;" data-id="' + s.id + '" data-nm="' + s.nama_usaha.replace(/"/g,'&quot;') + '" onclick="openEditSponsor(+this.dataset.id,this.dataset.nm)">&#x270F; Edit</button>';
+    var btn0 = '<button class="btn sm" style="background:#e0f2fe;color:#0369a1;" onclick="openEditSponsor(' + s.id + ')">&#x270F; Edit</button>';
 
     rows += '<div style="border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;background:white;">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">' +
@@ -1769,6 +1767,117 @@ async function simpanSponsorBaru() {
 
   closeModalTambahSponsor();
   toast('Sponsor berhasil ditambahkan!');
+  await lSponsor();
+}
+
+// ===== EDIT SPONSOR =====
+var _editSponsorId = null;
+var _logoB64Edit = '';
+
+function openEditSponsor(id) {
+  _editSponsorId = id;
+  _logoB64Edit = '';
+  var s = aSponsor.find(function(x){ return x.id === id; });
+  if (!s) return;
+  document.getElementById('mes-usaha').value = s.nama_usaha || '';
+  var prevEl = document.getElementById('mes-logo-preview');
+  var phEl   = document.getElementById('mes-logo-placeholder');
+  var imgEl  = document.getElementById('mes-logo-img');
+  var nmEl   = document.getElementById('mes-logo-name');
+  var clEl   = document.getElementById('mes-logo-clear');
+  var wrEl   = document.getElementById('mes-logo-wrap');
+  if (s.logo_url) {
+    imgEl.src = s.logo_url;
+    prevEl.style.display = 'block';
+    phEl.style.display = 'none';
+    nmEl.textContent = 'Logo saat ini';
+    clEl.style.display = 'inline';
+    wrEl.style.borderColor = 'var(--hijau)';
+    _logoB64Edit = s.logo_url;
+  } else {
+    imgEl.src = '';
+    prevEl.style.display = 'none';
+    phEl.style.display = 'block';
+    nmEl.textContent = '';
+    clEl.style.display = 'none';
+    wrEl.style.borderColor = 'var(--border)';
+  }
+  document.getElementById('mes-err').style.display = 'none';
+  document.getElementById('modal-edit-sponsor').classList.add('show');
+  setTimeout(function(){ document.getElementById('mes-usaha').focus(); }, 100);
+}
+
+function closeModalEditSponsor() {
+  document.getElementById('modal-edit-sponsor').classList.remove('show');
+  _editSponsorId = null;
+  _logoB64Edit = '';
+}
+
+function handleLogoFileEdit(input) {
+  var file = input.files ? input.files[0] : input;
+  if (!file) return;
+  if (file.size > 512000) {
+    alert('Ukuran logo maksimal 500KB.');
+    if (input.value !== undefined) input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    _logoB64Edit = e.target.result;
+    document.getElementById('mes-logo-img').src = _logoB64Edit;
+    document.getElementById('mes-logo-preview').style.display = 'block';
+    document.getElementById('mes-logo-placeholder').style.display = 'none';
+    document.getElementById('mes-logo-name').textContent = file.name;
+    document.getElementById('mes-logo-clear').style.display = 'inline';
+    document.getElementById('mes-logo-wrap').style.borderColor = 'var(--hijau)';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearLogoUploadEdit() {
+  _logoB64Edit = '';
+  var fi = document.getElementById('mes-logo-file');
+  if (fi) fi.value = '';
+  document.getElementById('mes-logo-img').src = '';
+  document.getElementById('mes-logo-preview').style.display = 'none';
+  document.getElementById('mes-logo-placeholder').style.display = 'block';
+  document.getElementById('mes-logo-name').textContent = '';
+  document.getElementById('mes-logo-clear').style.display = 'none';
+  document.getElementById('mes-logo-wrap').style.borderColor = 'var(--border)';
+}
+
+function handleLogoDropEdit(event) {
+  event.preventDefault();
+  document.getElementById('mes-logo-wrap').style.borderColor = 'var(--border)';
+  var file = event.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  handleLogoFileEdit(file);
+}
+
+async function simpanEditSponsor() {
+  if (!_editSponsorId) return;
+  var usaha = document.getElementById('mes-usaha').value.trim();
+  var errEl = document.getElementById('mes-err');
+  if (!usaha) {
+    errEl.textContent = 'Nama usaha wajib diisi';
+    errEl.style.display = 'block';
+    return;
+  }
+  var btn = document.querySelector('#modal-edit-sponsor .konfirm-ok');
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan...';
+  errEl.style.display = 'none';
+  var payload = { nama_usaha: usaha, logo_url: _logoB64Edit || null };
+  var result = await sb.from('mpps_sponsor').update(payload).eq('id', _editSponsorId);
+  btn.disabled = false;
+  btn.textContent = '💾 Simpan';
+  if (result.error) {
+    errEl.textContent = 'Gagal: ' + result.error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  closeModalEditSponsor();
+  toast('Data sponsor diperbarui!');
   await lSponsor();
 }
 
