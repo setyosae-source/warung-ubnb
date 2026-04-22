@@ -1035,24 +1035,31 @@ async function tarikPertama(jk){
   btn.innerHTML='<span class="spinner"></span>Rolling...';btn.disabled=true;
   const winner=hadirJK[0];
   const nomorWinner=winner.nomor||'0000';
-  const drumWrap=document.getElementById(isL?'drum-nomor-laki':'drum-nomor-perempuan');
-  const drumStrip=document.getElementById(isL?'dns-laki':'dns-perempuan');
-  drumWrap.classList.add('show');
   const allNomors=aHadir
     .filter(h=>{const v=(h.jenis_kelamin||'').toUpperCase();return v===jk||v.startsWith(jk);})
     .map(h=>h.nomor||'0000');
   if(allNomors.length<3){allNomors.push('0000','0000','0000');}
+
+  // Tampilkan fullscreen overlay seperti Sesi 2
+  const label=isL?'👨 Laki-laki Pertama Hadir':'👩 Perempuan Pertama Hadir';
+  document.getElementById('fs-hadiah-lbl').textContent=label+' — 🎁 '+hadiah.nama;
+  document.getElementById('fs-pool-info').innerHTML=`<strong>${allNomors.length}</strong> peserta ${isL?'laki-laki':'perempuan'}`;
+  document.getElementById('fs-overlay').classList.add('show');
+
+  const fsStrip=document.getElementById('fs-strip');
+  function buildFS(items,ci){
+    const total=items.length;let html='';
+    for(let i=-2;i<=2;i++){
+      const idx=i===0?(ci%total+total)%total:Math.floor(Math.random()*total);
+      html+=`<div style="height:120px;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:100%;">
+        <div class="fs-nomor" style="${i===0?'color:var(--gold);text-shadow:0 0 60px rgba(245,200,66,.6),0 0 120px rgba(245,200,66,.3);':'color:rgba(248,244,232,.3);'}">${items[idx]}</div>
+      </div>`;
+    }
+    fsStrip.innerHTML=html;fsStrip.style.transform='translateY(-120px)';
+  }
+
   const STEPS_P=80;let stepP=0;
   let cidxP=Math.floor(Math.random()*allNomors.length);
-  function buildNomorStrip(items,ci){
-    const total=items.length;let h='';
-    for(let i=-1;i<=1;i++){
-      const idx=i===0?(ci%total+total)%total:Math.floor(Math.random()*total);
-      h+=`<div class="drum-nomor-item${i===0?' center-item':''}" style="height:40px;">
-        <div class="drum-nomor-val">${items[idx]}</div></div>`;
-    }
-    drumStrip.innerHTML=h;drumStrip.style.transform='translateY(-20px)';
-  }
   function getDelayP(p){
     if(p<0.20){const t=p/0.20;return Math.round(88-t*(88-16));}
     else if(p<0.75)return 16;
@@ -1060,17 +1067,21 @@ async function tarikPertama(jk){
   }
   function doRollP(){
     if(stepP>=STEPS_P){
+      // Snap ke winner
       const wi=allNomors.indexOf(nomorWinner)>=0?allNomors.indexOf(nomorWinner):0;
-      buildNomorStrip(allNomors,wi);playWin();
+      buildFS(allNomors,wi);playWin();
+      // Blink di fullscreen
       let blink=0;
       const blinkP=setInterval(()=>{
         blink++;const on=blink%2===0;playBlink(on);
-        drumStrip.innerHTML=`<div class="drum-nomor-item center-item" style="height:56px;display:flex;align-items:center;justify-content:center;">
-          <div class="drum-nomor-val" style="${on?'font-size:28px;color:var(--gold);text-shadow:0 0 30px rgba(245,200,66,.8);':'font-size:24px;color:var(--gold2);'}">${nomorWinner}</div></div>`;
-        drumStrip.style.transform='translateY(0)';
+        fsStrip.innerHTML=`<div style="height:360px;display:flex;align-items:center;justify-content:center;width:100%;">
+          <div class="fs-nomor" style="${on?'color:var(--gold);text-shadow:0 0 60px rgba(245,200,66,.8),0 0 120px rgba(245,200,66,.4);':'color:var(--gold2);'}">${nomorWinner}</div>
+        </div>`;
+        fsStrip.style.transform='translateY(0)';
       },250);
       setTimeout(async()=>{
         clearInterval(blinkP);
+        document.getElementById('fs-overlay').classList.remove('show');
         const{error}=await sb.from('mpps_pemenang').insert([{
           nama:winner.nama,kelompok:winner.kelompok||null,hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe
         }]);
@@ -1081,7 +1092,7 @@ async function tarikPertama(jk){
       },1500);
       return;
     }
-    buildNomorStrip(allNomors,cidxP);
+    buildFS(allNomors,cidxP);
     const progP=stepP/STEPS_P;
     if(progP<0.75){const skipP=3+Math.floor(Math.random()*12);cidxP=(cidxP+skipP)%allNomors.length;}
     else{const skipP=1+Math.floor(Math.random()*2);cidxP=(cidxP+skipP)%allNomors.length;}
