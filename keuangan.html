@@ -1047,30 +1047,144 @@ function renderDashboard(){
 // ===== NERACA =====
 function renderNeraca(){
   const tahun=parseInt(document.getElementById('neraca-tahun')?.value);
-  const banding=parseInt(document.getElementById('neraca-banding')?.value)||null;
-  const kas=getKas(),piutang=getPiutang(),persediaan=getPersediaan();
-  const aset=getAset(),hutang=getHutang(),modal=getModal();
-  const ld=getLD(tahun),ldAkhir=ld?parseFloat(ld.laba_ditahan_akhir||0):0;
-  const labaBersih=hitungLabaBersih(tahun);
-  const pmAL=getPosManual(tahun,'neraca','aktiva_lancar');
-  const pmAT=getPosManual(tahun,'neraca','aktiva_tetap');
-  const pmKW=getPosManual(tahun,'neraca','kewajiban');
-  const pmMD=getPosManual(tahun,'neraca','modal');
-  const totalAL=kas.total+piutang.pokok+persediaan+pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const totalAT=aset.buku+pmAT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const totalAktiva=totalAL+totalAT;
-  const totalKW=hutang+pmKW.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const totalMD=modal.nilai+ldAkhir+labaBersih+pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const totalPasiva=totalKW+totalMD;
-  const seimbang=Math.abs(totalAktiva-totalPasiva)<1000;
-  const R=(uraian,nom,indent=true,cls='')=>{
-    return`<tr class="${cls}${indent?' row-indent':''}">
-      <td>${uraian}</td><td class="rp">${nom<0?'('+rp(Math.abs(nom))+')':rp(nom)}</td></tr>`;
-  };
-  const RS=(label,nom)=>`<tr class="row-subtotal"><td>${label}</td><td class="rp">${rp(nom)}</td></tr>`;
-  const RT=(label,nom)=>`<tr class="row-total"><td>${label}</td><td class="rp">${rp(nom)}</td></tr>`;
-  const RK=(label)=>`<tr class="row-seksi"><td colspan="2">📁 ${label}</td></tr>`;
-  const RSK=(label)=>`<tr class="row-subseksi"><td colspan="2">${label}</td></tr>`;
+  const bandingTahun=parseInt(document.getElementById('neraca-banding')?.value)||null;
+
+  /* Bangun data neraca untuk 1 tahun.
+     Jika ada pos_manual di DB → tampilkan pos manual + kas/piutang otomatis.
+     Jika tidak ada pos_manual → tampilkan data otomatis dari transaksi. */
+  function buildData(thn){
+    const kas=getKas(), piutang=getPiutang();
+    const pmAL=getPosManual(thn,'neraca','aktiva_lancar');
+    const pmAT=getPosManual(thn,'neraca','aktiva_tetap');
+    const pmKW=getPosManual(thn,'neraca','kewajiban');
+    const pmMD=getPosManual(thn,'neraca','modal');
+    const hasPM=!!(pmAL.length||pmAT.length||pmKW.length||pmMD.length);
+    const ld=getLD(thn);
+    const ldAkhir=ld?parseFloat(ld.laba_ditahan_akhir||0):0;
+    // Laba bersih: jika sudah punya pos manual berarti sudah final → baca dari LD
+    const lbLD=ld?parseFloat(ld.laba_bersih_tahun||0):0;
+    const labaBersih=hasPM?lbLD:hitungLabaBersih(thn);
+
+    // AKTIVA LANCAR
+    const pmALSum=pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const persediaan=getPersediaan();
+    const totalAL=kas.total+piutang.pokok+(hasPM?pmALSum:persediaan);
+
+    // AKTIVA TETAP
+    const aset=getAset();
+    const pmATSum=pmAT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const totalAT=hasPM?pmATSum:aset.buku;
+
+    // KEWAJIBAN
+    const hutang=getHutang();
+    const pmKWSum=pmKW.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const totalKW=hasPM?pmKWSum:hutang;
+
+    // MODAL
+    const modal=getModal();
+    const pmMDSum=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const totalMD=(hasPM?pmMDSum:modal.nilai)+ldAkhir+labaBersih;
+    const totalPasiva=totalKW+totalMD;
+    const totalAktiva=totalAL+totalAT;
+
+    return {kas,piutang,persediaan,aset,hutang,modal,
+            pmAL,pmAT,pmKW,pmMD,hasPM,
+            ldAkhir,labaBersih,
+            totalAL,totalAT,totalAktiva,
+            totalKW,totalMD,totalPasiva};
+  }
+
+  const d  = buildData(tahun);
+  const dB = bandingTahun ? buildData(bandingTahun) : null;
+  const seimbang = Math.abs(d.totalAktiva - d.totalPasiva) < 1000;
+  const cols = bandingTahun ? 6 : 2;
+
+  /* Helper pembuat baris */
+  function R(uraian, nom, nomB){
+    const dev = (dB && nomB !== undefined) ? nom - nomB : null;
+    let html = `<tr class="row-indent"><td>${uraian}</td>`;
+    html += `<td class="rp">${nom<0?'('+rp(Math.abs(nom))+')':rp(nom)}</td>`;
+    if(dB){
+      const nb = nomB !== undefined ? nomB : 0;
+      const ds = dev >= 0 ? 'dev-pos' : 'dev-neg';
+      html += `<td class="rp">${nomB!==undefined?(nomB<0?'('+rp(Math.abs(nomB))+')':rp(nomB)):'-'}</td>`;
+      html += `<td class="rp ${ds}">${dev!==null?(dev>=0?'+':'-')+rp(Math.abs(dev)):''}</td>`;
+      html += `<td class="rp ${ds}">${(dev!==null&&nb)?((dev/Math.abs(nb))*100).toFixed(2)+'%':''}</td>`;
+    }
+    return html+'</tr>';
+  }
+  function RS(lbl,n,nB){
+    let h=`<tr class="row-subtotal"><td>${lbl}</td><td class="rp">${rp(n)}</td>`;
+    if(dB){const diff=n-(nB||0);const ds=diff>=0?'dev-pos':'dev-neg';
+      h+=`<td class="rp">${nB!==undefined?rp(nB):'-'}</td>`;
+      h+=`<td class="rp ${ds}">${diff>=0?'+':'-'}${rp(Math.abs(diff))}</td>`;
+      h+=`<td class="rp ${ds}">${nB?((Math.abs(diff)/Math.abs(nB))*100).toFixed(2)+'%':''}</td>`;}
+    return h+'</tr>';
+  }
+  function RT(lbl,n,nB){
+    let h=`<tr class="row-total"><td>${lbl}</td><td class="rp">${rp(n)}</td>`;
+    if(dB){const diff=n-(nB||0);
+      h+=`<td class="rp">${nB!==undefined?rp(nB):'-'}</td>`;
+      h+=`<td class="rp">${diff>=0?'+':'-'}${rp(Math.abs(diff))}</td>`;
+      h+=`<td class="rp">${nB?((Math.abs(diff)/Math.abs(nB))*100).toFixed(2)+'%':''}</td>`;}
+    return h+'</tr>';
+  }
+  const RK  = lbl=>`<tr class="row-seksi"><td colspan="${cols}">📁 ${lbl}</td></tr>`;
+  const RSK = lbl=>`<tr class="row-subseksi"><td colspan="${cols}">${lbl}</td></tr>`;
+  const colH = dB
+    ? `<th class="r">${tahun}</th><th class="r">${bandingTahun}</th><th class="r">Deviasi</th><th class="r">%</th>`
+    : `<th class="r">${tahun} (Rp)</th>`;
+
+  /* Bangun baris per seksi */
+  function rowsAL(data, dataB){
+    let r = R('Kas Utama (Bendahara)', data.kas.warung, dataB?.kas?.warung)
+          + R('Kas BMT',               data.kas.bmt,    dataB?.kas?.bmt)
+          + R('Kas PPOB',              data.kas.ppob,   dataB?.kas?.ppob)
+          + R('Piutang Pokok Pembiayaan', data.piutang.pokok, dataB?.piutang?.pokok);
+    if(data.hasPM){
+      data.pmAL.forEach(p=>{
+        const nb=dataB?.pmAL?.find(x=>x.uraian===p.uraian);
+        r+=R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
+      });
+    } else {
+      r+=R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
+    }
+    return r;
+  }
+  function rowsAT(data, dataB){
+    if(data.hasPM){
+      return data.pmAT.map(p=>{
+        const nb=dataB?.pmAT?.find(x=>x.uraian===p.uraian);
+        return R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
+      }).join('');
+    }
+    return R('Aset Tetap (Nilai Buku)', data.aset.buku, dataB?.aset?.buku);
+  }
+  function rowsKW(data, dataB){
+    if(data.hasPM){
+      return data.pmKW.map(p=>{
+        const nb=dataB?.pmKW?.find(x=>x.uraian===p.uraian);
+        return R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
+      }).join('');
+    }
+    return R('Hutang Usaha (Supplier)', data.hutang, dataB?.hutang);
+  }
+  function rowsMD(data, dataB){
+    let r='';
+    if(data.hasPM){
+      data.pmMD.forEach(p=>{
+        const nb=dataB?.pmMD?.find(x=>x.uraian===p.uraian);
+        r+=R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
+      });
+    } else {
+      r+=R('Modal Saham ('+data.modal.lembar.toLocaleString('id-ID')+' lbr × Rp10.200)',
+           data.modal.nilai, dataB?.modal?.nilai);
+    }
+    r+=R('Laba Ditahan',             data.ldAkhir,    dataB?.ldAkhir);
+    r+=R('Laba Bersih Tahun '+tahun, data.labaBersih, dataB?.labaBersih);
+    return r;
+  }
+
   document.getElementById('neraca-content').innerHTML=`
   <div class="card">
     <div class="lap-header">
@@ -1079,77 +1193,117 @@ function renderNeraca(){
       <div class="lap-period">PER 31 DESEMBER ${tahun}</div>
     </div>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th style="width:55%">URAIAN</th><th class="r">${tahun} (Rp)</th></tr></thead>
+      <thead><tr><th style="width:${dB?'38%':'55%'}">URAIAN</th>${colH}</tr></thead>
       <tbody>
         ${RK('AKTIVA')}
         ${RSK('Aktiva Lancar')}
-        ${R('Kas Utama (Bendahara) 🟢',kas.warung)}
-        ${R('Kas BMT 🟢',kas.bmt)}
-        ${R('Kas PPOB 🟢',kas.ppob)}
-        ${R('Piutang Pokok Pembiayaan 🟢',piutang.pokok)}
-        ${R('Persediaan Barang Sembako 🟢',persediaan)}
-        ${pmAL.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('TOTAL AKTIVA LANCAR',totalAL)}
+        ${rowsAL(d,dB)}
+        ${RS('TOTAL AKTIVA LANCAR', d.totalAL, dB?.totalAL)}
         ${RSK('Aktiva Tetap')}
-        ${aset.list.length?aset.list.map(a=>R(a.nama+' (Nilai Buku) 🔵',parseFloat(a.nilai_buku))).join(''):''}
-        ${aset.list.length===0?R('Peralatan & Inventaris 🔵',0):''}
-        ${pmAT.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('TOTAL AKTIVA TETAP',totalAT)}
-        ${RT('TOTAL AKTIVA',totalAktiva)}
+        ${rowsAT(d,dB)}
+        ${RS('TOTAL AKTIVA TETAP', d.totalAT, dB?.totalAT)}
+        ${RT('TOTAL AKTIVA', d.totalAktiva, dB?.totalAktiva)}
+
         ${RK('PASIVA')}
         ${RSK('Kewajiban')}
-        ${R('Hutang Usaha (Supplier) 🟢',hutang)}
-        ${pmKW.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('TOTAL KEWAJIBAN',totalKW)}
+        ${rowsKW(d,dB)}
+        ${RS('TOTAL KEWAJIBAN', d.totalKW, dB?.totalKW)}
         ${RSK('Modal')}
-        ${R('Modal Saham ('+modal.lembar.toLocaleString('id-ID')+' lbr × Rp10.200) 🟢',modal.nilai)}
-        ${R('Laba Ditahan 🔵',ldAkhir)}
-        ${R('Laba Bersih Tahun '+tahun+' 🟢',labaBersih)}
-        ${pmMD.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('TOTAL MODAL',totalMD)}
-        ${RT('TOTAL PASIVA',totalPasiva)}
-        <tr><td colspan="2" style="padding:8px 10px;font-size:11px;background:${seimbang?'var(--hijau-light)':'var(--red-light)'};">
-          ${seimbang?`✅ Neraca Seimbang — ${rp(totalAktiva)}`:`⚠️ Selisih: ${rp(Math.abs(totalAktiva-totalPasiva))} — Cek pos yang belum tercatat`}
+        ${rowsMD(d,dB)}
+        ${RS('TOTAL MODAL', d.totalMD, dB?.totalMD)}
+        ${RT('TOTAL PASIVA', d.totalPasiva, dB?.totalPasiva)}
+
+        <tr><td colspan="${cols}" style="padding:8px 10px;font-size:11px;
+          background:${seimbang?'var(--hijau-light)':'var(--red-light)'};">
+          ${seimbang
+            ? `✅ Neraca Seimbang — ${rp(d.totalAktiva)}`
+            : `⚠️ Selisih: ${rp(Math.abs(d.totalAktiva-d.totalPasiva))} — Ada pos yang belum tercatat`}
         </td></tr>
       </tbody>
     </table></div>
-    <div style="font-size:10px;color:var(--gray);margin-top:8px;">🟢 Auto Transaksi &nbsp;|&nbsp; 🔵 Jurnal/Aset &nbsp;|&nbsp; 🟡 Manual</div>
   </div>`;
-  window._neracaData={tahun,totalAktiva,totalPasiva,kas,piutang,persediaan,aset,hutang,modal,ldAkhir,labaBersih};
+  window._neracaData = {tahun, ...d};
 }
 
 // ===== LABA RUGI =====
 function renderLabaRugi(){
   const tahun=parseInt(document.getElementById('lr-tahun')?.value);
-  const trx=getTrx(tahun),ppobD=getPPOB(tahun),bmt=getBMT(tahun);
-  const biaya=getBiaya(tahun),pendLain=getPendLain(tahun),zakat=getZakat(tahun);
-  const pmSem=getPosManual(tahun,'labarugi','sembako');
-  const pmBMT=getPosManual(tahun,'labarugi','pembiayaan');
-  const pmPPOB=getPosManual(tahun,'labarugi','ppob');
-  const pmPL=getPosManual(tahun,'labarugi','pendapatan_lain');
-  const pmBiaya=getPosManual(tahun,'labarugi','biaya');
-  const pmZakat=getPosManual(tahun,'labarugi','zakat');
-  const pmSemN=pmSem.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmBMTN=pmBMT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmPPOBN=pmPPOB.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmPLN=pmPL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmBiayaN=pmBiaya.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmZakatN=pmZakat.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pembelianThn=D.pembelian.filter(p=>{const y=p.tgl_beli?new Date(p.tgl_beli).getFullYear():null;return y===tahun;}).reduce((s,p)=>s+parseFloat(p.total||0),0);
-  const stokAkhir=getPersediaan();
-  const lkSem=trx.laba+pmSemN;
-  const lkBMT=bmt.margin+pmBMTN;
-  const lkPPOB=ppobD.laba+pmPPOBN;
-  const totalLK=lkSem+lkBMT+lkPPOB;
-  const totalPL=pendLain.total+pmPLN;
-  const totalBiaya=biaya.total+pmBiayaN;
-  const totalZakat=zakat+pmZakatN;
-  const labaBersih=totalLK+totalPL-totalBiaya-totalZakat;
-  const totalPj=trx.penjualan+ppobD.penjualan+bmt.margin;
-  const RB=(label,bg,color)=>`<tr><td colspan="2" style="background:${bg};color:${color};font-weight:800;font-size:11px;padding:7px 10px;">${label}</td></tr>`;
-  const R=(uraian,nom,indent=true)=>`<tr class="${indent?'row-indent':''}"><td>${uraian}</td><td class="rp">${nom<0?'('+rp(Math.abs(nom))+')':rp(nom)}</td></tr>`;
-  const RS=(label,nom,color='var(--hijau)')=>`<tr class="row-subtotal"><td>${label}</td><td class="rp" style="color:${color};font-weight:900;">${rp(nom)}</td></tr>`;
-  const RT=(label,nom)=>`<tr class="row-total"><td>${label}</td><td class="rp">${rp(nom)}</td></tr>`;
+
+  const pmSem   = getPosManual(tahun,'labarugi','sembako');
+  const pmBMT   = getPosManual(tahun,'labarugi','pembiayaan');
+  const pmPPOB  = getPosManual(tahun,'labarugi','ppob');
+  const pmPL    = getPosManual(tahun,'labarugi','pendapatan_lain');
+  const pmBiaya = getPosManual(tahun,'labarugi','biaya');
+  const pmZakat = getPosManual(tahun,'labarugi','zakat');
+  const hasPM   = !!(pmSem.length||pmBMT.length||pmBiaya.length||pmPL.length||pmZakat.length);
+
+  /* ---- KALKULASI ---- */
+  let pjSem,hppSem,lkSem, pjBMT,hppBMT,lkBMT, pjPPOB,hppPPOB,lkPPOB;
+  let totalPL, totalBiaya, totalZakat, labaBersih, totalPj;
+  let rSemRows='', rBMTRows='', rPPOBRows='';
+
+  const ppobAuto = getPPOB(tahun);
+
+  if(hasPM){
+    /* SEMBAKO */
+    // Baris: urutan 5=stok awal, 15=pembelian, 25=stok akhir (negatif)
+    const byUrut = k => pmSem.find(p=>p.urutan===k);
+    const semAwal  = parseFloat(byUrut(5)?.nominal||0);
+    const semBeli  = parseFloat(byUrut(15)?.nominal||0);
+    const semAkhir = Math.abs(parseFloat(byUrut(25)?.nominal||0));
+    hppSem = semAwal + semBeli - semAkhir;
+    // Penjualan sembako → dari transaksi otomatis
+    pjSem  = getTrx(tahun).penjualan;
+    lkSem  = pjSem - hppSem;
+    rSemRows = `
+      <tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjSem)}</td></tr>
+      <tr class="row-indent"><td>Persediaan Barang Dagang Awal</td><td class="rp">${rp(semAwal)}</td></tr>
+      <tr class="row-indent"><td>Pembelian</td><td class="rp">${rp(semBeli)}</td></tr>
+      <tr class="row-indent"><td>Persediaan Barang Dagang Akhir</td><td class="rp">(${rp(semAkhir)})</td></tr>
+      <tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
+
+    /* PEMBIAYAAN */
+    pjBMT  = parseFloat(pmBMT.find(p=>p.urutan===10)?.nominal||0);
+    hppBMT = parseFloat(pmBMT.find(p=>p.urutan===20)?.nominal||0);
+    lkBMT  = pjBMT - hppBMT;
+    rBMTRows = pmBMT.map(p=>`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`).join('');
+
+    /* PPOB */
+    pjPPOB  = ppobAuto.penjualan;
+    hppPPOB = ppobAuto.hpp;
+    lkPPOB  = ppobAuto.laba;
+    rPPOBRows = `
+      <tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjPPOB)}</td></tr>
+      <tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppPPOB)}</td></tr>`;
+    pmPPOB.forEach(p=>{rPPOBRows+=`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`;});
+
+    totalPL    = pmPL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    totalBiaya = pmBiaya.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    totalZakat = pmZakat.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+
+  } else {
+    const trx=getTrx(tahun), bmt=getBMT(tahun);
+    const biaya=getBiaya(tahun), pendLain=getPendLain(tahun), zakatA=getZakat(tahun);
+    pjSem=trx.penjualan; hppSem=trx.hpp; lkSem=trx.laba;
+    rSemRows=`<tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjSem)}</td></tr>`+
+             `<tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
+    pjBMT=bmt.margin; hppBMT=0; lkBMT=bmt.margin;
+    rBMTRows=`<tr class="row-indent"><td>Pendapatan Margin (est.)</td><td class="rp">${rp(pjBMT)}</td></tr>`;
+    pjPPOB=ppobAuto.penjualan; hppPPOB=ppobAuto.hpp; lkPPOB=ppobAuto.laba;
+    rPPOBRows=`<tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjPPOB)}</td></tr>`+
+              `<tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppPPOB)}</td></tr>`;
+    totalPL=pendLain.total; totalBiaya=biaya.total; totalZakat=zakatA;
+  }
+
+  const totalLK  = lkSem + lkBMT + lkPPOB;
+  labaBersih     = totalLK + totalPL - totalBiaya - totalZakat;
+  totalPj        = pjSem + pjBMT + pjPPOB;
+
+  /* ---- HELPERS ---- */
+  const RS=(lbl,nom,clr='var(--hijau)')=>`<tr class="row-subtotal"><td>${lbl}</td><td class="rp" style="color:${clr};font-weight:900;">${rp(nom)}</td></tr>`;
+  const RT=(lbl,nom)=>`<tr class="row-total"><td>${lbl}</td><td class="rp">${rp(nom)}</td></tr>`;
+  const RB=(lbl,bg,clr)=>`<tr><td colspan="2" style="background:${bg};color:${clr};font-weight:800;font-size:11px;padding:7px 10px;">${lbl}</td></tr>`;
+
   document.getElementById('lr-content').innerHTML=`
   <div class="card">
     <div class="lap-header">
@@ -1158,58 +1312,62 @@ function renderLabaRugi(){
       <div class="lap-period">PER 31 DESEMBER ${tahun}</div>
     </div>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th style="width:60%">URAIAN</th><th class="r">${tahun} (Rp)</th></tr></thead>
+      <thead><tr><th style="width:62%">JENIS USAHA / URAIAN</th><th class="r">${tahun} (Rp)</th></tr></thead>
       <tbody>
         ${RB('🏪 SEMBAKO','#fef3c7','#92400e')}
-        ${R('Penjualan 🟢',trx.penjualan)}
-        ${R('HPP 🟢',trx.hpp)}
-        ${pmSem.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('LABA KOTOR SEMBAKO',lkSem)}
+        ${rSemRows}
+        ${RS('LABA KOTOR SEMBAKO', lkSem)}
 
         ${RB('🏦 PEMBIAYAAN (BMT)','#e3eef9','#1565c0')}
-        ${R('Pendapatan Margin (est.) 🟢',bmt.margin)}
-        ${pmBMT.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('LABA KOTOR PEMBIAYAAN',lkBMT)}
+        ${rBMTRows}
+        ${RS('LABA KOTOR PEMBIAYAAN', lkBMT)}
 
         ${RB('📡 PPOB','#f3e8ff','#6b21a8')}
-        ${R('Penjualan PPOB 🟢',ppobD.penjualan)}
-        ${R('HPP PPOB 🟢',ppobD.hpp)}
-        ${pmPPOB.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('LABA KOTOR PPOB',lkPPOB)}
+        ${rPPOBRows}
+        ${RS('LABA KOTOR PPOB', lkPPOB)}
 
         <tr class="row-subtotal" style="border-top:2px solid var(--hijau);">
           <td><strong>JUMLAH LABA KOTOR</strong></td>
           <td class="rp"><strong>${rp(totalLK)}</strong></td>
         </tr>
+        <tr><td colspan="2" style="padding:3px 10px;font-size:10px;color:var(--gray);">
+          Jumlah Penjualan: ${rp(totalPj)} &nbsp;|&nbsp;
+          % Laba Kotor: ${totalPj?((totalLK/totalPj)*100).toFixed(2)+'%':'—'}
+        </td></tr>
 
         ${RB('💚 PENDAPATAN LAIN-LAIN','#d1fae5','#065f46')}
-        ${pendLain.list.length?pendLain.list.map(p=>R(p.nama+' 🔵',p.nominal)).join(''):R('(Belum ada — input via Jurnal)',0)}
-        ${pmPL.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('TOTAL PENDAPATAN LAIN-LAIN',totalPL)}
+        ${pmPL.length
+          ? pmPL.map(p=>`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`).join('')
+          : `<tr class="row-indent"><td style="color:var(--gray);">(Belum ada — input via Jurnal atau Pos Manual)</td><td></td></tr>`}
+        ${RS('JUMLAH PENDAPATAN LAIN-LAIN', totalPL)}
 
         ${RB('🔴 BIAYA-BIAYA','#fdecea','#c0392b')}
-        ${biaya.list.length?biaya.list.map(b=>R(b.nama+' 🔵',b.total)).join(''):R('(Belum ada — catat via Jurnal Umum)',0)}
-        ${pmBiaya.map(p=>R(p.uraian+' 🟡',parseFloat(p.nominal))).join('')}
-        ${RS('TOTAL BIAYA',totalBiaya,'var(--red)')}
+        ${pmBiaya.length
+          ? pmBiaya.map(p=>`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`).join('')
+          : `<tr class="row-indent"><td style="color:var(--gray);">(Belum ada — catat via Jurnal Umum)</td><td></td></tr>`}
+        ${RS('JUMLAH BIAYA-BIAYA', totalBiaya, 'var(--red)')}
 
         ${RB('🕌 ZAKAT TIJAROH','#e8f5ef','#1a6b47')}
-        ${totalZakat?R('Zakat Tijaroh 🔵',totalZakat):R('(Belum ada)',0)}
-        ${RS('ZAKAT',totalZakat)}
+        ${pmZakat.length
+          ? pmZakat.map(p=>`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`).join('')
+          : `<tr class="row-indent"><td style="color:var(--gray);">(Belum ada)</td><td></td></tr>`}
+        ${RS('ZAKAT TIJAROH', totalZakat)}
 
         <tr><td colspan="2" style="padding:5px 10px;background:var(--hijau-light);font-size:10px;color:var(--gray);">─── Ringkasan ───</td></tr>
-        <tr class="row-indent"><td>Laba Kotor</td><td class="rp">${rp(totalLK)}</td></tr>
-        <tr class="row-indent"><td>+ Pendapatan Lain</td><td class="rp">+ ${rp(totalPL)}</td></tr>
-        <tr class="row-indent"><td>− Biaya</td><td class="rp">− ${rp(totalBiaya)}</td></tr>
-        <tr class="row-indent"><td>− Zakat</td><td class="rp">− ${rp(totalZakat)}</td></tr>
-        ${RT('LABA BERSIH',labaBersih)}
-        <tr><td style="font-size:11px;color:var(--gray);padding-left:24px;">% Laba/Penjualan</td>
+        <tr class="row-indent"><td>Jumlah Laba Kotor</td><td class="rp">${rp(totalLK)}</td></tr>
+        <tr class="row-indent"><td>+ Pendapatan Lain-lain</td><td class="rp">+ ${rp(totalPL)}</td></tr>
+        <tr class="row-indent"><td>− Biaya-biaya</td><td class="rp">− ${rp(totalBiaya)}</td></tr>
+        <tr class="row-indent"><td>− Zakat Tijaroh</td><td class="rp">− ${rp(totalZakat)}</td></tr>
+        ${RT('JUMLAH LABA BERSIH', labaBersih)}
+        <tr><td style="font-size:11px;color:var(--gray);padding-left:24px;">% Laba/Rugi thd Total Penjualan</td>
           <td class="rp" style="font-size:11px;color:var(--gray);">${totalPj?((labaBersih/totalPj)*100).toFixed(2)+'%':'—'}</td></tr>
       </tbody>
     </table></div>
-    <div style="font-size:10px;color:var(--gray);margin-top:8px;">🟢 Auto Transaksi &nbsp;|&nbsp; 🔵 Jurnal Umum &nbsp;|&nbsp; 🟡 Manual</div>
   </div>`;
-  window._lrData={tahun,labaBersih,trx,ppobD,bmt,biaya,totalPL,totalZakat};
+
+  window._lrData={tahun,labaBersih,pjSem,hppSem,lkSem,pjBMT,hppBMT,lkBMT,pjPPOB,hppPPOB,lkPPOB,totalPL,totalBiaya,totalZakat};
 }
+
 
 // ===== DEVIASI =====
 function renderDeviasi(){
