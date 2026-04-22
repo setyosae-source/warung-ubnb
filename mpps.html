@@ -1614,15 +1614,66 @@ function kirimWASponsor(nama, telepon, status) {
 
 // ===== TAMBAH SPONSOR (ADMIN) =====
 function openModalTambahSponsor() {
-  ['msp-usaha','msp-kontak','msp-telp','msp-ket','msp-logo'].forEach(function(id) {
+  ['msp-usaha','msp-kontak','msp-telp','msp-ket'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.value = '';
   });
+  clearLogoUpload();
   document.getElementById('msp-jenis').value = 'uang';
   document.getElementById('msp-status').value = 'aktif';
   document.getElementById('msp-err').style.display = 'none';
   document.getElementById('modal-tambah-sponsor').classList.add('show');
   setTimeout(function(){ document.getElementById('msp-usaha').focus(); }, 100);
+}
+
+// ===== LOGO UPLOAD HELPER =====
+var _logoB64 = '';
+
+function handleLogoFile(input) {
+  var file = input.files ? input.files[0] : input;
+  if (!file) return;
+  if (file.size > 512000) {
+    alert('Ukuran logo maksimal 500KB. Silakan kompres gambar terlebih dahulu.');
+    if (input.value !== undefined) input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    _logoB64 = e.target.result;
+    document.getElementById('msp-logo-img').src = _logoB64;
+    document.getElementById('msp-logo-preview').style.display = 'block';
+    document.getElementById('msp-logo-placeholder').style.display = 'none';
+    document.getElementById('msp-logo-name').textContent = file.name;
+    document.getElementById('msp-logo-clear').style.display = 'inline';
+    document.getElementById('msp-logo-wrap').style.borderColor = 'var(--hijau)';
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleLogoDrop(event) {
+  event.preventDefault();
+  document.getElementById('msp-logo-wrap').style.borderColor = 'var(--border)';
+  var file = event.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  handleLogoFile(file);
+}
+
+function clearLogoUpload() {
+  _logoB64 = '';
+  var fi = document.getElementById('msp-logo-file');
+  if (fi) fi.value = '';
+  var img = document.getElementById('msp-logo-img');
+  if (img) img.src = '';
+  var prev = document.getElementById('msp-logo-preview');
+  if (prev) prev.style.display = 'none';
+  var ph = document.getElementById('msp-logo-placeholder');
+  if (ph) ph.style.display = 'block';
+  var nm = document.getElementById('msp-logo-name');
+  if (nm) nm.textContent = '';
+  var cl = document.getElementById('msp-logo-clear');
+  if (cl) cl.style.display = 'none';
+  var wr = document.getElementById('msp-logo-wrap');
+  if (wr) wr.style.borderColor = 'var(--border)';
 }
 
 function closeModalTambahSponsor() {
@@ -1635,7 +1686,7 @@ async function simpanSponsorBaru() {
   var telp = document.getElementById('msp-telp').value.trim();
   var jenis = document.getElementById('msp-jenis').value;
   var ket = document.getElementById('msp-ket').value.trim();
-  var logo = document.getElementById('msp-logo').value.trim();
+  var logo = _logoB64 || '';
   var status = document.getElementById('msp-status').value;
   var errEl = document.getElementById('msp-err');
 
@@ -1709,8 +1760,27 @@ async function simpanSponsorBaru() {
       <input type="text" id="msp-ket" placeholder="Contoh: Rp 500.000 / Voucher Makan 10 pcs" style="border-color:var(--border);">
     </div>
     <div class="konfirm-field">
-      <label>URL Logo <span style="font-weight:400;opacity:.6">(opsional)</span></label>
-      <input type="text" id="msp-logo" placeholder="https://..." style="border-color:var(--border);">
+      <label>Logo Usaha <span style="font-weight:400;opacity:.6">(opsional)</span></label>
+      <div id="msp-logo-wrap" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:12px;text-align:center;cursor:pointer;transition:border-color .2s;"
+        onclick="document.getElementById('msp-logo-file').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--hijau)';"
+        ondragleave="this.style.borderColor='var(--border)';"
+        ondrop="handleLogoDrop(event)">
+        <div id="msp-logo-preview" style="display:none;margin-bottom:8px;">
+          <img id="msp-logo-img" src="" style="max-height:80px;max-width:180px;object-fit:contain;border-radius:6px;border:1px solid var(--border);">
+        </div>
+        <div id="msp-logo-placeholder">
+          <div style="font-size:28px;margin-bottom:4px;">📷</div>
+          <div style="font-size:12px;color:var(--text-muted);">Klik atau drag &amp; drop logo di sini</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">JPG, PNG, GIF · Maks 500KB</div>
+        </div>
+        <input type="file" id="msp-logo-file" accept="image/*" style="display:none;" onchange="handleLogoFile(this)">
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;">
+        <span id="msp-logo-name" style="font-size:11px;color:var(--text-muted);"></span>
+        <button type="button" id="msp-logo-clear" style="display:none;font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:0;" onclick="clearLogoUpload()">✕ Hapus</button>
+      </div>
+      <input type="hidden" id="msp-logo">
     </div>
     <div class="konfirm-field">
       <label>Status Awal</label>
