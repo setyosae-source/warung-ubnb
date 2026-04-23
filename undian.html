@@ -842,14 +842,15 @@ async function loadAll(){
 }
 
 function updateHomeStats(){
-  const p=getPool();
+  const p=getPool(null); // tanpa filter hadiah — tampilkan total pool umum
   document.getElementById('stat-hadir').textContent=aHadir.length;
   document.getElementById('stat-menang').textContent=sudahMenang.size;
   document.getElementById('stat-pool').textContent=p.length;
 }
 
 function updateUndianStats(){
-  const p=getPool();
+  const hadiahId=document.getElementById('hadiah-sel')?.value||null;
+  const p=getPool(hadiahId);
   document.getElementById('uh-hadir').textContent=aHadir.length;
   document.getElementById('uh-menang').textContent=sudahMenang.size;
   document.getElementById('uh-pool').textContent=p.length;
@@ -858,13 +859,14 @@ function updateUndianStats(){
 // ============================
 // HADIAH OPTIONS
 // ============================
-function hadiahOpts(){
+function hadiahOpts(showPool=false){
   return '<option value="">— Pilih hadiah —</option>'+
     aHadiah.map(h=>{
       const menang=aPemenang.filter(p=>p.hadiah_id===h.id).length;
       const sisa=(h.qty||1)-menang;
       const habis=sisa<=0;
-      return`<option value="${h.id}" ${habis?'disabled':''}>${habis?'[HABIS] ':''}${h.nama} — Sisa ${sisa}/${h.qty||1}</option>`;
+      const poolLabel=showPool?(h.filter_pool==='anggota'?' [⭐Anggota]':' [🌐Semua Hadir]'):'';
+      return`<option value="${h.id}" ${habis?'disabled':''}>${habis?'[HABIS] ':''}${h.nama} — Sisa ${sisa}/${h.qty||1}${poolLabel}</option>`;
     }).join('');
 }
 
@@ -932,7 +934,7 @@ function renderUndianBody(sesi){
         <div class="s2-controls">
           <div class="selector-label">✦ Pilih Hadiah ✦</div>
           <select class="hadiah-select" id="hadiah-sel" onchange="updatePool()">
-            ${hadiahOpts()}
+            ${hadiahOpts(true)}
           </select>
           <div class="action-wrap">
             <button class="btn-start" id="btn-start" onclick="startUndian()" disabled>🎰 &nbsp; MULAI UNDIAN</button>
@@ -1108,30 +1110,36 @@ async function tarikPertama(jk){
 // ============================
 // SESI 2: UNDIAN
 // ============================
-function getPool(){
+function getPool(hadiahId){
   const seen=new Set();
   // Semua pemenang (sesi 1 maupun sesi 2) tidak boleh ikut undian sesi 2
   const semuaPemenang=new Set(aPemenang.map(p=>p.nama.toLowerCase().trim()));
+  const hadiah=hadiahId?aHadiah.find(h=>String(h.id)===String(hadiahId)):null;
+  // filter_pool: 'anggota' → hanya anggota saham yang hadir, 'semua' / default → semua yang hadir
+  const filterPool=hadiah?.filter_pool||'semua';
   return aHadir.filter(x=>{
     const k=x.nama.toLowerCase().trim();
     if(seen.has(k)||semuaPemenang.has(k))return false;
+    if(filterPool==='anggota'&&!x.is_anggota)return false;
     seen.add(k);return true;
   });
 }
 
 function updatePool(){
-  pool=getPool();
   const hadiahId=document.getElementById('hadiah-sel')?.value;
+  pool=getPool(hadiahId);
   const hadiah=aHadiah.find(h=>String(h.id)===hadiahId);
   const menang=hadiah?aPemenang.filter(p=>p.hadiah_id===hadiah.id).length:0;
   const sisa=hadiah?(hadiah.qty||1)-menang:0;
+  const filterPool=hadiah?.filter_pool||'semua';
   const canStart=hadiahId&&pool.length>0&&sisa>0&&!isRolling;
   const btnStart=document.getElementById('btn-start');
   if(btnStart)btnStart.disabled=!canStart;
   const infoEl=document.getElementById('pool-info');
+  const poolLabel=filterPool==='anggota'?'⭐ anggota saham':'🌐 semua peserta hadir';
   if(infoEl)infoEl.innerHTML=pool.length===0
-    ?'<span style="color:#e74c3c">⚠️ Tidak ada peserta dalam pool</span>'
-    :`<strong>${pool.length}</strong> peserta dalam pool undian`;
+    ?`<span style="color:#e74c3c">⚠️ Tidak ada peserta dalam pool (${poolLabel})</span>`
+    :`<strong>${pool.length}</strong> peserta &mdash; pool: ${poolLabel}`;
   updateUndianStats();
   if(!isRolling)buildStripIdle();
 }
@@ -1334,7 +1342,7 @@ function renderMultiHadiahSel(){
     aHadiah.map(h=>{
       const menang=aPemenang.filter(p=>p.hadiah_id===h.id).length;
       const sisa=(h.qty||1)-menang;const habis=sisa<=0;
-      return`<option value="${h.id}" ${habis?'disabled':''}>${h.nama} (sisa ${sisa})</option>`;
+      return`<option value="${h.id}" ${habis?'disabled':''}>${h.nama} (sisa ${sisa})${h.filter_pool==='anggota'?' ⭐':' 🌐'}</option>`;
     }).join('');
   if(prev)sel.value=prev;
 }
@@ -1347,7 +1355,7 @@ function jalankanMulti(){
   const sisa=(hadiah.qty||1)-menangHd;
   if(sisa<=0){toast('Hadiah sudah habis!',true);return;}
   const ambil=Math.min(jumlah,sisa);
-  let poolMulti=getPool();
+  let poolMulti=getPool(hadiahId);
   if(!poolMulti.length){toast('Pool kosong!',true);return;}
   const shuffled=[...poolMulti].sort(()=>Math.random()-.5);
   multiPemenangTemp=shuffled.slice(0,ambil).map(p=>({...p,hadiah:hadiah.nama,hadiah_id:hadiah.id}));
