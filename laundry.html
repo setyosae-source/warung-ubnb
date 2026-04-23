@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Laundry UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#c9a84c;--gold-dark:#9a7830;--gold-light:#fdf6e3;
+  --hijau:#1a6640;--hijau-dark:#0f4428;--hijau-light:#e8f5ee;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1e5fa8;--blue-light:#e8f0fb;
+  --purple:#6d28d9;--purple-light:#ede9fe;
+  --cyan:#0891b2;--cyan-light:#e0f7fa;
+  --orange:#c2410c;--orange-light:#fff7ed;
+  --bg:#faf8ff;--surface:#ffffff;--surface2:#f5f3ff;
+  --border:#e4e0f0;--border-light:#ede8ff;
+  --text:#1e1630;--text-2:#3d3560;--text-muted:#7c6fa8;
+  --radius:12px;--radius-sm:8px;--radius-xs:5px;
+  --shadow:0 2px 12px rgba(109,40,217,0.08);--shadow-lg:0 8px 32px rgba(109,40,217,0.15);
+  --sidebar-w:220px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
+
+/* LOGIN */
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,#2e1065 0%,var(--purple) 60%,#7c3aed 100%);display:flex;align-items:center;justify-content:center;z-index:500;padding:20px;}
+.login-card{background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.3);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .licon{width:64px;height:64px;background:linear-gradient(135deg,var(--purple),#7c3aed);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;}
+.login-logo h1{font-size:20px;font-weight:800;color:#2e1065;}
+.login-logo p{font-size:12px;color:var(--text-muted);margin-top:3px;}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:5px;}
+.lfield input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;transition:border-color .2s;}
+.lfield input:focus{outline:none;border-color:var(--purple);}
+.btn-login{width:100%;padding:13px;background:linear-gradient(135deg,var(--purple),#2e1065);color:white;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;}
+#login-err{color:var(--red);font-size:12px;margin-top:8px;text-align:center;}
+
+/* APP */
+#app{display:none;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar-w);background:#2e1065;position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform .3s;}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.08);}
+.sb-logo h1{font-size:14px;font-weight:800;color:#c4b5fd;}
+.sb-logo p{font-size:10px;color:rgba(255,255,255,.45);margin-top:2px;}
+.nav-items{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-section{padding:10px 16px 3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;color:rgba(255,255,255,.55);cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.85);}
+.nav-item.active{background:rgba(196,181,253,.12);color:#c4b5fd;border-left-color:#c4b5fd;}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);}
+.sb-user{font-size:10px;color:rgba(255,255,255,.4);margin-bottom:6px;}
+.btn-logout{width:100%;padding:7px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);border:none;border-radius:5px;font-family:inherit;font-size:11px;cursor:pointer;}
+
+/* TOPBAR */
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:52px;background:white;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;z-index:99;box-shadow:var(--shadow);}
+.hamburger{display:none;background:none;border:none;font-size:20px;cursor:pointer;}
+.topbar-title{font-size:14px;font-weight:700;color:#2e1065;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.user-badge{font-size:11px;font-weight:600;color:var(--text-muted);background:var(--bg);padding:4px 10px;border-radius:99px;}
+.btn-keluar{font-size:11px;color:var(--red);background:var(--red-light);border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+
+/* MAIN */
+.main-wrap{margin-left:var(--sidebar-w);padding-top:52px;min-height:100vh;}
+.page{display:none;padding:18px;}
+.page.active{display:block;}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;}
+.sb-overlay.show{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--border-light);}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+/* STAT */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+.stat-card{background:var(--surface);border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border-light);box-shadow:var(--shadow);}
+.stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:5px;}
+.stat-val{font-size:22px;font-weight:800;line-height:1;}
+.stat-val.purple{color:var(--purple);}
+.stat-val.hijau{color:var(--hijau);}
+.stat-val.gold{color:var(--gold-dark);}
+.stat-val.red{color:var(--red);}
+.stat-sub{font-size:10px;color:var(--text-muted);margin-top:4px;}
+
+/* KANBAN STATUS */
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.kanban-col{background:var(--surface2);border-radius:var(--radius-sm);padding:10px;}
+.kanban-header{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.kanban-count{background:var(--purple);color:white;font-size:9px;padding:1px 7px;border-radius:99px;}
+.kanban-item{background:white;border-radius:var(--radius-xs);padding:9px;margin-bottom:6px;border:1px solid var(--border-light);cursor:pointer;transition:all .15s;}
+.kanban-item:hover{border-color:var(--purple);box-shadow:var(--shadow);}
+.kanban-no{font-size:10px;font-weight:700;color:var(--purple);font-family:monospace;}
+.kanban-nama{font-size:12px;font-weight:600;margin:2px 0;}
+.kanban-sub{font-size:10px;color:var(--text-muted);}
+
+/* ORDER CARD */
+.order-card{background:white;border:1.5px solid var(--border-light);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;transition:all .2s;cursor:pointer;}
+.order-card:hover{border-color:var(--purple);box-shadow:var(--shadow);}
+.order-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
+.order-no{font-family:monospace;font-size:11px;font-weight:700;color:var(--purple);}
+.order-nama{font-size:13px;font-weight:700;}
+.order-sub{font-size:10px;color:var(--text-muted);}
+
+/* STATUS BADGES */
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;}
+.s-masuk{background:#e0f2fe;color:#0369a1;}
+.s-proses{background:var(--purple-light);color:var(--purple);}
+.s-selesai{background:var(--hijau-light);color:var(--hijau);}
+.s-diambil{background:#f3f4f6;color:#374151;}
+.s-dibatalkan{background:var(--red-light);color:var(--red);}
+.bayar-lunas{background:var(--hijau-light);color:var(--hijau);}
+.bayar-belum{background:var(--gold-light);color:var(--gold-dark);}
+.anggota-tag{background:var(--hijau-light);color:var(--hijau);font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+.jamaah-tag{background:var(--blue-light);color:var(--blue);font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+.custom-tag{background:#fef3c7;color:#92400e;font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+
+/* STATUS PROGRESS BAR */
+.progress-steps{display:flex;align-items:center;gap:4px;margin:10px 0;}
+.step{flex:1;text-align:center;font-size:9px;font-weight:700;padding:5px 2px;border-radius:4px;color:var(--text-muted);background:var(--surface2);}
+.step.done{background:var(--purple);color:white;}
+.step.current{background:var(--purple-light);color:var(--purple);outline:2px solid var(--purple);}
+.step-arrow{color:var(--border);font-size:10px;}
+
+/* FORM */
+.irow{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+.irow label{min-width:120px;padding-top:9px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;}
+.irow input,.irow select,.irow textarea{flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;color:var(--text);background:white;transition:border-color .2s;}
+.irow input:focus,.irow select:focus,.irow textarea:focus{outline:none;border-color:var(--purple);}
+.info-box{border-radius:var(--radius-xs);padding:10px 12px;font-size:12px;margin-bottom:12px;}
+.info-box.purple{background:var(--purple-light);border-left:3px solid var(--purple);color:#2e1065;}
+.info-box.hijau{background:var(--hijau-light);border-left:3px solid var(--hijau);color:var(--hijau-dark);}
+.info-box.gold{background:var(--gold-light);border-left:3px solid var(--gold);color:var(--gold-dark);}
+
+/* DROPDOWN ANGGOTA */
+.ac-wrap{position:relative;flex:1;}
+.ac-input{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;}
+.ac-input:focus{outline:none;border-color:var(--purple);}
+.ac-dd{position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--purple);border-radius:var(--radius-xs);box-shadow:var(--shadow-lg);z-index:200;max-height:260px;overflow-y:auto;display:none;}
+.ac-dd.show{display:block;}
+.ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px;}
+.ac-item:hover{background:var(--purple-light);}
+.ac-name{font-weight:600;font-size:12px;}
+.ac-sub{font-size:10px;color:var(--text-muted);}
+.ac-tag{font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+.ac-tag.anggota{background:var(--hijau-light);color:var(--hijau);}
+.ac-tag.jamaah{background:var(--blue-light);color:var(--blue);}
+.ac-tag.custom{background:#fef3c7;color:#92400e;}
+.ac-divider{padding:5px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase;}
+
+/* SEARCH BAR */
+.search-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.search-input{flex:1;min-width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;}
+.search-input:focus{outline:none;border-color:var(--purple);}
+.filter-sel{padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px;background:white;}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border:none;border-radius:var(--radius-xs);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;}
+.btn.primary{background:var(--purple);color:white;}
+.btn.primary:hover{background:#2e1065;}
+.btn.hijau{background:var(--hijau);color:white;}
+.btn.gold{background:var(--gold);color:#1a1a1a;}
+.btn.secondary{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);}
+.btn.danger{background:var(--red-light);color:var(--red);}
+.btn.sm{padding:4px 10px;font-size:11px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-end;justify-content:center;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:20px;}
+.mhandle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.modal-title h3{font-size:14px;font-weight:800;}
+.btn-close{background:var(--surface2);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+
+/* NOTA PRINT */
+@media print{
+  .sidebar,.topbar,.no-print{display:none!important;}
+  .main-wrap{margin-left:0;padding-top:0;}
+  .page{display:block!important;padding:5mm;}
+}
+
+/* TOAST & SPINNER */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#2e1065;color:white;padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+#toast.err{background:var(--red);}
+#toast.show{opacity:1;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{text-align:center;padding:32px;color:var(--text-muted);}
+.empty .ei{font-size:40px;margin-bottom:8px;}
+
+/* MOBILE */
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-220px);width:220px;}
+  .sidebar.open{transform:translateX(0);}
+  .topbar{left:0;}
+  .main-wrap{margin-left:0;}
+  .hamburger{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .kanban{grid-template-columns:1fr 1fr;}
+  .irow{flex-direction:column;}
+  .irow label{padding-top:0;min-width:unset;}
+  .two-col{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">👕</div>
+      <h1>Laundry UBNB</h1>
+      <p>Manajemen Order Laundry</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <h1>👕 Laundry UBNB</h1>
+      <p>Order & Tracking</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+      <div class="nav-section">Order</div>
+      <div class="nav-item" onclick="showPage('order-baru',this)"><span class="nav-icon">➕</span>Order Baru</div>
+      <div class="nav-item" onclick="showPage('tracking',this)"><span class="nav-icon">📋</span>Tracking Order</div>
+      <div class="nav-item" onclick="showPage('riwayat',this)"><span class="nav-icon">📜</span>Riwayat</div>
+      <div class="nav-section">Keuangan</div>
+      <div class="nav-item" onclick="showPage('pembayaran',this)"><span class="nav-icon">💰</span>Pembayaran</div>
+      <div class="nav-item" onclick="showPage('laporan',this)"><span class="nav-icon">📊</span>Laporan</div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user" id="sb-user"></div>
+      <button class="btn-logout" onclick="keluar()">Keluar</button>
+      <div style="margin-top:8px"><a href="portal.html" style="color:rgba(255,255,255,.4);font-size:10px;text-decoration:none;">← Portal</a></div>
+    </div>
+  </div>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="topbar-title">Dashboard Laundry</div>
+    <div class="topbar-right">
+      <span class="user-badge" id="user-badge">—</span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-lbl">Order Aktif</div><div class="stat-val purple" id="ds-aktif">—</div><div class="stat-sub">belum diambil</div></div>
+        <div class="stat-card"><div class="stat-lbl">Selesai Hari Ini</div><div class="stat-val hijau" id="ds-selesai">—</div><div class="stat-sub">siap diambil</div></div>
+        <div class="stat-card"><div class="stat-lbl">Pendapatan Bulan Ini</div><div class="stat-val gold" id="ds-pendapatan">—</div><div class="stat-sub">sudah lunas</div></div>
+        <div class="stat-card"><div class="stat-lbl">Belum Lunas</div><div class="stat-val red" id="ds-piutang">—</div><div class="stat-sub">menunggu bayar</div></div>
+      </div>
+
+      <!-- Kanban Status -->
+      <div class="card">
+        <div class="card-title"><span>📊 Status Order Aktif</span>
+          <button class="btn primary sm" onclick="showPage('order-baru',document.querySelectorAll('.nav-item')[1])">➕ Order Baru</button>
+        </div>
+        <div class="kanban" id="kanban-board"></div>
+      </div>
+    </div>
+
+    <!-- ORDER BARU -->
+    <div class="page" id="page-order-baru">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span>➕ Input Order Laundry</span></div>
+          <div class="info-box purple">Anggota saham yang bertransaksi akan dicatat untuk perhitungan SHU.</div>
+
+          <!-- Dropdown Anggota -->
+          <div class="irow">
+            <label>Pelanggan ⭐</label>
+            <div class="ac-wrap">
+              <input class="ac-input" type="text" id="order-cari" placeholder="Ketik nama / cari anggota..." oninput="acSearch(this.value)" onfocus="acSearch(this.value)">
+              <div class="ac-dd" id="order-dd"></div>
+            </div>
+          </div>
+          <input type="hidden" id="order-anggota-id">
+          <input type="hidden" id="order-jamaah-did">
+          <input type="hidden" id="order-sumber">
+          <div id="order-pelanggan-info" style="display:none;background:var(--purple-light);border-radius:var(--radius-xs);padding:8px 12px;margin-bottom:10px;font-size:11px">
+            <span id="order-pelanggan-tag"></span> <strong id="order-pelanggan-nama"></strong>
+          </div>
+
+          <div class="irow"><label>No. HP</label><input type="text" id="order-hp" placeholder="08xxxxxxxxxx"></div>
+          <div class="irow"><label>Tgl Masuk</label><input type="date" id="order-tgl-masuk"></div>
+          <div class="irow"><label>Layanan</label>
+            <select id="order-layanan" style="flex:1" onchange="hitungHarga()">
+              <option value="reguler">Reguler (2-3 hari)</option>
+              <option value="express">Express (1 hari)</option>
+              <option value="dry_clean">Dry Clean</option>
+            </select>
+          </div>
+          <div class="irow"><label>Berat (kg)</label>
+            <input type="number" id="order-berat" placeholder="0.0" step="0.5" min="0" oninput="hitungHarga()">
+          </div>
+          <div class="irow"><label>Harga/kg (Rp)</label>
+            <input type="number" id="order-harga-kg" placeholder="0" oninput="hitungHarga()">
+          </div>
+          <!-- Item tambahan -->
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Item Tambahan</div>
+            <div id="item-tambahan-list"></div>
+            <button class="btn secondary sm" onclick="tambahItem()">+ Tambah Item</button>
+          </div>
+          <!-- Preview total -->
+          <div id="order-preview" style="background:var(--purple-light);border-radius:var(--radius-xs);padding:12px;margin-bottom:10px;display:none">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+              <span>Laundry (<span id="prev-berat">0</span> kg × <span id="prev-harga">Rp 0</span>)</span>
+              <span id="prev-subtotal">Rp 0</span>
+            </div>
+            <div id="prev-items"></div>
+            <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;color:var(--purple);border-top:1px solid rgba(109,40,217,.2);padding-top:8px;margin-top:8px">
+              <span>Total</span><span id="prev-total">Rp 0</span>
+            </div>
+          </div>
+          <div class="irow"><label>Tgl Estimasi</label><input type="date" id="order-tgl-est"></div>
+          <div class="irow"><label>Catatan</label><textarea id="order-catatan" rows="2" placeholder="Opsional..." style="flex:1;resize:vertical"></textarea></div>
+          <div class="irow"><label>Bayar</label>
+            <select id="order-bayar" style="flex:1">
+              <option value="belum">Belum Lunas</option>
+              <option value="lunas">Lunas</option>
+            </select>
+          </div>
+          <div class="irow" id="row-kas" style="display:none"><label>Kas</label>
+            <select id="order-kas" style="flex:1"><option value="">Pilih kas...</option></select>
+          </div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn primary" style="flex:1" onclick="simpanOrder()">💾 Simpan Order</button>
+            <button class="btn secondary" onclick="resetOrder()">Reset</button>
+          </div>
+        </div>
+
+        <!-- Order Hari Ini -->
+        <div class="card">
+          <div class="card-title"><span>📋 Order Hari Ini</span></div>
+          <div id="list-order-hari">
+            <div class="empty"><div class="ei">👕</div><p>Belum ada order hari ini</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRACKING -->
+    <div class="page" id="page-tracking">
+      <div class="card">
+        <div class="card-title"><span>📋 Tracking Order Aktif</span></div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-tracking" placeholder="🔍 Cari nama, no. order..." oninput="filterTracking()">
+          <select class="filter-sel" id="filter-status-tracking" onchange="filterTracking()">
+            <option value="">Semua Status</option>
+            <option value="masuk">Masuk</option>
+            <option value="proses">Proses</option>
+            <option value="selesai">Selesai</option>
+          </select>
+        </div>
+        <div id="list-tracking"></div>
+      </div>
+    </div>
+
+    <!-- RIWAYAT -->
+    <div class="page" id="page-riwayat">
+      <div class="card">
+        <div class="card-title"><span>📜 Riwayat Order</span>
+          <div class="btn-row">
+            <button class="btn gold sm" onclick="exportExcel()">⬇️ Excel</button>
+          </div>
+        </div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-riwayat" placeholder="🔍 Cari nama, no. order..." oninput="filterRiwayat()">
+          <input type="date" class="filter-sel" id="filter-dari">
+          <input type="date" class="filter-sel" id="filter-sampai">
+          <select class="filter-sel" id="filter-status-riwayat" onchange="filterRiwayat()">
+            <option value="">Semua</option>
+            <option value="diambil">Diambil</option>
+            <option value="dibatalkan">Dibatalkan</option>
+          </select>
+          <button class="btn primary sm" onclick="filterRiwayat()">🔍 Cari</button>
+        </div>
+        <div id="list-riwayat">
+          <div class="empty"><div class="ei">📜</div><p>Memuat riwayat...</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PEMBAYARAN -->
+    <div class="page" id="page-pembayaran">
+      <div class="card">
+        <div class="card-title"><span>💰 Pembayaran Tertunda</span></div>
+        <div class="info-box gold">Order yang sudah selesai tapi belum dibayar.</div>
+        <div id="list-pembayaran">
+          <div class="empty"><div class="ei">💰</div><p>Memuat...</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LAPORAN -->
+    <div class="page" id="page-laporan">
+      <div class="card">
+        <div class="card-title"><span>📊 Laporan Laundry</span></div>
+        <div class="irow">
+          <label>Bulan</label>
+          <input type="month" id="lap-bulan" style="flex:1" onchange="loadLaporan()">
+        </div>
+        <div class="stat-grid" id="lap-stats"></div>
+        <div class="tbl-wrap">
+          <table class="tbl" style="font-size:12px">
+            <thead><tr><th>No. Order</th><th>Pelanggan</th><th>Layanan</th><th>Berat</th><th style="text-align:right">Total</th><th>Status</th><th>Bayar</th></tr></thead>
+            <tbody id="tbody-laporan"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- main-wrap -->
+</div><!-- app -->
+
+<!-- MODAL DETAIL ORDER -->
+<div class="overlay" id="modal-order">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="modal-title">
+      <h3 id="modal-order-title">Detail Order</h3>
+      <button class="btn-close" onclick="closeModal('modal-order')">✕</button>
+    </div>
+    <div id="modal-order-content"></div>
+  </div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase; const sb=createClient(SURL,SKEY);
+
+let CU=null, aOrders=[], aAnggota=[], aJamaah=[], aKas=[], aKebijakan=null;
+let itemTambahan=[]; // [{nama,harga}]
+
+// ===== UTILS =====
+const rp=n=>'Rp '+Math.round(parseFloat(n)||0).toLocaleString('id-ID');
+const fmtTgl=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+const today=()=>new Date().toISOString().slice(0,10);
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show'+(err?' err':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);
+}
+
+const STATUS_STEPS=['masuk','proses','selesai','diambil'];
+const STATUS_LABEL={masuk:'Masuk',proses:'Proses',selesai:'Selesai',diambil:'Diambil',dibatalkan:'Dibatalkan'};
+
+function progressBar(status){
+  if(status==='dibatalkan') return '<div style="color:var(--red);font-size:11px;font-weight:700">❌ Dibatalkan</div>';
+  return'<div class="progress-steps">'+STATUS_STEPS.map((s,i)=>{
+    const done=STATUS_STEPS.indexOf(status)>i;
+    const current=s===status;
+    return`<div class="step ${done?'done':current?'current':''}">${STATUS_LABEL[s]}</div>${i<STATUS_STEPS.length-1?'<span class="step-arrow">›</span>':''}`;
+  }).join('')+'</div>';
+}
+
+// ===== AUTH =====
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  const btn=document.getElementById('btn-login');
+  btn.innerHTML='<div class="spinner"></div>';btn.disabled=true;
+  const {data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.innerHTML='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
+  CU=data;
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username;
+  document.getElementById('sb-user').textContent='👤 '+CU.username;
+  await loadAll();
+  renderDashboard();
+  initForms();
+}
+function keluar(){CU=null;location.reload();}
+
+// ===== LOAD DATA =====
+async function loadAll(){
+  const [{data:o},{data:a},{data:j},{data:k},{data:kb}]=await Promise.all([
+    sb.from('laundry_order').select('*').order('created_at',{ascending:false}),
+    sb.from('ubnb_anggota').select('id,nama,no_anggota,kelompok,status').eq('status','Aktif').order('nama'),
+    sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok').order('nama').limit(200),
+    sb.from('kas').select('id,nama,saldo'),
+    sb.from('ubnb_kebijakan_shu').select('*').eq('status','aktif').single()
+  ]);
+  aOrders=o||[]; aAnggota=a||[]; aJamaah=j||[]; aKas=k||[]; aKebijakan=kb||null;
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const aktif=aOrders.filter(o=>['masuk','proses','selesai'].includes(o.status)).length;
+  const selesaiHariIni=aOrders.filter(o=>o.status==='selesai'&&o.tgl_selesai===today()).length;
+  const bulanIni=new Date().toISOString().slice(0,7);
+  const pendapatan=aOrders.filter(o=>o.status_bayar==='lunas'&&(o.tgl_masuk||''). startsWith(bulanIni)).reduce((s,o)=>s+parseFloat(o.total_harga||0),0);
+  const piutang=aOrders.filter(o=>o.status_bayar==='belum'&&o.status!=='dibatalkan').reduce((s,o)=>s+parseFloat(o.total_harga||0),0);
+
+  document.getElementById('ds-aktif').textContent=aktif;
+  document.getElementById('ds-selesai').textContent=selesaiHariIni;
+  document.getElementById('ds-pendapatan').textContent=rp(pendapatan);
+  document.getElementById('ds-piutang').textContent=rp(piutang);
+
+  // Kanban
+  const cols={masuk:[],proses:[],selesai:[],diambil:[]};
+  aOrders.filter(o=>o.status!=='dibatalkan').forEach(o=>{
+    if(cols[o.status]) cols[o.status].push(o);
+  });
+  const colColors={masuk:'#0369a1',proses:'var(--purple)',selesai:'var(--hijau)',diambil:'#374151'};
+  document.getElementById('kanban-board').innerHTML=Object.entries(cols).map(([status,orders])=>`
+    <div class="kanban-col">
+      <div class="kanban-header" style="color:${colColors[status]}">
+        ${STATUS_LABEL[status]}
+        <span class="kanban-count" style="background:${colColors[status]}">${orders.length}</span>
+      </div>
+      ${orders.slice(0,5).map(o=>`
+        <div class="kanban-item" onclick="bukaDetail('${o.id}')">
+          <div class="kanban-no">${o.no_order}</div>
+          <div class="kanban-nama">${o.nama_display}</div>
+          <div class="kanban-sub">${o.jenis_layanan||'—'} · ${o.berat_kg||0} kg</div>
+          <div class="kanban-sub" style="margin-top:3px;font-weight:700;color:var(--purple)">${rp(o.total_harga)}</div>
+        </div>`).join('')}
+      ${orders.length>5?`<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:4px">+${orders.length-5} lainnya</div>`:''}
+    </div>`).join('');
+}
+
+// ===== DROPDOWN ANGGOTA =====
+let _acTimer=null;
+async function acSearch(q){
+  clearTimeout(_acTimer);
+  const dd=document.getElementById('order-dd');
+  if(!q){dd.classList.remove('show');return;}
+  _acTimer=setTimeout(async()=>{
+    const ql=q.toLowerCase();
+    const matchAnggota=aAnggota.filter(a=>(a.nama||''). toLowerCase().includes(ql)||(a.no_anggota||''). toLowerCase().includes(ql)).slice(0,5);
+    const matchJamaah=aJamaah.filter(j=>(j.nama||''). toLowerCase().includes(ql)).slice(0,5);
+    let html='';
+    if(matchAnggota.length){
+      html+='<div class="ac-divider">⭐ Anggota Saham — masuk SHU</div>';
+      html+=matchAnggota.map(a=>`
+        <div class="ac-item" onclick="pilihPelanggan('anggota',${a.id},null,'${a.nama.replace(/'/g,"&apos;")}','${a.no_anggota}')">
+          <span>⭐</span>
+          <div><div class="ac-name">${a.nama} <span class="ac-tag anggota">${a.kelompok||''}</span></div>
+          <div class="ac-sub">${a.no_anggota}</div></div>
+        </div>`).join('');
+    }
+    if(matchJamaah.length){
+      html+='<div class="ac-divider">👤 Jamaah Desa — tidak masuk SHU</div>';
+      html+=matchJamaah.map(j=>`
+        <div class="ac-item" onclick="pilihPelanggan('jamaah',null,'${j.did}','${j.nama.replace(/'/g,"&apos;")}','${j.did}')">
+          <span>👤</span>
+          <div><div class="ac-name">${j.nama} <span class="ac-tag jamaah">Jamaah</span></div>
+          <div class="ac-sub">KK: ${j.nama_kk||'—'}</div></div>
+        </div>`).join('');
+    }
+    html+=`<div class="ac-divider">✏️ Nama Baru — tidak masuk SHU</div>
+      <div class="ac-item" onclick="pilihPelanggan('custom',null,null,'${q.replace(/'/g,"&apos;")}',null)">
+        <span>✏️</span>
+        <div><div class="ac-name">Gunakan "<strong>${q}</strong>" <span class="ac-tag custom">Baru</span></div>
+        <div class="ac-sub">Tidak tercatat sebagai anggota</div></div>
+      </div>`;
+    dd.innerHTML=html;
+    dd.classList.add('show');
+  },200);
+}
+
+function pilihPelanggan(sumber,anggotaId,jamaahDid,nama,kode){
+  document.getElementById('order-dd').classList.remove('show');
+  document.getElementById('order-cari').value=nama;
+  document.getElementById('order-anggota-id').value=anggotaId||''
+  document.getElementById('order-jamaah-did').value=jamaahDid||''
+  document.getElementById('order-sumber').value=sumber;
+  const info=document.getElementById('order-pelanggan-info');
+  const tagEl=document.getElementById('order-pelanggan-tag');
+  const namaEl=document.getElementById('order-pelanggan-nama');
+  info.style.display='block';
+  namaEl.textContent=nama;
+  if(sumber==='anggota') tagEl.innerHTML='<span class="anggota-tag">⭐ Anggota</span>';
+  else if(sumber==='jamaah') tagEl.innerHTML='<span class="jamaah-tag">👤 Jamaah</span>';
+  else tagEl.innerHTML='<span class="custom-tag">✏️ Nama Baru</span>';
+}
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.ac-wrap')){
+    document.querySelectorAll('.ac-dd').forEach(d=>d.classList.remove('show'));
+  }
+});
+
+// ===== HITUNG HARGA =====
+let _items=[];
+function tambahItem(){
+  const idx=_items.length;
+  _items.push({nama:'',harga:0});
+  renderItems();
+}
+function hapusItem(idx){
+  _items.splice(idx,1);
+  renderItems();
+  hitungHarga();
+}
+function renderItems(){
+  document.getElementById('item-tambahan-list').innerHTML=_items.map((it,i)=>`
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="text" placeholder="Nama item" value="${it.nama}" oninput="_items[${i}].nama=this.value;hitungHarga()"
+        style="flex:2;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px">
+      <input type="number" placeholder="Harga" value="${it.harga||''}" oninput="_items[${i}].harga=parseFloat(this.value)||0;hitungHarga()"
+        style="flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px">
+      <button onclick="hapusItem(${i})" style="background:var(--red-light);color:var(--red);border:none;border-radius:var(--radius-xs);padding:0 10px;cursor:pointer;font-size:14px">×</button>
+    </div>`).join('');
+}
+
+function hitungHarga(){
+  const berat=parseFloat(document.getElementById('order-berat').value)||0;
+  const hargaKg=parseFloat(document.getElementById('order-harga-kg').value)||0;
+  const subLaundry=berat*hargaKg;
+  const subItem=_items.reduce((s,it)=>s+parseFloat(it.harga||0),0);
+  const total=subLaundry+subItem;
+  const prev=document.getElementById('order-preview');
+  if(berat>0||subItem>0){
+    prev.style.display='block';
+    document.getElementById('prev-berat').textContent=berat;
+    document.getElementById('prev-harga').textContent=rp(hargaKg);
+    document.getElementById('prev-subtotal').textContent=rp(subLaundry);
+    document.getElementById('prev-items').innerHTML=_items.filter(it=>it.harga>0).map(it=>`
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+        <span>${it.nama||'Item tambahan'}</span><span>${rp(it.harga)}</span>
+      </div>`).join('');
+    document.getElementById('prev-total').textContent=rp(total);
+  } else prev.style.display='none';
+}
+
+// ===== SIMPAN ORDER =====
+async function simpanOrder(){
+  const nama=document.getElementById('order-cari').value.trim();
+  const anggotaId=parseInt(document.getElementById('order-anggota-id').value)||null;
+  const jamaahDid=document.getElementById('order-jamaah-did').value||null;
+  const sumber=document.getElementById('order-sumber').value||'custom';
+  const tglMasuk=document.getElementById('order-tgl-masuk').value;
+  const layanan=document.getElementById('order-layanan').value;
+  const berat=parseFloat(document.getElementById('order-berat').value)||0;
+  const hargaKg=parseFloat(document.getElementById('order-harga-kg').value)||0;
+  const tglEst=document.getElementById('order-tgl-est').value||null;
+  const catatan=document.getElementById('order-catatan').value.trim()||null;
+  const statusBayar=document.getElementById('order-bayar').value;
+  const kasId=parseInt(document.getElementById('order-kas').value)||null;
+  const hp=document.getElementById('order-hp').value.trim()||null;
+
+  if(!nama){toast('Isi nama pelanggan dulu',true);return;}
+  if(!tglMasuk){toast('Tanggal masuk wajib diisi',true);return;}
+  if(berat<=0){toast('Berat harus lebih dari 0',true);return;}
+
+  const subLaundry=berat*hargaKg;
+  const subItem=_items.reduce((s,it)=>s+parseFloat(it.harga||0),0);
+  const totalHarga=subLaundry+subItem;
+
+  // Generate no order
+  const noOrder='LND-'+tglMasuk.replace(/-/g,'')+'-'+String(aOrders.filter(o=>o.tgl_masuk===tglMasuk).length+1).padStart(3,'0');
+
+  const {data,error}=await sb.from('laundry_order').insert([{
+    no_order:noOrder,
+    anggota_id:anggotaId,
+    jamaah_did:jamaahDid,
+    nama_display:nama,
+    no_hp:hp,
+    jenis_layanan:layanan,
+    berat_kg:berat,
+    harga_per_kg:hargaKg,
+    item_tambahan:_items.filter(it=>it.nama).length?JSON.stringify(_items.filter(it=>it.nama)):[],
+    total_harga:totalHarga,
+    status:'masuk',
+    tgl_masuk:tglMasuk,
+    tgl_estimasi:tglEst,
+    status_bayar:statusBayar,
+    tgl_bayar:statusBayar==='lunas'?tglMasuk:null,
+    kas_id:kasId,
+    catatan,
+    operator:CU.username
+  }]).select('id').single();
+
+  if(error){toast('Gagal: '+error.message,true);return;}
+
+  // Kas mutasi jika lunas
+  if(statusBayar==='lunas'&&kasId){
+    await sb.from('kas_mutasi').insert([{
+      kas_id:kasId,tipe:'masuk',kategori:'masuk',
+      jumlah:totalHarga,tanggal:tglMasuk,
+      keterangan:'Laundry: '+nama+' ('+noOrder+')',
+      operator:CU.username
+    }]);
+  }
+
+  // Log SHU jika anggota & kebijakan aktif
+  if(anggotaId&&aKebijakan&&tglMasuk>=aKebijakan.tgl_mulai_berlaku){
+    await sb.from('ubnb_shu_trx_log').insert([{
+      kebijakan_id:aKebijakan.id, anggota_id:anggotaId,
+      periode:aKebijakan.periode, jenis_trx:'laundry',
+      ref_tabel:'laundry_order', ref_id:data.id,
+      tanggal:tglMasuk, nilai:totalHarga
+    }]);
+  }
+
+  toast('✅ Order '+noOrder+' berhasil disimpan!');
+  resetOrder();
+  await loadAll();
+  renderDashboard();
+  loadOrderHariIni();
+}
+
+// ===== RESET ORDER =====
+function resetOrder(){
+  ['order-cari','order-hp','order-catatan'].forEach(id=>document.getElementById(id).value='');
+  ['order-anggota-id','order-jamaah-did','order-sumber'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('order-berat').value='';
+  document.getElementById('order-harga-kg').value='';
+  document.getElementById('order-tgl-masuk').value=today();
+  document.getElementById('order-tgl-est').value='';
+  document.getElementById('order-pelanggan-info').style.display='none';
+  document.getElementById('order-preview').style.display='none';
+  _items=[];
+  renderItems();
+}
+
+// ===== ORDER HARI INI =====
+async function loadOrderHariIni(){
+  const tgl=today();
+  const orders=aOrders.filter(o=>o.tgl_masuk===tgl);
+  const el=document.getElementById('list-order-hari');
+  if(!orders.length){el.innerHTML='<div class="empty"><div class="ei">👕</div><p>Belum ada order hari ini</p></div>';return;}
+  el.innerHTML=orders.map(o=>`
+    <div class="order-card" onclick="bukaDetail('${o.id}')">
+      <div class="order-header">
+        <div>
+          <div class="order-no">${o.no_order}</div>
+          <div class="order-nama">${o.nama_display}</div>
+          <div class="order-sub">${o.jenis_layanan||'—'} · ${o.berat_kg||0} kg</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--purple)">${rp(o.total_harga)}</div>
+          <span class="badge s-${o.status}">${STATUS_LABEL[o.status]}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ===== TRACKING =====
+function filterTracking(){
+  const q=(document.getElementById('search-tracking').value||''). toLowerCase();
+  const fs=document.getElementById('filter-status-tracking').value;
+  let data=aOrders.filter(o=>{
+    if(!['masuk','proses','selesai'].includes(o.status)&&!fs) return false;
+    if(fs&&o.status!==fs) return false;
+    if(q&&!(o.nama_display||''). toLowerCase().includes(q)&&!(o.no_order||''). toLowerCase().includes(q)) return false;
+    return true;
+  });
+  renderTracking(data);
+}
+
+function renderTracking(data){
+  const el=document.getElementById('list-tracking');
+  if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">📋</div><p>Tidak ada order aktif</p></div>';return;}
+  el.innerHTML=data.map(o=>`
+    <div class="order-card" onclick="bukaDetail('${o.id}')">
+      <div class="order-header">
+        <div>
+          <div class="order-no">${o.no_order}</div>
+          <div class="order-nama">${o.nama_display}
+            ${o.anggota_id?'<span class="anggota-tag">⭐</span>':o.jamaah_did?'<span class="jamaah-tag">👤</span>':''}
+          </div>
+          <div class="order-sub">${o.jenis_layanan||'—'} · ${o.berat_kg||0} kg · Masuk: ${fmtTgl(o.tgl_masuk)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--purple)">${rp(o.total_harga)}</div>
+          <span class="badge bayar-${o.status_bayar}">${o.status_bayar==='lunas'?'Lunas':'Belum'}</span>
+        </div>
+      </div>
+      ${progressBar(o.status)}
+    </div>`).join('');
+}
+
+// ===== DETAIL ORDER =====
+async function bukaDetail(id){
+  const o=aOrders.find(x=>x.id==id);if(!o)return;
+  document.getElementById('modal-order-title').textContent=o.no_order;
+
+  const items=typeof o.item_tambahan==='string'?JSON.parse(o.item_tambahan||'[]'):o.item_tambahan||[];
+  const nextStatus={masuk:'proses',proses:'selesai',selesai:'diambil'};
+  const next=nextStatus[o.status];
+
+  document.getElementById('modal-order-content').innerHTML=`
+    <div style="background:linear-gradient(135deg,#2e1065,var(--purple));border-radius:var(--radius-sm);padding:14px;color:white;margin-bottom:14px">
+      <div style="font-size:18px;font-weight:800">${o.nama_display}</div>
+      <div style="font-size:11px;opacity:.75;margin-top:3px">
+        ${o.no_hp||'—'} · ${o.jenis_layanan||'—'} · ${o.berat_kg||0} kg
+      </div>
+      <div style="font-size:22px;font-weight:900;margin-top:10px;color:#c4b5fd">${rp(o.total_harga)}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700">${STATUS_LABEL[o.status]?.toUpperCase()}</span>
+        <span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700">${o.status_bayar==='lunas'?'✅ LUNAS':'⏳ BELUM LUNAS'}</span>
+        ${o.anggota_id?'<span style="background:rgba(255,255,255,.2);padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700">⭐ Anggota SHU</span>':''}
+      </div>
+    </div>
+
+    ${progressBar(o.status)}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;font-size:12px">
+      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">TGL MASUK</div>
+        <div style="font-weight:600">${fmtTgl(o.tgl_masuk)}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">ESTIMASI SELESAI</div>
+        <div style="font-weight:600">${fmtTgl(o.tgl_estimasi)||'—'}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">TGL SELESAI</div>
+        <div style="font-weight:600">${fmtTgl(o.tgl_selesai)||'—'}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">TGL DIAMBIL</div>
+        <div style="font-weight:600">${fmtTgl(o.tgl_diambil)||'—'}</div>
+      </div>
+    </div>
+
+    ${items.length?`
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px">RINCIAN HARGA</div>
+        <div style="font-size:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span>Laundry ${o.berat_kg} kg × ${rp(o.harga_per_kg)}</span>
+            <span>${rp((o.berat_kg||0)*(o.harga_per_kg||0))}</span>
+          </div>
+          ${items.map(it=>`<div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span>${it.nama||'Item'}</span><span>${rp(it.harga)}</span>
+          </div>`).join('')}
+          <div style="display:flex;justify-content:space-between;font-weight:800;padding-top:8px;border-top:1px solid var(--border-light)">
+            <span>Total</span><span style="color:var(--purple)">${rp(o.total_harga)}</span>
+          </div>
+        </div>
+      </div>`:''}
+
+    ${o.catatan?`<div style="background:var(--gold-light);border-radius:var(--radius-xs);padding:8px 12px;font-size:12px;margin-bottom:12px">📝 ${o.catatan}</div>`:''}
+
+    <div class="btn-row" style="flex-wrap:wrap">
+      ${next?`<button class="btn primary sm" onclick="updateStatus('${o.id}','${next}')">→ ${STATUS_LABEL[next]}</button>`:''}
+      ${o.status_bayar==='belum'&&o.status!=='dibatalkan'?`<button class="btn hijau sm" onclick="tandaiLunas('${o.id}')">✅ Tandai Lunas</button>`:''}
+      ${o.status!=='diambil'&&o.status!=='dibatalkan'?`<button class="btn danger sm" onclick="batalOrder('${o.id}')">❌ Batalkan</button>`:''}
+      <button class="btn secondary sm" onclick="cetakNota('${o.id}')">🖨️ Nota</button>
+    </div>`;
+
+  openModal('modal-order');
+}
+
+// ===== UPDATE STATUS =====
+async function updateStatus(id,newStatus){
+  const updateData={status:newStatus,updated_at:new Date().toISOString()};
+  if(newStatus==='selesai') updateData.tgl_selesai=today();
+  if(newStatus==='diambil') updateData.tgl_diambil=today();
+  await sb.from('laundry_order').update(updateData).eq('id',id);
+  toast('✅ Status diperbarui: '+STATUS_LABEL[newStatus]);
+  closeModal('modal-order');
+  await loadAll(); renderDashboard(); filterTracking();
+}
+
+async function tandaiLunas(id){
+  const o=aOrders.find(x=>x.id==id);if(!o)return;
+  // Pilih kas
+  const kasOpts=aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+  const kasHtml=aKas.length?`<select id="lunas-kas" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;margin-top:8px;font-family:inherit">${kasOpts}</select>`:'';
+  if(!confirm('Tandai order ini sebagai LUNAS?'+( aKas.length?' Pilih kas:':''))) return;
+
+  const kasId=document.getElementById('lunas-kas')?parseInt(document.getElementById('lunas-kas').value):null;
+  await sb.from('laundry_order').update({status_bayar:'lunas',tgl_bayar:today()}).eq('id',id);
+
+  if(kasId){
+    await sb.from('kas_mutasi').insert([{
+      kas_id:kasId,tipe:'masuk',kategori:'masuk',
+      jumlah:o.total_harga,tanggal:today(),
+      keterangan:'Laundry (lunas): '+o.nama_display+' ('+o.no_order+')',
+      operator:CU.username
+    }]);
+  }
+  toast('✅ Order ditandai lunas!');
+  closeModal('modal-order');
+  await loadAll(); renderDashboard();
+}
+
+async function batalOrder(id){
+  if(!confirm('Batalkan order ini?'))return;
+  await sb.from('laundry_order').update({status:'dibatalkan'}).eq('id',id);
+  toast('Order dibatalkan');
+  closeModal('modal-order');
+  await loadAll(); renderDashboard(); filterTracking();
+}
+
+// ===== NOTA CETAK =====
+function cetakNota(id){
+  const o=aOrders.find(x=>x.id==id);if(!o)return;
+  const items=typeof o.item_tambahan==='string'?JSON.parse(o.item_tambahan||'[]'):o.item_tambahan||[];
+  const w=window.open('','_blank','width=400,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><style>
+    body{font-family:monospace;font-size:12px;padding:10mm;max-width:80mm;}
+    .center{text-align:center;} .bold{font-weight:bold;} .line{border-top:1px dashed #000;margin:8px 0;}
+    .row{display:flex;justify-content:space-between;}
+  </style></head><body>
+    <div class="center bold" style="font-size:14px">LAUNDRY UBNB PERWIRA</div>
+    <div class="center">Desa Perwira, Bekasi Utara</div>
+    <div class="line"></div>
+    <div class="row"><span>No. Order:</span><span class="bold">${o.no_order}</span></div>
+    <div class="row"><span>Tgl Masuk:</span><span>${fmtTgl(o.tgl_masuk)}</span></div>
+    <div class="row"><span>Est. Selesai:</span><span>${fmtTgl(o.tgl_estimasi)||'—'}</span></div>
+    <div class="line"></div>
+    <div class="bold">${o.nama_display}</div>
+    <div>${o.no_hp||'—'}</div>
+    <div class="line"></div>
+    <div class="row"><span>${o.jenis_layanan} (${o.berat_kg} kg × ${rp(o.harga_per_kg)})</span><span>${rp((o.berat_kg||0)*(o.harga_per_kg||0))}</span></div>
+    ${items.map(it=>`<div class="row"><span>${it.nama}</span><span>${rp(it.harga)}</span></div>`).join('')}
+    <div class="line"></div>
+    <div class="row bold"><span>TOTAL</span><span>${rp(o.total_harga)}</span></div>
+    <div class="row"><span>Status Bayar:</span><span class="bold">${o.status_bayar==='lunas'?'LUNAS':'BELUM LUNAS'}</span></div>
+    <div class="line"></div>
+    <div class="center" style="font-size:11px">Terima kasih atas kepercayaan Anda!</div>
+  </body></html>`);
+  w.document.close();
+  w.print();
+}
+
+// ===== RIWAYAT =====
+async function filterRiwayat(){
+  const q=(document.getElementById('search-riwayat').value||''). toLowerCase();
+  const dari=document.getElementById('filter-dari').value;
+  const sampai=document.getElementById('filter-sampai').value;
+  const fs=document.getElementById('filter-status-riwayat').value;
+
+  let {data}=await sb.from('laundry_order')
+    .select('*')
+    .in('status',['diambil','dibatalkan'])
+    .order('tgl_masuk',{ascending:false}).limit(100);
+  data=data||[];
+
+  if(q) data=data.filter(o=>(o.nama_display||''). toLowerCase().includes(q)||(o.no_order||''). toLowerCase().includes(q));
+  if(dari) data=data.filter(o=>o.tgl_masuk>=dari);
+  if(sampai) data=data.filter(o=>o.tgl_masuk<=sampai);
+  if(fs) data=data.filter(o=>o.status===fs);
+
+  const el=document.getElementById('list-riwayat');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">📜</div><p>Tidak ada riwayat ditemukan</p></div>';return;}
+  el.innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No. Order</th><th>Pelanggan</th><th>Layanan</th><th>Masuk</th><th style="text-align:right">Total</th><th>Status</th><th>Bayar</th></tr></thead><tbody>'+
+    data.map(o=>`<tr>
+      <td style="font-family:monospace;font-size:10px">${o.no_order}</td>
+      <td><strong>${o.nama_display}</strong>${o.anggota_id?'<br><span class="anggota-tag">⭐ Anggota</span>':''}  </td>
+      <td>${o.jenis_layanan||'—'}<br><span style="font-size:10px;color:var(--text-muted)">${o.berat_kg||0} kg</span></td>
+      <td style="font-size:11px">${fmtTgl(o.tgl_masuk)}</td>
+      <td style="text-align:right;font-weight:700">${rp(o.total_harga)}</td>
+      <td><span class="badge s-${o.status}">${STATUS_LABEL[o.status]}</span></td>
+      <td><span class="badge bayar-${o.status_bayar}">${o.status_bayar==='lunas'?'Lunas':'Belum'}</span></td>
+    </tr>`).join('')+'</tbody></table></div>';
+}
+
+// ===== PEMBAYARAN =====
+function renderPembayaran(){
+  const data=aOrders.filter(o=>o.status_bayar==='belum'&&o.status!=='dibatalkan');
+  const el=document.getElementById('list-pembayaran');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">✅</div><p>Semua order sudah lunas!</p></div>';return;}
+  const total=data.reduce((s,o)=>s+parseFloat(o.total_harga||0),0);
+  el.innerHTML=`<div style="background:var(--gold-light);border-radius:var(--radius-xs);padding:10px 12px;margin-bottom:12px;font-size:12px">
+    Total piutang laundry: <strong style="color:var(--gold-dark)">${rp(total)}</strong> dari ${data.length} order
+  </div>`+
+  data.map(o=>`
+    <div class="order-card" onclick="bukaDetail('${o.id}')">
+      <div class="order-header">
+        <div>
+          <div class="order-no">${o.no_order}</div>
+          <div class="order-nama">${o.nama_display}</div>
+          <div class="order-sub">${fmtTgl(o.tgl_masuk)} · <span class="badge s-${o.status}">${STATUS_LABEL[o.status]}</span></div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--purple)">${rp(o.total_harga)}</div>
+          <button class="btn hijau sm" style="margin-top:4px" onclick="event.stopPropagation();tandaiLunas('${o.id}')">✅ Lunas</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ===== LAPORAN =====
+async function loadLaporan(){
+  const bulan=document.getElementById('lap-bulan').value;
+  if(!bulan)return;
+  const data=aOrders.filter(o=>o.tgl_masuk&&o.tgl_masuk.startsWith(bulan)&&o.status!=='dibatalkan');
+  const lunas=data.filter(o=>o.status_bayar==='lunas');
+  const totalPendapatan=lunas.reduce((s,o)=>s+parseFloat(o.total_harga||0),0);
+  const totalOrder=data.length;
+
+  document.getElementById('lap-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-lbl">Total Order</div><div class="stat-val purple">${totalOrder}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Sudah Lunas</div><div class="stat-val hijau">${lunas.length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Pendapatan</div><div class="stat-val gold">${rp(totalPendapatan)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Total Berat</div><div class="stat-val blue">${data.reduce((s,o)=>s+parseFloat(o.berat_kg||0),0).toFixed(1)} kg</div></div>`;
+
+  document.getElementById('tbody-laporan').innerHTML=data.map(o=>`<tr>
+    <td style="font-family:monospace;font-size:10px">${o.no_order}</td>
+    <td>${o.nama_display}${o.anggota_id?'<br><span class="anggota-tag">⭐</span>':''}  </td>
+    <td>${o.jenis_layanan||'—'}</td>
+    <td>${o.berat_kg||0} kg</td>
+    <td style="text-align:right;font-weight:700">${rp(o.total_harga)}</td>
+    <td><span class="badge s-${o.status}">${STATUS_LABEL[o.status]}</span></td>
+    <td><span class="badge bayar-${o.status_bayar}">${o.status_bayar==='lunas'?'Lunas':'Belum'}</span></td>
+  </tr>`).join('');
+}
+
+function exportExcel(){
+  const XLSX=window.XLSX;
+  const rows=aOrders.filter(o=>o.status!=='dibatalkan').map(o=>({
+    'No. Order':o.no_order,'Pelanggan':o.nama_display,
+    'Anggota':o.anggota_id?'Ya':'Tidak',
+    'Layanan':o.jenis_layanan,'Berat (kg)':o.berat_kg,
+    'Total':parseFloat(o.total_harga||0),
+    'Status':STATUS_LABEL[o.status],'Bayar':o.status_bayar,
+    'Tgl Masuk':o.tgl_masuk,'Tgl Selesai':o.tgl_selesai||'—'
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Laundry');
+  XLSX.writeFile(wb,'UBNB_Laundry_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+// ===== INIT =====
+function initForms(){
+  document.getElementById('order-tgl-masuk').value=today();
+  document.getElementById('lap-bulan').value=new Date().toISOString().slice(0,7);
+  // Harga default per layanan
+  document.getElementById('order-layanan').addEventListener('change',function(){
+    const defaults={reguler:5000,express:8000,dry_clean:15000};
+    document.getElementById('order-harga-kg').value=defaults[this.value]||5000;
+    hitungHarga();
+  });
+  document.getElementById('order-harga-kg').value=5000;
+  // Kas dropdown
+  const kasOpts='<option value="">Pilih kas...</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+  document.getElementById('order-kas').innerHTML=kasOpts;
+  // Show/hide kas
+  document.getElementById('order-bayar').addEventListener('change',function(){
+    document.getElementById('row-kas').style.display=this.value==='lunas'?'flex':'none';
+  });
+}
+
+// ===== UI HELPERS =====
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id)?.classList.add('active');
+  if(el) el.classList.add('active');
+  const titles={
+    dashboard:'Dashboard Laundry','order-baru':'Order Baru',
+    tracking:'Tracking Order',riwayat:'Riwayat Order',
+    pembayaran:'Pembayaran',laporan:'Laporan'
+  };
+  document.getElementById('topbar-title').textContent=titles[id]||id;
+  if(id==='tracking') filterTracking();
+  if(id==='riwayat') filterRiwayat();
+  if(id==='pembayaran') renderPembayaran();
+  if(id==='laporan') loadLaporan();
+  if(id==='order-baru') loadOrderHariIni();
+  closeSidebar();
+}
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sb-overlay').classList.toggle('show');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('show');
+}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+</script>
+</body>
+</html>

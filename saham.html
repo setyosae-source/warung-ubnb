@@ -446,7 +446,31 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       </div>
 
       <!-- SHU Section -->
-      <div class="card" id="shu-section" style="display:none">
+      <!-- ===== KEBIJAKAN SHU CARD ===== -->
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span>⚖️ Kebijakan SHU</span>
+          <button class="btn sm gold" onclick="document.getElementById('form-kebijakan').style.display=document.getElementById('form-kebijakan').style.display==='none'?'block':'none'">➕ Buat/Ubah</button>
+        </div>
+        <div id="kebijakan-aktif-info">
+          <div style="padding:10px;font-size:12px;color:var(--text-muted);text-align:center">Memuat kebijakan...</div>
+        </div>
+        <div id="form-kebijakan" style="display:none;margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px">
+          <input type="hidden" id="keb-mpps-id">
+          <div class="irow"><label>Periode</label><input type="text" id="keb-periode" placeholder="2027" maxlength="4"></div>
+          <div class="irow"><label>Tgl Mulai Berlaku ⭐</label><input type="date" id="keb-tgl-mulai"></div>
+          <div class="irow"><label>Tgl Berakhir</label><input type="date" id="keb-tgl-akhir"></div>
+          <div class="irow"><label>Pool Saham (%)</label><input type="number" id="keb-rasio-saham" value="60" min="0" max="100" step="5" oninput="sinkronRasio('saham')"></div>
+          <div class="irow"><label>Pool Transaksi (%)</label><input type="number" id="keb-rasio-trx" value="40" min="0" max="100" step="5" oninput="sinkronRasio('trx')"></div>
+          <div class="irow"><label>Catatan</label><input type="text" id="keb-catatan" placeholder="Keputusan MPPS..."></div>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn secondary" style="flex:1" onclick="document.getElementById('form-kebijakan').style.display='none'">Batal</button>
+            <button class="btn gold" style="flex:2" onclick="simpanKebijakanSHU()">💾 Simpan Kebijakan</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="shu-section"  style="display:none">
         <div class="card-title" style="justify-content:space-between">
           <span>💰 Hitung SHU — Periode <strong id="shu-periode-label">-</strong></span>
           <span style="font-size:11px;color:var(--text-muted)" id="shu-info-label"></span>
@@ -577,6 +601,7 @@ const sb=supabase.createClient(SURL,SKEY);
 
 // ===== STATE =====
 let CU=null, aSaham=[], aTrx=[], aBH=[], aBHDetail=[], aMPPS=[], aKU=[], aLapSHU=[];
+let aKebijakan=[], aRekapTrx=[];
 let HARGA_SAHAM=10200;
 let activeBHId=null;
 let activeTahun=null; // track tahun yang sedang diklik
@@ -679,7 +704,7 @@ window.addEventListener('load',()=>{const s=localStorage.getItem('saham_user');i
 
 // ===== LOAD DATA =====
 async function loadAll(){
-  const[{data:s},{data:t},{data:b},{data:bd},{data:m},{data:ku},{data:ls}]=await Promise.all([
+  const[{data:s},{data:t},{data:b},{data:bd},{data:m},{data:ku},{data:ls},{data:kb},{data:rt}]=await Promise.all([
     sb.from('ubnb_saham').select('*').order('jumlah_lembar',{ascending:false}),
     sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}),
     sb.from('ubnb_saham_bagi_hasil').select('*').order('periode',{ascending:false}),
@@ -687,9 +712,82 @@ async function loadAll(){
     sb.from('ubnb_mpps').select('*').order('tanggal_mpps',{ascending:false}),
     sb.from('ubnb_ku_kelompok').select('*').order('kelompok'),
     sb.from('ubnb_laporan_shu').select('id,periode,kelompok,total_anggota,total_shu,status,created_at').order('created_at',{ascending:false}),
+    sb.from('ubnb_kebijakan_shu').select('*').order('created_at',{ascending:false}),
+    sb.from('ubnb_trx_rekap_anggota').select('*'),
   ]);
   aSaham=s||[];aTrx=t||[];aBH=b||[];aBHDetail=bd||[];aMPPS=m||[];aKU=ku||[];aLapSHU=ls||[];
+  aKebijakan=kb||[];aRekapTrx=rt||[];
   if(aMPPS.length)HARGA_SAHAM=aMPPS[0].harga_saham_baru||10200;
+  renderKebijakan();
+}
+
+
+// ===== KEBIJAKAN SHU =====
+function getKebijakanAktif(periode){
+  return aKebijakan.find(k=>k.periode===periode&&k.status==='aktif')||null;
+}
+
+function renderKebijakan(){
+  // Update badge kebijakan di topbar jika ada
+  const aktif=aKebijakan.find(k=>k.status==='aktif');
+  // Tampilkan info kebijakan di section MPPS jika ada
+  const kEl=document.getElementById('kebijakan-aktif-info');
+  if(!kEl)return;
+  if(!aktif){
+    kEl.innerHTML=`<div style="padding:10px;font-size:12px;color:var(--text-muted);text-align:center">
+      Belum ada kebijakan SHU aktif.<br>
+      <button class="btn sm gold" style="margin-top:8px" onclick="document.getElementById('form-kebijakan').style.display='block'">➕ Buat Kebijakan</button>
+    </div>`;
+    return;
+  }
+  kEl.innerHTML=`
+    <div style="background:var(--hijau-light);border-radius:var(--radius-xs);padding:12px;border-left:4px solid var(--hijau)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:800;color:var(--hijau);font-size:13px">✅ Kebijakan Aktif — Periode ${aktif.periode}</div>
+        <span style="background:var(--hijau);color:white;font-size:9px;padding:2px 7px;border-radius:20px;font-weight:700">AKTIF</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+        <div><span style="color:var(--text-muted)">Berlaku mulai:</span> <strong>${fmtTgl(aktif.tgl_mulai_berlaku)}</strong></div>
+        <div><span style="color:var(--text-muted)">Berakhir:</span> <strong>${fmtTgl(aktif.tgl_akhir)}</strong></div>
+        <div><span style="color:var(--text-muted)">Pool Saham:</span> <strong style="color:var(--hijau)">${aktif.rasio_saham}%</strong></div>
+        <div><span style="color:var(--text-muted)">Pool Transaksi:</span> <strong style="color:var(--blue)">${aktif.rasio_transaksi}%</strong></div>
+      </div>
+      ${aktif.catatan?`<div style="margin-top:6px;font-size:11px;color:var(--text-muted)">📝 ${aktif.catatan}</div>`:''}
+    </div>`;
+}
+
+async function simpanKebijakanSHU(){
+  const mppsId=parseInt(document.getElementById('keb-mpps-id')?.value)||null;
+  const periode=document.getElementById('keb-periode')?.value.trim();
+  const tglMulai=document.getElementById('keb-tgl-mulai')?.value;
+  const tglAkhir=document.getElementById('keb-tgl-akhir')?.value;
+  const rSaham=parseFloat(document.getElementById('keb-rasio-saham')?.value)||60;
+  const rTrx=parseFloat(document.getElementById('keb-rasio-trx')?.value)||40;
+  const catatan=document.getElementById('keb-catatan')?.value.trim();
+  if(!periode||!tglMulai){toast('Lengkapi periode dan tanggal mulai berlaku',true);return;}
+  if(Math.abs(rSaham+rTrx-100)>0.01){toast('Rasio saham + transaksi harus = 100%',true);return;}
+  const existing=aKebijakan.find(k=>k.periode===periode&&k.status==='aktif');
+  if(existing){
+    if(!confirm('Kebijakan SHU periode '+periode+' sudah ada. Ganti?'))return;
+    await sb.from('ubnb_kebijakan_shu').update({status:'nonaktif'}).eq('id',existing.id);
+  }
+  const{error}=await sb.from('ubnb_kebijakan_shu').insert([{
+    mpps_id:mppsId,periode,tgl_mulai_berlaku:tglMulai,
+    tgl_akhir:tglAkhir||(periode+'-12-31'),
+    rasio_saham:rSaham,rasio_transaksi:rTrx,
+    status:'aktif',catatan:catatan||null,operator:CU.username
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Kebijakan SHU disimpan! Berlaku mulai '+tglMulai);
+  await loadAll();
+  document.getElementById('form-kebijakan').style.display='none';
+}
+
+function sinkronRasio(changed){
+  const s=parseFloat(document.getElementById('keb-rasio-saham')?.value)||0;
+  const t=parseFloat(document.getElementById('keb-rasio-trx')?.value)||0;
+  if(changed==='saham') document.getElementById('keb-rasio-trx').value=Math.max(0,100-s).toFixed(0);
+  else document.getElementById('keb-rasio-saham').value=Math.max(0,100-t).toFixed(0);
 }
 
 // ===== DASHBOARD =====

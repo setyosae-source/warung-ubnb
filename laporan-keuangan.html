@@ -455,7 +455,8 @@ async function refreshAll(){
   const[
     {data:kas},{data:barang},{data:akad},{data:angs},
     {data:trx},{data:ppob},{data:beli},{data:saham},
-    {data:aset},{data:ld},{data:jd},{data:ju},{data:coa},{data:pm}
+    {data:aset},{data:ld},{data:jd},{data:ju},{data:coa},{data:pm},
+    {data:laundry},{data:service},{data:wadiah},{data:modalPeny}
   ] = await Promise.all([
     sb.from('kas').select('*'),
     sb.from('barang').select('id,stok,harga_beli').gt('stok',0),
@@ -470,12 +471,17 @@ async function refreshAll(){
     sb.from('jurnal_detail').select('*'),
     sb.from('jurnal_umum').select('id,tanggal,status'),
     sb.from('coa').select('*').eq('is_aktif',true),
-    sb.from('ubnb_laporan_keuangan').select('*').order('urutan')
+    sb.from('ubnb_laporan_keuangan').select('*').order('urutan'),
+    sb.from('laundry_order').select('total_harga,tgl_masuk,status_bayar,status'),
+    sb.from('service_order').select('total_harga,tgl_masuk,status_bayar,status'),
+    sb.from('ubnb_wadiah_tabungan').select('saldo,status'),
+    sb.from('ubnb_modal_penyertaan').select('jumlah_modal,status').eq('status','aktif'),
   ]);
   D.kas=kas||[];D.barang=barang||[];D.bmt_akad=akad||[];D.bmt_angsuran=angs||[];
   D.transaksi=trx||[];D.ppob=ppob||[];D.pembelian=beli||[];D.ubnb_saham=saham||[];
   D.aset_tetap=aset||[];D.laba_ditahan=ld||[];
   D.jurnal_detail=jd||[];D.jurnal_umum=ju||[];D.coa=coa||[];D.pos_manual=pm||[];
+  D.laundry=laundry||[];D.service=service||[];D.wadiah=wadiah||[];D.modal_penyertaan=modalPeny||[];
   
   renderDashboard();
   renderLDList();
@@ -513,6 +519,24 @@ function getAset(){
 function getHutangUsaha(){
   const belum=D.pembelian.filter(p=>p.status_bayar==='belum_lunas').reduce((s,p)=>s+parseFloat(p.total||0),0);
   return belum;
+}
+
+
+// ===== HELPER: MODUL BARU =====
+function getLaundry(tahun){
+  const rows=(D.laundry||[]).filter(l=>l.status_bayar==='lunas'&&l.tgl_masuk&&new Date(l.tgl_masuk).getFullYear()===tahun);
+  return{pendapatan:rows.reduce((s,l)=>s+parseFloat(l.total_harga||0),0),jumlah:rows.length};
+}
+function getService(tahun){
+  const rows=(D.service||[]).filter(s=>s.status_bayar==='lunas'&&s.tgl_masuk&&new Date(s.tgl_masuk).getFullYear()===tahun);
+  return{pendapatan:rows.reduce((s,l)=>s+parseFloat(l.total_harga||0),0),jumlah:rows.length};
+}
+function getWadiah(){
+  const aktif=(D.wadiah||[]).filter(w=>w.status==='aktif');
+  return{total_saldo:aktif.reduce((s,w)=>s+parseFloat(w.saldo||0),0),jumlah:aktif.length};
+}
+function getModalPenyertaan(){
+  return{total:(D.modal_penyertaan||[]).reduce((s,m)=>s+parseFloat(m.jumlah_modal||0),0),jumlah:(D.modal_penyertaan||[]).length};
 }
 
 function getModalSaham(hargaPerLembar=10200){

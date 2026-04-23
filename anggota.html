@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Anggota UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#c9a84c;--gold-dark:#9a7830;--gold-light:#fdf6e3;--gold-mid:#f0d898;
+  --hijau:#1a6640;--hijau-dark:#0f4428;--hijau-light:#e8f5ee;--hijau-mid:#5aab7a;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1e5fa8;--blue-light:#e8f0fb;
+  --bg:#f5f3ee;--surface:#ffffff;--surface2:#faf8f4;
+  --border:#e0d8cc;--border-light:#ede8df;
+  --text:#1c1a16;--text-2:#4a4540;--text-muted:#8a8078;
+  --radius:12px;--radius-sm:8px;--radius-xs:5px;
+  --shadow:0 2px 12px rgba(0,0,0,0.07);--shadow-lg:0 8px 32px rgba(0,0,0,0.12);
+  --sidebar-w:220px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
+
+/* LOGIN */
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,var(--hijau-dark) 0%,var(--hijau) 60%,#2d8a55 100%);display:flex;align-items:center;justify-content:center;z-index:500;padding:20px;}
+.login-card{background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.25);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .licon{width:64px;height:64px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;}
+.login-logo h1{font-size:20px;font-weight:800;color:var(--hijau-dark);}
+.login-logo p{font-size:12px;color:var(--text-muted);margin-top:3px;}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:5px;}
+.lfield input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);transition:border-color .2s;}
+.lfield input:focus{outline:none;border-color:var(--hijau);}
+.btn-login{width:100%;padding:13px;background:linear-gradient(135deg,var(--hijau),var(--hijau-dark));color:white;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;}
+#login-err{color:var(--red);font-size:12px;margin-top:8px;text-align:center;}
+
+/* APP */
+#app{display:none;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar-w);background:var(--hijau-dark);position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform .3s;}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.08);}
+.sb-logo h1{font-size:14px;font-weight:800;color:var(--gold);}
+.sb-logo p{font-size:10px;color:rgba(255,255,255,.45);margin-top:2px;}
+.nav-items{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;color:rgba(255,255,255,.55);cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.85);}
+.nav-item.active{background:rgba(201,168,76,.12);color:var(--gold);border-left-color:var(--gold);}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);}
+.sb-user{font-size:10px;color:rgba(255,255,255,.4);margin-bottom:6px;}
+.btn-logout{width:100%;padding:7px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);border:none;border-radius:5px;font-family:inherit;font-size:11px;cursor:pointer;}
+
+/* TOPBAR */
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:52px;background:white;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;z-index:99;box-shadow:var(--shadow);}
+.hamburger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);}
+.topbar-title{font-size:14px;font-weight:700;color:var(--hijau-dark);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.user-badge{font-size:11px;font-weight:600;color:var(--text-muted);background:var(--bg);padding:4px 10px;border-radius:99px;}
+.btn-keluar{font-size:11px;color:var(--red);background:var(--red-light);border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+
+/* MAIN */
+.main-wrap{margin-left:var(--sidebar-w);padding-top:52px;min-height:100vh;}
+.page{display:none;padding:18px;}
+.page.active{display:block;}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;}
+.sb-overlay.show{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--border-light);}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+
+/* STAT */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+.stat-card{background:var(--surface);border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border-light);box-shadow:var(--shadow);}
+.stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:5px;}
+.stat-val{font-size:22px;font-weight:800;line-height:1;}
+.stat-val.gold{color:var(--gold-dark);}
+.stat-val.hijau{color:var(--hijau);}
+.stat-val.blue{color:var(--blue);}
+.stat-val.red{color:var(--red);}
+.stat-sub{font-size:10px;color:var(--text-muted);margin-top:4px;}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{background:var(--hijau);color:white;padding:8px 10px;text-align:left;font-weight:600;font-size:11px;}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--border-light);}
+.tbl tr:hover td{background:var(--surface2);}
+
+/* BADGE */
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-aktif{background:var(--hijau-light);color:var(--hijau);}
+.badge-nonaktif{background:var(--red-light);color:var(--red);}
+.badge-pw1{background:#dbeafe;color:#1d4ed8;}
+.badge-pw2{background:#fce7f3;color:#be185d;}
+.badge-pw3{background:#d1fae5;color:#065f46;}
+.badge-pw4{background:var(--gold-light);color:var(--gold-dark);}
+.badge-saham{background:var(--hijau-light);color:var(--hijau);font-size:9px;}
+.badge-norek{background:var(--blue-light);color:var(--blue);font-size:9px;}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border:none;border-radius:var(--radius-xs);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;}
+.btn.primary{background:var(--hijau);color:white;}
+.btn.primary:hover{background:var(--hijau-dark);}
+.btn.gold{background:var(--gold);color:#1a1a1a;}
+.btn.secondary{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);}
+.btn.danger{background:var(--red-light);color:var(--red);}
+.btn.sm{padding:4px 10px;font-size:11px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+
+/* FORM */
+.irow{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+.irow label{min-width:120px;padding-top:9px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;}
+.irow input,.irow select,.irow textarea{flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;color:var(--text);background:white;transition:border-color .2s;}
+.irow input:focus,.irow select:focus,.irow textarea:focus{outline:none;border-color:var(--hijau);}
+.info-box{background:var(--hijau-light);border-left:3px solid var(--hijau);border-radius:var(--radius-xs);padding:10px 12px;font-size:12px;color:var(--hijau-dark);margin-bottom:12px;}
+
+/* SEARCH BAR */
+.search-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.search-input{flex:1;min-width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;}
+.search-input:focus{outline:none;border-color:var(--hijau);}
+.filter-sel{padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px;background:white;}
+
+/* DROPDOWN ANGGOTA — Komponen reusable */
+.ac-wrap{position:relative;flex:1;}
+.ac-input{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;}
+.ac-input:focus{outline:none;border-color:var(--hijau);}
+.ac-dd{position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--hijau);border-radius:var(--radius-xs);box-shadow:var(--shadow-lg);z-index:200;max-height:260px;overflow-y:auto;display:none;}
+.ac-dd.show{display:block;}
+.ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px;}
+.ac-item:hover{background:var(--hijau-light);}
+.ac-item:last-child{border-bottom:none;}
+.ac-icon{font-size:14px;flex-shrink:0;}
+.ac-name{font-weight:600;font-size:12px;}
+.ac-sub{font-size:10px;color:var(--text-muted);}
+.ac-tag{font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+.ac-tag.anggota{background:var(--hijau-light);color:var(--hijau);}
+.ac-tag.jamaah{background:var(--blue-light);color:var(--blue);}
+.ac-tag.custom{background:#fef3c7;color:#92400e;}
+.ac-divider{padding:5px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase;letter-spacing:.5px;}
+
+/* PROFIL CARD */
+.profil-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.profil-item{background:var(--surface2);border-radius:var(--radius-xs);padding:10px 12px;}
+.profil-lbl{font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:3px;}
+.profil-val{font-size:13px;font-weight:600;}
+.profil-header{display:flex;align-items:center;gap:14px;padding:14px;background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));border-radius:var(--radius-sm);color:white;margin-bottom:12px;}
+.profil-avatar{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.profil-nama{font-size:15px;font-weight:800;}
+.profil-no{font-size:11px;opacity:.75;margin-top:2px;}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid var(--border-light);padding-bottom:0;}
+.tab-btn{padding:8px 14px;border:none;background:none;font-family:inherit;font-size:12px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.tab-btn.active{color:var(--hijau);border-bottom-color:var(--hijau);}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-end;justify-content:center;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;padding:20px;}
+.mhandle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.modal-title h3{font-size:14px;font-weight:800;}
+.btn-close{background:var(--surface2);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--hijau-dark);color:white;padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+#toast.err{background:var(--red);}
+#toast.show{opacity:1;}
+
+/* SPINNER */
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{text-align:center;padding:32px;color:var(--text-muted);}
+.empty .ei{font-size:40px;margin-bottom:8px;}
+
+/* MOBILE */
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-220px);width:220px;}
+  .sidebar.open{transform:translateX(0);}
+  .topbar{left:0;}
+  .main-wrap{margin-left:0;}
+  .hamburger{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .irow{flex-direction:column;}
+  .irow label{padding-top:0;min-width:unset;}
+  .profil-grid{grid-template-columns:1fr;}
+  .two-col{grid-template-columns:1fr;}
+}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">👥</div>
+      <h1>Data Anggota UBNB</h1>
+      <p>Manajemen Master Anggota</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <h1>👥 Anggota UBNB</h1>
+      <p>Master Data Anggota</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+      <div class="nav-item" onclick="showPage('daftar',this)"><span class="nav-icon">👥</span>Daftar Anggota</div>
+      <div class="nav-item" onclick="showPage('tambah',this)"><span class="nav-icon">➕</span>Tambah Anggota</div>
+      <div class="nav-item" onclick="showPage('cari',this)"><span class="nav-icon">🔍</span>Cari Anggota</div>
+      <div class="nav-item" onclick="showPage('kelompok',this)"><span class="nav-icon">🏘️</span>Rekap Kelompok</div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user" id="sb-user"></div>
+      <button class="btn-logout" onclick="keluar()">Keluar</button>
+      <div style="margin-top:8px"><a href="portal.html" style="color:rgba(255,255,255,.4);font-size:10px;text-decoration:none;">← Portal</a></div>
+    </div>
+  </div>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="topbar-title">Dashboard Anggota</div>
+    <div class="topbar-right">
+      <span class="user-badge" id="user-badge">—</span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stat-grid" id="dash-stats">
+        <div class="stat-card"><div class="stat-lbl">Total Anggota</div><div class="stat-val hijau" id="ds-total">—</div><div class="stat-sub">terdaftar</div></div>
+        <div class="stat-card"><div class="stat-lbl">Aktif</div><div class="stat-val hijau" id="ds-aktif">—</div><div class="stat-sub">status aktif</div></div>
+        <div class="stat-card"><div class="stat-lbl">Pemegang Saham</div><div class="stat-val gold" id="ds-saham">—</div><div class="stat-sub">anggota</div></div>
+        <div class="stat-card"><div class="stat-lbl">Punya Wadiah</div><div class="stat-val blue" id="ds-wadiah">—</div><div class="stat-sub">rekening aktif</div></div>
+      </div>
+
+      <!-- Rekap per kelompok -->
+      <div class="card">
+        <div class="card-title"><span>🏘️ Rekap per Kelompok</span></div>
+        <div class="tbl-wrap"><table class="tbl" id="tbl-kelompok">
+          <thead><tr><th>Kelompok</th><th>Total Anggota</th><th>Pemegang Saham</th><th>Wadiah Aktif</th><th>Status</th></tr></thead>
+          <tbody id="tbody-kelompok"></tbody>
+        </table></div>
+      </div>
+
+      <!-- Anggota terbaru -->
+      <div class="card">
+        <div class="card-title"><span>🆕 Anggota Terbaru</span></div>
+        <div id="list-terbaru"></div>
+      </div>
+    </div>
+
+    <!-- DAFTAR ANGGOTA -->
+    <div class="page" id="page-daftar">
+      <div class="card">
+        <div class="card-title">
+          <span>👥 Daftar Anggota</span>
+          <div class="btn-row">
+            <button class="btn gold sm" onclick="exportExcel()">⬇️ Excel</button>
+            <button class="btn primary sm" onclick="showPage('tambah',document.querySelectorAll('.nav-item')[2])">➕ Tambah</button>
+          </div>
+        </div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-anggota" placeholder="🔍 Cari nama, no. anggota..." oninput="filterDaftar()">
+          <select class="filter-sel" id="filter-kelompok" onchange="filterDaftar()">
+            <option value="">Semua Kelompok</option>
+            <option value="PW1">PW1</option><option value="PW2">PW2</option>
+            <option value="PW3">PW3</option><option value="PW4">PW4</option>
+          </select>
+          <select class="filter-sel" id="filter-status" onchange="filterDaftar()">
+            <option value="">Semua Status</option>
+            <option value="Aktif">Aktif</option>
+            <option value="NonAktif">Non Aktif</option>
+          </select>
+          <select class="filter-sel" id="filter-jenis" onchange="filterDaftar()">
+            <option value="">Semua Jenis</option>
+            <option value="anggota">Anggota</option>
+            <option value="investor">Investor</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>No. Anggota</th><th>Nama</th><th>KK/Keluarga</th><th>Kelompok</th><th>Jenis</th><th>Saham</th><th>Wadiah</th><th>Status</th><th>Aksi</th></tr></thead>
+            <tbody id="tbody-daftar"></tbody>
+          </table>
+        </div>
+        <div id="daftar-info" style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:right;"></div>
+      </div>
+    </div>
+
+    <!-- TAMBAH ANGGOTA -->
+    <div class="page" id="page-tambah">
+      <div class="card">
+        <div class="card-title"><span>➕ Tambah Anggota Baru</span></div>
+        <div class="info-box">Data anggota ini akan menjadi identitas utama yang terhubung ke semua modul transaksi.</div>
+        <div class="irow"><label>No. Anggota</label>
+          <div style="flex:1;display:flex;gap:6px">
+            <input type="text" id="ta-no" placeholder="Auto-generate..." style="flex:1">
+            <button class="btn secondary sm" onclick="autoNoAnggota()">↻ Auto</button>
+          </div>
+        </div>
+        <div class="irow"><label>Nama Lengkap ⭐</label><input type="text" id="ta-nama" placeholder="Nama anggota"></div>
+        <div class="irow"><label>Nama KK</label><input type="text" id="ta-kk" placeholder="Nama kepala keluarga"></div>
+        <div class="irow"><label>Kelompok</label>
+          <select id="ta-kelompok" style="flex:1">
+            <option value="PW1">PW1 — Perwirasari</option>
+            <option value="PW2">PW2 — Alinda</option>
+            <option value="PW3">PW3 — Bulak Perwira</option>
+            <option value="PW4">PW4 — VIP</option>
+          </select>
+        </div>
+        <div class="irow"><label>Jenis</label>
+          <select id="ta-jenis" style="flex:1">
+            <option value="anggota">Anggota</option>
+            <option value="investor">Investor</option>
+          </select>
+        </div>
+        <div class="irow"><label>No. HP</label><input type="tel" id="ta-hp" placeholder="08xxxxxxxxxx"></div>
+        <div class="irow"><label>Alamat</label><input type="text" id="ta-alamat" placeholder="Opsional"></div>
+        <div class="irow"><label>Tgl. Daftar</label><input type="date" id="ta-tgl"></div>
+        <div class="irow"><label>Status</label>
+          <select id="ta-status" style="flex:1">
+            <option value="Aktif">Aktif</option>
+            <option value="NonAktif">Non Aktif</option>
+          </select>
+        </div>
+        <div class="irow"><label>Catatan</label><input type="text" id="ta-catatan" placeholder="Opsional"></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn primary" style="flex:1" onclick="simpanAnggota()">💾 Simpan Anggota</button>
+          <button class="btn secondary" onclick="resetFormTambah()">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARI / PROFIL ANGGOTA -->
+    <div class="page" id="page-cari">
+      <div class="card">
+        <div class="card-title"><span>🔍 Cari & Lihat Profil Anggota</span></div>
+        <!-- Dropdown Anggota Reusable -->
+        <div class="irow" style="margin-bottom:16px">
+          <label>Cari Anggota</label>
+          <div class="ac-wrap">
+            <input class="ac-input" type="text" id="cari-input" placeholder="Ketik nama anggota..." oninput="acSearch(this.value,'cari-dd',onPilihAnggota)" onfocus="acSearch(this.value,'cari-dd',onPilihAnggota)">
+            <div class="ac-dd" id="cari-dd"></div>
+          </div>
+        </div>
+        <div id="profil-anggota" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- REKAP KELOMPOK -->
+    <div class="page" id="page-kelompok">
+      <div class="card">
+        <div class="card-title"><span>🏘️ Rekap per Kelompok</span></div>
+        <div id="kelompok-detail"></div>
+      </div>
+    </div>
+
+  </div><!-- main-wrap -->
+</div><!-- app -->
+
+<!-- MODAL EDIT -->
+<div class="overlay" id="modal-edit">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="modal-title">
+      <h3>✏️ Edit Data Anggota</h3>
+      <button class="btn-close" onclick="closeModal('modal-edit')">✕</button>
+    </div>
+    <input type="hidden" id="ea-id">
+    <div class="irow"><label>No. Anggota</label><input type="text" id="ea-no" readonly style="background:var(--surface2);"></div>
+    <div class="irow"><label>Nama Lengkap</label><input type="text" id="ea-nama"></div>
+    <div class="irow"><label>Nama KK</label><input type="text" id="ea-kk"></div>
+    <div class="irow"><label>Kelompok</label>
+      <select id="ea-kelompok" style="flex:1">
+        <option value="PW1">PW1</option><option value="PW2">PW2</option>
+        <option value="PW3">PW3</option><option value="PW4">PW4</option>
+      </select>
+    </div>
+    <div class="irow"><label>Jenis</label>
+      <select id="ea-jenis" style="flex:1">
+        <option value="anggota">Anggota</option>
+        <option value="investor">Investor</option>
+      </select>
+    </div>
+    <div class="irow"><label>No. HP</label><input type="tel" id="ea-hp"></div>
+    <div class="irow"><label>Alamat</label><input type="text" id="ea-alamat"></div>
+    <div class="irow"><label>Status</label>
+      <select id="ea-status" style="flex:1">
+        <option value="Aktif">Aktif</option><option value="NonAktif">Non Aktif</option>
+      </select>
+    </div>
+    <div class="irow"><label>Catatan</label><input type="text" id="ea-catatan"></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn primary" style="flex:2" onclick="updateAnggota()">💾 Simpan</button>
+      <button class="btn danger" style="flex:1" onclick="nonaktifkanAnggota()">🔒 Non-Aktifkan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase; const sb=createClient(SURL,SKEY);
+
+let CU=null, aAnggota=[], aSahamMap={}, aWadiahMap={};
+
+// ===== UTILS =====
+const rp=n=>'Rp '+Math.round(parseFloat(n)||0).toLocaleString('id-ID');
+const fmtTgl=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show'+(err?' err':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);
+}
+function kelBadge(k){const c={PW1:'badge-pw1',PW2:'badge-pw2',PW3:'badge-pw3',PW4:'badge-pw4'};return`<span class="badge ${c[k]||''}">${k||'—'}</span>`;}
+
+// ===== AUTH =====
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  const btn=document.getElementById('btn-login');
+  btn.innerHTML='<div class="spinner"></div>';btn.disabled=true;
+  const {data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.innerHTML='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
+  CU=data;
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username;
+  document.getElementById('sb-user').textContent='👤 '+CU.username;
+  await loadAll();
+  renderDashboard();
+}
+function keluar(){CU=null;location.reload();}
+
+// ===== LOAD DATA =====
+async function loadAll(){
+  const [{data:a},{data:s},{data:w}] = await Promise.all([
+    sb.from('ubnb_anggota').select('*').order('no_anggota'),
+    sb.from('ubnb_saham').select('anggota_id,jumlah_lembar'),
+    sb.from('ubnb_wadiah_tabungan').select('anggota_id,status,saldo')
+  ]);
+  aAnggota=a||[];
+  // Map saham per anggota
+  aSahamMap={};
+  (s||[]).forEach(x=>{
+    if(!aSahamMap[x.anggota_id]) aSahamMap[x.anggota_id]={lembar:0};
+    aSahamMap[x.anggota_id].lembar+=(x.jumlah_lembar||0);
+  });
+  // Map wadiah per anggota
+  aWadiahMap={};
+  (w||[]).forEach(x=>{
+    if(!aWadiahMap[x.anggota_id]) aWadiahMap[x.anggota_id]={status:x.status,saldo:parseFloat(x.saldo||0)};
+  });
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const total=aAnggota.length;
+  const aktif=aAnggota.filter(a=>a.status==='Aktif').length;
+  const saham=aAnggota.filter(a=>aSahamMap[a.id]).length;
+  const wadiah=aAnggota.filter(a=>aWadiahMap[a.id]?.status==='aktif').length;
+  document.getElementById('ds-total').textContent=total;
+  document.getElementById('ds-aktif').textContent=aktif;
+  document.getElementById('ds-saham').textContent=saham;
+  document.getElementById('ds-wadiah').textContent=wadiah;
+
+  // Rekap kelompok
+  const kels=['PW1','PW2','PW3','PW4'];
+  document.getElementById('tbody-kelompok').innerHTML=kels.map(k=>{
+    const angg=aAnggota.filter(a=>a.kelompok===k);
+    const sh=angg.filter(a=>aSahamMap[a.id]).length;
+    const wd=angg.filter(a=>aWadiahMap[a.id]?.status==='aktif').length;
+    return`<tr>
+      <td>${kelBadge(k)}</td>
+      <td><strong>${angg.length}</strong> anggota</td>
+      <td>${sh} orang</td>
+      <td>${wd} rekening</td>
+      <td><span class="badge badge-aktif">${angg.filter(a=>a.status==='Aktif').length} Aktif</span></td>
+    </tr>`;
+  }).join('');
+
+  // Terbaru
+  const terbaru=[...aAnggota].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,5);
+  document.getElementById('list-terbaru').innerHTML=terbaru.map(a=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light)">
+      <div style="width:36px;height:36px;background:var(--hijau-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">👤</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:12px">${a.nama}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${a.no_anggota} · ${a.kelompok||'—'}</div>
+      </div>
+      ${kelBadge(a.kelompok)}
+    </div>`).join('');
+}
+
+// ===== DAFTAR ANGGOTA =====
+function filterDaftar(){
+  const q=(document.getElementById('search-anggota').value||''). toLowerCase();
+  const fk=document.getElementById('filter-kelompok').value;
+  const fs=document.getElementById('filter-status').value;
+  const fj=document.getElementById('filter-jenis').value;
+  let data=aAnggota.filter(a=>{
+    if(q && !(a.nama||''). toLowerCase().includes(q) && !(a.no_anggota||''). toLowerCase().includes(q) && !(a.nama_keluarga||''). toLowerCase().includes(q)) return false;
+    if(fk && a.kelompok!==fk) return false;
+    if(fs && a.status!==fs) return false;
+    if(fj && a.jenis!==fj) return false;
+    return true;
+  });
+  renderDaftar(data);
+}
+
+function renderDaftar(data){
+  data=data||aAnggota;
+  const sahamCount=data.filter(a=>aSahamMap[a.id]).length;
+  document.getElementById('daftar-info').textContent=`Menampilkan ${data.length} dari ${aAnggota.length} anggota`;
+  document.getElementById('tbody-daftar').innerHTML=data.map(a=>{
+    const sh=aSahamMap[a.id];
+    const wd=aWadiahMap[a.id];
+    return`<tr>
+      <td style="font-family:monospace;font-size:11px">${a.no_anggota}</td>
+      <td><strong>${a.nama}</strong></td>
+      <td style="color:var(--text-muted);font-size:11px">${a.nama_keluarga||'—'}</td>
+      <td>${kelBadge(a.kelompok)}</td>
+      <td style="font-size:11px">${a.jenis||'anggota'}</td>
+      <td>${sh?`<span class="badge badge-saham">⭐ ${sh.lembar} lbr</span>`:\`<span style="color:var(--text-muted);font-size:11px">—</span>\`}</td>
+      <td>${wd?`<span class="badge badge-norek">🏦 ${wd.status}</span>`:\`<span style="color:var(--text-muted);font-size:11px">—</span>\`}</td>
+      <td><span class="badge ${a.status==='Aktif'?'badge-aktif':'badge-nonaktif'}">${a.status}</span></td>
+      <td>
+        <button class="btn secondary sm" onclick="bukaEdit(${a.id})">✏️</button>
+        <button class="btn sm" style="background:var(--hijau-light);color:var(--hijau)" onclick="bukaProfil(${a.id})">👁️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== TAMBAH ANGGOTA =====
+async function autoNoAnggota(){
+  const maxNo=aAnggota.reduce((mx,a)=>{
+    const n=parseInt((a.no_anggota||'0').replace(/\D/g,''));
+    return n>mx?n:mx;
+  },0);
+  document.getElementById('ta-no').value='UBNB-PW/'+String(maxNo+1).padStart(5,'0');
+}
+
+function resetFormTambah(){
+  ['ta-no','ta-nama','ta-kk','ta-hp','ta-alamat','ta-catatan'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  document.getElementById('ta-tgl').value=new Date().toISOString().slice(0,10);
+}
+
+async function simpanAnggota(){
+  const no=document.getElementById('ta-no').value.trim();
+  const nama=document.getElementById('ta-nama').value.trim();
+  if(!nama){toast('Nama wajib diisi',true);return;}
+
+  // Cek duplikat nama+KK
+  const kk=document.getElementById('ta-kk').value.trim();
+  if(kk){
+    const dup=aAnggota.find(a=>a.nama.toLowerCase()===nama.toLowerCase()&&(a.nama_keluarga||''). toLowerCase()===kk.toLowerCase());
+    if(dup){toast(`Anggota dengan nama & KK yang sama sudah ada: ${dup.no_anggota}`,true);return;}
+  }
+
+  const {error}=await sb.from('ubnb_anggota').insert([{
+    no_anggota : no||'UBNB-PW/TEMP-'+Date.now(),
+    nama,
+    nama_keluarga : kk||null,
+    kelompok : document.getElementById('ta-kelompok').value,
+    jenis    : document.getElementById('ta-jenis').value,
+    no_hp    : document.getElementById('ta-hp').value.trim()||null,
+    alamat   : document.getElementById('ta-alamat').value.trim()||null,
+    tgl_daftar : document.getElementById('ta-tgl').value||null,
+    status   : document.getElementById('ta-status').value,
+    catatan  : document.getElementById('ta-catatan').value.trim()||null
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Anggota berhasil ditambahkan!');
+  resetFormTambah();
+  await loadAll();
+  renderDashboard();
+}
+
+// ===== EDIT ANGGOTA =====
+function bukaEdit(id){
+  const a=aAnggota.find(x=>x.id===id);if(!a)return;
+  document.getElementById('ea-id').value=a.id;
+  document.getElementById('ea-no').value=a.no_anggota;
+  document.getElementById('ea-nama').value=a.nama;
+  document.getElementById('ea-kk').value=a.nama_keluarga||''
+  document.getElementById('ea-kelompok').value=a.kelompok||'PW1';
+  document.getElementById('ea-jenis').value=a.jenis||'anggota';
+  document.getElementById('ea-hp').value=a.no_hp||''
+  document.getElementById('ea-alamat').value=a.alamat||''
+  document.getElementById('ea-status').value=a.status||'Aktif';
+  document.getElementById('ea-catatan').value=a.catatan||''
+  openModal('modal-edit');
+}
+
+async function updateAnggota(){
+  const id=parseInt(document.getElementById('ea-id').value);
+  const nama=document.getElementById('ea-nama').value.trim();
+  if(!nama){toast('Nama wajib diisi',true);return;}
+  const {error}=await sb.from('ubnb_anggota').update({
+    nama,
+    nama_keluarga : document.getElementById('ea-kk').value.trim()||null,
+    kelompok : document.getElementById('ea-kelompok').value,
+    jenis    : document.getElementById('ea-jenis').value,
+    no_hp    : document.getElementById('ea-hp').value.trim()||null,
+    alamat   : document.getElementById('ea-alamat').value.trim()||null,
+    status   : document.getElementById('ea-status').value,
+    catatan  : document.getElementById('ea-catatan').value.trim()||null
+  }).eq('id',id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Data diperbarui!');
+  closeModal('modal-edit');
+  await loadAll();
+  filterDaftar();
+}
+
+async function nonaktifkanAnggota(){
+  const id=parseInt(document.getElementById('ea-id').value);
+  if(!confirm('Non-aktifkan anggota ini?'))return;
+  await sb.from('ubnb_anggota').update({status:'NonAktif'}).eq('id',id);
+  toast('Anggota dinonaktifkan');
+  closeModal('modal-edit');
+  await loadAll(); filterDaftar();
+}
+
+// ===== PROFIL ANGGOTA =====
+async function bukaProfil(id){
+  const a=aAnggota.find(x=>x.id===id);if(!a)return;
+  const sh=aSahamMap[a.id];
+  const wd=aWadiahMap[a.id];
+
+  // Ambil data saham detail
+  const {data:sahamDetail}=await sb.from('ubnb_saham')
+    .select('no_anggota,jumlah_lembar,tanggal_pertama,kelompok')
+    .eq('anggota_id',a.id).order('tanggal_pertama');
+
+  // Ambil riwayat transaksi SHU
+  const {data:shuLog}=await sb.from('ubnb_shu_trx_log')
+    .select('jenis_trx,nilai,tanggal,periode')
+    .eq('anggota_id',a.id)
+    .order('tanggal',{ascending:false}).limit(10);
+
+  document.getElementById('profil-anggota').style.display='block';
+  document.getElementById('profil-anggota').innerHTML=`
+    <div class="profil-header">
+      <div class="profil-avatar">👤</div>
+      <div>
+        <div class="profil-nama">${a.nama}</div>
+        <div class="profil-no">${a.no_anggota} · ${a.kelompok||'—'}</div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="badge ${a.status==='Aktif'?'badge-aktif':'badge-nonaktif'}">${a.status}</span>
+          ${sh?`<span class="badge badge-saham">⭐ ${sh.lembar} lembar saham</span>`:''}
+          ${wd?`<span class="badge badge-norek">🏦 Wadiah ${wd.status}</span>`:''}
+        </div>
+      </div>
+      <button class="btn secondary sm" style="margin-left:auto;align-self:flex-start" onclick="bukaEdit(${a.id})">✏️ Edit</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'tab-info')">📋 Info</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-saham')">⭐ Saham</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-trx')">📊 Transaksi SHU</button>
+    </div>
+
+    <div id="tab-info">
+      <div class="profil-grid">
+        <div class="profil-item"><div class="profil-lbl">Nama KK</div><div class="profil-val">${a.nama_keluarga||'—'}</div></div>
+        <div class="profil-item"><div class="profil-lbl">Kelompok</div><div class="profil-val">${kelBadge(a.kelompok)}</div></div>
+        <div class="profil-item"><div class="profil-lbl">Jenis</div><div class="profil-val">${a.jenis||'anggota'}</div></div>
+        <div class="profil-item"><div class="profil-lbl">No. HP</div><div class="profil-val">${a.no_hp||'—'}</div></div>
+        <div class="profil-item"><div class="profil-lbl">Tgl. Daftar</div><div class="profil-val">${fmtTgl(a.tgl_daftar)}</div></div>
+        <div class="profil-item"><div class="profil-lbl">Alamat</div><div class="profil-val">${a.alamat||'—'}</div></div>
+        ${a.catatan?`<div class="profil-item" style="grid-column:span 2"><div class="profil-lbl">Catatan</div><div class="profil-val">${a.catatan}</div></div>`:''}
+      </div>
+    </div>
+
+    <div id="tab-saham" style="display:none">
+      ${sahamDetail&&sahamDetail.length?`
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>No. Anggota</th><th>Lembar</th><th>Tgl. Beli</th></tr></thead>
+          <tbody>${sahamDetail.map(s=>`<tr>
+            <td style="font-family:monospace;font-size:11px">${s.no_anggota}</td>
+            <td><strong>${s.jumlah_lembar}</strong> lembar</td>
+            <td>${fmtTgl(s.tanggal_pertama)}</td>
+          </tr>`).join('')}</tbody>
+          <tfoot><tr style="background:var(--hijau-light)">
+            <td style="font-weight:700">Total</td>
+            <td style="font-weight:800;color:var(--hijau)">${sahamDetail.reduce((a,s)=>a+(s.jumlah_lembar||0),0)} lembar</td>
+            <td></td>
+          </tr></tfoot>
+        </table></div>`
+      :'<div class="empty"><div class="ei">⭐</div><p>Belum ada kepemilikan saham</p></div>'}
+    </div>
+
+    <div id="tab-trx" style="display:none">
+      ${shuLog&&shuLog.length?`
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>Tgl</th><th>Jenis</th><th>Periode</th><th style="text-align:right">Nilai</th></tr></thead>
+          <tbody>${shuLog.map(t=>`<tr>
+            <td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
+            <td><span class="badge" style="background:var(--blue-light);color:var(--blue)">${t.jenis_trx}</span></td>
+            <td style="font-size:11px">${t.periode||'—'}</td>
+            <td style="text-align:right;font-weight:600">${rp(t.nilai)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>`
+      :'<div class="empty"><div class="ei">📊</div><p>Belum ada transaksi SHU tercatat</p></div>'}
+    </div>`;
+
+  // Scroll ke profil
+  document.getElementById('profil-anggota').scrollIntoView({behavior:'smooth'});
+}
+
+// ===== DROPDOWN ANGGOTA — Komponen Reusable =====
+let _acTimer=null;
+let _acCallbacks={};
+
+async function acSearch(q,ddId,onPilih){
+  clearTimeout(_acTimer);
+  _acTimer=setTimeout(async()=>{
+    const dd=document.getElementById(ddId);
+    if(!q||q.length<1){dd.classList.remove('show');return;}
+    const ql=q.toLowerCase();
+
+    // Filter anggota saham
+    const matchAnggota=aAnggota.filter(a=>
+      (a.nama||''). toLowerCase().includes(ql)||
+      (a.no_anggota||''). toLowerCase().includes(ql)||
+      (a.nama_keluarga||''). toLowerCase().includes(ql)
+    ).slice(0,5);
+
+    // Query jamaah_desa
+    const {data:jamaah}=await sb.from('jamaah_desa')
+      .select('did,nama,nama_kk,kelompok')
+      .ilike('nama',`%${q}%`)
+      .limit(5);
+
+    let html='';
+
+    if(matchAnggota.length){
+      html+='<div class="ac-divider">⭐ Anggota Saham — masuk SHU</div>';
+      html+=matchAnggota.map(a=>`
+        <div class="ac-item" onclick="acPilih('${ddId}','anggota',${a.id},'${a.nama.replace(/'/g,"&apos;")}','${a.no_anggota}')">
+          <span class="ac-icon">⭐</span>
+          <div>
+            <div class="ac-name">${a.nama} <span class="ac-tag anggota">${a.kelompok||''}</span></div>
+            <div class="ac-sub">${a.no_anggota} · ${a.nama_keluarga||''}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    if(jamaah&&jamaah.length){
+      html+='<div class="ac-divider">👤 Jamaah Desa — tidak masuk SHU</div>';
+      html+=jamaah.map(j=>`
+        <div class="ac-item" onclick="acPilih('${ddId}','jamaah','${j.did}','${j.nama.replace(/'/g,"&apos;")}','${j.did}')">
+          <span class="ac-icon">👤</span>
+          <div>
+            <div class="ac-name">${j.nama} <span class="ac-tag jamaah">Jamaah</span></div>
+            <div class="ac-sub">KK: ${j.nama_kk||'—'} · Klp: ${j.kelompok||'—'}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    // Opsi ketik nama baru
+    html+=`<div class="ac-divider">✏️ Nama Baru — tidak masuk SHU</div>
+      <div class="ac-item" onclick="acPilih('${ddId}','custom',null,'${q.replace(/'/g,"&apos;")}',null)">
+        <span class="ac-icon">✏️</span>
+        <div>
+          <div class="ac-name">Gunakan nama: "<strong>${q}</strong>" <span class="ac-tag custom">Baru</span></div>
+          <div class="ac-sub">Tidak tercatat sebagai anggota</div>
+        </div>
+      </div>`;
+
+    dd.innerHTML=html;
+    dd.classList.add('show');
+    _acCallbacks[ddId]=onPilih;
+  },250);
+}
+
+function acPilih(ddId,sumber,refId,nama,kode){
+  document.getElementById(ddId).classList.remove('show');
+  // Isi input dengan nama terpilih
+  const wrap=document.getElementById(ddId).closest('.ac-wrap');
+  const inp=wrap?.querySelector('.ac-input');
+  if(inp) inp.value=nama;
+  // Panggil callback
+  if(_acCallbacks[ddId]) _acCallbacks[ddId](sumber,refId,nama,kode);
+}
+
+// Close dropdown saat klik luar
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.ac-wrap')){
+    document.querySelectorAll('.ac-dd').forEach(d=>d.classList.remove('show'));
+  }
+});
+
+// Callback untuk halaman Cari
+let _selectedAnggotaId=null;
+function onPilihAnggota(sumber,refId,nama,kode){
+  if(sumber==='anggota') bukaProfil(refId);
+  else toast('Pilih dari daftar Anggota Saham untuk melihat profil',true);
+}
+
+// ===== REKAP KELOMPOK =====
+function renderRekap(){
+  const kels=['PW1','PW2','PW3','PW4'];
+  const namaKel={PW1:'Perwirasari',PW2:'Alinda',PW3:'Bulak Perwira',PW4:'VIP'};
+  document.getElementById('kelompok-detail').innerHTML=kels.map(k=>{
+    const angg=aAnggota.filter(a=>a.kelompok===k);
+    return`
+      <div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          ${kelBadge(k)} <strong style="font-size:12px">${namaKel[k]}</strong>
+          <span style="font-size:11px;color:var(--text-muted)">${angg.length} anggota</span>
+        </div>
+        <div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>No.</th><th>Nama</th><th>KK</th><th>Saham</th><th>Status</th></tr></thead>
+          <tbody>${angg.map((a,i)=>`<tr>
+            <td style="font-size:11px;color:var(--text-muted)">${i+1}</td>
+            <td><strong>${a.nama}</strong></td>
+            <td style="font-size:11px">${a.nama_keluarga||'—'}</td>
+            <td>${aSahamMap[a.id]?`<span class="badge badge-saham">${aSahamMap[a.id].lembar} lbr</span>`:'—'}</td>
+            <td><span class="badge ${a.status==='Aktif'?'badge-aktif':'badge-nonaktif'}">${a.status}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+  }).join('');
+}
+
+// ===== EXPORT EXCEL =====
+function exportExcel(){
+  const XLSX=window.XLSX;
+  const rows=aAnggota.map(a=>({
+    'No. Anggota':a.no_anggota,
+    'Nama':a.nama,
+    'Nama KK':a.nama_keluarga||'—',
+    'Kelompok':a.kelompok,
+    'Jenis':a.jenis,
+    'No. HP':a.no_hp||'—',
+    'Alamat':a.alamat||'—',
+    'Saham (lembar)':aSahamMap[a.id]?.lembar||0,
+    'Wadiah':aWadiahMap[a.id]?.status||'—',
+    'Status':a.status,
+    'Tgl Daftar':fmtTgl(a.tgl_daftar)
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Anggota');
+  XLSX.writeFile(wb,'UBNB_Anggota_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+// ===== UI HELPERS =====
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id)?.classList.add('active');
+  if(el) el.classList.add('active');
+  const titles={dashboard:'Dashboard Anggota',daftar:'Daftar Anggota',tambah:'Tambah Anggota',cari:'Cari Anggota',kelompok:'Rekap Kelompok'};
+  document.getElementById('topbar-title').textContent=titles[id]||id;
+  if(id==='daftar') filterDaftar();
+  if(id==='kelompok') renderRekap();
+  closeSidebar();
+}
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sb-overlay').classList.toggle('show');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('show');
+}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function switchTab(btn,tabId){
+  const parent=btn.closest('.page,#profil-anggota');
+  parent.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  ['tab-info','tab-saham','tab-trx'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display=id===tabId?'block':'none';
+  });
+}
+
+// Set default tanggal
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('ta-tgl').value=new Date().toISOString().slice(0,10);
+});
+</script>
+</body>
+</html>

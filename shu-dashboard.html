@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SHU Dashboard UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#c9a84c;--gold-dark:#9a7830;--gold-light:#fdf6e3;--gold-mid:#f0d898;
+  --hijau:#1a6640;--hijau-dark:#0f4428;--hijau-light:#e8f5ee;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1e5fa8;--blue-light:#e8f0fb;
+  --purple:#6d28d9;--purple-light:#ede9fe;
+  --cyan:#0891b2;--cyan-light:#e0f7fa;
+  --orange:#c2410c;--orange-light:#fff7ed;
+  --teal:#0e7490;--teal-light:#e0f2fe;
+  --bg:#0f172a;--surface:#1e293b;--surface2:#263350;
+  --border:#334155;--border-light:#3d4f6e;
+  --text:#f1f5f9;--text-2:#cbd5e1;--text-muted:#94a3b8;
+  --radius:12px;--radius-sm:8px;--radius-xs:5px;
+  --shadow:0 2px 12px rgba(0,0,0,0.3);--shadow-lg:0 8px 32px rgba(0,0,0,0.4);
+  --sidebar-w:240px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
+
+/* LOGIN */
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,#020617 0%,#0f172a 50%,#1e1b4b 100%);display:flex;align-items:center;justify-content:center;z-index:500;padding:20px;}
+.login-card{background:var(--surface);border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.5);border:1px solid var(--border);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .licon{width:64px;height:64px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;}
+.login-logo h1{font-size:20px;font-weight:800;color:var(--text);}
+.login-logo p{font-size:12px;color:var(--text-muted);margin-top:3px;}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:5px;}
+.lfield input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;background:var(--surface2);color:var(--text);transition:border-color .2s;}
+.lfield input:focus{outline:none;border-color:var(--gold);}
+.btn-login{width:100%;padding:13px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#1a1207;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;margin-top:4px;}
+#login-err{color:var(--red);font-size:12px;margin-top:8px;text-align:center;}
+
+/* APP */
+#app{display:none;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar-w);background:#020617;position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform .3s;border-right:1px solid var(--border);}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--border);}
+.sb-logo h1{font-size:13px;font-weight:800;color:var(--gold);}
+.sb-logo p{font-size:10px;color:var(--text-muted);margin-top:2px;}
+.nav-items{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-section{padding:10px 16px 3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:.8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;color:var(--text-muted);cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,.04);color:var(--text-2);}
+.nav-item.active{background:rgba(201,168,76,.1);color:var(--gold);border-left-color:var(--gold);}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.sb-footer{padding:12px 16px;border-top:1px solid var(--border);}
+.sb-user{font-size:10px;color:var(--text-muted);margin-bottom:6px;}
+.btn-logout{width:100%;padding:7px;background:rgba(255,255,255,.05);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:11px;cursor:pointer;}
+
+/* TOPBAR */
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;z-index:99;}
+.hamburger{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);}
+.topbar-title{font-size:14px;font-weight:700;color:var(--gold);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.user-badge{font-size:11px;font-weight:600;color:var(--text-muted);background:var(--surface2);padding:4px 10px;border-radius:99px;border:1px solid var(--border);}
+.btn-keluar{font-size:11px;color:var(--red);background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+
+/* MAIN */
+.main-wrap{margin-left:var(--sidebar-w);padding-top:52px;min-height:100vh;}
+.page{display:none;padding:18px;}
+.page.active{display:block;}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;}
+.sb-overlay.show{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--border);}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+
+/* STAT GRID */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+.stat-card{background:var(--surface2);border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border-light);}
+.stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:5px;}
+.stat-val{font-size:22px;font-weight:800;line-height:1;}
+.stat-val.gold{color:var(--gold);}
+.stat-val.hijau{color:#4ade80;}
+.stat-val.blue{color:#60a5fa;}
+.stat-val.red{color:#f87171;}
+.stat-val.purple{color:#c084fc;}
+.stat-sub{font-size:10px;color:var(--text-muted);margin-top:4px;}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{background:rgba(201,168,76,.15);color:var(--gold);padding:8px 10px;text-align:left;font-weight:700;font-size:11px;letter-spacing:.3px;border-bottom:1px solid var(--border);}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text-2);}
+.tbl tr:hover td{background:rgba(255,255,255,.03);}
+
+/* BADGE */
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-anggota{background:rgba(74,222,128,.15);color:#4ade80;}
+.badge-aktif{background:rgba(74,222,128,.15);color:#4ade80;}
+.badge-nonaktif{background:rgba(248,113,113,.15);color:#f87171;}
+.badge-saham{background:rgba(201,168,76,.15);color:var(--gold);}
+.badge-angsuran{background:rgba(96,165,250,.15);color:#60a5fa;}
+.badge-warung{background:rgba(192,132,252,.15);color:#c084fc;}
+.badge-ppob{background:rgba(251,146,60,.15);color:#fb923c;}
+.badge-laundry{background:rgba(52,211,153,.15);color:#34d399;}
+.badge-service{background:rgba(251,191,36,.15);color:#fbbf24;}
+.badge-wadiah{background:rgba(129,140,248,.15);color:#818cf8;}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border:none;border-radius:var(--radius-xs);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;}
+.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#1a1207;}
+.btn.primary{background:rgba(96,165,250,.2);color:#60a5fa;border:1px solid rgba(96,165,250,.3);}
+.btn.secondary{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);}
+.btn.danger{background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3);}
+.btn.sm{padding:4px 10px;font-size:11px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+
+/* FORM */
+.irow{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+.irow label{min-width:120px;padding-top:9px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;}
+.irow input,.irow select{flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;color:var(--text);background:var(--surface2);transition:border-color .2s;}
+.irow input:focus,.irow select:focus{outline:none;border-color:var(--gold);}
+.info-box{border-radius:var(--radius-xs);padding:10px 12px;font-size:12px;margin-bottom:12px;}
+.info-box.gold{background:rgba(201,168,76,.1);border-left:3px solid var(--gold);color:var(--gold-mid);}
+.info-box.blue{background:rgba(96,165,250,.1);border-left:3px solid #60a5fa;color:#93c5fd;}
+.info-box.hijau{background:rgba(74,222,128,.1);border-left:3px solid #4ade80;color:#86efac;}
+.info-box.red{background:rgba(248,113,113,.1);border-left:3px solid #f87171;color:#fca5a5;}
+
+/* PROGRESS BAR PORSI */
+.porsi-bar{height:24px;background:var(--surface2);border-radius:99px;overflow:hidden;display:flex;margin-bottom:8px;border:1px solid var(--border);}
+.porsi-seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:white;transition:width .5s;min-width:0;overflow:hidden;}
+
+/* ANGGOTA CARD */
+.anggota-card{background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer;transition:all .2s;}
+.anggota-card:hover{border-color:var(--gold);background:rgba(201,168,76,.05);}
+.ac-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ac-nama{font-weight:700;font-size:13px;}
+.ac-no{font-size:10px;color:var(--text-muted);font-family:monospace;}
+.ac-shu-total{font-size:16px;font-weight:800;color:var(--gold);}
+
+/* MINI CHART */
+.mini-chart{display:flex;gap:3px;align-items:flex-end;height:32px;margin-top:6px;}
+.mini-bar{flex:1;border-radius:2px 2px 0 0;min-height:3px;transition:height .3s;}
+
+/* RANKING */
+.rank-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+.rank-no{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;}
+.rank-1{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1a1207;}
+.rank-2{background:linear-gradient(135deg,#94a3b8,#64748b);color:white;}
+.rank-3{background:linear-gradient(135deg,#cd7c2f,#a16207);color:white;}
+.rank-n{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);}
+
+/* SEARCH */
+.search-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.search-input{flex:1;min-width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;background:var(--surface2);color:var(--text);}
+.search-input:focus{outline:none;border-color:var(--gold);}
+.filter-sel{padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px;background:var(--surface2);color:var(--text);}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-end;justify-content:center;}
+.overlay.show{display:flex;}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:92vh;overflow-y:auto;padding:20px;border-top:1px solid var(--border);}
+.mhandle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.modal-title h3{font-size:14px;font-weight:800;color:var(--gold);}
+.btn-close{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--gold-dark);color:white;padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+#toast.err{background:var(--red);}
+#toast.show{opacity:1;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{text-align:center;padding:32px;color:var(--text-muted);}
+.empty .ei{font-size:40px;margin-bottom:8px;}
+.loading{text-align:center;padding:24px;color:var(--text-muted);}
+
+/* MOBILE */
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-240px);width:240px;}
+  .sidebar.open{transform:translateX(0);}
+  .topbar{left:0;}
+  .main-wrap{margin-left:0;}
+  .hamburger{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .two-col{grid-template-columns:1fr;}
+  .three-col{grid-template-columns:1fr;}
+  .irow{flex-direction:column;}
+  .irow label{padding-top:0;min-width:unset;}
+  .kanban{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">📊</div>
+      <h1>SHU Dashboard</h1>
+      <p>Rekap Keaktifan Transaksi Anggota</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <h1>📊 SHU Dashboard</h1>
+      <p>Keaktifan & Estimasi SHU</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+      <div class="nav-section">Analisis</div>
+      <div class="nav-item" onclick="showPage('rekap',this)"><span class="nav-icon">📋</span>Rekap per Anggota</div>
+      <div class="nav-item" onclick="showPage('ranking',this)"><span class="nav-icon">🏆</span>Ranking Keaktifan</div>
+      <div class="nav-item" onclick="showPage('trx-log',this)"><span class="nav-icon">📜</span>Log Transaksi SHU</div>
+      <div class="nav-section">Simulasi</div>
+      <div class="nav-item" onclick="showPage('simulasi',this)"><span class="nav-icon">🧮</span>Simulasi SHU</div>
+      <div class="nav-section">Kebijakan</div>
+      <div class="nav-item" onclick="showPage('kebijakan',this)"><span class="nav-icon">⚖️</span>Kebijakan SHU</div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user" id="sb-user"></div>
+      <button class="btn-logout" onclick="keluar()">Keluar</button>
+      <div style="margin-top:8px"><a href="portal.html" style="color:var(--text-muted);font-size:10px;text-decoration:none;">← Portal</a></div>
+    </div>
+  </div>
+
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="topbar-title">SHU Dashboard</div>
+    <div class="topbar-right">
+      <span id="kebijakan-badge" style="font-size:10px;padding:3px 8px;border-radius:99px;background:rgba(74,222,128,.15);color:#4ade80;font-weight:700;border:1px solid rgba(74,222,128,.3)">Memuat...</span>
+      <span class="user-badge" id="user-badge">—</span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <!-- Kebijakan info -->
+      <div id="kebijakan-info-box" class="info-box gold">Memuat kebijakan SHU...</div>
+
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-lbl">Total Anggota Aktif</div><div class="stat-val hijau" id="ds-anggota">—</div><div class="stat-sub">pemegang saham</div></div>
+        <div class="stat-card"><div class="stat-lbl">Sudah Bertransaksi</div><div class="stat-val gold" id="ds-aktif-trx">—</div><div class="stat-sub">sejak cut-off</div></div>
+        <div class="stat-card"><div class="stat-lbl">Total Nilai Transaksi</div><div class="stat-val blue" id="ds-total-trx">—</div><div class="stat-sub">semua jenis</div></div>
+        <div class="stat-card"><div class="stat-lbl">Total Log SHU</div><div class="stat-val purple" id="ds-log">—</div><div class="stat-sub">transaksi tercatat</div></div>
+      </div>
+
+      <!-- Distribusi per jenis transaksi -->
+      <div class="card">
+        <div class="card-title"><span>📊 Distribusi Transaksi per Jenis</span></div>
+        <div id="distribusi-chart"></div>
+      </div>
+
+      <!-- Top 5 anggota paling aktif -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span>🏆 Top 5 Paling Aktif</span></div>
+          <div id="top5-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>⚠️ Belum Ada Transaksi</span></div>
+          <div id="zero-trx-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REKAP PER ANGGOTA -->
+    <div class="page" id="page-rekap">
+      <div class="card">
+        <div class="card-title">
+          <span>📋 Rekap Keaktifan per Anggota</span>
+          <div class="btn-row">
+            <button class="btn gold sm" onclick="exportRekap()">⬇️ Excel</button>
+            <button class="btn primary sm" onclick="hitungRekap()">🔄 Hitung Ulang</button>
+          </div>
+        </div>
+        <div class="info-box blue">Nilai transaksi dihitung sejak tanggal cut-off kebijakan SHU berlaku.</div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-rekap" placeholder="🔍 Cari nama anggota..." oninput="filterRekap()">
+          <select class="filter-sel" id="filter-rekap-kelompok" onchange="filterRekap()">
+            <option value="">Semua Kelompok</option>
+            <option value="PW1">PW1</option><option value="PW2">PW2</option>
+            <option value="PW3">PW3</option><option value="PW4">PW4</option>
+          </select>
+          <select class="filter-sel" id="filter-rekap-sort" onchange="filterRekap()">
+            <option value="total-desc">Total Terbesar</option>
+            <option value="total-asc">Total Terkecil</option>
+            <option value="nama-asc">Nama A-Z</option>
+          </select>
+        </div>
+        <div id="list-rekap">
+          <div class="loading"><div class="spinner" style="border-top-color:var(--gold);margin:0 auto 8px"></div>Memuat rekap...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RANKING -->
+    <div class="page" id="page-ranking">
+      <div class="card">
+        <div class="card-title"><span>🏆 Ranking Keaktifan Anggota</span></div>
+        <div class="info-box gold">Ranking berdasarkan total nilai transaksi terbobot (setelah dikalikan porsi per jenis transaksi).</div>
+        <div class="search-bar">
+          <select class="filter-sel" id="filter-rank-jenis" onchange="renderRanking()">
+            <option value="all">Semua Jenis</option>
+            <option value="saham">⭐ Saham</option>
+            <option value="angsuran">💳 Angsuran BMT</option>
+            <option value="warung">🛒 Warung</option>
+            <option value="ppob">⚡ PPOB</option>
+            <option value="laundry">👕 Laundry</option>
+            <option value="service">🔧 Service</option>
+            <option value="wadiah">🏦 Wadiah</option>
+          </select>
+        </div>
+        <div id="list-ranking">
+          <div class="loading"><div class="spinner" style="border-top-color:var(--gold);margin:0 auto 8px"></div>Memuat ranking...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG TRANSAKSI SHU -->
+    <div class="page" id="page-trx-log">
+      <div class="card">
+        <div class="card-title"><span>📜 Log Transaksi SHU</span>
+          <button class="btn gold sm" onclick="exportLog()">⬇️ Excel</button>
+        </div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-log" placeholder="🔍 Cari nama, jenis..." oninput="filterLog()">
+          <select class="filter-sel" id="filter-log-jenis" onchange="filterLog()">
+            <option value="">Semua Jenis</option>
+            <option value="saham">Saham</option>
+            <option value="angsuran">Angsuran</option>
+            <option value="warung">Warung</option>
+            <option value="ppob">PPOB</option>
+            <option value="laundry">Laundry</option>
+            <option value="service">Service</option>
+            <option value="wadiah">Wadiah</option>
+          </select>
+          <input type="date" class="filter-sel" id="filter-log-dari">
+          <input type="date" class="filter-sel" id="filter-log-sampai">
+          <button class="btn primary sm" onclick="loadLog()">🔍 Cari</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Tanggal</th><th>Anggota</th><th>Jenis Transaksi</th><th>Periode</th><th style="text-align:right">Nilai</th></tr></thead>
+            <tbody id="tbody-log"></tbody>
+          </table>
+        </div>
+        <div id="log-pagination" style="text-align:center;margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- SIMULASI SHU -->
+    <div class="page" id="page-simulasi">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span>🧮 Simulasi Pembagian SHU</span></div>
+          <div class="info-box gold">Simulasi berdasarkan data transaksi saat ini dan kebijakan aktif. Hasil aktual bergantung pada total SHU yang ditetapkan di MPPS.</div>
+
+          <div class="irow"><label>Total SHU (Rp)</label>
+            <input type="number" id="sim-total-shu" placeholder="Misal: 50000000" oninput="hitungSimulasi()">
+          </div>
+          <div class="irow"><label>Pool Saham (%)</label>
+            <input type="number" id="sim-pct-saham" placeholder="60" min="0" max="100" oninput="sinkronSim('saham');hitungSimulasi()">
+          </div>
+          <div class="irow"><label>Pool Transaksi (%)</label>
+            <input type="number" id="sim-pct-trx" placeholder="40" min="0" max="100" oninput="sinkronSim('trx');hitungSimulasi()">
+          </div>
+
+          <!-- Preview pool -->
+          <div id="sim-pool-preview" style="display:none;margin-bottom:12px">
+            <div style="display:flex;gap:8px;margin-bottom:6px">
+              <div style="flex:1;background:rgba(74,222,128,.1);border-radius:var(--radius-xs);padding:10px;text-align:center;border:1px solid rgba(74,222,128,.2)">
+                <div style="font-size:9px;color:#4ade80;font-weight:700;text-transform:uppercase">Pool Saham</div>
+                <div style="font-size:18px;font-weight:800;color:#4ade80" id="sim-pool-saham-val">Rp 0</div>
+              </div>
+              <div style="flex:1;background:rgba(96,165,250,.1);border-radius:var(--radius-xs);padding:10px;text-align:center;border:1px solid rgba(96,165,250,.2)">
+                <div style="font-size:9px;color:#60a5fa;font-weight:700;text-transform:uppercase">Pool Transaksi</div>
+                <div style="font-size:18px;font-weight:800;color:#60a5fa" id="sim-pool-trx-val">Rp 0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="irow"><label>SHU/Lembar (Rp)</label>
+            <input type="number" id="sim-shu-lembar" placeholder="Dari MPPS" oninput="hitungSimulasi()">
+          </div>
+
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn gold" style="flex:1" onclick="jalankanSimulasi()">▶️ Jalankan Simulasi</button>
+          </div>
+        </div>
+
+        <!-- Hasil simulasi top 10 -->
+        <div class="card">
+          <div class="card-title"><span>📊 Hasil Simulasi — Top 10</span></div>
+          <div id="sim-hasil">
+            <div class="empty"><div class="ei">🧮</div><p>Isi parameter dan jalankan simulasi</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabel simulasi lengkap -->
+      <div class="card" id="sim-tabel-card" style="display:none">
+        <div class="card-title">
+          <span>📋 Simulasi Lengkap Semua Anggota</span>
+          <button class="btn gold sm" onclick="exportSimulasi()">⬇️ Excel</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>#</th><th>Anggota</th><th>Kelompok</th>
+              <th style="text-align:right">Lembar Prop.</th>
+              <th style="text-align:right">SHU Saham</th>
+              <th style="text-align:right">Nilai Trx Terbobot</th>
+              <th style="text-align:right">SHU Transaksi</th>
+              <th style="text-align:right;color:var(--gold)">TOTAL SHU</th>
+            </tr></thead>
+            <tbody id="tbody-simulasi"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- KEBIJAKAN SHU -->
+    <div class="page" id="page-kebijakan">
+      <div class="card">
+        <div class="card-title"><span>⚖️ Kebijakan SHU Aktif</span></div>
+        <div id="kebijakan-detail">
+          <div class="loading"><div class="spinner" style="border-top-color:var(--gold);margin:0 auto 8px"></div>Memuat kebijakan...</div>
+        </div>
+      </div>
+
+      <!-- Porsi per jenis transaksi -->
+      <div class="card" id="porsi-card" style="display:none">
+        <div class="card-title"><span>📊 Porsi per Jenis Transaksi dalam Pool 40%</span></div>
+        <div class="info-box blue">Total porsi = 100%. Porsi ini menentukan bobot masing-masing jenis transaksi dalam perhitungan pool transaksi SHU.</div>
+        <div id="porsi-display"></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn primary sm" onclick="editPorsi()">✏️ Edit Porsi</button>
+        </div>
+      </div>
+
+      <!-- Semua kebijakan -->
+      <div class="card">
+        <div class="card-title"><span>📋 Riwayat Kebijakan</span></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Periode</th><th>Berlaku Mulai</th><th>Pool Saham</th><th>Pool Transaksi</th><th>Status</th><th>Operator</th></tr></thead>
+            <tbody id="tbody-kebijakan"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL DETAIL ANGGOTA -->
+<div class="overlay" id="modal-anggota">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="modal-title">
+      <h3 id="modal-anggota-title">Detail Keaktifan</h3>
+      <button class="btn-close" onclick="closeModal('modal-anggota')">✕</button>
+    </div>
+    <div id="modal-anggota-content"></div>
+  </div>
+</div>
+
+<!-- MODAL EDIT PORSI -->
+<div class="overlay" id="modal-porsi">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="modal-title">
+      <h3>✏️ Edit Porsi Transaksi</h3>
+      <button class="btn-close" onclick="closeModal('modal-porsi')">✕</button>
+    </div>
+    <div class="info-box gold">Total semua porsi harus = 100%</div>
+    <div id="porsi-form"></div>
+    <div id="porsi-total-warning" style="display:none;color:#f87171;font-size:12px;font-weight:700;margin-bottom:10px">⚠️ Total harus = 100%</div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn gold" style="flex:1" onclick="simpanPorsi()">💾 Simpan Porsi</button>
+      <button class="btn secondary" onclick="closeModal('modal-porsi')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase; const sb=createClient(SURL,SKEY);
+
+let CU=null, aKebijakan=null, aSaham=[], aAnggota=[], aLog=[], aRekap=[];
+let _simResult=[];
+
+const rp=n=>'Rp '+Math.round(parseFloat(n)||0).toLocaleString('id-ID');
+const fmtTgl=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+const rpK=n=>{const v=Math.round(parseFloat(n)||0);return v>=1e6?'Rp '+(v/1e6).toFixed(1)+'jt':rp(v);};
+
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show'+(err?' err':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);
+}
+
+const JENIS_COLORS={saham:'#fbbf24',angsuran:'#60a5fa',warung:'#c084fc',ppob:'#fb923c',laundry:'#34d399',service:'#fbbf24',wadiah:'#818cf8'};
+const JENIS_ICON={saham:'⭐',angsuran:'💳',warung:'🛒',ppob:'⚡',laundry:'👕',service:'🔧',wadiah:'🏦'};
+
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  const btn=document.getElementById('btn-login');
+  btn.innerHTML='<div class="spinner"></div>';btn.disabled=true;
+  const {data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.innerHTML='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
+  CU=data;
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username;
+  document.getElementById('sb-user').textContent='👤 '+CU.username;
+  await loadAll();
+  renderDashboard();
+}
+function keluar(){CU=null;location.reload();}
+
+async function loadAll(){
+  const [{data:kb},{data:s},{data:a}]=await Promise.all([
+    sb.from('ubnb_kebijakan_shu').select('*').eq('status','aktif').single(),
+    sb.from('ubnb_saham').select('anggota_id,jumlah_lembar,tanggal_pertama'),
+    sb.from('ubnb_anggota').select('id,nama,no_anggota,kelompok,status').eq('status','Aktif').order('nama')
+  ]);
+  aKebijakan=kb||null; aSaham=s||[]; aAnggota=a||[];
+
+  // Update badge
+  const badge=document.getElementById('kebijakan-badge');
+  if(aKebijakan){
+    badge.textContent='✅ Kebijakan '+aKebijakan.periode+' Aktif';
+    badge.style.background='rgba(74,222,128,.15)';badge.style.color='#4ade80';
+  } else {
+    badge.textContent='⚠️ Belum Ada Kebijakan';
+    badge.style.background='rgba(251,191,36,.15)';badge.style.color='#fbbf24';
+  }
+
+  // Build rekap dari log
+  await buildRekap();
+}
+
+async function buildRekap(){
+  if(!aKebijakan){aRekap=[];return;}
+  const {data:logs}=await sb.from('ubnb_shu_trx_log')
+    .select('anggota_id,jenis_trx,nilai,tanggal')
+    .eq('kebijakan_id',aKebijakan.id);
+  aLog=logs||[];
+
+  // Group by anggota_id
+  const map={};
+  (logs||[]).forEach(l=>{
+    if(!map[l.anggota_id]) map[l.anggota_id]={
+      anggota_id:l.anggota_id,
+      saham:0,angsuran:0,warung:0,ppob:0,laundry:0,service:0,wadiah:0,total:0
+    };
+    const jenis=l.jenis_trx||'lainnya';
+    map[l.anggota_id][jenis]=(map[l.anggota_id][jenis]||0)+parseFloat(l.nilai||0);
+    map[l.anggota_id].total+=parseFloat(l.nilai||0);
+  });
+
+  // Gabungkan dengan data anggota
+  aRekap=aAnggota.map(a=>{
+    const trx=map[a.id]||{anggota_id:a.id,saham:0,angsuran:0,warung:0,ppob:0,laundry:0,service:0,wadiah:0,total:0};
+    const sahamData=aSaham.filter(s=>s.anggota_id===a.id);
+    const totalLembar=sahamData.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+    return {...a,...trx,total_lembar:totalLembar};
+  });
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  // Info kebijakan
+  const kBox=document.getElementById('kebijakan-info-box');
+  if(aKebijakan){
+    kBox.className='info-box hijau';
+    kBox.innerHTML=`✅ <strong>Kebijakan SHU Aktif — Periode ${aKebijakan.periode}</strong><br>
+      Cut-off: ${fmtTgl(aKebijakan.tgl_mulai_berlaku)} · Pool Saham: ${aKebijakan.rasio_saham}% · Pool Transaksi: ${aKebijakan.rasio_transaksi}%`;
+  } else {
+    kBox.className='info-box gold';
+    kBox.innerHTML='⚠️ Belum ada kebijakan SHU aktif. Semua transaksi belum diperhitungkan untuk SHU.';
+  }
+
+  const sudahTrx=aRekap.filter(r=>r.total>0).length;
+  const totalTrx=aRekap.reduce((s,r)=>s+r.total,0);
+  document.getElementById('ds-anggota').textContent=aAnggota.length;
+  document.getElementById('ds-aktif-trx').textContent=sudahTrx;
+  document.getElementById('ds-total-trx').textContent=rpK(totalTrx);
+  document.getElementById('ds-log').textContent=aLog.length;
+
+  // Distribusi per jenis
+  const jenis=['saham','angsuran','warung','ppob','laundry','service','wadiah'];
+  const totals={};
+  jenis.forEach(j=>{totals[j]=aRekap.reduce((s,r)=>s+(r[j]||0),0);});
+  const grandTotal=Object.values(totals).reduce((s,v)=>s+v,0)||1;
+
+  const distribEl=document.getElementById('distribusi-chart');
+  distribEl.innerHTML=`
+    <div class="porsi-bar" style="height:32px;border-radius:var(--radius-xs)">
+      ${jenis.map(j=>`
+        <div class="porsi-seg" style="width:${(totals[j]/grandTotal*100).toFixed(1)}%;background:${JENIS_COLORS[j]}" title="${j}: ${rp(totals[j])}">
+          ${(totals[j]/grandTotal*100)>5?JENIS_ICON[j]+' '+Math.round(totals[j]/grandTotal*100)+'%':''}
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+      ${jenis.map(j=>`
+        <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border-radius:var(--radius-xs);padding:6px 10px;border:1px solid var(--border)">
+          <div style="width:10px;height:10px;border-radius:2px;background:${JENIS_COLORS[j]};flex-shrink:0"></div>
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--text-2)">${JENIS_ICON[j]} ${j.charAt(0).toUpperCase()+j.slice(1)}</div>
+            <div style="font-size:11px;color:var(--gold);font-weight:700">${rpK(totals[j])}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+
+  // Top 5
+  const sorted=[...aRekap].sort((a,b)=>b.total-a.total);
+  document.getElementById('top5-list').innerHTML=sorted.slice(0,5).map((r,i)=>`
+    <div class="rank-item">
+      <div class="rank-no ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}">${i+1}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:12px">${r.nama}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${r.kelompok||'—'} · ${r.total_lembar||0} lembar</div>
+      </div>
+      <div style="font-weight:700;color:var(--gold);font-size:13px">${rpK(r.total)}</div>
+    </div>`).join('')||'<div class="empty"><div class="ei">🏆</div><p>Belum ada data</p></div>';
+
+  // Zero transaksi
+  const zero=aRekap.filter(r=>r.total===0);
+  document.getElementById('zero-trx-list').innerHTML=zero.length?
+    `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${zero.length} anggota belum bertransaksi</div>`+
+    zero.slice(0,8).map(r=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:12px">${r.nama}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${r.kelompok||'—'}</div>
+        </div>
+        <span style="font-size:10px;color:#f87171;font-weight:700">0 transaksi</span>
+      </div>`).join('')+
+    (zero.length>8?`<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:6px">+${zero.length-8} lainnya</div>`:'')
+  :'<div class="empty"><div class="ei">✅</div><p>Semua anggota sudah bertransaksi!</p></div>';
+}
+
+// ===== REKAP PER ANGGOTA =====
+function filterRekap(){
+  const q=(document.getElementById('search-rekap').value||''). toLowerCase();
+  const fk=document.getElementById('filter-rekap-kelompok').value;
+  const sort=document.getElementById('filter-rekap-sort').value;
+
+  let data=[...aRekap].filter(r=>{
+    if(q&&!(r.nama||''). toLowerCase().includes(q)) return false;
+    if(fk&&r.kelompok!==fk) return false;
+    return true;
+  });
+
+  if(sort==='total-desc') data.sort((a,b)=>b.total-a.total);
+  else if(sort==='total-asc') data.sort((a,b)=>a.total-b.total);
+  else data.sort((a,b)=>(a.nama||''). localeCompare(b.nama||'')); 
+
+  const jenis=['saham','angsuran','warung','ppob','laundry','service','wadiah'];
+  const el=document.getElementById('list-rekap');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">📋</div><p>Tidak ada data</p></div>';return;}
+
+  el.innerHTML=data.map((r,i)=>{
+    const maxJenis=Math.max(...jenis.map(j=>r[j]||0),1);
+    return`
+      <div class="anggota-card" onclick="bukaDetailAnggota(${r.id})">
+        <div class="ac-header">
+          <div>
+            <div class="ac-nama">${i+1}. ${r.nama}</div>
+            <div class="ac-no">${r.no_anggota} · ${r.kelompok||'—'} · ${r.total_lembar||0} lembar</div>
+          </div>
+          <div style="text-align:right">
+            <div class="ac-shu-total">${rpK(r.total)}</div>
+            <div style="font-size:10px;color:var(--text-muted)">${aLog.filter(l=>l.anggota_id===r.id).length} transaksi</div>
+          </div>
+        </div>
+        <!-- Bar per jenis -->
+        <div style="display:flex;gap:4px">
+          ${jenis.map(j=>r[j]>0?`
+            <div style="flex:${r[j]};background:${JENIS_COLORS[j]};height:6px;border-radius:3px;min-width:4px" title="${JENIS_ICON[j]} ${j}: ${rp(r[j])}"></div>
+          `:'').join('')}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          ${jenis.filter(j=>r[j]>0).map(j=>`
+            <span style="font-size:9px;color:${JENIS_COLORS[j]};font-weight:700">${JENIS_ICON[j]} ${rpK(r[j])}</span>
+          `).join('')}
+          ${r.total===0?'<span style="font-size:9px;color:#f87171;font-weight:700">⚠️ Belum ada transaksi</span>':''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ===== DETAIL ANGGOTA =====
+function bukaDetailAnggota(id){
+  const r=aRekap.find(x=>x.id===id);if(!r)return;
+  const jenis=['saham','angsuran','warung','ppob','laundry','service','wadiah'];
+  const logs=aLog.filter(l=>l.anggota_id===id).sort((a,b)=>b.tanggal.localeCompare(a.tanggal));
+  document.getElementById('modal-anggota-title').textContent=r.nama;
+
+  const porsiKebijakan=aKebijakan?{
+    saham:aKebijakan.porsi_saham_pct||20,
+    angsuran:aKebijakan.porsi_angsuran_pct||25,
+    warung:aKebijakan.porsi_warung_pct||15,
+    ppob:aKebijakan.porsi_ppob_pct||10,
+    laundry:aKebijakan.porsi_laundry_pct||10,
+    service:aKebijakan.porsi_service_pct||10,
+    wadiah:aKebijakan.porsi_wadiah_pct||10
+  }:{};
+
+  document.getElementById('modal-anggota-content').innerHTML=`
+    <div style="background:linear-gradient(135deg,#020617,#1e1b4b);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:1px solid var(--border)">
+      <div style="font-size:18px;font-weight:800;color:var(--text)">${r.nama}</div>
+      <div style="font-size:11px;color:var(--text-muted)">${r.no_anggota} · ${r.kelompok||'—'} · ${r.total_lembar||0} lembar saham</div>
+      <div style="font-size:24px;font-weight:900;color:var(--gold);margin-top:10px">${rp(r.total)}</div>
+      <div style="font-size:11px;color:var(--text-muted)">total nilai transaksi SHU</div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px">Breakdown per Jenis</div>
+      ${jenis.map(j=>{
+        const val=r[j]||0;
+        const pct=aKebijakan?porsiKebijakan[j]||0:0;
+        const totalJenis=aRekap.reduce((s,x)=>s+(x[j]||0),0)||1;
+        const share=(val/totalJenis*100).toFixed(1);
+        return val>0?`
+          <div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px">
+              <span>${JENIS_ICON[j]} ${j} <span style="font-size:10px;color:var(--text-muted)">(porsi ${pct}%)</span></span>
+              <span style="font-weight:700;color:${JENIS_COLORS[j]}">${rp(val)}</span>
+            </div>
+            <div style="background:var(--surface2);border-radius:99px;height:5px">
+              <div style="width:${share}%;background:${JENIS_COLORS[j]};height:5px;border-radius:99px;transition:width .5s"></div>
+            </div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px">${share}% dari total pool ${j}</div>
+          </div>`:'';
+      }).join('')}
+      ${r.total===0?'<div class="empty" style="padding:16px"><div class="ei">⚠️</div><p style="color:#f87171">Belum ada transaksi SHU tercatat</p></div>':''}
+    </div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px">10 Transaksi Terbaru</div>
+    ${logs.slice(0,10).map(l=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:16px">${JENIS_ICON[l.jenis_trx]||'📋'}</span>
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:600;color:var(--text-2)">${l.jenis_trx}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${fmtTgl(l.tanggal)}</div>
+        </div>
+        <div style="font-weight:700;color:${JENIS_COLORS[l.jenis_trx]||'var(--gold)'};">${rp(l.nilai)}</div>
+      </div>`).join('')||'<div class="empty" style="padding:16px"><p>Belum ada log</p></div>'}`;
+
+  openModal('modal-anggota');
+}
+
+// ===== RANKING =====
+function renderRanking(){
+  const filterJenis=document.getElementById('filter-rank-jenis').value;
+  let data=[...aRekap];
+
+  if(filterJenis!=='all'){
+    data=data.map(r=>({...r,_val:r[filterJenis]||0})).sort((a,b)=>b._val-a._val);
+  } else {
+    data=data.sort((a,b)=>b.total-a.total);
+  }
+
+  const el=document.getElementById('list-ranking');
+  el.innerHTML=data.map((r,i)=>{
+    const val=filterJenis==='all'?r.total:(r[filterJenis]||0);
+    return`
+      <div class="rank-item" style="cursor:pointer" onclick="bukaDetailAnggota(${r.id})">
+        <div class="rank-no ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}">${i+1}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:12px">${r.nama}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${r.kelompok||'—'} · ${r.total_lembar||0} lbr</div>
+        </div>
+        ${val>0?`<div style="font-weight:800;color:${filterJenis!=='all'?JENIS_COLORS[filterJenis]:'var(--gold)'};font-size:13px">${rpK(val)}</div>`
+        :'<span style="font-size:11px;color:#f87171">—</span>'}
+      </div>`;
+  }).join('')||'<div class="empty"><div class="ei">🏆</div><p>Tidak ada data</p></div>';
+}
+
+// ===== LOG TRANSAKSI =====
+async function loadLog(){
+  const q=(document.getElementById('search-log').value||''). toLowerCase();
+  const fj=document.getElementById('filter-log-jenis').value;
+  const dari=document.getElementById('filter-log-dari').value;
+  const sampai=document.getElementById('filter-log-sampai').value;
+
+  let query=sb.from('ubnb_shu_trx_log')
+    .select('*,ubnb_anggota(nama,kelompok)')
+    .order('tanggal',{ascending:false}).limit(200);
+  if(aKebijakan) query=query.eq('kebijakan_id',aKebijakan.id);
+  if(fj) query=query.eq('jenis_trx',fj);
+  if(dari) query=query.gte('tanggal',dari);
+  if(sampai) query=query.lte('tanggal',sampai);
+
+  const {data}=await query;
+  let rows=(data||[]);
+  if(q) rows=rows.filter(l=>(l.ubnb_anggota?.nama||''). toLowerCase().includes(q)||(l.jenis_trx||''). includes(q));
+
+  document.getElementById('tbody-log').innerHTML=rows.map(l=>`<tr>
+    <td style="font-size:11px">${fmtTgl(l.tanggal)}</td>
+    <td><strong>${l.ubnb_anggota?.nama||'—'}</strong><br>
+      <span style="font-size:10px;color:var(--text-muted)">${l.ubnb_anggota?.kelompok||'—'}</span></td>
+    <td><span class="badge badge-${l.jenis_trx}">${JENIS_ICON[l.jenis_trx]||'📋'} ${l.jenis_trx||'—'}</span></td>
+    <td style="font-size:11px;color:var(--text-muted)">${l.periode||'—'}</td>
+    <td style="text-align:right;font-weight:700;color:${JENIS_COLORS[l.jenis_trx]||'var(--gold)'}">${rp(l.nilai)}</td>
+  </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">Tidak ada data</td></tr>';
+}
+
+// ===== SIMULASI SHU =====
+function sinkronSim(changed){
+  const s=parseFloat(document.getElementById('sim-pct-saham').value)||0;
+  const t=parseFloat(document.getElementById('sim-pct-trx').value)||0;
+  if(changed==='saham') document.getElementById('sim-pct-trx').value=Math.max(0,100-s).toFixed(0);
+  else document.getElementById('sim-pct-saham').value=Math.max(0,100-t).toFixed(0);
+}
+
+function hitungSimulasi(){
+  const totalSHU=parseFloat(document.getElementById('sim-total-shu').value)||0;
+  const pctSaham=(parseFloat(document.getElementById('sim-pct-saham').value)||60)/100;
+  const pctTrx=(parseFloat(document.getElementById('sim-pct-trx').value)||40)/100;
+  const prev=document.getElementById('sim-pool-preview');
+  if(totalSHU>0){
+    prev.style.display='block';
+    document.getElementById('sim-pool-saham-val').textContent=rp(totalSHU*pctSaham);
+    document.getElementById('sim-pool-trx-val').textContent=rp(totalSHU*pctTrx);
+  } else prev.style.display='none';
+}
+
+async function jalankanSimulasi(){
+  const totalSHU=parseFloat(document.getElementById('sim-total-shu').value)||0;
+  const shuPerLembar=parseFloat(document.getElementById('sim-shu-lembar').value)||0;
+  const pctSaham=(parseFloat(document.getElementById('sim-pct-saham').value)||60)/100;
+  const pctTrx=(parseFloat(document.getElementById('sim-pct-trx').value)||40)/100;
+
+  if(!totalSHU&&!shuPerLembar){toast('Isi Total SHU atau SHU/Lembar dulu',true);return;}
+
+  const poolSaham=totalSHU*pctSaham;
+  const poolTrx=totalSHU*pctTrx;
+
+  // Hitung total lembar proporsional (simplified)
+  const totalLembar=aRekap.reduce((s,r)=>s+(r.total_lembar||0),0)||1;
+
+  // Hitung total transaksi terbobot
+  const kebPorsi=aKebijakan?{
+    saham:(aKebijakan.porsi_saham_pct||20)/100,
+    angsuran:(aKebijakan.porsi_angsuran_pct||25)/100,
+    warung:(aKebijakan.porsi_warung_pct||15)/100,
+    ppob:(aKebijakan.porsi_ppob_pct||10)/100,
+    laundry:(aKebijakan.porsi_laundry_pct||10)/100,
+    service:(aKebijakan.porsi_service_pct||10)/100,
+    wadiah:(aKebijakan.porsi_wadiah_pct||10)/100
+  }:{saham:.2,angsuran:.25,warung:.15,ppob:.1,laundry:.1,service:.1,wadiah:.1};
+
+  // Hitung terbobot per anggota
+  const jenis=['saham','angsuran','warung','ppob','laundry','service','wadiah'];
+  aRekap.forEach(r=>{
+    r._terbobot=jenis.reduce((s,j)=>s+(r[j]||0)*(kebPorsi[j]||0),0);
+  });
+  const totalTerbobot=aRekap.reduce((s,r)=>s+(r._terbobot||0),0)||1;
+
+  _simResult=aRekap.map(r=>{
+    const shuSaham=shuPerLembar>0?(r.total_lembar||0)*shuPerLembar:poolSaham*((r.total_lembar||0)/totalLembar);
+    const shuTrx=poolTrx>0?poolTrx*(r._terbobot||0)/totalTerbobot:0;
+    return {...r,shu_saham:Math.round(shuSaham),shu_trx:Math.round(shuTrx),shu_total:Math.round(shuSaham+shuTrx)};
+  }).sort((a,b)=>b.shu_total-a.shu_total);
+
+  // Top 10
+  const top10=_simResult.slice(0,10);
+  document.getElementById('sim-hasil').innerHTML=top10.map((r,i)=>`
+    <div class="rank-item">
+      <div class="rank-no ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}">${i+1}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:12px">${r.nama}</div>
+        <div style="font-size:10px;color:var(--text-muted)">
+          Saham: ${rp(r.shu_saham)} · Trx: ${rp(r.shu_trx)}
+        </div>
+      </div>
+      <div style="font-weight:800;color:var(--gold);font-size:14px">${rp(r.shu_total)}</div>
+    </div>`).join('');
+
+  // Tabel lengkap
+  document.getElementById('sim-tabel-card').style.display='block';
+  document.getElementById('tbody-simulasi').innerHTML=_simResult.map((r,i)=>`<tr>
+    <td style="color:var(--text-muted)">${i+1}</td>
+    <td><strong>${r.nama}</strong></td>
+    <td><span style="font-size:10px;color:var(--text-muted)">${r.kelompok||'—'}</span></td>
+    <td style="text-align:right">${(r.total_lembar||0).toFixed(1)}</td>
+    <td style="text-align:right;color:#4ade80">${rp(r.shu_saham)}</td>
+    <td style="text-align:right;color:#60a5fa">${rp(r._terbobot||0)}</td>
+    <td style="text-align:right;color:#c084fc">${rp(r.shu_trx)}</td>
+    <td style="text-align:right;font-weight:800;color:var(--gold)">${rp(r.shu_total)}</td>
+  </tr>`).join('');
+
+  toast('✅ Simulasi selesai!');
+}
+
+function exportSimulasi(){
+  if(!_simResult.length){toast('Jalankan simulasi dulu',true);return;}
+  const XLSX=window.XLSX;
+  const rows=_simResult.map((r,i)=>({
+    '#':i+1,'Nama':r.nama,'Kelompok':r.kelompok,
+    'Lembar':r.total_lembar||0,
+    'SHU Saham':r.shu_saham,'Nilai Trx Terbobot':Math.round(r._terbobot||0),
+    'SHU Transaksi':r.shu_trx,'Total SHU':r.shu_total
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Simulasi SHU');
+  XLSX.writeFile(wb,'UBNB_Simulasi_SHU_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+// ===== KEBIJAKAN =====
+async function renderKebijakan(){
+  const el=document.getElementById('kebijakan-detail');
+  const {data:all}=await sb.from('ubnb_kebijakan_shu').select('*').order('created_at',{ascending:false});
+
+  if(!aKebijakan){
+    el.innerHTML='<div class="info-box gold">⚠️ Belum ada kebijakan SHU aktif. Buat kebijakan di modul Saham.</div>';
+    document.getElementById('porsi-card').style.display='none';
+  } else {
+    el.innerHTML=`
+      <div style="background:linear-gradient(135deg,#020617,#1e1b4b);border-radius:var(--radius-sm);padding:16px;border:1px solid var(--border);margin-bottom:12px">
+        <div style="font-size:15px;font-weight:800;color:var(--gold)">Periode ${aKebijakan.periode}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          Berlaku: ${fmtTgl(aKebijakan.tgl_mulai_berlaku)} → ${fmtTgl(aKebijakan.tgl_akhir)}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+          <div style="background:rgba(74,222,128,.1);border-radius:var(--radius-xs);padding:10px;border:1px solid rgba(74,222,128,.2)">
+            <div style="font-size:10px;color:#4ade80;font-weight:700">POOL SAHAM</div>
+            <div style="font-size:24px;font-weight:900;color:#4ade80">${aKebijakan.rasio_saham}%</div>
+          </div>
+          <div style="background:rgba(96,165,250,.1);border-radius:var(--radius-xs);padding:10px;border:1px solid rgba(96,165,250,.2)">
+            <div style="font-size:10px;color:#60a5fa;font-weight:700">POOL TRANSAKSI</div>
+            <div style="font-size:24px;font-weight:900;color:#60a5fa">${aKebijakan.rasio_transaksi}%</div>
+          </div>
+        </div>
+        ${aKebijakan.catatan?`<div style="margin-top:10px;font-size:12px;color:var(--text-muted)">📝 ${aKebijakan.catatan}</div>`:''}
+      </div>`;
+
+    // Porsi per jenis
+    document.getElementById('porsi-card').style.display='block';
+    const porsiData=[
+      {key:'porsi_saham_pct',label:'Saham',icon:'⭐',color:JENIS_COLORS.saham},
+      {key:'porsi_angsuran_pct',label:'Angsuran BMT',icon:'💳',color:JENIS_COLORS.angsuran},
+      {key:'porsi_warung_pct',label:'Warung',icon:'🛒',color:JENIS_COLORS.warung},
+      {key:'porsi_ppob_pct',label:'PPOB',icon:'⚡',color:JENIS_COLORS.ppob},
+      {key:'porsi_laundry_pct',label:'Laundry',icon:'👕',color:JENIS_COLORS.laundry},
+      {key:'porsi_service_pct',label:'Service',icon:'🔧',color:JENIS_COLORS.service},
+      {key:'porsi_wadiah_pct',label:'Wadiah',icon:'🏦',color:JENIS_COLORS.wadiah},
+    ];
+    document.getElementById('porsi-display').innerHTML=`
+      <div class="porsi-bar" style="height:28px;border-radius:var(--radius-xs);margin-bottom:12px">
+        ${porsiData.map(p=>{
+          const val=aKebijakan[p.key]||0;
+          return`<div class="porsi-seg" style="width:${val}%;background:${p.color}" title="${p.label}: ${val}%">
+            ${val>7?p.icon+' '+val+'%':''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${porsiData.map(p=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:var(--radius-xs);padding:8px 12px;border:1px solid var(--border)">
+            <span style="font-size:12px">${p.icon} ${p.label}</span>
+            <span style="font-weight:800;color:${p.color};font-size:14px">${aKebijakan[p.key]||0}%</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // Riwayat kebijakan
+  document.getElementById('tbody-kebijakan').innerHTML=(all||[]).map(k=>`<tr>
+    <td style="font-weight:700">${k.periode}</td>
+    <td style="font-size:11px">${fmtTgl(k.tgl_mulai_berlaku)}</td>
+    <td><span style="color:#4ade80;font-weight:700">${k.rasio_saham}%</span></td>
+    <td><span style="color:#60a5fa;font-weight:700">${k.rasio_transaksi}%</span></td>
+    <td><span class="badge ${k.status==='aktif'?'badge-aktif':'badge-nonaktif'}">${k.status}</span></td>
+    <td style="font-size:11px;color:var(--text-muted)">${k.operator||'—'}</td>
+  </tr>`).join('');
+}
+
+// ===== EDIT PORSI =====
+function editPorsi(){
+  if(!aKebijakan){toast('Tidak ada kebijakan aktif',true);return;}
+  const porsiData=[
+    {key:'porsi_saham_pct',label:'Saham',icon:'⭐'},
+    {key:'porsi_angsuran_pct',label:'Angsuran BMT',icon:'💳'},
+    {key:'porsi_warung_pct',label:'Warung',icon:'🛒'},
+    {key:'porsi_ppob_pct',label:'PPOB',icon:'⚡'},
+    {key:'porsi_laundry_pct',label:'Laundry',icon:'👕'},
+    {key:'porsi_service_pct',label:'Service',icon:'🔧'},
+    {key:'porsi_wadiah_pct',label:'Wadiah',icon:'🏦'},
+  ];
+  document.getElementById('porsi-form').innerHTML=porsiData.map(p=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="width:120px;font-size:12px;font-weight:600;color:var(--text-2)">${p.icon} ${p.label}</span>
+      <input type="number" id="ep-${p.key}" value="${aKebijakan[p.key]||0}" min="0" max="100" step="5"
+        style="width:80px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;text-align:center"
+        oninput="cekTotalPorsi()">
+      <span style="font-size:12px;color:var(--text-muted)">%</span>
+    </div>`).join('');
+  openModal('modal-porsi');
+}
+
+function cekTotalPorsi(){
+  const keys=['porsi_saham_pct','porsi_angsuran_pct','porsi_warung_pct','porsi_ppob_pct','porsi_laundry_pct','porsi_service_pct','porsi_wadiah_pct'];
+  const total=keys.reduce((s,k)=>s+(parseFloat(document.getElementById('ep-'+k)?.value)||0),0);
+  const warn=document.getElementById('porsi-total-warning');
+  warn.style.display=Math.abs(total-100)>0.01?'block':'none';
+  warn.textContent=`⚠️ Total saat ini: ${total}% (harus = 100%)`;
+}
+
+async function simpanPorsi(){
+  const keys=['porsi_saham_pct','porsi_angsuran_pct','porsi_warung_pct','porsi_ppob_pct','porsi_laundry_pct','porsi_service_pct','porsi_wadiah_pct'];
+  const vals={};
+  let total=0;
+  keys.forEach(k=>{
+    const v=parseFloat(document.getElementById('ep-'+k)?.value)||0;
+    vals[k]=v; total+=v;
+  });
+  if(Math.abs(total-100)>0.01){toast('Total porsi harus = 100%',true);return;}
+  const {error}=await sb.from('ubnb_kebijakan_shu').update(vals).eq('id',aKebijakan.id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Porsi berhasil disimpan!');
+  closeModal('modal-porsi');
+  await loadAll();
+  renderKebijakan();
+}
+
+// ===== EXPORT =====
+function exportRekap(){
+  const XLSX=window.XLSX;
+  const rows=aRekap.map((r,i)=>({
+    '#':i+1,'Nama':r.nama,'No. Anggota':r.no_anggota,'Kelompok':r.kelompok,
+    'Lembar Saham':r.total_lembar||0,
+    'Saham':r.saham||0,'Angsuran BMT':r.angsuran||0,'Warung':r.warung||0,
+    'PPOB':r.ppob||0,'Laundry':r.laundry||0,'Service':r.service||0,'Wadiah':r.wadiah||0,
+    'Total Transaksi':r.total||0
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Rekap SHU');
+  XLSX.writeFile(wb,'UBNB_Rekap_SHU_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+async function exportLog(){
+  const {data}=await sb.from('ubnb_shu_trx_log')
+    .select('*,ubnb_anggota(nama,kelompok)')
+    .order('tanggal',{ascending:false}).limit(5000);
+  const XLSX=window.XLSX;
+  const rows=(data||[]).map(l=>({
+    'Tanggal':l.tanggal,'Anggota':l.ubnb_anggota?.nama||'—',
+    'Kelompok':l.ubnb_anggota?.kelompok||'—',
+    'Jenis':l.jenis_trx,'Periode':l.periode||'—','Nilai':parseFloat(l.nilai||0)
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Log SHU');
+  XLSX.writeFile(wb,'UBNB_Log_SHU_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+// ===== UI HELPERS =====
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id)?.classList.add('active');
+  if(el) el.classList.add('active');
+  const titles={
+    dashboard:'SHU Dashboard',rekap:'Rekap per Anggota',ranking:'Ranking Keaktifan',
+    'trx-log':'Log Transaksi SHU',simulasi:'Simulasi SHU',kebijakan:'Kebijakan SHU'
+  };
+  document.getElementById('topbar-title').textContent=titles[id]||id;
+  if(id==='rekap') filterRekap();
+  if(id==='ranking') renderRanking();
+  if(id==='trx-log') loadLog();
+  if(id==='kebijakan') renderKebijakan();
+  if(id==='simulasi'){
+    const kb=aKebijakan;
+    if(kb){
+      document.getElementById('sim-pct-saham').value=kb.rasio_saham||60;
+      document.getElementById('sim-pct-trx').value=kb.rasio_transaksi||40;
+    }
+  }
+  closeSidebar();
+}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sb-overlay').classList.toggle('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+
+async function hitungRekap(){
+  toast('🔄 Menghitung ulang rekap...');
+  await loadAll();
+  filterRekap();
+  toast('✅ Rekap diperbarui!');
+}
+</script>
+</body>
+</html>

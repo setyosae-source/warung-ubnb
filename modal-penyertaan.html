@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Modal Penyertaan UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#c9a84c;--gold-dark:#9a7830;--gold-light:#fdf6e3;--gold-mid:#f0d898;
+  --hijau:#1a6640;--hijau-dark:#0f4428;--hijau-light:#e8f5ee;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1e5fa8;--blue-light:#e8f0fb;
+  --emerald:#059669;--emerald-light:#d1fae5;
+  --bg:#f8fdf5;--surface:#ffffff;--surface2:#f2faf4;
+  --border:#c8e6c9;--border-light:#e8f5e9;
+  --text:#0d2b0f;--text-2:#1b4d1e;--text-muted:#5a7a5c;
+  --radius:12px;--radius-sm:8px;--radius-xs:5px;
+  --shadow:0 2px 12px rgba(5,150,105,0.08);--shadow-lg:0 8px 32px rgba(5,150,105,0.15);
+  --sidebar-w:230px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
+
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,#022c22 0%,var(--emerald) 60%,#10b981 100%);display:flex;align-items:center;justify-content:center;z-index:500;padding:20px;}
+.login-card{background:white;border-radius:20px;padding:36px 32px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.25);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .licon{width:64px;height:64px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;}
+.login-logo h1{font-size:20px;font-weight:800;color:#022c22;}
+.login-logo p{font-size:12px;color:var(--text-muted);margin-top:3px;}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:5px;}
+.lfield input{width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;transition:border-color .2s;}
+.lfield input:focus{outline:none;border-color:var(--emerald);}
+.btn-login{width:100%;padding:13px;background:linear-gradient(135deg,var(--emerald),#022c22);color:white;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;}
+#login-err{color:var(--red);font-size:12px;margin-top:8px;text-align:center;}
+
+#app{display:none;min-height:100vh;}
+
+.sidebar{width:var(--sidebar-w);background:#022c22;position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform .3s;}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.08);}
+.sb-logo h1{font-size:13px;font-weight:800;color:var(--gold-mid);}
+.sb-logo p{font-size:10px;color:rgba(255,255,255,.45);margin-top:2px;}
+.nav-items{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-section{padding:10px 16px 3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.8px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;color:rgba(255,255,255,.55);cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.85);}
+.nav-item.active{background:rgba(201,168,76,.12);color:var(--gold-mid);border-left-color:var(--gold-mid);}
+.nav-icon{font-size:15px;width:18px;text-align:center;}
+.sb-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);}
+.sb-user{font-size:10px;color:rgba(255,255,255,.4);margin-bottom:6px;}
+.btn-logout{width:100%;padding:7px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);border:none;border-radius:5px;font-family:inherit;font-size:11px;cursor:pointer;}
+
+.topbar{position:fixed;top:0;left:var(--sidebar-w);right:0;height:52px;background:white;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;z-index:99;box-shadow:var(--shadow);}
+.hamburger{display:none;background:none;border:none;font-size:20px;cursor:pointer;}
+.topbar-title{font-size:14px;font-weight:700;color:#022c22;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.user-badge{font-size:11px;font-weight:600;color:var(--text-muted);background:var(--bg);padding:4px 10px;border-radius:99px;}
+.btn-keluar{font-size:11px;color:var(--red);background:var(--red-light);border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+
+.main-wrap{margin-left:var(--sidebar-w);padding-top:52px;min-height:100vh;}
+.page{display:none;padding:18px;}
+.page.active{display:block;}
+.sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99;}
+.sb-overlay.show{display:block;}
+
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:var(--shadow);border:1px solid var(--border-light);}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+.stat-card{background:var(--surface);border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border-light);box-shadow:var(--shadow);}
+.stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:5px;}
+.stat-val{font-size:22px;font-weight:800;line-height:1;}
+.stat-val.gold{color:var(--gold-dark);}
+.stat-val.hijau{color:var(--hijau);}
+.stat-val.emerald{color:var(--emerald);}
+.stat-val.red{color:var(--red);}
+.stat-sub{font-size:10px;color:var(--text-muted);margin-top:4px;}
+
+.tbl-wrap{overflow-x:auto;}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{background:var(--emerald);color:white;padding:8px 10px;text-align:left;font-weight:600;font-size:11px;}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--border-light);}
+.tbl tr:hover td{background:var(--surface2);}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-aktif{background:var(--emerald-light);color:var(--emerald);}
+.badge-jatuh_tempo{background:var(--gold-light);color:var(--gold-dark);}
+.badge-dicairkan{background:#f3f4f6;color:#374151;}
+.badge-diperpanjang{background:var(--blue-light);color:var(--blue);}
+.badge-penuh{background:var(--emerald-light);color:var(--emerald);}
+.badge-spesifik{background:var(--blue-light);color:var(--blue);}
+.badge-lunas{background:var(--emerald-light);color:var(--emerald);}
+.badge-belum{background:var(--gold-light);color:var(--gold-dark);}
+.anggota-tag{background:var(--hijau-light);color:var(--hijau);font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+
+.btn{padding:7px 14px;border:none;border-radius:var(--radius-xs);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;}
+.btn.primary{background:var(--emerald);color:white;}
+.btn.primary:hover{background:#022c22;}
+.btn.gold{background:var(--gold);color:#1a1a1a;}
+.btn.secondary{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);}
+.btn.danger{background:var(--red-light);color:var(--red);}
+.btn.hijau{background:var(--hijau);color:white;}
+.btn.sm{padding:4px 10px;font-size:11px;}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+
+.irow{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+.irow label{min-width:130px;padding-top:9px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;}
+.irow input,.irow select,.irow textarea{flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;color:var(--text);background:white;transition:border-color .2s;}
+.irow input:focus,.irow select:focus{outline:none;border-color:var(--emerald);}
+.info-box{border-radius:var(--radius-xs);padding:10px 12px;font-size:12px;margin-bottom:12px;}
+.info-box.emerald{background:var(--emerald-light);border-left:3px solid var(--emerald);color:#022c22;}
+.info-box.gold{background:var(--gold-light);border-left:3px solid var(--gold);color:var(--gold-dark);}
+.info-box.red{background:var(--red-light);border-left:3px solid var(--red);color:var(--red);}
+
+.ac-wrap{position:relative;flex:1;}
+.ac-input{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;}
+.ac-input:focus{outline:none;border-color:var(--emerald);}
+.ac-dd{position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--emerald);border-radius:var(--radius-xs);box-shadow:var(--shadow-lg);z-index:200;max-height:260px;overflow-y:auto;display:none;}
+.ac-dd.show{display:block;}
+.ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px;}
+.ac-item:hover{background:var(--emerald-light);}
+.ac-name{font-weight:600;font-size:12px;}
+.ac-sub{font-size:10px;color:var(--text-muted);}
+.ac-divider{padding:5px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase;}
+
+.search-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.search-input{flex:1;min-width:160px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;}
+.search-input:focus{outline:none;border-color:var(--emerald);}
+.filter-sel{padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-family:inherit;font-size:12px;background:white;}
+
+/* PENYERTAAN CARD */
+.peny-card{background:white;border:1.5px solid var(--border-light);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;transition:all .2s;cursor:pointer;}
+.peny-card:hover{border-color:var(--emerald);box-shadow:var(--shadow);}
+.peny-card.penuh{border-left:4px solid var(--emerald);}
+.peny-card.spesifik{border-left:4px solid var(--blue);}
+.peny-card.jatuh_tempo{border-left:4px solid var(--gold);}
+.peny-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
+.peny-no{font-family:monospace;font-size:11px;font-weight:700;color:var(--emerald);}
+.peny-nama{font-size:13px;font-weight:700;}
+.peny-sub{font-size:10px;color:var(--text-muted);}
+
+/* NISBAH SLIDER */
+.nisbah-wrap{flex:1;}
+.nisbah-display{display:flex;gap:8px;margin-bottom:6px;}
+.nisbah-box{flex:1;text-align:center;padding:8px;border-radius:var(--radius-xs);}
+.nisbah-box.anggota{background:var(--emerald-light);}
+.nisbah-box.ubnb{background:var(--gold-light);}
+.nisbah-label{font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;}
+.nisbah-val{font-size:18px;font-weight:800;}
+.nisbah-val.anggota{color:var(--emerald);}
+.nisbah-val.ubnb{color:var(--gold-dark);}
+.nisbah-bar{height:8px;background:var(--border-light);border-radius:99px;overflow:hidden;margin-top:6px;}
+.nisbah-fill{height:100%;background:linear-gradient(90deg,var(--emerald),var(--gold));border-radius:99px;transition:width .3s;}
+
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-end;justify-content:center;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;padding:20px;}
+.mhandle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.modal-title h3{font-size:14px;font-weight:800;}
+.btn-close{background:var(--surface2);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#022c22;color:white;padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+#toast.err{background:var(--red);}
+#toast.show{opacity:1;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{text-align:center;padding:32px;color:var(--text-muted);}
+.empty .ei{font-size:40px;margin-bottom:8px;}
+
+.tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid var(--border-light);}
+.tab-btn{padding:8px 14px;border:none;background:none;font-family:inherit;font-size:12px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.tab-btn.active{color:var(--emerald);border-bottom-color:var(--emerald);}
+
+@media(max-width:768px){
+  :root{--sidebar-w:0px;}
+  .sidebar{transform:translateX(-230px);width:230px;}
+  .sidebar.open{transform:translateX(0);}
+  .topbar{left:0;}
+  .main-wrap{margin-left:0;}
+  .hamburger{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .irow{flex-direction:column;}
+  .irow label{padding-top:0;min-width:unset;}
+  .two-col{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">🏛️</div>
+      <h1>Modal Penyertaan UBNB</h1>
+      <p>Deposito Syariah Anggota</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <h1>🏛️ Modal Penyertaan</h1>
+      <p>Deposito Syariah UBNB</p>
+    </div>
+    <div class="nav-items">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">🏠</span>Dashboard</div>
+      <div class="nav-section">Penyertaan</div>
+      <div class="nav-item" onclick="showPage('daftar',this)"><span class="nav-icon">📋</span>Daftar Penyertaan</div>
+      <div class="nav-item" onclick="showPage('tambah',this)"><span class="nav-icon">➕</span>Tambah Penyertaan</div>
+      <div class="nav-section">Bagi Hasil</div>
+      <div class="nav-item" onclick="showPage('bagi-hasil',this)"><span class="nav-icon">💰</span>Input Bagi Hasil</div>
+      <div class="nav-item" onclick="showPage('riwayat-bh',this)"><span class="nav-icon">📜</span>Riwayat Bagi Hasil</div>
+      <div class="nav-section">Laporan</div>
+      <div class="nav-item" onclick="showPage('laporan',this)"><span class="nav-icon">📊</span>Laporan</div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user" id="sb-user"></div>
+      <button class="btn-logout" onclick="keluar()">Keluar</button>
+      <div style="margin-top:8px"><a href="portal.html" style="color:rgba(255,255,255,.4);font-size:10px;text-decoration:none;">← Portal</a></div>
+    </div>
+  </div>
+
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="topbar-title">Dashboard Modal Penyertaan</div>
+    <div class="topbar-right">
+      <span class="user-badge" id="user-badge">—</span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-lbl">Total Penyertaan</div><div class="stat-val emerald" id="ds-total">—</div><div class="stat-sub">aktif</div></div>
+        <div class="stat-card"><div class="stat-lbl">Total Modal</div><div class="stat-val gold" id="ds-modal">—</div><div class="stat-sub">terkumpul</div></div>
+        <div class="stat-card"><div class="stat-lbl">Jatuh Tempo Bulan Ini</div><div class="stat-val red" id="ds-jatuh">—</div><div class="stat-sub">perlu tindakan</div></div>
+        <div class="stat-card"><div class="stat-lbl">Total Bagi Hasil</div><div class="stat-val hijau" id="ds-bh">—</div><div class="stat-sub">sudah dibayar</div></div>
+      </div>
+
+      <!-- Jenis breakdown -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span>🏛️ Penyertaan Penuh (1 Tahun)</span></div>
+          <div id="dash-penuh">
+            <div class="empty"><div class="ei">🏛️</div><p>Memuat...</p></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>🔗 Penyertaan Spesifik</span></div>
+          <div id="dash-spesifik">
+            <div class="empty"><div class="ei">🔗</div><p>Memuat...</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jatuh tempo -->
+      <div class="card">
+        <div class="card-title"><span>⏰ Jatuh Tempo Segera</span></div>
+        <div id="dash-jatuh-tempo"></div>
+      </div>
+    </div>
+
+    <!-- DAFTAR PENYERTAAN -->
+    <div class="page" id="page-daftar">
+      <div class="card">
+        <div class="card-title">
+          <span>📋 Daftar Penyertaan Modal</span>
+          <div class="btn-row">
+            <button class="btn gold sm" onclick="exportExcel()">⬇️ Excel</button>
+            <button class="btn primary sm" onclick="showPage('tambah',document.querySelectorAll('.nav-item')[2])">➕ Tambah</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchTab(this,'semua')">Semua</button>
+          <button class="tab-btn" onclick="switchTab(this,'penuh')">🏛️ Penuh</button>
+          <button class="tab-btn" onclick="switchTab(this,'spesifik')">🔗 Spesifik</button>
+          <button class="tab-btn" onclick="switchTab(this,'aktif')">✅ Aktif</button>
+          <button class="tab-btn" onclick="switchTab(this,'jatuh_tempo')">⏰ Jatuh Tempo</button>
+        </div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-peny" placeholder="🔍 Cari nama, no. penyertaan..." oninput="filterDaftar()">
+        </div>
+        <div id="list-penyertaan">
+          <div class="empty"><div class="ei">🏛️</div><p>Memuat data...</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAMBAH PENYERTAAN -->
+    <div class="page" id="page-tambah">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span>➕ Tambah Penyertaan Modal</span></div>
+          <div class="info-box emerald">Modal penyertaan mendapat bagi hasil tersendiri dan tidak termasuk dalam perhitungan SHU keaktifan.</div>
+
+          <div class="irow">
+            <label>Anggota ⭐</label>
+            <div class="ac-wrap">
+              <input class="ac-input" type="text" id="tp-cari" placeholder="Ketik nama anggota..." oninput="acSearch(this.value)" onfocus="acSearch(this.value)">
+              <div class="ac-dd" id="tp-dd"></div>
+            </div>
+          </div>
+          <input type="hidden" id="tp-anggota-id">
+          <div id="tp-anggota-info" style="display:none;background:var(--emerald-light);border-radius:var(--radius-xs);padding:8px 12px;margin-bottom:10px;font-size:11px;font-weight:600;color:var(--emerald)"></div>
+
+          <div class="irow">
+            <label>Jenis ⭐</label>
+            <select id="tp-jenis" style="flex:1" onchange="onJenisChange()">
+              <option value="penuh">🏛️ Penuh — Dikelola 1 Tahun</option>
+              <option value="spesifik">🔗 Spesifik — Per Pembiayaan</option>
+            </select>
+          </div>
+
+          <div id="row-akad" style="display:none">
+            <div class="irow">
+              <label>Akad BMT</label>
+              <input type="text" id="tp-akad" placeholder="No. akad pembiayaan (opsional)" style="flex:1">
+            </div>
+          </div>
+
+          <div class="irow"><label>Jumlah Modal (Rp)</label><input type="number" id="tp-modal" placeholder="0" oninput="hitungSimulasi()"></div>
+
+          <!-- Nisbah -->
+          <div class="irow">
+            <label>Nisbah Anggota</label>
+            <div class="nisbah-wrap">
+              <div class="nisbah-display">
+                <div class="nisbah-box anggota">
+                  <div class="nisbah-label">Anggota</div>
+                  <div class="nisbah-val anggota" id="nisbah-anggota-val">60%</div>
+                </div>
+                <div class="nisbah-box ubnb">
+                  <div class="nisbah-label">UBNB</div>
+                  <div class="nisbah-val ubnb" id="nisbah-ubnb-val">40%</div>
+                </div>
+              </div>
+              <input type="range" id="tp-nisbah" min="10" max="90" value="60" step="5"
+                oninput="updateNisbah(this.value)" style="width:100%;accent-color:var(--emerald)">
+              <div class="nisbah-bar">
+                <div class="nisbah-fill" id="nisbah-fill" style="width:60%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="irow"><label>Tgl Mulai</label><input type="date" id="tp-tgl-mulai" oninput="hitungSimulasi()"></div>
+          <div id="row-jatuh-tempo">
+            <div class="irow"><label>Jatuh Tempo</label><input type="date" id="tp-tgl-jt" oninput="hitungSimulasi()"></div>
+          </div>
+
+          <!-- Simulasi bagi hasil -->
+          <div id="tp-simulasi" style="display:none;background:var(--emerald-light);border-radius:var(--radius-xs);padding:12px;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--emerald);margin-bottom:8px">📊 SIMULASI BAGI HASIL</div>
+            <div style="font-size:12px" id="simulasi-content"></div>
+          </div>
+
+          <div class="irow"><label>Catatan</label><input type="text" id="tp-catatan" placeholder="Opsional" style="flex:1"></div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn primary" style="flex:1" onclick="simpanPenyertaan()">💾 Simpan Penyertaan</button>
+            <button class="btn secondary" onclick="resetForm()">Reset</button>
+          </div>
+        </div>
+
+        <!-- Info penyertaan terbaru -->
+        <div class="card">
+          <div class="card-title"><span>📋 Penyertaan Terbaru</span></div>
+          <div id="list-terbaru-peny">
+            <div class="empty"><div class="ei">🏛️</div><p>Belum ada penyertaan</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BAGI HASIL -->
+    <div class="page" id="page-bagi-hasil">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span>💰 Input Bagi Hasil</span></div>
+          <div class="info-box gold">Masukkan bagi hasil per penyertaan berdasarkan laba usaha periode ini.</div>
+
+          <div class="irow">
+            <label>Penyertaan</label>
+            <select id="bh-penyertaan" style="flex:1" onchange="onPilihPenyertaan()">
+              <option value="">— Pilih penyertaan —</option>
+            </select>
+          </div>
+
+          <div id="bh-penyertaan-info" style="display:none;background:var(--emerald-light);border-radius:var(--radius-xs);padding:10px 12px;margin-bottom:10px;font-size:12px">
+            <div id="bh-info-nama" style="font-weight:700"></div>
+            <div id="bh-info-modal" style="color:var(--text-muted);margin-top:2px"></div>
+            <div id="bh-info-nisbah" style="color:var(--emerald);font-weight:600;margin-top:2px"></div>
+          </div>
+
+          <div class="irow"><label>Periode</label>
+            <input type="text" id="bh-periode" placeholder="2027-Q1 atau 2027-01" style="flex:1">
+          </div>
+          <div class="irow"><label>Laba Usaha (Rp)</label>
+            <input type="number" id="bh-laba" placeholder="0" oninput="hitungBagiHasil()">
+          </div>
+          <div id="bh-preview" style="display:none;background:var(--gold-light);border-radius:var(--radius-xs);padding:12px;margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+              <span>Laba Usaha</span><span id="bh-prev-laba">Rp 0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+              <span id="bh-prev-pct-label">Nisbah Anggota</span><span id="bh-prev-pct"></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;color:var(--emerald);border-top:1px solid rgba(5,150,105,.2);padding-top:8px;margin-top:8px">
+              <span>Bagi Hasil Anggota</span><span id="bh-prev-hasil">Rp 0</span>
+            </div>
+          </div>
+          <div class="irow"><label>Tgl Bayar</label><input type="date" id="bh-tgl-bayar" style="flex:1"></div>
+          <div class="irow"><label>Kas</label>
+            <select id="bh-kas" style="flex:1"><option value="">Pilih kas...</option></select>
+          </div>
+          <div class="irow"><label>Catatan</label><input type="text" id="bh-catatan" placeholder="Opsional" style="flex:1"></div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn gold" style="flex:1" onclick="simpanBagiHasil()">💰 Simpan Bagi Hasil</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>📊 Rekap Bagi Hasil Belum Dibayar</span></div>
+          <div id="list-bh-pending">
+            <div class="empty"><div class="ei">💰</div><p>Memuat...</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIWAYAT BAGI HASIL -->
+    <div class="page" id="page-riwayat-bh">
+      <div class="card">
+        <div class="card-title"><span>📜 Riwayat Bagi Hasil</span>
+          <button class="btn gold sm" onclick="exportBH()">⬇️ Excel</button>
+        </div>
+        <div class="search-bar">
+          <input class="search-input" type="text" id="search-bh" placeholder="🔍 Cari nama, periode..." oninput="filterRiwayatBH()">
+          <select class="filter-sel" id="filter-bh-status" onchange="filterRiwayatBH()">
+            <option value="">Semua</option>
+            <option value="true">Sudah Dibayar</option>
+            <option value="false">Belum Dibayar</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Anggota</th><th>No. Penyertaan</th><th>Periode</th><th>Jenis</th><th style="text-align:right">Laba Usaha</th><th style="text-align:right">Bagi Hasil</th><th>Tgl Bayar</th><th>Status</th></tr></thead>
+            <tbody id="tbody-riwayat-bh"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LAPORAN -->
+    <div class="page" id="page-laporan">
+      <div class="card">
+        <div class="card-title"><span>📊 Laporan Modal Penyertaan</span></div>
+        <div class="stat-grid" id="lap-stats"></div>
+
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px">Rekap per Anggota</div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>Anggota</th><th>Jenis</th><th style="text-align:right">Modal</th><th>Nisbah</th><th style="text-align:right">Total BH Diterima</th><th>Status</th><th>Jatuh Tempo</th></tr></thead>
+              <tbody id="tbody-laporan"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL DETAIL PENYERTAAN -->
+<div class="overlay" id="modal-peny">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="modal-title">
+      <h3 id="modal-peny-title">Detail Penyertaan</h3>
+      <button class="btn-close" onclick="closeModal('modal-peny')">✕</button>
+    </div>
+    <div id="modal-peny-content"></div>
+  </div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase; const sb=createClient(SURL,SKEY);
+
+let CU=null, aPenyertaan=[], aBH=[], aAnggota=[], aKas=[];
+let _tabFilter='semua';
+
+const rp=n=>'Rp '+Math.round(parseFloat(n)||0).toLocaleString('id-ID');
+const fmtTgl=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+const today=()=>new Date().toISOString().slice(0,10);
+const bulanIni=()=>new Date().toISOString().slice(0,7);
+
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show'+(err?' err':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);
+}
+
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  const btn=document.getElementById('btn-login');
+  btn.innerHTML='<div class="spinner"></div>';btn.disabled=true;
+  const {data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
+  btn.innerHTML='Masuk';btn.disabled=false;
+  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
+  CU=data;
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent=CU.username;
+  document.getElementById('sb-user').textContent='👤 '+CU.username;
+  await loadAll();
+  renderDashboard();
+  initForms();
+}
+function keluar(){CU=null;location.reload();}
+
+async function loadAll(){
+  const [{data:p},{data:b},{data:a},{data:k}]=await Promise.all([
+    sb.from('ubnb_modal_penyertaan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('created_at',{ascending:false}),
+    sb.from('ubnb_modal_bagi_hasil').select('*,ubnb_anggota(nama),ubnb_modal_penyertaan(no_penyertaan,jenis)').order('created_at',{ascending:false}),
+    sb.from('ubnb_anggota').select('id,nama,no_anggota,kelompok').eq('status','Aktif').order('nama'),
+    sb.from('kas').select('id,nama,saldo')
+  ]);
+  aPenyertaan=p||[]; aBH=b||[]; aAnggota=a||[]; aKas=k||[];
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const aktif=aPenyertaan.filter(p=>p.status==='aktif');
+  const totalModal=aktif.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
+  const totalBH=aBH.filter(b=>b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+  const thisMonth=bulanIni();
+  const jatuhTempo=aPenyertaan.filter(p=>p.status==='aktif'&&p.tgl_jatuh_tempo&&p.tgl_jatuh_tempo.startsWith(thisMonth)).length;
+
+  document.getElementById('ds-total').textContent=aktif.length;
+  document.getElementById('ds-modal').textContent=rp(totalModal);
+  document.getElementById('ds-jatuh').textContent=jatuhTempo;
+  document.getElementById('ds-bh').textContent=rp(totalBH);
+
+  // Penuh
+  const penuh=aPenyertaan.filter(p=>p.jenis==='penuh'&&p.status==='aktif');
+  document.getElementById('dash-penuh').innerHTML=penuh.length?penuh.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light);cursor:pointer" onclick="bukaDetail(${p.id})">
+      <div>
+        <div style="font-weight:600;font-size:12px">${p.ubnb_anggota?.nama||'—'}</div>
+        <div style="font-size:10px;color:var(--text-muted)">JT: ${fmtTgl(p.tgl_jatuh_tempo)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:var(--emerald)">${rp(p.jumlah_modal)}</div>
+        <span class="badge badge-${p.status}">${p.status}</span>
+      </div>
+    </div>`).join('')
+  :'<div class="empty"><div class="ei">🏛️</div><p>Belum ada</p></div>';
+
+  // Spesifik
+  const spesifik=aPenyertaan.filter(p=>p.jenis==='spesifik'&&p.status==='aktif');
+  document.getElementById('dash-spesifik').innerHTML=spesifik.length?spesifik.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light);cursor:pointer" onclick="bukaDetail(${p.id})">
+      <div>
+        <div style="font-weight:600;font-size:12px">${p.ubnb_anggota?.nama||'—'}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${p.no_penyertaan}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:var(--blue)">${rp(p.jumlah_modal)}</div>
+        <span class="badge badge-${p.status}">${p.status}</span>
+      </div>
+    </div>`).join('')
+  :'<div class="empty"><div class="ei">🔗</div><p>Belum ada</p></div>';
+
+  // Jatuh tempo
+  const jt=aPenyertaan.filter(p=>p.status==='aktif'&&p.tgl_jatuh_tempo&&p.tgl_jatuh_tempo<=today()).sort((a,b)=>a.tgl_jatuh_tempo.localeCompare(b.tgl_jatuh_tempo));
+  document.getElementById('dash-jatuh-tempo').innerHTML=jt.length?jt.map(p=>`
+    <div class="peny-card ${p.jenis}" onclick="bukaDetail(${p.id})">
+      <div class="peny-header">
+        <div>
+          <div class="peny-no">${p.no_penyertaan}</div>
+          <div class="peny-nama">${p.ubnb_anggota?.nama||'—'}</div>
+          <div class="peny-sub">JT: ${fmtTgl(p.tgl_jatuh_tempo)} · ${p.jenis}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--emerald)">${rp(p.jumlah_modal)}</div>
+          <span class="badge badge-jatuh_tempo">Jatuh Tempo</span>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn primary sm" onclick="event.stopPropagation();perpanjang(${p.id})">🔄 Perpanjang</button>
+        <button class="btn secondary sm" onclick="event.stopPropagation();cairkan(${p.id})">💸 Cairkan</button>
+      </div>
+    </div>`).join('')
+  :'<div class="empty"><div class="ei">✅</div><p>Tidak ada yang jatuh tempo</p></div>';
+}
+
+// ===== DAFTAR =====
+let _tabFilterDaftar='semua';
+function switchTab(btn,filter){
+  document.querySelectorAll('#page-daftar .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  _tabFilterDaftar=filter;
+  filterDaftar();
+}
+function filterDaftar(){
+  const q=(document.getElementById('search-peny').value||''). toLowerCase();
+  let data=aPenyertaan.filter(p=>{
+    if(q&&!(p.ubnb_anggota?.nama||''). toLowerCase().includes(q)&&!(p.no_penyertaan||''). toLowerCase().includes(q)) return false;
+    if(_tabFilterDaftar==='penuh') return p.jenis==='penuh';
+    if(_tabFilterDaftar==='spesifik') return p.jenis==='spesifik';
+    if(_tabFilterDaftar==='aktif') return p.status==='aktif';
+    if(_tabFilterDaftar==='jatuh_tempo') return p.status==='aktif'&&p.tgl_jatuh_tempo&&p.tgl_jatuh_tempo<=today();
+    return true;
+  });
+  const el=document.getElementById('list-penyertaan');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">🏛️</div><p>Tidak ada data</p></div>';return;}
+  el.innerHTML=data.map(p=>`
+    <div class="peny-card ${p.jenis}" onclick="bukaDetail(${p.id})">
+      <div class="peny-header">
+        <div>
+          <div class="peny-no">${p.no_penyertaan}</div>
+          <div class="peny-nama">${p.ubnb_anggota?.nama||'—'} <span class="badge badge-${p.jenis}" style="font-size:9px">${p.jenis}</span></div>
+          <div class="peny-sub">${p.ubnb_anggota?.kelompok||'—'} · Mulai: ${fmtTgl(p.tgl_mulai)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--emerald);font-size:15px">${rp(p.jumlah_modal)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">Nisbah: ${p.nisbah_anggota}%/${p.nisbah_ubnb}%</div>
+          <span class="badge badge-${p.status}" style="margin-top:4px">${p.status}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted)">
+        <span>💰 BH Total: <strong style="color:var(--hijau)">${rp(p.total_bagi_hasil)}</strong></span>
+        ${p.tgl_jatuh_tempo?`<span>📅 JT: <strong>${fmtTgl(p.tgl_jatuh_tempo)}</strong></span>`:''}
+      </div>
+    </div>`).join('');
+}
+
+// ===== DROPDOWN ANGGOTA =====
+let _acTimer=null;
+async function acSearch(q){
+  clearTimeout(_acTimer);
+  const dd=document.getElementById('tp-dd');
+  if(!q){dd.classList.remove('show');return;}
+  _acTimer=setTimeout(()=>{
+    const ql=q.toLowerCase();
+    const matches=aAnggota.filter(a=>(a.nama||''). toLowerCase().includes(ql)||(a.no_anggota||''). toLowerCase().includes(ql)).slice(0,8);
+    if(!matches.length){dd.classList.remove('show');return;}
+    dd.innerHTML='<div class="ac-divider">⭐ Pilih Anggota</div>'+matches.map(a=>`
+      <div class="ac-item" onclick="pilihAnggota(${a.id},'${a.nama.replace(/'/g,"&apos;")}','${a.no_anggota}')">
+        <span>⭐</span>
+        <div><div class="ac-name">${a.nama}</div>
+        <div class="ac-sub">${a.no_anggota} · ${a.kelompok}</div></div>
+      </div>`).join('');
+    dd.classList.add('show');
+  },200);
+}
+function pilihAnggota(id,nama,noAnggota){
+  document.getElementById('tp-dd').classList.remove('show');
+  document.getElementById('tp-cari').value=nama;
+  document.getElementById('tp-anggota-id').value=id;
+  const info=document.getElementById('tp-anggota-info');
+  info.style.display='block';
+  info.textContent='⭐ '+nama+' · '+noAnggota;
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.ac-wrap')) document.querySelectorAll('.ac-dd').forEach(d=>d.classList.remove('show'));
+});
+
+// ===== NISBAH =====
+function updateNisbah(val){
+  const nA=parseInt(val);
+  const nU=100-nA;
+  document.getElementById('nisbah-anggota-val').textContent=nA+'%';
+  document.getElementById('nisbah-ubnb-val').textContent=nU+'%';
+  document.getElementById('nisbah-fill').style.width=nA+'%';
+  hitungSimulasi();
+}
+function onJenisChange(){
+  const jenis=document.getElementById('tp-jenis').value;
+  document.getElementById('row-akad').style.display=jenis==='spesifik'?'block':'none';
+  document.getElementById('row-jatuh-tempo').style.display=jenis==='penuh'?'block':'none';
+}
+
+// ===== SIMULASI =====
+function hitungSimulasi(){
+  const modal=parseFloat(document.getElementById('tp-modal').value)||0;
+  const nisbah=parseInt(document.getElementById('tp-nisbah').value)||60;
+  const tglMulai=document.getElementById('tp-tgl-mulai').value;
+  const tglJT=document.getElementById('tp-tgl-jt').value;
+  const sim=document.getElementById('tp-simulasi');
+  if(!modal||!tglMulai){sim.style.display='none';return;}
+  sim.style.display='block';
+  let html=`<div style="display:flex;justify-content:space-between;margin-bottom:4px">
+    <span>Modal Penyertaan</span><span style="font-weight:700">${rp(modal)}</span>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+    <span>Nisbah Anggota</span><span style="font-weight:700;color:var(--emerald)">${nisbah}%</span>
+  </div>`;
+  if(tglJT){
+    const bulan=Math.round((new Date(tglJT)-new Date(tglMulai))/(1000*60*60*24*30));
+    html+=`<div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span>Durasi</span><span style="font-weight:700">${bulan} bulan</span>
+    </div>`;
+  }
+  html+=`<div style="font-size:10px;color:var(--text-muted);margin-top:6px">
+    ℹ️ Besaran bagi hasil tergantung laba usaha aktual UBNB per periode
+  </div>`;
+  document.getElementById('simulasi-content').innerHTML=html;
+}
+
+// ===== SIMPAN PENYERTAAN =====
+async function simpanPenyertaan(){
+  const anggotaId=parseInt(document.getElementById('tp-anggota-id').value)||null;
+  const jenis=document.getElementById('tp-jenis').value;
+  const modal=parseFloat(document.getElementById('tp-modal').value)||0;
+  const nisbahA=parseInt(document.getElementById('tp-nisbah').value)||60;
+  const tglMulai=document.getElementById('tp-tgl-mulai').value;
+  const tglJT=document.getElementById('tp-tgl-jt').value||null;
+  const akad=document.getElementById('tp-akad')?.value.trim()||null;
+  const catatan=document.getElementById('tp-catatan').value.trim()||null;
+
+  if(!anggotaId){toast('Pilih anggota dulu',true);return;}
+  if(!modal||modal<=0){toast('Jumlah modal wajib diisi',true);return;}
+  if(!tglMulai){toast('Tanggal mulai wajib diisi',true);return;}
+  if(jenis==='penuh'&&!tglJT){toast('Tanggal jatuh tempo wajib untuk penyertaan penuh',true);return;}
+
+  const noUrut=String(aPenyertaan.length+1).padStart(3,'0');
+  const tahun=new Date().getFullYear();
+  const noPenyertaan='MP-'+tahun+'-'+noUrut;
+
+  const {error}=await sb.from('ubnb_modal_penyertaan').insert([{
+    no_penyertaan:noPenyertaan,
+    anggota_id:anggotaId,
+    jenis, akad_id:null,
+    jumlah_modal:modal,
+    nisbah_anggota:nisbahA,
+    nisbah_ubnb:100-nisbahA,
+    tgl_mulai:tglMulai,
+    tgl_jatuh_tempo:tglJT,
+    status:'aktif',
+    total_bagi_hasil:0,
+    catatan,
+    operator:CU.username
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Penyertaan '+noPenyertaan+' berhasil disimpan!');
+  resetForm();
+  await loadAll();
+  renderDashboard();
+  renderTerbaru();
+}
+
+function resetForm(){
+  ['tp-cari','tp-modal','tp-catatan','tp-akad'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('tp-anggota-id').value='';
+  document.getElementById('tp-anggota-info').style.display='none';
+  document.getElementById('tp-tgl-mulai').value=today();
+  document.getElementById('tp-tgl-jt').value='';
+  document.getElementById('tp-nisbah').value=60;
+  updateNisbah(60);
+  document.getElementById('tp-simulasi').style.display='none';
+}
+
+function renderTerbaru(){
+  const el=document.getElementById('list-terbaru-peny');
+  const data=aPenyertaan.slice(0,5);
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">🏛️</div><p>Belum ada penyertaan</p></div>';return;}
+  el.innerHTML=data.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light)">
+      <div>
+        <div style="font-weight:600;font-size:12px">${p.ubnb_anggota?.nama||'—'}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${p.no_penyertaan} · ${p.jenis}</div>
+      </div>
+      <div style="font-weight:700;color:var(--emerald)">${rp(p.jumlah_modal)}</div>
+    </div>`).join('');
+}
+
+// ===== DETAIL PENYERTAAN =====
+function bukaDetail(id){
+  const p=aPenyertaan.find(x=>x.id===id);if(!p)return;
+  const bhList=aBH.filter(b=>b.penyertaan_id===id);
+  document.getElementById('modal-peny-title').textContent=p.no_penyertaan;
+  document.getElementById('modal-peny-content').innerHTML=`
+    <div style="background:linear-gradient(135deg,#022c22,var(--emerald));border-radius:var(--radius-sm);padding:16px;color:white;margin-bottom:14px">
+      <div style="font-size:18px;font-weight:800">${p.ubnb_anggota?.nama||'—'}</div>
+      <div style="font-size:11px;opacity:.75">${p.ubnb_anggota?.no_anggota||'—'} · ${p.ubnb_anggota?.kelompok||'—'}</div>
+      <div style="font-size:26px;font-weight:900;margin-top:10px;color:var(--gold-mid)">${rp(p.jumlah_modal)}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700">${p.jenis.toUpperCase()}</span>
+        <span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700">${p.status.toUpperCase()}</span>
+        <span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700">Nisbah: ${p.nisbah_anggota}% / ${p.nisbah_ubnb}%</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;font-size:12px">
+      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">TGL MULAI</div>
+        <div style="font-weight:600">${fmtTgl(p.tgl_mulai)}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">JATUH TEMPO</div>
+        <div style="font-weight:600">${fmtTgl(p.tgl_jatuh_tempo)||'—'}</div>
+      </div>
+      <div style="background:var(--emerald-light);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">TOTAL BH DITERIMA</div>
+        <div style="font-weight:800;color:var(--emerald)">${rp(p.total_bagi_hasil)}</div>
+      </div>
+      <div style="background:var(--gold-light);border-radius:var(--radius-xs);padding:8px">
+        <div style="color:var(--text-muted);font-size:10px;font-weight:700">JUMLAH BH</div>
+        <div style="font-weight:700;color:var(--gold-dark)">${bhList.length} kali</div>
+      </div>
+    </div>
+
+    ${p.catatan?`<div style="background:var(--gold-light);border-radius:var(--radius-xs);padding:8px 12px;font-size:12px;margin-bottom:12px">📝 ${p.catatan}</div>`:''}
+
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px">Riwayat Bagi Hasil</div>
+    ${bhList.length?bhList.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light)">
+        <div>
+          <div style="font-weight:600;font-size:12px">${b.periode}</div>
+          <div style="font-size:10px;color:var(--text-muted)">Laba: ${rp(b.laba_usaha)} · BH: ${b.porsi_anggota_pct}%</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:800;color:var(--emerald)">${rp(b.jumlah_bagi_hasil)}</div>
+          <span class="badge badge-${b.sudah_dibayar?'lunas':'belum'}">${b.sudah_dibayar?'Lunas':'Belum'}</span>
+        </div>
+      </div>`).join('')
+    :'<div class="empty" style="padding:16px"><div class="ei">💰</div><p>Belum ada bagi hasil</p></div>'}
+
+    <div class="btn-row" style="margin-top:14px">
+      ${p.status==='aktif'?`
+        <button class="btn primary sm" onclick="perpanjang(${p.id})">🔄 Perpanjang</button>
+        <button class="btn secondary sm" onclick="cairkan(${p.id})">💸 Cairkan</button>`:''}
+    </div>`;
+  openModal('modal-peny');
+}
+
+// ===== AKSI STATUS =====
+async function perpanjang(id){
+  const p=aPenyertaan.find(x=>x.id===id);if(!p)return;
+  const tglBaru=prompt('Masukkan tanggal jatuh tempo baru (YYYY-MM-DD):','');
+  if(!tglBaru)return;
+  await sb.from('ubnb_modal_penyertaan').update({status:'diperpanjang',tgl_jatuh_tempo:tglBaru}).eq('id',id);
+  // Insert baru dengan status aktif
+  await sb.from('ubnb_modal_penyertaan').insert([{
+    no_penyertaan:p.no_penyertaan+'-P',
+    anggota_id:p.anggota_id, jenis:p.jenis,
+    jumlah_modal:p.jumlah_modal, nisbah_anggota:p.nisbah_anggota,
+    nisbah_ubnb:p.nisbah_ubnb, tgl_mulai:today(),
+    tgl_jatuh_tempo:tglBaru, status:'aktif',
+    total_bagi_hasil:0, catatan:'Perpanjangan dari: '+p.no_penyertaan,
+    operator:CU.username
+  }]);
+  toast('✅ Penyertaan diperpanjang!');
+  closeModal('modal-peny');
+  await loadAll(); renderDashboard();
+}
+
+async function cairkan(id){
+  if(!confirm('Cairkan penyertaan ini? Status akan berubah menjadi Dicairkan.'))return;
+  await sb.from('ubnb_modal_penyertaan').update({status:'dicairkan'}).eq('id',id);
+  toast('Penyertaan dicairkan');
+  closeModal('modal-peny');
+  await loadAll(); renderDashboard();
+}
+
+// ===== BAGI HASIL =====
+function onPilihPenyertaan(){
+  const id=parseInt(document.getElementById('bh-penyertaan').value)||null;
+  const p=aPenyertaan.find(x=>x.id===id);
+  const info=document.getElementById('bh-penyertaan-info');
+  if(!p){info.style.display='none';return;}
+  info.style.display='block';
+  document.getElementById('bh-info-nama').textContent=p.ubnb_anggota?.nama||'—';
+  document.getElementById('bh-info-modal').textContent='Modal: '+rp(p.jumlah_modal)+' · Jenis: '+p.jenis;
+  document.getElementById('bh-info-nisbah').textContent='Nisbah Anggota: '+p.nisbah_anggota+'%';
+  hitungBagiHasil();
+}
+
+function hitungBagiHasil(){
+  const id=parseInt(document.getElementById('bh-penyertaan').value)||null;
+  const p=aPenyertaan.find(x=>x.id===id);
+  const laba=parseFloat(document.getElementById('bh-laba').value)||0;
+  const prev=document.getElementById('bh-preview');
+  if(!p||!laba){prev.style.display='none';return;}
+  const hasil=Math.round(laba*(p.nisbah_anggota/100));
+  prev.style.display='block';
+  document.getElementById('bh-prev-laba').textContent=rp(laba);
+  document.getElementById('bh-prev-pct-label').textContent='Nisbah Anggota ('+p.nisbah_anggota+'%)';
+  document.getElementById('bh-prev-pct').textContent=p.nisbah_anggota+'%';
+  document.getElementById('bh-prev-hasil').textContent=rp(hasil);
+}
+
+async function simpanBagiHasil(){
+  const id=parseInt(document.getElementById('bh-penyertaan').value)||null;
+  const p=aPenyertaan.find(x=>x.id===id);
+  if(!p){toast('Pilih penyertaan dulu',true);return;}
+  const laba=parseFloat(document.getElementById('bh-laba').value)||0;
+  const periode=document.getElementById('bh-periode').value.trim();
+  const tglBayar=document.getElementById('bh-tgl-bayar').value;
+  const kasId=parseInt(document.getElementById('bh-kas').value)||null;
+  const catatan=document.getElementById('bh-catatan').value.trim()||null;
+  if(!laba){toast('Laba usaha wajib diisi',true);return;}
+  if(!periode){toast('Periode wajib diisi',true);return;}
+  const hasil=Math.round(laba*(p.nisbah_anggota/100));
+  const {error}=await sb.from('ubnb_modal_bagi_hasil').insert([{
+    penyertaan_id:id, anggota_id:p.anggota_id,
+    periode, laba_usaha:laba, porsi_anggota_pct:p.nisbah_anggota,
+    jumlah_bagi_hasil:hasil, tgl_bayar:tglBayar||null,
+    sudah_dibayar:!!tglBayar, catatan, operator:CU.username
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  // Update total bagi hasil
+  await sb.from('ubnb_modal_penyertaan').update({total_bagi_hasil:parseFloat(p.total_bagi_hasil||0)+hasil}).eq('id',id);
+  // Kas mutasi jika ada
+  if(kasId&&tglBayar){
+    await sb.from('kas_mutasi').insert([{
+      kas_id:kasId,tipe:'keluar',kategori:'keluar',
+      jumlah:hasil,tanggal:tglBayar,
+      keterangan:'Bagi Hasil Modal: '+(p.ubnb_anggota?.nama||'')+ ' '+periode,
+      operator:CU.username
+    }]);
+  }
+  toast('✅ Bagi hasil berhasil disimpan!');
+  ['bh-laba','bh-periode','bh-tgl-bayar','bh-catatan'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('bh-preview').style.display='none';
+  await loadAll(); renderDashboard(); loadBHPending();
+}
+
+async function loadBHPending(){
+  const data=aBH.filter(b=>!b.sudah_dibayar);
+  const el=document.getElementById('list-bh-pending');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">✅</div><p>Semua bagi hasil sudah lunas!</p></div>';return;}
+  el.innerHTML=data.map(b=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-light)">
+      <div>
+        <div style="font-weight:600;font-size:12px">${b.ubnb_anggota?.nama||'—'}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${b.ubnb_modal_penyertaan?.no_penyertaan||'—'} · ${b.periode}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:var(--emerald)">${rp(b.jumlah_bagi_hasil)}</div>
+        <span class="badge badge-belum">Belum</span>
+      </div>
+    </div>`).join('');
+}
+
+function filterRiwayatBH(){
+  const q=(document.getElementById('search-bh').value||''). toLowerCase();
+  const fs=document.getElementById('filter-bh-status').value;
+  let data=aBH.filter(b=>{
+    if(q&&!(b.ubnb_anggota?.nama||''). toLowerCase().includes(q)&&!(b.periode||''). toLowerCase().includes(q)) return false;
+    if(fs==='true'&&!b.sudah_dibayar) return false;
+    if(fs==='false'&&b.sudah_dibayar) return false;
+    return true;
+  });
+  document.getElementById('tbody-riwayat-bh').innerHTML=data.map(b=>`<tr>
+    <td><strong>${b.ubnb_anggota?.nama||'—'}</strong></td>
+    <td style="font-family:monospace;font-size:10px">${b.ubnb_modal_penyertaan?.no_penyertaan||'—'}</td>
+    <td>${b.periode}</td>
+    <td><span class="badge badge-${b.ubnb_modal_penyertaan?.jenis||'penuh'}">${b.ubnb_modal_penyertaan?.jenis||'—'}</span></td>
+    <td style="text-align:right">${rp(b.laba_usaha)}</td>
+    <td style="text-align:right;font-weight:700;color:var(--emerald)">${rp(b.jumlah_bagi_hasil)}</td>
+    <td style="font-size:11px">${fmtTgl(b.tgl_bayar)||'—'}</td>
+    <td><span class="badge badge-${b.sudah_dibayar?'lunas':'belum'}">${b.sudah_dibayar?'Lunas':'Belum'}</span></td>
+  </tr>`).join('');
+}
+
+// ===== LAPORAN =====
+function loadLaporan(){
+  const aktif=aPenyertaan.filter(p=>p.status==='aktif');
+  const totalModal=aktif.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
+  const totalBH=aBH.reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+  const lunas=aBH.filter(b=>b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+
+  document.getElementById('lap-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-lbl">Total Modal Aktif</div><div class="stat-val gold">${rp(totalModal)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Penyertaan Aktif</div><div class="stat-val emerald">${aktif.length}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Total BH Wajib</div><div class="stat-val hijau">${rp(totalBH)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">BH Sudah Dibayar</div><div class="stat-val gold">${rp(lunas)}</div></div>`;
+
+  document.getElementById('tbody-laporan').innerHTML=aPenyertaan.map(p=>`<tr>
+    <td><strong>${p.ubnb_anggota?.nama||'—'}</strong><br>
+      <span style="font-size:10px;color:var(--text-muted)">${p.ubnb_anggota?.no_anggota||'—'}</span></td>
+    <td><span class="badge badge-${p.jenis}">${p.jenis}</span></td>
+    <td style="text-align:right;font-weight:700">${rp(p.jumlah_modal)}</td>
+    <td style="font-size:12px">${p.nisbah_anggota}% / ${p.nisbah_ubnb}%</td>
+    <td style="text-align:right;font-weight:700;color:var(--emerald)">${rp(p.total_bagi_hasil)}</td>
+    <td><span class="badge badge-${p.status}">${p.status}</span></td>
+    <td style="font-size:11px">${fmtTgl(p.tgl_jatuh_tempo)||'—'}</td>
+  </tr>`).join('');
+}
+
+function exportExcel(){
+  const XLSX=window.XLSX;
+  const rows=aPenyertaan.map(p=>({
+    'No. Penyertaan':p.no_penyertaan,
+    'Anggota':p.ubnb_anggota?.nama||'—',
+    'Jenis':p.jenis,
+    'Modal':parseFloat(p.jumlah_modal||0),
+    'Nisbah Anggota':p.nisbah_anggota+'%',
+    'Nisbah UBNB':p.nisbah_ubnb+'%',
+    'Tgl Mulai':p.tgl_mulai,
+    'Jatuh Tempo':p.tgl_jatuh_tempo||'—',
+    'Total BH':parseFloat(p.total_bagi_hasil||0),
+    'Status':p.status
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Modal Penyertaan');
+  XLSX.writeFile(wb,'UBNB_Modal_Penyertaan_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+function exportBH(){
+  const XLSX=window.XLSX;
+  const rows=aBH.map(b=>({
+    'Anggota':b.ubnb_anggota?.nama||'—',
+    'No. Penyertaan':b.ubnb_modal_penyertaan?.no_penyertaan||'—',
+    'Periode':b.periode,
+    'Laba Usaha':parseFloat(b.laba_usaha||0),
+    'Bagi Hasil':parseFloat(b.jumlah_bagi_hasil||0),
+    'Tgl Bayar':b.tgl_bayar||'—',
+    'Status':b.sudah_dibayar?'Lunas':'Belum'
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Bagi Hasil');
+  XLSX.writeFile(wb,'UBNB_Bagi_Hasil_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('✅ Export berhasil!');
+}
+
+// ===== INIT =====
+function initForms(){
+  document.getElementById('tp-tgl-mulai').value=today();
+  document.getElementById('bh-tgl-bayar').value=today();
+  const kasOpts='<option value="">Pilih kas...</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+  document.getElementById('bh-kas').innerHTML=kasOpts;
+  // Fill penyertaan dropdown untuk bagi hasil
+  const aktifPeny=aPenyertaan.filter(p=>p.status==='aktif');
+  document.getElementById('bh-penyertaan').innerHTML=
+    '<option value="">— Pilih penyertaan —</option>'+
+    aktifPeny.map(p=>`<option value="${p.id}">${p.no_penyertaan} — ${p.ubnb_anggota?.nama||'—'} (${rp(p.jumlah_modal)})</option>`).join('');
+  renderTerbaru();
+  loadBHPending();
+}
+
+// ===== UI HELPERS =====
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id)?.classList.add('active');
+  if(el) el.classList.add('active');
+  const titles={
+    dashboard:'Dashboard Modal Penyertaan',daftar:'Daftar Penyertaan',tambah:'Tambah Penyertaan',
+    'bagi-hasil':'Input Bagi Hasil','riwayat-bh':'Riwayat Bagi Hasil',laporan:'Laporan'
+  };
+  document.getElementById('topbar-title').textContent=titles[id]||id;
+  if(id==='daftar') filterDaftar();
+  if(id==='riwayat-bh') filterRiwayatBH();
+  if(id==='laporan') loadLaporan();
+  if(id==='bagi-hasil') loadBHPending();
+  closeSidebar();
+}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sb-overlay').classList.toggle('show');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sb-overlay').classList.remove('show');}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+</script>
+</body>
+</html>

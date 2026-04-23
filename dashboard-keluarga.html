@@ -370,6 +370,18 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
       <div id="shuList"></div>
     </div>
 
+    <!-- RIWAYAT TRANSAKSI SHU -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📊 Riwayat Transaksi SHU</div>
+        <span class="card-badge" id="shuLogBadge">—</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;padding:0 2px">
+        Transaksi yang dihitung dalam sistem SHU keaktifan. Semakin aktif bertransaksi, porsi SHU semakin besar.
+      </div>
+      <div id="shuLogList"></div>
+    </div>
+
     <!-- TAMBAH KEPESERTAAN -->
     <div class="card">
       <div class="card-header">
@@ -578,7 +590,7 @@ async function showApp() {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('keluargaBadge').textContent = '🏠 ' + CK;
-  await Promise.all([loadSaham(), loadHadir(), loadPemenang(), loadSHU()]);
+  await Promise.all([loadSaham(), loadHadir(), loadPemenang(), loadSHU(), loadSHULog()]);
 }
 
 // ===== SAHAM =====
@@ -739,6 +751,65 @@ async function loadSHU() {
         </div>
       </div>
     </div>`).join('');
+}
+
+
+// ===== RIWAYAT TRANSAKSI SHU =====
+async function loadSHULog() {
+  const el = document.getElementById('shuLogList');
+  const badge = document.getElementById('shuLogBadge');
+  if (!el) return;
+
+  // Ambil ID saham keluarga untuk cari anggota_id
+  const { data: saham } = await sb.from('ubnb_saham')
+    .select('anggota_id').eq('nama_keluarga', CK).eq('status','Aktif');
+
+  const anggotaIds = [...new Set((saham||[]).map(s=>s.anggota_id).filter(Boolean))];
+
+  if (!anggotaIds.length) {
+    el.innerHTML = '<div class="empty-state"><div class="ei">📊</div><p>Data SHU tidak ditemukan.</p></div>';
+    return;
+  }
+
+  const { data: logs } = await sb.from('ubnb_shu_trx_log')
+    .select('jenis_trx,nilai,tanggal,periode')
+    .in('anggota_id', anggotaIds)
+    .order('tanggal', { ascending: false })
+    .limit(30);
+
+  if (badge) badge.textContent = (logs||[]).length + ' transaksi';
+
+  if (!logs || !logs.length) {
+    el.innerHTML = '<div class="empty-state"><div class="ei">📊</div><p>Belum ada transaksi SHU tercatat.</p></div>';
+    return;
+  }
+
+  const icons = {saham:'⭐',angsuran:'💳',warung:'🛒',ppob:'⚡',laundry:'👕',service:'🔧',wadiah:'🏦'};
+  const fmtRp = n => 'Rp ' + Math.round(parseFloat(n)||0).toLocaleString('id-ID');
+  const fmtTgl = d => d ? new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}) : '-';
+
+  // Group by jenis
+  const byJenis = {};
+  logs.forEach(l => {
+    if (!byJenis[l.jenis_trx]) byJenis[l.jenis_trx] = 0;
+    byJenis[l.jenis_trx] += parseFloat(l.nilai||0);
+  });
+
+  const summary = Object.entries(byJenis).map(([j,v]) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:#f0f9f4;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:600;color:#1a6640;margin:2px">${icons[j]||'📋'} ${j}: <strong>Rp ${Math.round(v).toLocaleString('id-ID')}</strong></span>`
+  ).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">${summary}</div>
+    ${logs.map(l => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:20px">${icons[l.jenis_trx]||'📋'}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:12px;text-transform:capitalize">${l.jenis_trx}</div>
+        <div style="font-size:10px;color:var(--text-muted)">${fmtTgl(l.tanggal)} · Periode: ${l.periode||'—'}</div>
+      </div>
+      <div style="font-weight:700;color:#1a6640">${fmtRp(l.nilai)}</div>
+    </div>`).join('')}`;
 }
 
 // ===== MODAL TAMBAH SAHAM =====
