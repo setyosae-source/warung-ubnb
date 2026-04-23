@@ -470,7 +470,16 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
         <!-- RIWAYAT -->
         <div style="border-top:1px solid var(--border-light);padding-top:12px;margin-top:12px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">🏆 Riwayat Pemenang</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">🏆 Riwayat Pemenang <span id="pemenang-count" style="font-weight:400;font-size:10px;"></span></div>
+            <div style="display:flex;gap:6px;flex:1;min-width:180px;">
+              <input type="text" id="search-pemenang" placeholder="🔍 Cari nama / hadiah..."
+                oninput="riwayatFilter=this.value;renderRiwayatPemenang()"
+                style="flex:1;padding:5px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;outline:none;">
+              <button onclick="riwayatFilter='';document.getElementById('search-pemenang').value='';renderRiwayatPemenang()"
+                style="padding:5px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);font-size:11px;cursor:pointer;">✕</button>
+            </div>
+          </div>
           <div id="riwayat-pemenang"></div>
         </div>
       </div>
@@ -628,6 +637,8 @@ async function loadAll(){
   riwayatPemenang=(pw||[]).map(r=>({
     id:r.id,nama:r.nama,kelompok:r.kelompok,hadiah:r.hadiah,
     hadiah_id:r.hadiah_id,tipe:r.tipe||'undian',
+    sudah_diambil:r.sudah_diambil||false,
+    waktu_ambil:r.waktu_ambil||null,
     waktu:new Date(r.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})
   }));
   const nw=new Set((pw||[]).map(r=>r.nama.toLowerCase().trim()));
@@ -989,7 +1000,7 @@ async function mulaiUndian(){
         nama:pm.nama,kelompok:pm.kelompok||null,hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian'
       }]).select().single();
       sudahMenang.add(pm.nama.toLowerCase().trim());
-      riwayatPemenang.unshift({id:dr?.id,nama:pm.nama,kelompok:pm.kelompok,hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian',waktu:new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})});
+      riwayatPemenang.unshift({id:dr?.id,nama:pm.nama,kelompok:pm.kelompok,hadiah:hadiah.nama,hadiah_id:hadiah.id,tipe:'undian',sudah_diambil:false,waktu_ambil:null,waktu:new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})});
       renderRiwayatPemenang();
       renderHadiah();renderUndianHadiah();
       toast(`🎉 Selamat ${pm.nama}! Menang ${hadiah.nama}`);
@@ -1005,26 +1016,71 @@ async function resetUndian(){
   document.getElementById('u-drum').style.display='none';
   updatePoolInfo();renderRiwayatPemenang();toast('Undian direset!');
 }
+let riwayatFilter='';
 function renderRiwayatPemenang(){
   const el=document.getElementById('riwayat-pemenang');
-  if(!riwayatPemenang.length){el.innerHTML='<div style="text-align:center;padding:12px;font-size:12px;color:var(--text-muted)">Belum ada pemenang</div>';return;}
-  el.innerHTML=riwayatPemenang.map((p,i)=>{
-    const tipeLbl={undian:'🎰',pertama_laki:'👨 Pertama',pertama_perempuan:'👩 Pertama'};
-    const tipeBg={undian:'var(--emas-light)',pertama_laki:'#e8f0fb',pertama_perempuan:'#fce7f3'};
-    const tipeClr={undian:'var(--emas-dark)',pertama_laki:'#1e5fa8',pertama_perempuan:'#be185d'};
+  if(!el)return;
+
+  const q=riwayatFilter.toLowerCase().trim();
+  let list=riwayatPemenang;
+  if(q)list=list.filter(p=>
+    p.nama.toLowerCase().includes(q)||
+    p.hadiah.toLowerCase().includes(q)||
+    (p.kelompok||'').toLowerCase().includes(q)
+  );
+
+  // Update count label
+  const cntEl=document.getElementById('pemenang-count');
+  if(cntEl)cntEl.textContent=q?`(${list.length}/${riwayatPemenang.length})`:(`${riwayatPemenang.length} pemenang · `+riwayatPemenang.filter(p=>p.sudah_diambil).length+' sudah diambil');
+
+  if(!list.length){
+    el.innerHTML=`<div style="text-align:center;padding:12px;font-size:12px;color:var(--text-muted)">${riwayatPemenang.length?'🔍 Tidak ditemukan':'Belum ada pemenang'}</div>`;
+    return;
+  }
+
+  const tipeLbl={undian:'🎰 Undian',pertama_laki:'👨 Pertama L',pertama_perempuan:'👩 Pertama P'};
+  const tipeBg={undian:'var(--emas-light)',pertama_laki:'#e8f0fb',pertama_perempuan:'#fce7f3'};
+  const tipeClr={undian:'var(--emas-dark)',pertama_laki:'#1e5fa8',pertama_perempuan:'#be185d'};
+
+  el.innerHTML=list.map((p,i)=>{
     const t=p.tipe||'undian';
+    const sudah=p.sudah_diambil;
     return`<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border-light);">
-      <div style="width:26px;height:26px;background:var(--emas);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">${i+1}</div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:13px">${p.nama} ${p.kelompok?kelBadge(p.kelompok):''}</div>
+      <div style="width:26px;height:26px;background:${sudah?'var(--hijau)':'var(--emas)'};color:white;border-radius:50%;
+        display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">
+        ${sudah?'✓':(i+1)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${p.nama} ${p.kelompok?kelBadge(p.kelompok):''}</div>
         <div style="font-size:11px;color:var(--emas-dark)">🎁 ${p.hadiah}</div>
+        ${sudah?`<div style="font-size:10px;color:var(--hijau);font-weight:600">✅ Diambil${p.waktu_ambil?' · '+fmtJam(p.waktu_ambil):''}</div>`:''}
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
         <span style="font-size:10px;padding:1px 7px;border-radius:99px;background:${tipeBg[t]};color:${tipeClr[t]};font-weight:700">${tipeLbl[t]||'🎰'}</span>
         <span style="font-size:10px;color:var(--text-muted)">${p.waktu}</span>
+        <button onclick="toggleAmbil(${p.id},${sudah})"
+          style="font-size:10px;padding:3px 8px;border-radius:6px;
+          border:1.5px solid ${sudah?'#bbb':'var(--hijau)'};
+          background:${sudah?'#f3f4f6':'var(--hijau-light)'};
+          color:${sudah?'#888':'var(--hijau)'};
+          cursor:pointer;font-weight:700;white-space:nowrap;font-family:inherit;">
+          ${sudah?'↩ Belum':'✅ Diambil'}</button>
       </div>
     </div>`;
   }).join('');
+}
+
+async function toggleAmbil(id,sudah){
+  const baru=!sudah;
+  const{error}=await sb.from('mpps_pemenang').update({
+    sudah_diambil:baru,
+    waktu_ambil:baru?new Date().toISOString():null
+  }).eq('id',id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  const p=riwayatPemenang.find(p=>p.id===id);
+  if(p){p.sudah_diambil=baru;p.waktu_ambil=baru?new Date().toISOString():null;}
+  renderRiwayatPemenang();
+  toast(baru?'✅ Hadiah ditandai sudah diambil!':'↩ Dikembalikan ke belum diambil');
 }
 
 // ===== UNDIAN PERTAMA HADIR =====
