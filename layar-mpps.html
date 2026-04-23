@@ -330,35 +330,11 @@ function loadCounter(){
   });
 }
 
-// ===== DESKRIPSI via Anthropic API =====
-const descCache={};
-async function generateDesc(nama,keterangan){
-  const key=nama.toLowerCase().trim();
-  if(descCache[key])return descCache[key];
-
-  // Fallback cepat kalau API belum selesai
-  const fallback=keterangan||'Mendukung penuh kegiatan MPPS UBNB Perwira 2026.';
-
-  try{
-    const prompt=`Buat deskripsi usaha yang SANGAT MENARIK dan menggiurkan untuk ditampilkan di layar proyektor acara. Nama usaha: "${nama}". ${keterangan?'Info tambahan: '+keterangan+'.':''} Tulis 1-2 kalimat pendek (max 20 kata), persuasif, mengundang rasa ingin tahu, tanpa emoji. Langsung deskripsinya saja, tanpa tanda kutip.`;
-
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:80,
-        messages:[{role:'user',content:prompt}]
-      })
-    });
-    const data=await res.json();
-    const text=data?.content?.[0]?.text?.trim()||fallback;
-    descCache[key]=text;
-    return text;
-  }catch(e){
-    descCache[key]=fallback;
-    return fallback;
-  }
+// ===== DESKRIPSI — langsung dari DB (keterangan_kontribusi) =====
+function getDesc(s){
+  return s.keterangan_kontribusi&&s.keterangan_kontribusi.trim().length>3
+    ? s.keterangan_kontribusi.trim()
+    : 'Mendukung penuh kegiatan MPPS UBNB Perwira 2026. Jazakumullah khairan!';
 }
 
 // ===== FORMAT HP =====
@@ -383,7 +359,7 @@ function renderSideSkeleton(s){
     </div>
     <div class="sp-info-panel">
       <div class="sp-info-name">${s.nama_usaha}</div>
-      <div class="sp-info-desc sp-desc-loading" id="desc-${s.id}">Memuat deskripsi...</div>
+      <div class="sp-info-desc" id="desc-${s.id}"></div>
       ${hp?`<div class="sp-info-hp"><span class="hp-icon">📱</span>${hp}</div>`:''}
     </div>
   </div>`;
@@ -422,19 +398,12 @@ async function renderCarousel(){
   for(let i=0;i<totalSlides;i++) dots+=`<div class="sp-dot${i===currentSlide?' active':''}"></div>`;
   dotsEl.innerHTML=dots;
 
-  // Generate deskripsi async untuk masing-masing sponsor
-  const fillDesc=async(s)=>{
+  // Isi deskripsi langsung dari DB (sinkron)
+  [left,right].forEach(s=>{
     if(!s)return;
     const el=document.getElementById('desc-'+s.id);
-    if(!el)return;
-    const desc=await generateDesc(s.nama_usaha,s.keterangan_kontribusi);
-    if(el){
-      el.textContent=desc;
-      el.classList.remove('sp-desc-loading');
-    }
-  };
-  fillDesc(left);
-  fillDesc(right);
+    if(el){el.textContent=getDesc(s);el.classList.remove('sp-desc-loading');}
+  });
 
   // Auto-advance
   if(carouselTimer)clearTimeout(carouselTimer);
