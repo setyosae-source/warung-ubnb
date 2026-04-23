@@ -378,7 +378,7 @@ const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 const {createClient}=supabase;
 const sb=createClient(SURL,SKEY);
 
-let CU=null, aB=[], aPel=[], aSup=[], aKB=[], aBatch=[], aSahamAnggota=[];
+let CU=null, aB=[], aPel=[], aSup=[], aKB=[], aBatch=[], aSahamAnggota=[], aJamaah=[];
 let KR=[], KB=[]; // keranjang jual & beli
 let katFilter='', metodeBayar='tunai';
 let sdSel={prod:null, bprod:null, pel:null, sup:null};
@@ -432,7 +432,7 @@ window.addEventListener('DOMContentLoaded',async()=>{
 
 // ===== LOAD DATA =====
 async function loadAll(){
-  await Promise.all([lB(),lPel(),lSup(),lBatch(),lAnggota()]);
+  await Promise.all([lB(),lPel(),lSup(),lBatch(),lAnggota(),lJamaah()]);
   renderProduk();
   renderPelDropdown();
   renderSupDropdown();
@@ -442,6 +442,7 @@ async function loadAll(){
 async function lB(){const{data}=await sb.from('barang').select('*').order('nama');aB=data||[];}
 async function lPel(){const{data}=await sb.from('pelanggan').select('*').order('nama');aPel=data||[];}
 async function lAnggota(){const{data}=await sb.from('ubnb_anggota').select('id,no_anggota,nama,kelompok,jenis,status').eq('status','Aktif').order('nama');aSahamAnggota=data||[];}
+async function lJamaah(){const{data}=await sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok').order('nama').limit(500);aJamaah=data||[];}
 async function lSup(){const{data}=await sb.from('supplier').select('*').order('nama');aSup=data||[];}
 async function lBatch(){const{data}=await sb.from('stok_batch').select('*');aBatch=data||[];}
 
@@ -812,11 +813,14 @@ function selSD(k,item){
 }
 
 function renderPelDropdown(){
-  const items=[
-    {id:null,anggota_id:null,label:'Umum'},
-    ...aSahamAnggota.map(a=>({id:null,anggota_id:a.id,label:a.nama,sub:a.no_anggota+' · '+a.kelompok}))
-  ];
-  document.getElementById('sdo-pel').innerHTML=items.map(i=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify(i)})'>${i.anggota_id?'⭐ ':''}${i.label}${i.sub?`<div style="font-size:10px;opacity:0.7">${i.sub}</div>`:''}</div>`).join('');
+  let html='';
+  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">⭐ Anggota Saham — masuk SHU</div>`;
+  html+=aSahamAnggota.map(a=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:a.id,jamaah_did:null,label:a.nama,sumber:"anggota"})})'><div>⭐ ${a.nama}<div style="font-size:10px;opacity:0.7">${a.no_anggota} · ${a.kelompok}</div></div></div>`).join('');
+  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">👤 Jamaah Desa — tidak masuk SHU</div>`;
+  html+=aJamaah.slice(0,50).map(j=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:j.did,label:j.nama,sumber:"jamaah"})})'><div>👤 ${j.nama}<div style="font-size:10px;opacity:0.7">${j.kelompok?'Kel. '+j.kelompok:''}</div></div></div>`).join('');
+  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">✏️ Lainnya</div>`;
+  html+=`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:"umum"})})'><div>Umum<div style="font-size:10px;opacity:0.7">Tidak masuk SHU</div></div></div>`;
+  document.getElementById('sdo-pel').innerHTML=html;
 }
 function renderSupDropdown(){
   const items=[{id:null,label:'Tanpa supplier'},...aSup.map(s=>({id:s.id,label:s.nama}))];
@@ -826,7 +830,24 @@ function renderBprodDropdown(){
   const items=aB.map(b=>({id:b.id,label:b.nama}));
   document.getElementById('sdo-bprod').innerHTML=items.map(i=>`<div class="sd-option" onclick='selSD("bprod",${JSON.stringify(i)})'>${i.label}</div>`).join('');
 }
-function filterPel(){const q=(document.getElementById('sds-pel').value||'').toLowerCase();document.querySelectorAll('#sdo-pel .sd-option').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(q)?'':'none';});}
+function filterPel(){
+  const q=(document.getElementById('sds-pel').value||'').toLowerCase();
+  if(!q){renderPelDropdown();return;}
+  let html='';
+  const fa=aSahamAnggota.filter(a=>a.nama.toLowerCase().includes(q)||(a.no_anggota||'').toLowerCase().includes(q));
+  if(fa.length){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase">⭐ Anggota Saham</div>`;
+    html+=fa.map(a=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:a.id,jamaah_did:null,label:a.nama,sumber:"anggota"})})'><div>⭐ ${a.nama}<div style="font-size:10px;opacity:0.7">${a.no_anggota} · ${a.kelompok}</div></div></div>`).join('');
+  }
+  const fj=aJamaah.filter(j=>j.nama.toLowerCase().includes(q));
+  if(fj.length){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase">👤 Jamaah Desa</div>`;
+    html+=fj.slice(0,20).map(j=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:j.did,label:j.nama,sumber:"jamaah"})})'><div>👤 ${j.nama}</div></div>`).join('');
+  }
+  if(q){html+=`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:null,label:q,sumber:"baru"})})'><div>✏️ "${q}" (nama baru)</div></div>`;}
+  html+=`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:"umum"})})'><div>Umum</div></div>`;
+  document.getElementById('sdo-pel').innerHTML=html||'<div class="sd-empty">Tidak ditemukan</div>';
+}
 function filterSup(){const q=(document.getElementById('sds-sup').value||'').toLowerCase();document.querySelectorAll('#sdo-sup .sd-option').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(q)?'':'none';});}
 function filterBprod(){const q=(document.getElementById('sds-bprod').value||'').toLowerCase();document.querySelectorAll('#sdo-bprod .sd-option').forEach(el=>{el.style.display=el.textContent.toLowerCase().includes(q)?'':'none';});}
 

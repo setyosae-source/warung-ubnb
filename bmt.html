@@ -728,7 +728,7 @@ const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const sb=supabase.createClient(SURL,SKEY);
 
-let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',simR={},aSahamAnggota=[],aKas=[];
+let CU=null,aAkad=[],aAngsuran=[],adminT='dimuka',baruD={},simAkad='murabahah',simR={},aSahamAnggota=[],aKas=[],aJamaah=[];
 
 function rp(n){return'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');}
 function fmtTgl(v){if(!v)return'-';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});}
@@ -783,13 +783,14 @@ window.addEventListener('DOMContentLoaded',()=>{
 
 // ===== DATA =====
 async function loadAll(){
-  const[{data:a},{data:b},{data:c},{data:d}]=await Promise.all([
+  const[{data:a},{data:b},{data:c},{data:d},{data:j}]=await Promise.all([
     sb.from('bmt_akad').select('*').order('created_at',{ascending:false}),
     sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}),
     sb.from('ubnb_anggota').select('id,no_anggota,nama,kelompok,jenis,status,no_hp').eq('status','Aktif').order('nama'),
+    sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok,nomor_wa').order('nama').limit(500),
     sb.from('kas').select('*').order('id')
   ]);
-  aAkad=a||[];aAngsuran=b||[];aSahamAnggota=c||[];aKas=d||[];
+  aAkad=a||[];aAngsuran=b||[];aSahamAnggota=c||[];aKas=d||[];aJamaah=j||[];
   // Enrich no_hp dari ubnb_anggota
   aAkad.forEach(function(ak){if(ak.anggota_id){var s=aSahamAnggota.find(function(x){return x.id===ak.anggota_id;});if(s&&s.no_hp)ak._no_hp=s.no_hp;}});
   isiDropdownAnggota();isiKasDropdown();
@@ -801,27 +802,56 @@ function isiDropdownAnggota(){
 function searchAnggotaBMT(q){
   const dd=document.getElementById('b-nama-dd');
   if(!dd)return;
-  // Sumber: anggota saham + opsi Umum
-  const src=[
-    {id:null,nama:'Umum',no_anggota:'',kelompok:'Luar Perwira'},
-    ...aSahamAnggota
-  ];
-  const filtered=q
-    ?src.filter(a=>a.nama.toLowerCase().includes(q.toLowerCase())||a.no_anggota.toLowerCase().includes(q.toLowerCase()))
-    :src.slice(0,10);
+  const ql=(q||'').toLowerCase();
+  let html='';
+  // TIER 1: Anggota Saham
+  const fa=aSahamAnggota.filter(a=>!ql||a.nama.toLowerCase().includes(ql)||(a.no_anggota||'').toLowerCase().includes(ql));
+  if(fa.length||!ql){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">⭐ Anggota Saham — masuk SHU</div>`;
+    html+=(ql?fa:fa.slice(0,8)).map(a=>`
+      <div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+        onmousedown="pilihAnggotaBMT(${JSON.stringify(a.id)},'${a.nama.replace(/'/g,"\'")}','${a.kelompok||''}','${a.no_anggota||''}','anggota')">
+        <div style="font-weight:600">⭐ ${a.nama}</div>
+        <div style="font-size:11px;color:#888">${a.no_anggota} · ${a.kelompok}</div>
+      </div>`).join('');
+  }
+  // TIER 2: Jamaah Desa
+  const fj=aJamaah.filter(j=>!ql||j.nama.toLowerCase().includes(ql));
+  if(fj.length||!ql){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">👤 Jamaah Desa — tidak masuk SHU</div>`;
+    html+=(ql?fj:fj.slice(0,6)).map(j=>`
+      <div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+        onmousedown="pilihAnggotaBMT(null,'${j.nama.replace(/'/g,"\'")}','${j.kelompok||''}','','jamaah','${j.did}')">
+        <div style="font-weight:600">👤 ${j.nama}</div>
+        <div style="font-size:11px;color:#888">${j.kelompok?'Kel. '+j.kelompok:''}</div>
+      </div>`).join('');
+  }
+  // TIER 3: Umum / Nama Baru
+  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">✏️ Lainnya</div>`;
+  html+=`<div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+    onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+    onmousedown="pilihAnggotaBMT(null,'Umum','Luar Perwira','','umum','')">
+    <div style="font-weight:600">Umum</div>
+    <div style="font-size:11px;color:#888">Tidak masuk SHU</div>
+  </div>`;
+  if(q){html+=`<div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+    onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+    onmousedown="pilihAnggotaBMT(null,'${q.replace(/'/g,"\'")}','','','baru','')">
+    <div style="font-weight:600">✏️ "${q}" (nama baru)</div>
+    <div style="font-size:11px;color:#888">Tidak masuk SHU</div>
+  </div>`;}
   dd.style.display='block';
-  dd.innerHTML=filtered.map(a=>`
-    <div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
-      onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
-      onmousedown="pilihAnggotaBMT(${JSON.stringify(a.id||null)},'${a.nama.replace(/'/g,"\'")}','${a.kelompok||''}','${a.no_anggota||''}')">
-      <div style="font-weight:600">${a.id?'⭐ ':''}${a.nama}</div>
-      <div style="font-size:11px;color:#888">${a.no_anggota?a.no_anggota+' · ':''} ${a.kelompok||''}</div>
-    </div>`).join('')||'<div style="padding:10px 12px;color:#888;font-size:13px">Tidak ditemukan</div>';
+  dd.innerHTML=html||'<div style="padding:10px 12px;color:#888;font-size:13px">Tidak ditemukan</div>';
 }
-function pilihAnggotaBMT(id,nama,kelompok,noAnggota){
-  document.getElementById('b-nama-search').value=id?(('⭐ ')+nama+' ('+noAnggota+')'):nama;
+function pilihAnggotaBMT(id,nama,kelompok,noAnggota,sumber,jamaahDid){
+  if(sumber==='anggota') document.getElementById('b-nama-search').value='⭐ '+nama+(noAnggota?' ('+noAnggota+')':'');
+  else if(sumber==='jamaah') document.getElementById('b-nama-search').value='👤 '+nama;
+  else document.getElementById('b-nama-search').value=nama;
   document.getElementById('b-anggota-id').value=id||'';
   document.getElementById('b-kelompok').value=kelompok||'';
+  if(document.getElementById('b-jamaah-did')) document.getElementById('b-jamaah-did').value=jamaahDid||'';
   document.getElementById('b-nama-dd').style.display="none";
   resetBaru();
 }
@@ -2344,26 +2374,46 @@ function renderRekening(){
 function searchAnggotaTabungan(q){
   const dd=document.getElementById('tab-nama-dd');
   if(!dd)return;
-  const src=[
-    {id:null,nama:'Umum (Non-Anggota)',no_anggota:'',kelompok:''},
-    ...aSahamAnggota
-  ];
-  const filtered=q
-    ?src.filter(a=>a.nama.toLowerCase().includes(q.toLowerCase())||a.no_anggota.toLowerCase().includes(q.toLowerCase()))
-    :src.slice(0,10);
+  const ql=(q||'').toLowerCase();
+  let html='';
+  const fa=aSahamAnggota.filter(a=>!ql||a.nama.toLowerCase().includes(ql)||(a.no_anggota||'').toLowerCase().includes(ql));
+  if(fa.length||!ql){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">⭐ Anggota Saham — masuk SHU</div>`;
+    html+=(ql?fa:fa.slice(0,8)).map(a=>`
+      <div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+        onmousedown="pilihAnggotaTabungan(${JSON.stringify(a.id)},'${a.nama.replace(/'/g,"\'")}','${a.kelompok||''}','${a.no_anggota||''}','anggota','')">
+        <div style="font-weight:600">⭐ ${a.nama}</div>
+        <div style="font-size:11px;color:#888">${a.no_anggota} · ${a.kelompok}</div>
+      </div>`).join('');
+  }
+  const fj=aJamaah.filter(j=>!ql||j.nama.toLowerCase().includes(ql));
+  if(fj.length||!ql){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">👤 Jamaah Desa — tidak masuk SHU</div>`;
+    html+=(ql?fj:fj.slice(0,6)).map(j=>`
+      <div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+        onmousedown="pilihAnggotaTabungan(null,'${j.nama.replace(/'/g,"\'")}','${j.kelompok||''}','','jamaah','${j.did}')">
+        <div style="font-weight:600">👤 ${j.nama}</div>
+        <div style="font-size:11px;color:#888">${j.kelompok?'Kel. '+j.kelompok:''}</div>
+      </div>`).join('');
+  }
+  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">✏️ Lainnya</div>`;
+  html+=`<div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+    onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
+    onmousedown="pilihAnggotaTabungan(null,'Umum','','','umum','')">
+    <div style="font-weight:600">Umum</div><div style="font-size:11px;color:#888">Tidak masuk SHU</div>
+  </div>`;
   dd.style.display='block';
-  dd.innerHTML=filtered.map(a=>`
-    <div style="padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
-      onmouseover="this.style.background='#f0fdf8'" onmouseout="this.style.background=''"
-      onmousedown="pilihAnggotaTabungan(${JSON.stringify(a.id||null)},'${a.nama.replace(/'/g,"\'")}','${a.kelompok||''}','${a.no_anggota||''}')">
-      <div style="font-weight:600">${a.id?'⭐ ':''}${a.nama}</div>
-      <div style="font-size:11px;color:#888">${a.no_anggota?a.no_anggota+' · ':''} ${a.kelompok||''}</div>
-    </div>`).join('')||'<div style="padding:10px 12px;color:#888;font-size:13px">Tidak ditemukan</div>';
+  dd.innerHTML=html||'<div style="padding:10px 12px;color:#888;font-size:13px">Tidak ditemukan</div>';
 }
-function pilihAnggotaTabungan(id,nama,kelompok,noAnggota){
-  document.getElementById('tab-nama-search').value=id?('⭐ '+nama+' ('+noAnggota+')'):'Umum';
+function pilihAnggotaTabungan(id,nama,kelompok,noAnggota,sumber,jamaahDid){
+  if(sumber==='anggota') document.getElementById('tab-nama-search').value='⭐ '+nama+(noAnggota?' ('+noAnggota+')':'');
+  else if(sumber==='jamaah') document.getElementById('tab-nama-search').value='👤 '+nama;
+  else document.getElementById('tab-nama-search').value=nama||'Umum';
   document.getElementById('tab-anggota-id').value=id||'';
   document.getElementById('tab-kelompok').value=kelompok||'';
+  if(document.getElementById('tab-jamaah-did')) document.getElementById('tab-jamaah-did').value=jamaahDid||'';
   document.getElementById('tab-nama-dd').style.display="none";
 }
 document.addEventListener('click',e=>{
