@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manajemen Keluarga | UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
+<style>
+:root{
+  --hijau:#1a6640;--hijau2:#0f4428;--hijau-light:#e8f5ee;
+  --border:#e0d8cc;--bg:#f5f3ee;--surface:#fff;
+  --text:#1c1a16;--muted:#8a8078;--radius:10px;
+  --shadow:0 2px 8px rgba(0,0,0,.07);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+
+/* LOGIN */
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,var(--hijau2),var(--hijau));
+  display:flex;align-items:center;justify-content:center;z-index:999;}
+.login-box{background:white;border-radius:16px;padding:32px 28px;width:320px;}
+.login-logo{text-align:center;font-size:32px;margin-bottom:8px;}
+.login-title{text-align:center;font-weight:700;font-size:16px;margin-bottom:4px;}
+.login-sub{text-align:center;font-size:12px;color:var(--muted);margin-bottom:20px;}
+.lfield{margin-bottom:12px;}
+.lfield label{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;}
+.lfield input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;outline:none;}
+.lfield input:focus{border-color:var(--hijau);}
+.btn-login{width:100%;padding:11px;background:var(--hijau);color:white;border:none;border-radius:8px;
+  font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;}
+#login-err{color:#dc2626;font-size:12px;margin-top:8px;text-align:center;display:none;}
+
+/* APP */
+#app{display:none;}
+.topbar{background:linear-gradient(135deg,var(--hijau2),var(--hijau));color:white;
+  padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-title{font-size:15px;font-weight:700;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.btn-keluar{background:rgba(255,255,255,.2);border:none;color:white;padding:5px 12px;
+  border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+
+.main{max-width:960px;margin:0 auto;padding:16px;}
+
+/* STAT */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.stat{background:var(--surface);border-radius:var(--radius);padding:14px;border:1px solid var(--border);text-align:center;}
+.stat-num{font-size:24px;font-weight:700;color:var(--hijau);}
+.stat-num.warn{color:#b45309;}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+
+/* TOOLBAR */
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.inp-search{flex:1;min-width:180px;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:8px;font-family:inherit;font-size:13px;outline:none;}
+.inp-search:focus{border-color:var(--hijau);}
+select.filter{padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
+  font-family:inherit;font-size:13px;outline:none;background:white;}
+.btn{padding:9px 16px;border:none;border-radius:8px;font-family:inherit;font-size:12px;
+  font-weight:700;cursor:pointer;}
+.btn-primary{background:var(--hijau);color:white;}
+.btn-sec{background:white;border:1.5px solid var(--border);color:var(--text);}
+
+/* TABS */
+.tabs{display:flex;gap:2px;margin-bottom:12px;background:#e5e7eb;border-radius:8px;padding:3px;}
+.tab{flex:1;padding:7px;text-align:center;border-radius:6px;font-size:12px;font-weight:600;
+  cursor:pointer;color:var(--muted);border:none;background:none;font-family:inherit;}
+.tab.active{background:white;color:var(--hijau);box-shadow:0 1px 4px rgba(0,0,0,.1);}
+
+/* TABLE */
+.tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.tbl{width:100%;border-collapse:collapse;}
+.tbl thead{background:var(--hijau);}
+.tbl th{padding:10px 12px;text-align:left;font-size:10px;font-weight:700;color:white;
+  text-transform:uppercase;letter-spacing:.5px;}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tr:hover td{background:var(--hijau-light);}
+.nama-kk{font-weight:700;}
+.sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
+.chip-ok{background:#dcfce7;color:#166534;}
+.chip-warn{background:#fef3c7;color:#92400e;}
+.chip-err{background:#fee2e2;color:#991b1b;}
+.chip-kk{background:#dbeafe;color:#1e40af;}
+.btn-sm{padding:4px 10px;font-size:11px;font-weight:700;border:none;border-radius:5px;cursor:pointer;font-family:inherit;}
+.btn-edit{background:var(--hijau-light);color:var(--hijau);}
+.btn-view{background:#e0e7ff;color:#3730a3;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;
+  display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:white;border-radius:16px;padding:24px;width:480px;max-height:85vh;overflow-y:auto;
+  box-shadow:0 8px 40px rgba(0,0,0,.2);}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px;}
+.irow{margin-bottom:12px;}
+.irow label{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;}
+.irow input,.irow select,.irow textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:8px;font-family:inherit;font-size:13px;outline:none;}
+.irow input:focus,.irow select:focus{border-color:var(--hijau);}
+.btn-row{display:flex;gap:8px;margin-top:16px;}
+
+/* DETAIL KK */
+.anggota-list{background:var(--bg);border-radius:8px;padding:10px;margin-top:8px;}
+.anggota-item{display:flex;align-items:center;justify-content:space-between;
+  padding:6px 8px;border-bottom:1px solid var(--border);font-size:12px;}
+.anggota-item:last-child{border-bottom:none;}
+
+/* JAMAAH TANPA KK */
+.jamaah-nokk{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.nokk-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.nokk-nama{font-weight:700;font-size:13px;}
+.nokk-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.nokk-input{width:100%;margin-top:6px;padding:6px 8px;border:1.5px solid var(--border);
+  border-radius:6px;font-size:12px;font-family:inherit;outline:none;}
+.nokk-input:focus{border-color:var(--hijau);}
+.nokk-btn{margin-top:6px;width:100%;padding:6px;background:var(--hijau);color:white;
+  border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+
+.empty{text-align:center;padding:32px;color:var(--muted);}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--hijau);color:white;padding:9px 20px;border-radius:99px;
+  font-size:13px;font-weight:700;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;z-index:999;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">🏠</div>
+    <div class="login-title">Manajemen Keluarga</div>
+    <div class="login-sub">UBNB Desa Perwira</div>
+    <div class="lfield"><label>Username</label>
+      <input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label>
+      <input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-title">🏠 Manajemen Kepala Keluarga</div>
+    <div class="topbar-right">
+      <span style="font-size:12px;opacity:.8" id="user-badge"></span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- STAT -->
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num" id="st-kk">—</div><div class="stat-lbl">Total KK</div></div>
+      <div class="stat"><div class="stat-num" id="st-link">—</div><div class="stat-lbl">KK terlink jamaah</div></div>
+      <div class="stat"><div class="stat-num warn" id="st-nolink">—</div><div class="stat-lbl">KK belum terlink</div></div>
+      <div class="stat"><div class="stat-num warn" id="st-nokk">—</div><div class="stat-lbl">Jamaah tanpa KK</div></div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active" onclick="setTab('daftar',this)">📋 Daftar KK</button>
+      <button class="tab" onclick="setTab('nokk',this)">⚠️ Jamaah tanpa KK</button>
+      <button class="tab" onclick="setTab('nolink',this)">🔗 KK belum terlink</button>
+    </div>
+
+    <!-- TAB DAFTAR KK -->
+    <div id="tab-daftar">
+      <div class="toolbar">
+        <input class="inp-search" id="search-kk" placeholder="🔍 Cari nama KK..." oninput="renderKK()">
+        <select class="filter" id="filter-kel" onchange="renderKK()">
+          <option value="">Semua Kelompok</option>
+          <option value="1">PW1 - Perwirasari</option>
+          <option value="2">PW2 - Alinda</option>
+          <option value="3">PW3 - Bulak Perwira</option>
+          <option value="4">PW4 - VIP</option>
+        </select>
+        <button class="btn btn-primary" onclick="openModalTambah()">＋ Tambah KK</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th><th>Kepala Keluarga</th><th>Kelompok</th>
+            <th>Anggota</th><th>Saham</th><th>Status</th><th>Aksi</th>
+          </tr></thead>
+          <tbody id="tbody-kk"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB JAMAAH TANPA KK -->
+    <div id="tab-nokk" style="display:none;">
+      <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:var(--radius);
+        padding:12px 14px;margin-bottom:12px;font-size:12px;color:#92400e;">
+        ⚠️ <strong>57 jamaah belum ada data KK-nya.</strong> 
+        Isi nama kepala keluarga untuk setiap jamaah di bawah.
+      </div>
+      <div class="jamaah-nokk" id="list-nokk"></div>
+    </div>
+
+    <!-- TAB KK BELUM TERLINK -->
+    <div id="tab-nolink" style="display:none;">
+      <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius);
+        padding:12px 14px;margin-bottom:12px;font-size:12px;color:#991b1b;">
+        🔗 <strong>7 KK ini namanya tidak cocok dengan nama di data jamaah.</strong>
+        Pilih jamaah yang benar sebagai KK-nya, atau biarkan jika KK-nya belum terdaftar.
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Nama KK</th><th>Anggota KK</th><th>Link ke Jamaah</th><th>Aksi</th></tr></thead>
+          <tbody id="tbody-nolink"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH/EDIT KK -->
+<div class="modal-overlay" id="modal-kk">
+  <div class="modal">
+    <div class="modal-title" id="modal-kk-title">Tambah Kepala Keluarga</div>
+    <input type="hidden" id="kk-id">
+    <div class="irow"><label>Nama KK *</label>
+      <input type="text" id="kk-nama" placeholder="Nama kepala keluarga"></div>
+    <div class="irow"><label>Kelompok</label>
+      <select id="kk-kelompok">
+        <option value="">— Pilih —</option>
+        <option value="1">PW1 - Perwirasari</option>
+        <option value="2">PW2 - Alinda</option>
+        <option value="3">PW3 - Bulak Perwira</option>
+        <option value="4">PW4 - VIP</option>
+      </select></div>
+    <div class="irow"><label>No. WhatsApp</label>
+      <input type="tel" id="kk-wa" placeholder="08xxx"></div>
+    <div class="irow"><label>Alamat</label>
+      <input type="text" id="kk-alamat" placeholder="Alamat rumah"></div>
+    <div class="irow"><label>Catatan</label>
+      <input type="text" id="kk-catatan" placeholder="Opsional"></div>
+    <div class="btn-row">
+      <button class="btn btn-sec" style="flex:1" onclick="closeModal('modal-kk')">Batal</button>
+      <button class="btn btn-primary" style="flex:2" onclick="simpanKK()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETAIL KK -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal">
+    <div class="modal-title" id="detail-nama">—</div>
+    <div id="detail-info" style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.8;"></div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Anggota Keluarga</div>
+    <div class="anggota-list" id="detail-anggota"></div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn btn-sec" style="flex:1" onclick="closeModal('modal-detail')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LINK JAMAAH -->
+<div class="modal-overlay" id="modal-link">
+  <div class="modal">
+    <div class="modal-title">🔗 Link KK ke Jamaah</div>
+    <div id="link-kk-info" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;"></div>
+    <input type="hidden" id="link-kk-id">
+    <div class="irow"><label>Pilih Jamaah yang menjadi KK ini</label>
+      <input type="text" id="link-search" placeholder="Ketik nama jamaah..." oninput="filterLinkSearch()" autocomplete="off">
+      <div id="link-dd" style="border:1.5px solid var(--hijau);border-radius:8px;margin-top:4px;max-height:200px;overflow-y:auto;display:none;background:white;"></div>
+    </div>
+    <div id="link-selected" style="background:var(--hijau-light);border-radius:8px;padding:8px 12px;font-size:12px;display:none;margin-top:4px;"></div>
+    <div class="btn-row">
+      <button class="btn btn-sec" style="flex:1" onclick="closeModal('modal-link')">Batal</button>
+      <button class="btn btn-primary" style="flex:2" id="btn-link-save" onclick="saveLink()" disabled>💾 Simpan Link</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SURL,SKEY);
+let CU=null, aKK=[], aJamaah=[], aSaham=[], currentTab='daftar';
+let linkSelectedJamaah=null;
+
+// ── AUTH ─────────────────────────────────────────────────────────
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value;
+  if(!u||!p){showErr('Isi username dan password');return;}
+  try{
+    const ud=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('kk_user',ud);
+    document.getElementById('login-wrap').style.display='none';
+    document.getElementById('app').style.display='block';
+    document.getElementById('user-badge').textContent=CU.username+' · '+CU.role;
+    await loadAll();
+  }catch(e){showErr(e.message||'Username atau password salah');}
+}
+function showErr(m){const e=document.getElementById('login-err');e.textContent=m;e.style.display='block';}
+function keluar(){UBNBAuth.clearAllSessions();location.reload();}
+
+window.addEventListener('DOMContentLoaded',async()=>{
+  const saved=UBNBAuth.loadSession('kk_user');
+  if(saved){
+    const cu=await UBNBAuth.verifySession(sb,'kk_user');
+    if(cu){CU=cu;document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('user-badge').textContent=CU.username+' · '+CU.role;
+      await loadAll();}
+  }
+});
+
+// ── LOAD DATA ─────────────────────────────────────────────────────
+async function loadAll(){
+  const[{data:kk},{data:jm},{data:sm}]=await Promise.all([
+    sb.from('keluarga').select('*').order('nama_kk'),
+    sb.from('jamaah_desa').select('did,nama,kelompok,kelompok_nama,keluarga_id,nama_kk,jenis_kelamin,nomor_wa').order('nama'),
+    sb.from('ubnb_saham').select('id,nama,jamaah_did,status,jumlah_lembar').eq('status','Aktif'),
+  ]);
+  aKK=kk||[];aJamaah=jm||[];aSaham=sm||[];
+  updateStats();renderKK();renderNokk();renderNolink();
+}
+
+function updateStats(){
+  document.getElementById('st-kk').textContent=aKK.length;
+  document.getElementById('st-link').textContent=aKK.filter(k=>k.jamaah_did).length;
+  document.getElementById('st-nolink').textContent=aKK.filter(k=>!k.jamaah_did).length;
+  document.getElementById('st-nokk').textContent=aJamaah.filter(j=>!j.keluarga_id&&(!j.nama_kk||j.nama_kk.trim()=='')).length;
+}
+
+const kelNama={1:'PW1 · Perwirasari',2:'PW2 · Alinda',3:'PW3 · Bulak Perwira',4:'PW4 · VIP'};
+const fmt=n=>'Rp '+Math.round(n||0).toLocaleString('id-ID');
+
+// ── TABS ──────────────────────────────────────────────────────────
+function setTab(tab,btn){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-daftar').style.display=tab==='daftar'?'block':'none';
+  document.getElementById('tab-nokk').style.display=tab==='nokk'?'block':'none';
+  document.getElementById('tab-nolink').style.display=tab==='nolink'?'block':'none';
+}
+
+// ── RENDER KK TABLE ───────────────────────────────────────────────
+function renderKK(){
+  const q=(document.getElementById('search-kk').value||'').toLowerCase();
+  const kel=document.getElementById('filter-kel').value;
+  let data=aKK;
+  if(q)data=data.filter(k=>k.nama_kk.toLowerCase().includes(q));
+  if(kel)data=data.filter(k=>k.kelompok===kel);
+
+  const tbody=document.getElementById('tbody-kk');
+  if(!data.length){tbody.innerHTML='<tr><td colspan="7" class="empty">Tidak ada data</td></tr>';return;}
+
+  tbody.innerHTML=data.map((k,i)=>{
+    const members=aJamaah.filter(j=>j.keluarga_id===k.id);
+    const sahamCount=members.filter(j=>aSaham.find(s=>s.jamaah_did===j.did)).length;
+    const linked=k.jamaah_did;
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>
+        <div class="nama-kk">${k.nama_kk}</div>
+        <div class="sub">${k.nomor_wa||'—'} ${k.alamat?'· '+k.alamat.slice(0,30):''}</div>
+      </td>
+      <td>${k.kelompok?'<span class="chip chip-kk">'+kelNama[k.kelompok]+'</span>':'<span style="color:var(--muted)">—</span>'}</td>
+      <td><strong>${members.length}</strong> jamaah</td>
+      <td>${sahamCount>0?'<span class="chip chip-ok">'+sahamCount+' anggota</span>':'<span style="color:var(--muted)">—</span>'}</td>
+      <td>${linked?'<span class="chip chip-ok">✅ Terlink</span>':'<span class="chip chip-warn">Belum</span>'}</td>
+      <td style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn-sm btn-view" onclick="openDetail(${k.id})">👁 Detail</button>
+        <button class="btn-sm btn-edit" onclick="openEdit(${k.id})">✏️ Edit</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── DETAIL KK ────────────────────────────────────────────────────
+function openDetail(kkId){
+  const k=aKK.find(x=>x.id===kkId);
+  const members=aJamaah.filter(j=>j.keluarga_id===kkId);
+  document.getElementById('detail-nama').textContent='🏠 '+k.nama_kk;
+  document.getElementById('detail-info').innerHTML=`
+    <div>📍 Kelompok: <strong>${k.kelompok?kelNama[k.kelompok]:'—'}</strong></div>
+    <div>📞 WA: <strong>${k.nomor_wa||'—'}</strong></div>
+    <div>🏘 Alamat: <strong>${k.alamat||'—'}</strong></div>
+    <div>👥 Jumlah anggota keluarga: <strong>${members.length}</strong></div>
+  `;
+  const anggotaHTML=members.length?members.map(j=>{
+    const punya=aSaham.find(s=>s.jamaah_did===j.did);
+    return `<div class="anggota-item">
+      <div>
+        <span>${j.nama}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:6px;">${j.jenis_kelamin||'—'}</span>
+      </div>
+      <div>${punya?'<span class="chip chip-ok">⭐ Anggota</span>':'<span style="font-size:11px;color:var(--muted)">Jamaah</span>'}</div>
+    </div>`;
+  }).join(''):'<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">Belum ada anggota keluarga terdaftar</div>';
+  document.getElementById('detail-anggota').innerHTML=anggotaHTML;
+  document.getElementById('modal-detail').classList.add('open');
+}
+
+// ── TAMBAH / EDIT KK ─────────────────────────────────────────────
+function openModalTambah(){
+  document.getElementById('kk-id').value='';
+  document.getElementById('modal-kk-title').textContent='Tambah Kepala Keluarga';
+  ['kk-nama','kk-wa','kk-alamat','kk-catatan'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('kk-kelompok').value='';
+  document.getElementById('modal-kk').classList.add('open');
+}
+function openEdit(kkId){
+  const k=aKK.find(x=>x.id===kkId);
+  document.getElementById('kk-id').value=k.id;
+  document.getElementById('modal-kk-title').textContent='Edit KK: '+k.nama_kk;
+  document.getElementById('kk-nama').value=k.nama_kk;
+  document.getElementById('kk-kelompok').value=k.kelompok||'';
+  document.getElementById('kk-wa').value=k.nomor_wa||'';
+  document.getElementById('kk-alamat').value=k.alamat||'';
+  document.getElementById('kk-catatan').value=k.catatan||'';
+  document.getElementById('modal-kk').classList.add('open');
+}
+async function simpanKK(){
+  const id=document.getElementById('kk-id').value;
+  const nama=document.getElementById('kk-nama').value.trim();
+  if(!nama){toast('Nama KK wajib diisi',true);return;}
+  const payload={
+    nama_kk:nama,
+    kelompok:document.getElementById('kk-kelompok').value||null,
+    nomor_wa:document.getElementById('kk-wa').value.trim()||null,
+    alamat:document.getElementById('kk-alamat').value.trim()||null,
+    catatan:document.getElementById('kk-catatan').value.trim()||null,
+  };
+  let err;
+  if(id){({error:err}=await sb.from('keluarga').update(payload).eq('id',id));}
+  else{({error:err}=await sb.from('keluarga').insert([payload]));}
+  if(err){toast('Gagal: '+err.message,true);return;}
+  toast(id?'KK diperbarui':'KK ditambahkan');
+  closeModal('modal-kk');
+  await loadAll();
+}
+
+// ── JAMAAH TANPA KK ───────────────────────────────────────────────
+function renderNokk(){
+  const nokk=aJamaah.filter(j=>!j.keluarga_id&&(!j.nama_kk||j.nama_kk.trim()===''));
+  const el=document.getElementById('list-nokk');
+  if(!nokk.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);grid-column:span 2">✅ Semua jamaah sudah punya data KK!</div>';return;}
+  el.innerHTML=nokk.map(j=>`
+    <div class="nokk-item">
+      <div class="nokk-nama">${j.nama}</div>
+      <div class="nokk-sub">${j.kelompok?'Kel. '+j.kelompok:''} ${j.jenis_kelamin||''}</div>
+      <input class="nokk-input" id="nokk-${j.did}" placeholder="Nama kepala keluarga..."
+        list="kk-datalist" autocomplete="off">
+      <button class="nokk-btn" onclick="simpanNamaKK('${j.did}')">💾 Simpan</button>
+    </div>`).join('');
+  // Datalist untuk autocomplete
+  const dl=document.createElement('datalist');
+  dl.id='kk-datalist';
+  dl.innerHTML=aKK.map(k=>`<option value="${k.nama_kk}">`).join('');
+  el.appendChild(dl);
+}
+async function simpanNamaKK(did){
+  const namaKK=document.getElementById('nokk-'+did).value.trim();
+  if(!namaKK){toast('Isi nama KK dulu',true);return;}
+  // Cari keluarga_id yang cocok
+  const kk=aKK.find(k=>LOWER(k.nama_kk)===LOWER(namaKK));
+  const{error}=await sb.from('jamaah_desa').update({
+    nama_kk:namaKK,
+    keluarga_id:kk?kk.id:null
+  }).eq('did',did);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Tersimpan');
+  await loadAll();
+}
+function LOWER(s){return(s||'').toLowerCase().trim();}
+
+// ── KK BELUM TERLINK ──────────────────────────────────────────────
+function renderNolink(){
+  const nolink=aKK.filter(k=>!k.jamaah_did);
+  const tbody=document.getElementById('tbody-nolink');
+  if(!nolink.length){tbody.innerHTML='<tr><td colspan="4" class="empty">✅ Semua KK sudah terlink!</td></tr>';return;}
+  tbody.innerHTML=nolink.map(k=>{
+    const members=aJamaah.filter(j=>j.keluarga_id===k.id);
+    return `<tr>
+      <td><div class="nama-kk">${k.nama_kk}</div></td>
+      <td>${members.length} jamaah: <span style="font-size:11px;color:var(--muted)">${members.slice(0,3).map(j=>j.nama).join(', ')}${members.length>3?'...':''}</span></td>
+      <td><span class="chip chip-warn">Belum terlink</span></td>
+      <td><button class="btn-sm btn-edit" onclick="openLink(${k.id})">🔗 Link</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── MODAL LINK JAMAAH ─────────────────────────────────────────────
+function openLink(kkId){
+  const k=aKK.find(x=>x.id===kkId);
+  document.getElementById('link-kk-id').value=kkId;
+  document.getElementById('link-kk-info').innerHTML=`<strong>${k.nama_kk}</strong><br>Pilih jamaah yang merupakan kepala keluarga ini`;
+  document.getElementById('link-search').value='';
+  document.getElementById('link-dd').style.display='none';
+  document.getElementById('link-selected').style.display='none';
+  document.getElementById('btn-link-save').disabled=true;
+  linkSelectedJamaah=null;
+  document.getElementById('modal-link').classList.add('open');
+}
+function filterLinkSearch(){
+  const q=document.getElementById('link-search').value.toLowerCase().trim();
+  const dd=document.getElementById('link-dd');
+  if(!q){dd.style.display='none';return;}
+  const found=aJamaah.filter(j=>j.nama.toLowerCase().includes(q)).slice(0,15);
+  if(!found.length){dd.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px">Tidak ditemukan</div>';}
+  else{dd.innerHTML=found.map(j=>`<div onclick="selectLinkJamaah('${j.did}','${escQ(j.nama)}','${j.kelompok||''}')"
+    style="padding:9px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f3f4f6;">
+    <strong>${j.nama}</strong><span style="color:var(--muted);margin-left:6px">Kel. ${j.kelompok||'—'}</span>
+  </div>`).join('');}
+  dd.style.display='block';
+}
+function escQ(s){return(s||'').replace(/'/g,"\\'");}
+function selectLinkJamaah(did,nama,kel){
+  linkSelectedJamaah={did,nama,kel};
+  document.getElementById('link-search').value=nama;
+  document.getElementById('link-dd').style.display='none';
+  const sel=document.getElementById('link-selected');
+  sel.innerHTML=`✅ Dipilih: <strong>${nama}</strong> (Kel. ${kel||'—'})`;
+  sel.style.display='block';
+  document.getElementById('btn-link-save').disabled=false;
+}
+async function saveLink(){
+  const kkId=parseInt(document.getElementById('link-kk-id').value);
+  if(!linkSelectedJamaah){toast('Pilih jamaah dulu',true);return;}
+  const{error}=await sb.from('keluarga').update({jamaah_did:linkSelectedJamaah.did}).eq('id',kkId);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Link tersimpan');
+  closeModal('modal-link');
+  await loadAll();
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+let _tt;
+function toast(msg,err=false){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.style.background=err?'#991b1b':'#1a6640';
+  el.classList.add('show');clearTimeout(_tt);
+  _tt=setTimeout(()=>el.classList.remove('show'),2500);
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#link-search')&&!e.target.closest('#link-dd'))
+    document.getElementById('link-dd').style.display='none';
+});
+</script>
+</body>
+</html>
