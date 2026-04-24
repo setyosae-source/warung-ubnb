@@ -119,6 +119,15 @@ select.filter{padding:9px 12px;border:1.5px solid var(--border);border-radius:8p
   border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
 
 .empty{text-align:center;padding:32px;color:var(--muted);}
+.kk-list{display:flex;flex-direction:column;gap:8px;}
+.kk-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px 14px;transition:box-shadow .15s;}
+.kk-card:hover{box-shadow:var(--shadow);}
+.kk-card-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
+.kk-card-body{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.kk-stat{font-size:11px;color:var(--muted);background:var(--bg);padding:3px 8px;border-radius:99px;}
+.kk-stat-ok{color:#166534;background:#dcfce7;}
+.kk-card-foot{display:flex;gap:6px;}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
   background:var(--hijau);color:white;padding:9px 20px;border-radius:99px;
   font-size:13px;font-weight:700;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;z-index:999;}
@@ -181,15 +190,7 @@ select.filter{padding:9px 12px;border:1.5px solid var(--border);border-radius:8p
         </select>
         <button class="btn btn-primary" onclick="openModalTambah()">＋ Tambah KK</button>
       </div>
-      <div class="tbl-wrap">
-        <table class="tbl">
-          <thead><tr>
-            <th>#</th><th>Kepala Keluarga</th><th>Kelompok</th>
-            <th>Anggota</th><th>Saham</th><th>Status</th><th>Aksi</th>
-          </tr></thead>
-          <tbody id="tbody-kk"></tbody>
-        </table>
-      </div>
+      <div id="kk-list-wrap" class="kk-list"></div>
     </div>
 
     <!-- TAB JAMAAH TANPA KK -->
@@ -209,12 +210,7 @@ select.filter{padding:9px 12px;border:1.5px solid var(--border);border-radius:8p
         🔗 <strong>7 KK ini namanya tidak cocok dengan nama di data jamaah.</strong>
         Pilih jamaah yang benar sebagai KK-nya, atau biarkan jika KK-nya belum terdaftar.
       </div>
-      <div class="tbl-wrap">
-        <table class="tbl">
-          <thead><tr><th>Nama KK</th><th>Anggota KK</th><th>Link ke Jamaah</th><th>Aksi</th></tr></thead>
-          <tbody id="tbody-nolink"></tbody>
-        </table>
-      </div>
+      <div id="tbody-nolink" class="kk-list"></div>
     </div>
   </div>
 </div>
@@ -357,25 +353,30 @@ function renderKK(){
   const tbody=document.getElementById('tbody-kk');
   if(!data.length){tbody.innerHTML='<tr><td colspan="7" class="empty">Tidak ada data</td></tr>';return;}
 
-  tbody.innerHTML=data.map((k,i)=>{
+  // Mobile: render sebagai card list, bukan tabel
+  const el=document.getElementById('kk-list-wrap');
+  el.innerHTML=data.map((k,i)=>{
     const members=aJamaah.filter(j=>j.keluarga_id===k.id);
     const sahamCount=members.filter(j=>aSaham.find(s=>s.jamaah_did===j.did)).length;
     const linked=k.jamaah_did;
-    return `<tr>
-      <td style="color:var(--muted)">${i+1}</td>
-      <td>
-        <div class="nama-kk">${k.nama_kk}</div>
-        <div class="sub">${k.nomor_wa||'—'} ${k.alamat?'· '+k.alamat.slice(0,30):''}</div>
-      </td>
-      <td>${k.kelompok?'<span class="chip chip-kk">'+kelNama[k.kelompok]+'</span>':'<span style="color:var(--muted)">—</span>'}</td>
-      <td><strong>${members.length}</strong> jamaah</td>
-      <td>${sahamCount>0?'<span class="chip chip-ok">'+sahamCount+' anggota</span>':'<span style="color:var(--muted)">—</span>'}</td>
-      <td>${linked?'<span class="chip chip-ok">✅ Terlink</span>':'<span class="chip chip-warn">Belum</span>'}</td>
-      <td style="display:flex;gap:4px;flex-wrap:wrap;">
+    return `<div class="kk-card">
+      <div class="kk-card-head">
+        <div>
+          <div class="nama-kk">${k.nama_kk}</div>
+          <div class="sub">${k.kelompok?kelNama[k.kelompok]:'—'}${k.alamat?' · '+k.alamat.slice(0,25):''}</div>
+        </div>
+        <div>${linked?'<span class="chip chip-ok">✅</span>':'<span class="chip chip-warn">!</span>'}</div>
+      </div>
+      <div class="kk-card-body">
+        <span class="kk-stat">👥 ${members.length} jamaah</span>
+        ${sahamCount>0?`<span class="kk-stat kk-stat-ok">⭐ ${sahamCount} anggota</span>`:''}
+        ${k.nomor_wa?`<span class="kk-stat">📞 ${k.nomor_wa}</span>`:''}
+      </div>
+      <div class="kk-card-foot">
         <button class="btn-sm btn-view" onclick="openDetail(${k.id})">👁 Detail</button>
         <button class="btn-sm btn-edit" onclick="openEdit(${k.id})">✏️ Edit</button>
-      </td>
-    </tr>`;
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -482,14 +483,22 @@ function renderNolink(){
   const nolink=aKK.filter(k=>!k.jamaah_did);
   const tbody=document.getElementById('tbody-nolink');
   if(!nolink.length){tbody.innerHTML='<tr><td colspan="4" class="empty">✅ Semua KK sudah terlink!</td></tr>';return;}
-  tbody.innerHTML=nolink.map(k=>{
+  // Render nolink sebagai cards
+  const nlWrap=document.getElementById('tbody-nolink');
+  nlWrap.innerHTML=nolink.map(k=>{
     const members=aJamaah.filter(j=>j.keluarga_id===k.id);
-    return `<tr>
-      <td><div class="nama-kk">${k.nama_kk}</div></td>
-      <td>${members.length} jamaah: <span style="font-size:11px;color:var(--muted)">${members.slice(0,3).map(j=>j.nama).join(', ')}${members.length>3?'...':''}</span></td>
-      <td><span class="chip chip-warn">Belum terlink</span></td>
-      <td><button class="btn-sm btn-edit" onclick="openLink(${k.id})">🔗 Link</button></td>
-    </tr>`;
+    return `<div class="kk-card">
+      <div class="kk-card-head">
+        <div>
+          <div class="nama-kk">${k.nama_kk}</div>
+          <div class="sub">${members.length} jamaah: ${members.slice(0,3).map(j=>j.nama).join(', ')}${members.length>3?'...':''}</div>
+        </div>
+        <span class="chip chip-warn">!</span>
+      </div>
+      <div class="kk-card-foot">
+        <button class="btn-sm btn-edit" onclick="openLink(${k.id})">🔗 Link ke Jamaah</button>
+      </div>
+    </div>`;
   }).join('');
 }
 
