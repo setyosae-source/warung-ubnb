@@ -68,6 +68,28 @@ body{
   cursor:pointer;transition:all .2s;}
 .btn-portal:hover{background:var(--gold);color:var(--navy-dark);}
 
+/* ── LOGIN DROPDOWN NAV ── */
+.login-dropdown{position:relative;}
+.login-nav-menu{
+  position:absolute;top:calc(100% + 10px);right:0;
+  background:var(--navy-dark);border:1px solid rgba(245,200,66,0.4);
+  border-radius:12px;min-width:220px;overflow:hidden;
+  opacity:0;visibility:hidden;transform:translateY(-8px);
+  transition:all .25s ease;z-index:200;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.login-dropdown.open .login-nav-menu{
+  opacity:1;visibility:visible;transform:translateY(0);}
+.login-nav-item{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  text-decoration:none;color:var(--text);
+  border-bottom:1px solid rgba(245,200,66,0.12);
+  transition:background .2s;}
+.login-nav-item:last-child{border-bottom:none;}
+.login-nav-item:hover{background:rgba(245,200,66,0.1);}
+.login-nav-icon{font-size:22px;flex-shrink:0;}
+.login-nav-title{font-size:13px;font-weight:700;color:var(--gold);}
+.login-nav-desc{font-size:10px;color:var(--text-muted);margin-top:2px;}
+
 /* ── CONTAINER ── */
 .container{position:relative;z-index:2;max-width:1200px;margin:0 auto;padding:90px 20px 60px;}
 
@@ -464,7 +486,25 @@ body{
     <a class="nav-link" href="#feedback">Feedback</a>
   </div>
   <div class="nav-actions">
-    <button class="btn-portal" onclick="window.location.href='portal.html'">🔐 Portal Admin</button>
+    <div class="login-dropdown" id="loginDropdown">
+      <button class="btn-portal" onclick="toggleLoginNav()">🔐 Login ▾</button>
+      <div class="login-nav-menu" id="loginNavMenu">
+        <a class="login-nav-item" href="portal.html">
+          <span class="login-nav-icon">🛠️</span>
+          <div>
+            <div class="login-nav-title">Portal Admin</div>
+            <div class="login-nav-desc">Pengurus & Admin UBNB</div>
+          </div>
+        </a>
+        <a class="login-nav-item" href="dashboard-keluarga.html">
+          <span class="login-nav-icon">🏠</span>
+          <div>
+            <div class="login-nav-title">Dashboard Anggota</div>
+            <div class="login-nav-desc">Pemegang Saham UBNB</div>
+          </div>
+        </a>
+      </div>
+    </div>
   </div>
 </nav>
 
@@ -1399,44 +1439,67 @@ function fmtRpShort(n){
 // ── SPONSOR ──
 async function renderSponsor(){
   const wrap = document.getElementById('sponsor-slots');
-  wrap.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px;">Memuat sponsor...</div>';
-  
-  const {data} = await sb.from('mpps_sponsor')
-    .select('id,nama_usaha,keterangan_kontribusi,logo_url,jenis_kontribusi')
-    .eq('status','aktif')
-    .order('id');
+  wrap.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px;">Memuat data sponsor...</div>';
 
-  if(!data||!data.length){
-    wrap.innerHTML = '<div class="sponsor-empty">🤝<br>Data sponsor tidak tersedia</div>';
-    return;
+  try {
+    const {data, error} = await sb
+      .from('mpps_sponsor')
+      .select('id,nama_usaha,nama_kontak,telepon,jenis_kontribusi,keterangan_kontribusi,logo_url,status')
+      .eq('status','aktif')
+      .order('id');
+
+    if(error) throw error;
+    if(!data||!data.length){
+      wrap.innerHTML = '<div class="sponsor-empty">🤝<br>Belum ada sponsor terdaftar</div>';
+      return;
+    }
+
+    wrap.innerHTML = data.map(s=>{
+      const hasLogo = s.logo_url && s.logo_url.startsWith('data:');
+      // Fallback icon berdasarkan nama usaha
+      const namaLower = (s.nama_usaha||'').toLowerCase();
+      let icon = '🏢';
+      if(namaLower.includes('bakso')||namaLower.includes('pentol')) icon='🍜';
+      else if(namaLower.includes('sayur')||namaLower.includes('barokah')) icon='🥬';
+      else if(namaLower.includes('farm')||namaLower.includes('telur')||namaLower.includes('sarana')) icon='🥚';
+      else if(namaLower.includes('krasti')||namaLower.includes('gubuk')||namaLower.includes('catering')) icon='🍱';
+      else if(namaLower.includes('zafran')||namaLower.includes('bebek')||namaLower.includes('dapoer')) icon='🦆';
+      else if(namaLower.includes('danish')||namaLower.includes('lauk')||namaLower.includes('kios')) icon='🐟';
+      else if(namaLower.includes('emas')||namaLower.includes('bakul')||namaLower.includes('gold')) icon='💍';
+      else if(namaLower.includes('laundry')) icon='👕';
+      else if(namaLower.includes('pulsa')||namaLower.includes('ppob')) icon='⚡';
+
+      const isUang = s.jenis_kontribusi==='uang';
+      const badgeBg = isUang ? 'rgba(245,200,66,0.2)' : 'rgba(29,158,117,0.2)';
+      const badgeColor = isUang ? 'var(--gold)' : '#4ecca3';
+      const badgeLabel = isUang ? '💰 Kontribusi' : '🎁 Hadiah';
+      const desc = s.keterangan_kontribusi
+        ? (s.keterangan_kontribusi.length > 70
+            ? s.keterangan_kontribusi.substring(0,70)+'...'
+            : s.keterangan_kontribusi)
+        : '';
+
+      return `<div class="sponsor-card" style="min-width:180px;max-width:220px;">
+        ${hasLogo
+          ? `<img src="${s.logo_url}" alt="${s.nama_usaha}"
+              style="width:80px;height:80px;object-fit:contain;border-radius:10px;
+              margin-bottom:10px;background:white;padding:4px;"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='block'">`
+          : ''}
+        <div style="font-size:${hasLogo?'0':'36'}px;margin-bottom:${hasLogo?'0':'10'}px;
+          display:${hasLogo?'none':'block'};">${icon}</div>
+        <div class="sponsor-name" style="font-size:13px;">${s.nama_usaha}</div>
+        ${desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:5px;line-height:1.5;">${desc}</div>` : ''}
+        <div style="margin-top:8px;display:inline-block;
+          background:${badgeBg};color:${badgeColor};
+          padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;">${badgeLabel}</div>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    console.error('Sponsor error:', e);
+    wrap.innerHTML = '<div class="sponsor-empty">❌ Gagal memuat data sponsor</div>';
   }
-
-  const icons = {
-    1:'🍜', 3:'🥬', 5:'🥚', 6:'🍱', 7:'🦆', 8:'💍', 9:'🐟'
-  };
-
-  wrap.innerHTML = data.map(s=>{
-    const hasLogo = s.logo_url && s.logo_url.startsWith('data:');
-    const icon = icons[s.id] || '🏢';
-    const badgeColor = s.jenis_kontribusi==='uang'
-      ? 'rgba(245,200,66,0.2);color:var(--gold)'
-      : 'rgba(29,158,117,0.2);color:#4ecca3';
-    const badgeLabel = s.jenis_kontribusi==='uang' ? '💰 Kontribusi' : '🎁 Hadiah';
-
-    return `<div class="sponsor-card" style="min-width:180px;">
-      ${hasLogo
-        ? `<img src="${s.logo_url}" alt="${s.nama_usaha}"
-            style="width:80px;height:80px;object-fit:contain;border-radius:10px;margin-bottom:10px;
-            background:white;padding:4px;">`
-        : `<div style="font-size:36px;margin-bottom:10px;">${icon}</div>`}
-      <div class="sponsor-name" style="font-size:13px;">${s.nama_usaha}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.5;">
-        ${s.keterangan_kontribusi ? s.keterangan_kontribusi.substring(0,60)+'...' : ''}
-      </div>
-      <div style="margin-top:8px;display:inline-block;background:${badgeColor};
-        padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;">${badgeLabel}</div>
-    </div>`;
-  }).join('');
 }
 
 // ── ANGGOTA ──
@@ -1505,6 +1568,15 @@ async function submitFeedback(e){
 function openVideo(){
   window.open('https://drive.google.com/file/d/1fpXTkjikBWBS0_y2fEwMeMlSKcMVi2tI/view','_blank');
 }
+
+// ── LOGIN NAV DROPDOWN ──
+function toggleLoginNav(){
+  document.getElementById('loginDropdown').classList.toggle('open');
+}
+document.addEventListener('click', function(e){
+  const dd = document.getElementById('loginDropdown');
+  if(dd && !dd.contains(e.target)) dd.classList.remove('open');
+});
 
 // ── INIT ──
 window.addEventListener('load', loadAll);
