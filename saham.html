@@ -433,8 +433,18 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         <div id="form-kebijakan" style="display:none;margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px">
           <input type="hidden" id="keb-mpps-id">
           <div class="irow"><label>Periode</label><input type="text" id="keb-periode" placeholder="2027" maxlength="4"></div>
-          <div class="irow"><label>Tgl Mulai Berlaku ⭐</label><input type="date" id="keb-tgl-mulai"></div>
-          <div class="irow"><label>Tgl Berakhir</label><input type="date" id="keb-tgl-akhir"></div>
+          <div class="irow"><label>Tgl Mulai Berlaku ⭐</label>
+            <div style="flex:1">
+              <input type="date" id="keb-tgl-mulai" style="width:100%">
+              <div style="font-size:10px;color:var(--text-muted);margin-top:4px">📌 Tanggal kebijakan ini mulai dipakai menghitung proporsi SHU. Anggota yang beli saham setelah tanggal ini dihitung berdasarkan kebijakan baru.</div>
+            </div>
+          </div>
+          <div class="irow"><label>Tgl Berakhir</label>
+            <div style="flex:1">
+              <input type="date" id="keb-tgl-akhir" style="width:100%">
+              <div style="font-size:10px;color:var(--text-muted);margin-top:4px">📌 Batas akhir periode perhitungan SHU. Biasanya 31 Desember tahun periode. Anggota yang beli setelah tanggal ini tidak masuk hitungan SHU periode ini.</div>
+            </div>
+          </div>
           <div class="irow"><label>Pool Saham (%)</label><input type="number" id="keb-rasio-saham" value="60" min="0" max="100" step="5" oninput="sinkronRasio('saham')"></div>
           <div class="irow"><label>Pool Transaksi (%)</label><input type="number" id="keb-rasio-trx" value="40" min="0" max="100" step="5" oninput="sinkronRasio('trx')"></div>
           <div class="irow"><label>Catatan</label><input type="text" id="keb-catatan" placeholder="Keputusan MPPS..."></div>
@@ -1113,18 +1123,20 @@ function lihatDetail(id){
     </div>
     <div style="font-weight:700;margin-bottom:8px">📋 Riwayat Transaksi (${trxList.length})</div>
     ${trxList.length?`<div style="overflow-x:auto"><table class="tbl">
-      <thead><tr><th>Tanggal</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Keterangan</th></tr></thead>
+      <thead><tr><th>Tanggal</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>No. Saham</th><th>Keterangan</th></tr></thead>
       <tbody>${trxList.map(t=>{
         const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
         const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
-        let keteranganDisplay = t.catatan||'-';
-        if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);keteranganDisplay=`<div style="font-weight:600">→ Ke: ${sk?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;}
-        else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);keteranganDisplay=`<div style="font-weight:600">← Dari: ${sd?.nama||'Unknown'}</div>${t.catatan?'<div>'+t.catatan+'</div>':''}`;}
+        const noSaham=t.no_saham||(t.catatan?.match(/^[\d]{4}\/SHM-UBNB\/[\d]{4}|^202201-\d{5}/)?t.catatan.split(' - ')[0]:null);
+        let ketDisplay=t.keterangan||(t.catatan&&!noSaham?t.catatan:null);
+        if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);ketDisplay=`→ ${sk?.nama||'?'}${ketDisplay?' · '+ketDisplay:''}`;}
+        else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);ketDisplay=`← ${sd?.nama||'?'}${ketDisplay?' · '+ketDisplay:''}`;}
         return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
           <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:10px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
           <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
           <td style="font-size:11px">${rp(t.total_nilai)}</td>
-          <td style="font-size:10px;color:var(--text-muted)">${keteranganDisplay}</td></tr>`;
+          <td style="font-size:10px">${noSaham?`<span style="font-family:monospace;background:var(--surface2);padding:2px 5px;border-radius:4px">${noSaham}</span>`:'-'}</td>
+          <td style="font-size:10px;color:var(--text-muted)">${ketDisplay||'-'}</td></tr>`;
       }).join('')}</tbody></table></div>`
     :'<div class="empty" style="padding:16px"><div class="ei" style="font-size:24px">📋</div>Belum ada transaksi</div>'}`;
   openModal('modal-detail');
@@ -1231,19 +1243,36 @@ async function simpanTrxBeli(){
   const catatan=document.getElementById('trx-catatan').value.trim();
   if(!sahamId||!lembar||!tgl){toast('Lengkapi data transaksi',true);return;}
   const tahun=new Date(tgl).getFullYear();
+  // Generate no_saham dari kolom no_saham (bukan catatan)
   const reSHM=/([0-9]{4})[/]SHM-UBNB[/][0-9]{4}/g;
   let maxNo=0;
-  aTrx.forEach(t=>{const m=(t.catatan||'').match(reSHM);if(m)m.forEach(s=>{const n=parseInt(s.split('/')[0]);if(n>maxNo)maxNo=n;});});
+  aTrx.forEach(t=>{
+    const src=(t.no_saham||t.catatan||'');
+    const m=src.match(reSHM);
+    if(m)m.forEach(s=>{const n=parseInt(s.split('/')[0]);if(n>maxNo)maxNo=n;});
+  });
   const noSahamBaru=String(maxNo+1).padStart(4,'0')+'/SHM-UBNB/'+tahun;
-  const keterangan=catatan?noSahamBaru+' - '+catatan:noSahamBaru;
-  const{data:newTrx,error}=await sb.from('ubnb_saham_trx').insert([{saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:keterangan,operator:CU.username,harga_saham_saat_itu:harga}]).select().single();
+  const{data:newTrx,error}=await sb.from('ubnb_saham_trx').insert([{
+    saham_id:sahamId,tipe:'beli',jumlah_lembar:lembar,
+    harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,
+    no_saham:noSahamBaru,
+    keterangan:catatan||null,
+    catatan:catatan?noSahamBaru+' - '+catatan:noSahamBaru, // backward compat
+    operator:CU.username,harga_saham_saat_itu:harga
+  }]).select().single();
   if(error){toast('Gagal: '+error.message,true);return;}
+  // Insert ke sertifikat
   const s=aSaham.find(x=>x.id===sahamId);
-  await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+lembar}).eq('id',sahamId);
+  await sb.from('ubnb_saham_sertifikat').insert([{
+    no_saham:noSahamBaru,jumlah_lembar:lembar,tanggal_terbit:tgl,
+    pemilik_awal_id:sahamId,pemilik_kini_id:sahamId,status:'aktif',
+    keterangan:catatan||null
+  }]).select().maybeSingle();
+  // trigger otomatis update jumlah_lembar di ubnb_saham
   window.lastTransaction={id:newTrx.id,saham_id:sahamId,jumlah_lembar:lembar,nama:s?.nama||'Unknown',timestamp:Date.now()};
   const btnUndo=document.getElementById('btn-undo-beli');
   if(btnUndo){btnUndo.disabled=false;btnUndo.title=`Undo: ${s?.nama} - ${lembar} lembar`;}
-  toast('✅ Transaksi berhasil! (Bisa di-undo dalam 5 menit)');
+  toast(`✅ Transaksi berhasil! No. Saham: ${noSahamBaru}`);
   ['trx-ac-input','trx-catatan'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['trx-ac-id','trx-lembar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('trx-info').style.display='none';
@@ -1518,27 +1547,37 @@ function cetakBuktiTransfer(){
 }
 
 async function loadRiwayatTrx(){
-  const{data}=await sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}).limit(50);
+  const{data}=await sb.from('ubnb_saham_trx')
+    .select('*').order('tanggal',{ascending:false}).limit(50);
   aTrx=data||[];
   const el=document.getElementById('riwayat-trx');if(!el)return;
   if(!aTrx.length){el.innerHTML='<div class="empty"><div class="ei">💹</div>Belum ada transaksi</div>';return;}
   const warna={beli:'var(--hijau)',jual:'var(--red)',transfer_masuk:'var(--blue)',transfer_keluar:'#f59e0b'};
   const ikon={beli:'📈',jual:'📉',transfer_masuk:'📥',transfer_keluar:'📤'};
   el.innerHTML=`<table class="tbl">
-    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>Ket.</th><th>Aksi</th></tr></thead>
+    <thead><tr><th>Tanggal</th><th>Pemegang</th><th>Tipe</th><th>Lembar</th><th>Nilai</th><th>No. Saham</th><th>Aksi</th></tr></thead>
     <tbody>${aTrx.map(t=>{
       const s=aSaham.find(x=>x.id===t.saham_id);
-      let namaDisplay=s?.nama||'-';
-      if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">→ Ke: ${sk?.nama||'Unknown'}</div>`;}
-      else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div><div style="font-size:10px;color:var(--text-muted)">← Dari: ${sd?.nama||'Unknown'}</div>`;}
-      else{namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div>`;}
-      return`<tr><td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
+      let namaDisplay=`<div style="font-weight:600;font-size:12px">${s?.nama||'-'}</div>`;
+      if(t.tipe==='transfer_keluar'&&t.ke_id){const sk=aSaham.find(x=>x.id===t.ke_id);namaDisplay+=`<div style="font-size:10px;color:var(--text-muted)">→ ${sk?.nama||'Unknown'}</div>`;}
+      else if(t.tipe==='transfer_masuk'&&t.dari_id){const sd=aSaham.find(x=>x.id===t.dari_id);namaDisplay+=`<div style="font-size:10px;color:var(--text-muted)">← ${sd?.nama||'Unknown'}</div>`;}
+      // no_saham: pakai kolom baru, fallback ke catatan (data lama)
+      const noSaham=t.no_saham||(t.catatan?.match(/^[\d]{4}\/SHM-UBNB\/[\d]{4}|^202201-\d{5}/)?t.catatan.split(' - ')[0]:null);
+      const ketDisplay=t.keterangan||(t.catatan&&!noSaham?t.catatan:null);
+      return`<tr>
+        <td style="font-size:11px">${fmtTgl(t.tanggal)}</td>
         <td>${namaDisplay}</td>
         <td><span style="color:${warna[t.tipe]||'inherit'};font-weight:700;font-size:11px">${ikon[t.tipe]||''} ${t.tipe.replace(/_/g,' ')}</span></td>
         <td><strong>${(t.jumlah_lembar||0).toLocaleString('id-ID')}</strong></td>
         <td style="font-size:11px">${rp(t.total_nilai)}</td>
-        <td style="font-size:10px;color:var(--text-muted)">${t.catatan||'-'}</td>
-        <td style="white-space:nowrap"><button class="btn sm secondary" onclick="editTransaksi(${t.id})" style="padding:4px 8px;margin-right:4px">✏️</button><button class="btn sm danger" onclick="hapusTransaksi(${t.id})" style="padding:4px 8px">🗑️</button></td></tr>`;
+        <td style="font-size:10px">
+          ${noSaham?`<span style="font-family:monospace;background:var(--surface2);padding:2px 6px;border-radius:4px">${noSaham}</span>`:'<span style="color:var(--text-muted)">-</span>'}
+          ${ketDisplay?`<div style="color:var(--text-muted);margin-top:2px">${ketDisplay}</div>`:''}
+        </td>
+        <td style="white-space:nowrap">
+          <button class="btn sm secondary" onclick="editTransaksi(${t.id})" style="padding:4px 8px;margin-right:4px">✏️</button>
+          <button class="btn sm danger" onclick="hapusTransaksi(${t.id})" style="padding:4px 8px">🗑️</button>
+        </td></tr>`;
     }).join('')}</tbody></table>`;
 }
 
@@ -1552,21 +1591,22 @@ async function editTransaksi(id){
   const harga=parseInt(newHarga)||0;if(harga<=0){toast('Harga harus > 0',true);return;}
   const newTgl=prompt(`Edit Tanggal (YYYY-MM-DD)\nTanggal saat ini: ${t.tanggal}`,t.tanggal);if(newTgl===null)return;
   const newCatatan=prompt(`Edit Catatan\nCatatan saat ini: ${t.catatan||'(kosong)'}`,t.catatan||'');
-  const selisih=lembar-(t.jumlah_lembar||0);
-  const{error}=await sb.from('ubnb_saham_trx').update({jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:newTgl,catatan:newCatatan||null}).eq('id',id);
+  const{error}=await sb.from('ubnb_saham_trx').update({
+    jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,
+    tanggal:newTgl,catatan:newCatatan||null
+  }).eq('id',id);
   if(error){toast('Gagal update: '+error.message,true);return;}
-  if(selisih!==0&&t.tipe==='beli'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+selisih}).eq('id',t.saham_id);}
+  // trigger otomatis update jumlah_lembar di ubnb_saham
   toast('✅ Transaksi berhasil diupdate!');await loadAll();loadRiwayatTrx();
 }
+
 async function hapusTransaksi(id){
   const t=aTrx.find(x=>x.id===id);if(!t)return;
   const s=aSaham.find(x=>x.id===t.saham_id);
-  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${s?.nama||'?'}\nTipe: ${t.tipe}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}\n\nPeringatan: Ini akan mengurangi jumlah lembar anggota!`))return;
+  if(!confirm(`HAPUS transaksi ini?\n\nAnggota: ${s?.nama||'?'}\nTipe: ${t.tipe}\nNo. Saham: ${t.no_saham||t.catatan||'-'}\nLembar: ${t.jumlah_lembar}\nNilai: ${rp(t.total_nilai)}\nTanggal: ${t.tanggal}`))return;
   const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',id);
   if(error){toast('Gagal hapus: '+error.message,true);return;}
-  if(t.tipe==='beli'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);}
-  else if(t.tipe==='transfer_keluar'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)+(t.jumlah_lembar||0)}).eq('id',t.saham_id);}
-  else if(t.tipe==='transfer_masuk'){await sb.from('ubnb_saham').update({jumlah_lembar:(s?.jumlah_lembar||0)-(t.jumlah_lembar||0)}).eq('id',t.saham_id);}
+  // trigger otomatis update jumlah_lembar di ubnb_saham
   toast('✅ Transaksi berhasil dihapus!');await loadAll();loadRiwayatTrx();
 }
 
@@ -1579,8 +1619,9 @@ async function undoTransaksiBeli(){
   if(!confirm(`UNDO transaksi pembelian saham?\n\nAnggota: ${trx.nama}\nJumlah: ${trx.jumlah_lembar} lembar`))return;
   const{error}=await sb.from('ubnb_saham_trx').delete().eq('id',trx.id);
   if(error){toast('Gagal undo: '+error.message,true);return;}
-  const s=aSaham.find(x=>x.id===trx.saham_id);
-  if(s){await sb.from('ubnb_saham').update({jumlah_lembar:(s.jumlah_lembar||0)-trx.jumlah_lembar}).eq('id',trx.saham_id);}
+  // trigger otomatis update jumlah_lembar di ubnb_saham
+  // Hapus juga dari sertifikat jika ada
+  await sb.from('ubnb_saham_sertifikat').delete().eq('no_saham', trx.no_saham||'__none__');
   window.lastTransaction=null;
   const btnUndo=document.getElementById('btn-undo-beli');if(btnUndo){btnUndo.disabled=true;btnUndo.title='Undo transaksi terakhir';}
   toast('✅ Transaksi berhasil di-undo!');await loadAll();renderDashboard();loadRiwayatTrx();
