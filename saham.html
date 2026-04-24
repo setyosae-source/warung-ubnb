@@ -362,14 +362,15 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
               <input type="hidden" id="tf-ke-id">
             </div>
           </div>
-          <div class="irow"><label>Jumlah Lembar</label><input type="number" id="tf-lembar" placeholder="0" min="1" oninput="hitungTf()"></div>
-          <div class="irow"><label>Harga/Lembar (Rp)</label><input type="number" id="tf-harga" oninput="hitungTf()"></div>
+          <div class="irow"><label>Jumlah Lembar</label><input type="number" id="tf-lembar" placeholder="0" min="1" oninput="hitungTf();setTimeout(previewTransfer,300)"></div>
+          <div class="irow"><label>Harga/Lembar (Rp)</label><input type="number" id="tf-harga" oninput="hitungTf();setTimeout(previewTransfer,300)"></div>
           <div class="irow"><label>Tanggal</label><input type="date" id="tf-tgl"></div>
           <div id="tf-total-box" style="display:none;background:#fef3c7;border-radius:var(--radius-xs);padding:12px;margin-bottom:10px">
             <div style="font-size:10px;color:#92400e;font-weight:700;text-transform:uppercase">Total Transfer</div>
             <div style="font-size:22px;font-weight:800;color:#92400e" id="tf-total-val">Rp 0</div>
           </div>
-          <div class="irow"><label>Catatan</label><input type="text" id="tf-catatan" placeholder="Alasan transfer"></div>
+          <div id="tf-fifo-preview" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-xs);padding:12px;margin-bottom:10px"></div>
+          <div class="irow"><label>Catatan</label><input type="text" id="tf-catatan" placeholder="Alasan transfer / keterangan peralihan"></div>
           <div class="btn-row"><button class="btn secondary" style="flex:1" onclick="simpanTransfer()">🔄 Proses Transfer</button></div>
         </div>
       </div>
@@ -1200,7 +1201,7 @@ function selectAC(type,id){
   document.getElementById(hid).value=id;
   document.getElementById(list).style.display='none';
   if(type==='trx'){const info=document.getElementById('trx-info');info.style.display='block';info.innerHTML=`<strong>${s.nama}</strong> · ${kelBadge(s.kelompok)} · <span style="color:var(--hijau);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;hitungTrx();}
-  if(type==='tf-dari'){const info=document.getElementById('tf-dari-info');info.style.display='block';info.innerHTML=`<strong>${s.nama}</strong> memiliki <span style="color:var(--red);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;hitungTf();}
+  if(type==='tf-dari'){const info=document.getElementById('tf-dari-info');info.style.display='block';info.innerHTML=`<strong>${s.nama}</strong> memiliki <span style="color:var(--red);font-weight:700">${(s.jumlah_lembar||0).toLocaleString('id-ID')} lembar</span>`;hitungTf();setTimeout(previewTransfer,300);}
 }
 document.addEventListener('click',e=>{
   ['trx-ac-list','tf-dari-list','tf-ke-list'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.parentElement?.contains(e.target))el.style.display='none';});
@@ -1240,6 +1241,60 @@ async function simpanTrxBeli(){
   setTimeout(()=>{if(window.lastTransaction&&window.lastTransaction.id===newTrx.id){window.lastTransaction=null;if(btnUndo){btnUndo.disabled=true;btnUndo.title='Undo transaksi terakhir';}}},5*60*1000);
 }
 
+// ===== TRANSFER FIFO =====
+function noPecahan(noSaham,ke){return noSaham+'-'+ke;}
+
+async function hitungFIFO(sahamId,lembarDiminta){
+  const{data:sertList,error}=await sb.from('ubnb_saham_sertifikat')
+    .select('*').eq('pemilik_kini_id',sahamId).eq('status','aktif')
+    .order('tanggal_terbit',{ascending:true}).order('id',{ascending:true});
+  if(error||!sertList||!sertList.length)return null;
+  let sisa=lembarDiminta;
+  const hasil=[];
+  for(const s of sertList){
+    if(sisa<=0)break;
+    const ambil=Math.min(s.jumlah_lembar,sisa);
+    hasil.push({sertifikat:s,ambil,pecah:ambil<s.jumlah_lembar,sisaLembar:s.jumlah_lembar-ambil});
+    sisa-=ambil;
+  }
+  if(sisa>0)return null;
+  return hasil;
+}
+
+async function previewTransfer(){
+  const dariId=parseInt(document.getElementById('tf-dari-id').value);
+  const lembar=parseInt(document.getElementById('tf-lembar').value)||0;
+  const el=document.getElementById('tf-fifo-preview');
+  if(!el)return;
+  if(!dariId||!lembar){el.style.display='none';return;}
+  const hasil=await hitungFIFO(dariId,lembar);
+  if(!hasil){
+    el.innerHTML='<div style="color:var(--red);font-size:12px">⚠️ Lembar tidak mencukupi atau tidak ada sertifikat aktif.</div>';
+    el.style.display='block';return;
+  }
+  const harga=parseInt(document.getElementById('tf-harga').value)||HARGA_SAHAM;
+  let html='<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Detail Sertifikat FIFO</div>';
+  hasil.forEach(h=>{
+    const s=h.sertifikat;
+    if(h.pecah){
+      html+=`<div style="background:#fef3c7;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">
+        <div style="font-weight:700;font-family:monospace">${s.no_saham} <span style="color:#92400e">(DIPECAH)</span></div>
+        <div style="color:#6b7280;font-size:11px">${s.jumlah_lembar} lbr total</div>
+        <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
+          <span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:99px;font-size:11px">${noPecahan(s.no_saham,1)}: ${h.sisaLembar} lbr (sisa)</span>
+          <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:11px">${noPecahan(s.no_saham,2)}: ${h.ambil} lbr (dialihkan)</span>
+        </div></div>`;
+    }else{
+      html+=`<div style="background:var(--hijau-light);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px">
+        <div style="font-weight:700;font-family:monospace">${s.no_saham} <span style="color:var(--hijau)">(SELURUHNYA)</span></div>
+        <div style="color:#6b7280;font-size:11px">${h.ambil} lbr → dialihkan penuh</div></div>`;
+    }
+  });
+  const totalLembar=hasil.reduce((a,h)=>a+h.ambil,0);
+  html+=`<div style="background:var(--gold-light);border-radius:6px;padding:8px 10px;font-size:12px;font-weight:700;color:var(--gold-dark)">Total: ${totalLembar} lembar · ${rp(totalLembar*harga)}</div>`;
+  el.innerHTML=html;el.style.display='block';
+}
+
 async function simpanTransfer(){
   const dariId=parseInt(document.getElementById('tf-dari-id').value);
   const keId=parseInt(document.getElementById('tf-ke-id').value);
@@ -1250,20 +1305,205 @@ async function simpanTransfer(){
   if(!dariId||!keId||!lembar||!tgl){toast('Lengkapi data transfer',true);return;}
   if(dariId===keId){toast('Dari dan ke tidak boleh sama',true);return;}
   const sDari=aSaham.find(x=>x.id===dariId);
-  if((sDari?.jumlah_lembar||0)<lembar){toast('Lembar tidak cukup',true);return;}
   const sKe=aSaham.find(x=>x.id===keId);
-  await sb.from('ubnb_saham_trx').insert([
-    {saham_id:dariId,tipe:'transfer_keluar',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:catatan||null,ke_id:keId,operator:CU.username,harga_saham_saat_itu:harga},
-    {saham_id:keId,tipe:'transfer_masuk',jumlah_lembar:lembar,harga_per_lembar:harga,total_nilai:lembar*harga,tanggal:tgl,catatan:catatan||null,dari_id:dariId,operator:CU.username,harga_saham_saat_itu:harga},
-  ]);
-  await sb.from('ubnb_saham').update({jumlah_lembar:(sDari.jumlah_lembar||0)-lembar}).eq('id',dariId);
-  await sb.from('ubnb_saham').update({jumlah_lembar:(sKe?.jumlah_lembar||0)+lembar}).eq('id',keId);
-  toast('Transfer berhasil!');
-  ['tf-dari-input','tf-ke-input','tf-catatan'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  ['tf-dari-id','tf-ke-id','tf-lembar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('tf-dari-info').style.display='none';
-  document.getElementById('tf-total-box').style.display='none';
-  await loadAll();renderDashboard();loadRiwayatTrx();
+  if(!sDari||!sKe){toast('Data anggota tidak ditemukan',true);return;}
+  if((sDari.jumlah_lembar||0)<lembar){toast('Lembar tidak cukup',true);return;}
+  const hasil=await hitungFIFO(dariId,lembar);
+  if(!hasil){toast('Gagal hitung sertifikat FIFO',true);return;}
+  window._hasilFIFO=hasil;window._sDari=sDari;window._sKe=sKe;
+  window._tfParams={dariId,keId,lembar,harga,tgl,catatan};
+  tampilKonfirmasiTransfer();
+}
+
+function tampilKonfirmasiTransfer(){
+  const{dariId,keId,lembar,harga,tgl,catatan}=window._tfParams;
+  const hasil=window._hasilFIFO;
+  const sDari=window._sDari;const sKe=window._sKe;
+  const fmtTgl2=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'-';
+  let detailRows='';
+  hasil.forEach(h=>{
+    const s=h.sertifikat;
+    if(h.pecah){
+      detailRows+=`<tr><td style="font-family:monospace;font-size:11px;padding:6px 8px">${s.no_saham}</td>
+        <td style="text-align:center;padding:6px 8px">${s.jumlah_lembar}</td>
+        <td style="padding:6px 8px;color:#92400e;font-weight:700">DIPECAH</td>
+        <td style="padding:6px 8px;font-size:11px">${noPecahan(s.no_saham,1)}: ${h.sisaLembar} lbr (sisa)<br>${noPecahan(s.no_saham,2)}: ${h.ambil} lbr (dialihkan)</td></tr>`;
+    }else{
+      detailRows+=`<tr><td style="font-family:monospace;font-size:11px;padding:6px 8px">${s.no_saham}</td>
+        <td style="text-align:center;padding:6px 8px">${h.ambil}</td>
+        <td style="padding:6px 8px;color:#065f46;font-weight:700">PENUH</td>
+        <td style="padding:6px 8px;font-size:11px;color:#6b7280">Seluruhnya dialihkan</td></tr>`;
+    }
+  });
+  const html=`<div id="modal-konfirm-transfer" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:white;border-radius:16px;max-width:640px;width:100%;max-height:90vh;overflow-y:auto;padding:24px">
+      <div style="font-size:16px;font-weight:800;margin-bottom:16px;color:var(--hijau-dark)">🔄 Konfirmasi Transfer Saham</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:#fef2f2;border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:#991b1b;font-weight:700;text-transform:uppercase;margin-bottom:4px">Dari (Penjual)</div>
+          <div style="font-weight:700">${sDari.nama}</div>
+          <div style="font-size:11px;color:#6b7280">${sDari.no_anggota} · ${sDari.kelompok}</div>
+        </div>
+        <div style="background:#eff6ff;border-radius:8px;padding:12px">
+          <div style="font-size:10px;color:#1d4ed8;font-weight:700;text-transform:uppercase;margin-bottom:4px">Ke (Pembeli)</div>
+          <div style="font-weight:700">${sKe.nama}</div>
+          <div style="font-size:11px;color:#6b7280">${sKe.no_anggota} · ${sKe.kelompok}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+        <div style="background:#f0fdf4;border-radius:8px;padding:10px">
+          <div style="font-size:10px;color:#065f46;font-weight:700">Total Lembar</div>
+          <div style="font-size:20px;font-weight:800;color:#065f46">${lembar}</div>
+        </div>
+        <div style="background:#fef3c7;border-radius:8px;padding:10px">
+          <div style="font-size:10px;color:#92400e;font-weight:700">Total Nilai</div>
+          <div style="font-size:15px;font-weight:800;color:#92400e">${rp(lembar*harga)}</div>
+        </div>
+        <div style="background:#f5f3ff;border-radius:8px;padding:10px">
+          <div style="font-size:10px;color:#5b21b6;font-weight:700">Tanggal</div>
+          <div style="font-size:12px;font-weight:700;color:#5b21b6">${fmtTgl2(tgl)}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:8px">Detail Sertifikat (FIFO)</div>
+      <div style="overflow-x:auto;margin-bottom:16px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#f3f4f6">
+            <th style="padding:6px 8px;text-align:left">No. Saham Asal</th>
+            <th style="padding:6px 8px;text-align:center">Lembar</th>
+            <th style="padding:6px 8px;text-align:left">Status</th>
+            <th style="padding:6px 8px;text-align:left">Pecahan</th>
+          </tr></thead>
+          <tbody>${detailRows}</tbody>
+        </table>
+      </div>
+      ${catatan?`<div style="background:#f9fafb;border-radius:6px;padding:10px;margin-bottom:16px;font-size:12px"><strong>Catatan:</strong> ${catatan}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('modal-konfirm-transfer').remove()"
+          style="flex:1;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer;font-size:13px">Batal</button>
+        <button onclick="cetakBuktiTransfer()"
+          style="padding:10px 16px;border:1.5px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer;font-size:13px">🖨️ Cetak</button>
+        <button id="btn-konfirm-eksekusi" onclick="eksekusiTransfer()"
+          style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--hijau);color:white;cursor:pointer;font-size:13px;font-weight:700">✅ Konfirmasi & Proses</button>
+      </div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+
+async function eksekusiTransfer(){
+  const{dariId,keId,lembar,harga,tgl,catatan}=window._tfParams;
+  const hasil=window._hasilFIFO;
+  const btn=document.getElementById('btn-konfirm-eksekusi');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Memproses...';}
+  try{
+    const operator=CU?.username||'admin';
+    for(const h of hasil){
+      const s=h.sertifikat;
+      if(h.pecah){
+        await sb.from('ubnb_saham_sertifikat').update({status:'hangus'}).eq('no_saham',s.no_saham);
+        if(h.sisaLembar>0){
+          await sb.from('ubnb_saham_sertifikat').insert([{
+            no_saham:noPecahan(s.no_saham,1),jumlah_lembar:h.sisaLembar,tanggal_terbit:s.tanggal_terbit,
+            pemilik_awal_id:s.pemilik_awal_id,pemilik_kini_id:dariId,status:'aktif',
+            sertifikat_induk:s.no_saham,pecahan_ke:1,
+            keterangan:`Pecahan dari ${s.no_saham} — sisa pemilik lama`
+          }]);
+        }
+        await sb.from('ubnb_saham_sertifikat').insert([{
+          no_saham:noPecahan(s.no_saham,2),jumlah_lembar:h.ambil,tanggal_terbit:s.tanggal_terbit,
+          pemilik_awal_id:s.pemilik_awal_id,pemilik_kini_id:keId,status:'aktif',
+          sertifikat_induk:s.no_saham,pecahan_ke:2,
+          keterangan:`Pecahan dari ${s.no_saham} — dialihkan ke ${window._sKe?.nama}`
+        }]);
+      }else{
+        await sb.from('ubnb_saham_sertifikat').update({pemilik_kini_id:keId}).eq('no_saham',s.no_saham);
+      }
+      const noSahamLog=h.pecah?noPecahan(s.no_saham,2):s.no_saham;
+      await sb.from('ubnb_saham_sertifikat_log').insert([{
+        no_saham:noSahamLog,dari_saham_id:dariId,ke_saham_id:keId,
+        tanggal:tgl,keterangan:catatan||'Peralihan saham',operator
+      }]);
+    }
+    const trxKeluar=hasil.map(h=>({
+      saham_id:dariId,tipe:'transfer_keluar',jumlah_lembar:h.ambil,
+      harga_per_lembar:harga,total_nilai:h.ambil*harga,tanggal:tgl,
+      no_saham:h.pecah?noPecahan(h.sertifikat.no_saham,2):h.sertifikat.no_saham,
+      ke_id:keId,keterangan:catatan||'Peralihan saham',operator,harga_saham_saat_itu:harga
+    }));
+    const trxMasuk=hasil.map(h=>({
+      saham_id:keId,tipe:'transfer_masuk',jumlah_lembar:h.ambil,
+      harga_per_lembar:harga,total_nilai:h.ambil*harga,tanggal:tgl,
+      no_saham:h.pecah?noPecahan(h.sertifikat.no_saham,2):h.sertifikat.no_saham,
+      dari_id:dariId,keterangan:catatan||'Peralihan saham',operator,harga_saham_saat_itu:harga
+    }));
+    await sb.from('ubnb_saham_trx').insert([...trxKeluar,...trxMasuk]);
+    document.getElementById('modal-konfirm-transfer')?.remove();
+    ['tf-dari-input','tf-ke-input','tf-catatan'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    ['tf-dari-id','tf-ke-id','tf-lembar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('tf-dari-info').style.display='none';
+    document.getElementById('tf-total-box').style.display='none';
+    document.getElementById('tf-fifo-preview').style.display='none';
+    window._hasilFIFO=null;window._sDari=null;window._sKe=null;window._tfParams=null;
+    toast('✅ Transfer berhasil!');
+    await loadAll();renderDashboard();loadRiwayatTrx();
+  }catch(err){
+    toast('Gagal: '+err.message,true);
+    if(btn){btn.disabled=false;btn.textContent='✅ Konfirmasi & Proses';}
+  }
+}
+
+function cetakBuktiTransfer(){
+  const{dariId,keId,lembar,harga,tgl,catatan}=window._tfParams;
+  const hasil=window._hasilFIFO;
+  const sDari=window._sDari;const sKe=window._sKe;
+  const fmtTgl2=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'-';
+  let detailRows='';
+  hasil.forEach(h=>{
+    const s=h.sertifikat;
+    if(h.pecah){
+      detailRows+=`<tr><td>${s.no_saham}</td><td style="text-align:center">${s.jumlah_lembar}</td>
+        <td>DIPECAH</td>
+        <td>${noPecahan(s.no_saham,1)}: ${h.sisaLembar} lbr (sisa)<br>${noPecahan(s.no_saham,2)}: ${h.ambil} lbr (dialihkan)</td></tr>`;
+    }else{
+      detailRows+=`<tr><td>${s.no_saham}</td><td style="text-align:center">${h.ambil}</td>
+        <td>PENUH</td><td>Seluruhnya dialihkan</td></tr>`;
+    }
+  });
+  const printHtml=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bukti Peralihan Saham</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20mm}
+  h2{text-align:center;font-size:16px;margin-bottom:4px}
+  .sub{text-align:center;color:#666;margin-bottom:16px;font-size:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+  .box{border:1px solid #e5e7eb;border-radius:6px;padding:10px}
+  .lbl{font-size:10px;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th{background:#1a3a2a;color:white;padding:6px 8px;text-align:left;font-size:11px}
+  td{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:11px}
+  .total{background:#f9fafb;padding:10px;border-radius:6px;text-align:right;font-weight:700;margin-bottom:16px}
+  .ttd{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:40px}
+  .ttd-box{text-align:center}
+  .ttd-line{border-top:1px solid #333;padding-top:4px;font-size:11px;margin-top:40px}
+  @media print{body{padding:10mm}}</style></head><body>
+  <h2>BUKTI PERALIHAN SAHAM UBNB PERWIRA</h2>
+  <p class="sub">Tanggal: ${fmtTgl2(tgl)}</p>
+  <div class="grid">
+    <div class="box"><div class="lbl">Dari (Penjual)</div>
+      <div style="font-weight:700">${sDari?.nama}</div>
+      <div style="color:#666">${sDari?.no_anggota} · ${sDari?.kelompok}</div></div>
+    <div class="box"><div class="lbl">Ke (Pembeli)</div>
+      <div style="font-weight:700">${sKe?.nama}</div>
+      <div style="color:#666">${sKe?.no_anggota} · ${sKe?.kelompok}</div></div>
+  </div>
+  <table><thead><tr>
+    <th>No. Saham Asal</th><th>Lembar Asal</th><th>Status</th><th>Hasil / Keterangan</th>
+  </tr></thead><tbody>${detailRows}</tbody></table>
+  <div class="total">Total Dialihkan: ${lembar} lembar &nbsp;·&nbsp; ${rp(lembar*harga)}</div>
+  ${catatan?`<div style="font-size:11px;margin-bottom:16px"><strong>Catatan:</strong> ${catatan}</div>`:''}
+  <div class="ttd">
+    <div class="ttd-box"><div class="ttd-line">Pihak Penjual<br><strong>${sDari?.nama}</strong></div></div>
+    <div class="ttd-box"><div class="ttd-line">Pihak Pembeli<br><strong>${sKe?.nama}</strong></div></div>
+  </div>
+  <script>window.onload=()=>window.print()<\/script></body></html>`;
+  const w=window.open('','_blank');w.document.write(printHtml);w.document.close();
 }
 
 async function loadRiwayatTrx(){
