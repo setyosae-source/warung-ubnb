@@ -8,6 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>Laporan Keuangan | UBNB Desa Perwira</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
 :root{
@@ -438,15 +439,19 @@ async function doLogin(){
   const p=document.getElementById('inp-pass').value;
   if(!u||!p){document.getElementById('login-err').textContent='Isi username dan password';return;}
   const btn=document.getElementById('btn-login');btn.textContent='Memverifikasi...';btn.disabled=true;
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  btn.textContent='Masuk';btn.disabled=false;
-  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
-  CU=data;
-  document.getElementById('login-wrap').style.display='none';
-  document.getElementById('app').style.display='block';
-  document.getElementById('user-badge').textContent=CU.username;
-  document.getElementById('sb-user').textContent='👤 '+CU.username;
-  await refreshAll();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('lk_user',userData);
+    btn.textContent='Masuk';btn.disabled=false;
+    document.getElementById('login-wrap').style.display='none';
+    document.getElementById('app').style.display='block';
+    document.getElementById('user-badge').textContent=CU.username;
+    document.getElementById('sb-user').textContent='👤 '+CU.username;
+    await refreshAll();
+  }catch(e){
+    btn.textContent='Masuk';btn.disabled=false;
+    document.getElementById('login-err').textContent=e.message||'Username atau password salah';
+  }
 }
 function keluar(){CU=null;location.reload();}
 

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MPPS — UBNB Desa Perwira</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script src="analytics.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -598,10 +599,15 @@ async function doLogin(){
   const u=document.getElementById('inp-user').value.trim(),p=document.getElementById('inp-pass').value;
   const btn=document.getElementById('btn-login');
   btn.innerHTML='<div class="spinner"></div>';btn.disabled=true;
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  btn.innerHTML='Masuk →';btn.disabled=false;
-  if(error||!data){document.getElementById('login-err').style.display='block';return;}
-  CU=data;localStorage.setItem('mpps_user',JSON.stringify(data));loginOK();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('mpps_user',userData);
+    btn.innerHTML='Masuk →';btn.disabled=false;
+    loginOK();
+  }catch(e){
+    btn.innerHTML='Masuk →';btn.disabled=false;
+    document.getElementById('login-err').style.display='block';
+  }
 }
 async function loginOK(){
   document.getElementById('login-wrap').style.display='none';
@@ -610,7 +616,16 @@ async function loginOK(){
   await loadAll();
 }
 function doLogout(){CU=null;localStorage.removeItem('mpps_user');location.reload();}
-window.addEventListener('load',()=>{const s=localStorage.getItem('mpps_user');if(s)try{CU=JSON.parse(s);loginOK();}catch(e){}});
+window.addEventListener('load',async()=>{
+  const saved=UBNBAuth.loadSession('mpps_user');
+  if(saved){
+    CU=await UBNBAuth.verifySession(sb,'mpps_user');
+    if(CU){
+      loginOK();
+      UBNBAuth.startExpiryTimer('mpps_user',()=>{CU=null;UBNBAuth.clearAllSessions();location.reload();});
+    }
+  }
+});
 
 // ===== LOAD ALL =====
 async function loadAll(){
@@ -1387,7 +1402,11 @@ async function doResetHadir(){
   errEl.style.display='none';
 
   // Verifikasi ke tabel users
-  const{data,error}=await sb.from('users').select('id,role').eq('username',u).eq('password',p).single();
+  // Verifikasi password menggunakan hash (SHA-256)
+  const pHash=await UBNBAuth.sha256(p);
+  let{data,error}=await sb.from('users').select('id,role').eq('username',u).eq('password_hash',pHash).single();
+  // Fallback plaintext selama masa transisi
+  if(error||!data){const res=await sb.from('users').select('id,role').eq('username',u).eq('password',p).single();data=res.data;error=res.error;}
 
   if(error||!data){
     errEl.textContent='Username atau password salah';

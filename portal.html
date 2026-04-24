@@ -358,6 +358,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="analytics.js"></script>
+<script src="ubnb-auth.js"></script>
 <script>
 const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
@@ -373,30 +374,50 @@ function toast(msg){
   clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2500);
 }
 
-// ===== LOGIN =====
+// ===== LOGIN — via UBNBAuth (hash + fallback plaintext) =====
 async function doLogin(){
   const u=document.getElementById('inp-user').value.trim();
   const p=document.getElementById('inp-pass').value.trim();
   const err=document.getElementById('login-err');
   err.style.display='none';
   if(!u||!p){err.textContent='Isi username dan password';err.style.display='block';return;}
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  if(error||!data){err.textContent='Username atau password salah';err.style.display='block';return;}
-  CU=data;
-  localStorage.setItem('portal_cu',JSON.stringify(data));
-  showApp();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('portal_cu',userData);
+    showApp();
+  }catch(e){
+    err.textContent=e.message||'Username atau password salah';
+    err.style.display='block';
+  }
 }
 
 function keluar(){
-  localStorage.removeItem('portal_cu');
+  UBNBAuth.clearAllSessions();
   CU=null;
   document.getElementById('app').style.display='none';
   document.getElementById('login-wrap').style.display='flex';
 }
 
-window.addEventListener('DOMContentLoaded',()=>{
-  const saved=localStorage.getItem('portal_cu');
-  if(saved){try{CU=JSON.parse(saved);showApp();}catch(e){localStorage.removeItem('portal_cu');}}
+window.addEventListener('DOMContentLoaded',async()=>{
+  // Cek session dengan expiry check otomatis
+  const saved=UBNBAuth.loadSession('portal_cu');
+  if(saved){
+    // Verifikasi role dari server — cegah manipulasi localStorage
+    CU=await UBNBAuth.verifySession(sb,'portal_cu');
+    if(CU){
+      showApp();
+      // Mulai timer expiry 8 jam
+      UBNBAuth.startExpiryTimer('portal_cu',()=>{
+        toast('Sesi berakhir, silakan login kembali');
+        setTimeout(()=>{
+          UBNBAuth.clearAllSessions();CU=null;
+          document.getElementById('app').style.display='none';
+          document.getElementById('login-wrap').style.display='flex';
+        },2000);
+      });
+    }
+    // Jika verifySession null → session invalid → tampil form login
+  }
   document.getElementById('inp-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 });
 

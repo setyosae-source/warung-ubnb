@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BMT UBNB PERWIRA</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -755,9 +756,11 @@ async function doLogin(){
   const u=document.getElementById('inp-u').value.trim();
   const p=document.getElementById('inp-p').value.trim();
   if(!u||!p){setLE('Isi username dan password');return;}
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  if(error||!data){setLE('Username atau password salah');return;}
-  CU=data;localStorage.setItem('bmt_cu',JSON.stringify(data));loginOK();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('bmt_cu',userData);
+    loginOK();
+  }catch(e){setLE(e.message||'Username atau password salah');}
 }
 function setLE(m){const e=document.getElementById('login-err');e.textContent=m;e.style.display='block';}
 async function loginOK(){
@@ -776,9 +779,15 @@ function keluar(){
   document.getElementById('login-wrap').style.display='flex';
   document.getElementById('inp-u').value='';document.getElementById('inp-p').value='';
 }
-window.addEventListener('DOMContentLoaded',()=>{
-  const s=localStorage.getItem('bmt_cu');
-  if(s){try{CU=JSON.parse(s);loginOK();}catch(e){}}
+window.addEventListener('DOMContentLoaded',async()=>{
+  const saved=UBNBAuth.loadSession('bmt_cu');
+  if(saved){
+    CU=await UBNBAuth.verifySession(sb,'bmt_cu');
+    if(CU){
+      loginOK();
+      UBNBAuth.startExpiryTimer('bmt_cu',()=>{CU=null;UBNBAuth.clearAllSessions();location.reload();});
+    }
+  }
 });
 
 // ===== DATA =====

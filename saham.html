@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Saham UBNB Perwira</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -703,11 +704,16 @@ async function doLogin(){
   const p=document.getElementById('inp-pass').value;
   const btn=document.getElementById('btn-login');
   btn.textContent='...';btn.disabled=true;
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  btn.textContent='Masuk';btn.disabled=false;
-  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';document.getElementById('login-err').style.display='block';return;}
-  CU=data;localStorage.setItem('saham_user',JSON.stringify(data));
-  await loginOK();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('saham_user',userData);
+    btn.textContent='Masuk';btn.disabled=false;
+    await loginOK();
+  }catch(e){
+    btn.textContent='Masuk';btn.disabled=false;
+    document.getElementById('login-err').textContent=e.message||'Username atau password salah';
+    document.getElementById('login-err').style.display='block';
+  }
 }
 async function loginOK(){
   document.getElementById('login-wrap').style.display='none';
@@ -721,7 +727,16 @@ async function loginOK(){
   history.replaceState({page:'dashboard'},'',window.location.pathname+'#dashboard');
 }
 function doLogout(){CU=null;localStorage.removeItem('saham_user');location.reload();}
-window.addEventListener('load',()=>{const s=localStorage.getItem('saham_user');if(s)try{CU=JSON.parse(s);loginOK();}catch(e){}});
+window.addEventListener('load',async()=>{
+  const saved=UBNBAuth.loadSession('saham_user');
+  if(saved){
+    CU=await UBNBAuth.verifySession(sb,'saham_user');
+    if(CU){
+      await loginOK();
+      UBNBAuth.startExpiryTimer('saham_user',()=>{CU=null;UBNBAuth.clearAllSessions();location.reload();});
+    }
+  }
+});
 
 // ===== LOAD DATA =====
 async function loadAll(){

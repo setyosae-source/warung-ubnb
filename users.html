@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>User Management — UBNB</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -795,33 +796,28 @@ const ROLE_DEFAULTS = {
 
 // Init
 async function init() {
-  // Check login
-  const cu = localStorage.getItem('portal_cu');
-  if (!cu) {
+  // Cek session (expiry otomatis) + verifikasi role dari server
+  const saved = UBNBAuth.loadSession('portal_cu');
+  if (!saved) {
     alert('Silakan login terlebih dahulu');
     window.location.href = 'portal.html';
     return;
   }
-  
-  try {
-    CU = JSON.parse(cu);
-    
-    // Check if user is pemilik
-    if (CU.role !== 'pemilik') {
-      alert('Akses ditolak. Hanya pemilik yang dapat mengakses halaman ini.');
-      window.location.href = 'portal.html';
-      return;
-    }
-    
-    document.getElementById('current-user').textContent = CU.username + ' • ' + CU.role;
-    
-    await loadUsers();
-    renderPermissionsGrid();
-    
-  } catch (e) {
-    alert('Session invalid. Silakan login ulang.');
+  CU = await UBNBAuth.verifySession(sb, 'portal_cu');
+  if (!CU) {
+    alert('Session tidak valid. Silakan login kembali.');
     window.location.href = 'portal.html';
+    return;
   }
+  if (CU.role !== 'pemilik') {
+    alert('Akses ditolak. Hanya pemilik yang dapat mengakses halaman ini.');
+    window.location.href = 'portal.html';
+    return;
+  }
+  document.getElementById('current-user').textContent = CU.username + ' • ' + CU.role;
+  UBNBAuth.startExpiryTimer('portal_cu', () => window.location.href = 'portal.html');
+  await loadUsers();
+  renderPermissionsGrid();
 }
 
 // Load users

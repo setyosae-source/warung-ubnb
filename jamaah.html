@@ -253,6 +253,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script>
 const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
@@ -281,17 +282,21 @@ async function doLogin(){
   const u=document.getElementById('inp-user').value.trim();
   const p=document.getElementById('inp-pass').value.trim();
   if(!u||!p){setLE('Isi username dan password');return;}
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  if(error||!data){setLE('Username atau password salah');return;}
-  CU=data;localStorage.setItem('wu_jamaah',JSON.stringify(data));
-  init();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('wu_jamaah',userData);
+    init();
+  }catch(e){setLE(e.message||'Username atau password salah');}
 }
 function setLE(m){const e=document.getElementById('login-err');e.textContent=m;e.style.display='block';}
-function keluar(){localStorage.removeItem('wu_jamaah');location.reload();}
+function keluar(){UBNBAuth.clearAllSessions();location.reload();}
 
 window.addEventListener('DOMContentLoaded',async()=>{
-  const saved=localStorage.getItem('wu_jamaah');
-  if(saved){try{CU=JSON.parse(saved);init();}catch(e){localStorage.removeItem('wu_jamaah');}}
+  const saved=UBNBAuth.loadSession('wu_jamaah');
+  if(saved){
+    const cu=await UBNBAuth.verifySession(sb,'wu_jamaah');
+    if(cu){CU=cu;init();UBNBAuth.startExpiryTimer('wu_jamaah',()=>{UBNBAuth.clearAllSessions();location.reload();});}
+  }
   document.getElementById('inp-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 });
 

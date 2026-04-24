@@ -8,6 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>Jurnal Umum & Aset | UBNB Desa Perwira</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
 :root{
@@ -591,21 +592,24 @@ async function doLogin(){
   const p=document.getElementById('inp-pass').value;
   if(!u||!p){document.getElementById('login-err').textContent='Isi username dan password';return;}
   const btn=document.getElementById('btn-login');btn.textContent='Memverifikasi...';btn.disabled=true;
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  btn.textContent='Masuk';btn.disabled=false;
-  if(error||!data){document.getElementById('login-err').textContent='Username atau password salah';return;}
-  CU=data;
-  document.getElementById('login-wrap').style.display='none';
-  document.getElementById('app').style.display='block';
-  document.getElementById('user-badge').textContent=CU.username;
-  document.getElementById('sb-user').textContent='👤 '+CU.username;
-  // Set tanggal default
-  document.getElementById('jurnal-tgl').value=new Date().toISOString().split('T')[0];
-  document.getElementById('aset-tgl').value=new Date().toISOString().split('T')[0];
-  const ym=new Date().toISOString().slice(0,7);
-  document.getElementById('filter-bulan').value=ym;
-  document.getElementById('bb-bulan').value=ym;
-  await refreshAll();
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    CU=UBNBAuth.saveSession('jurnal_user',userData);
+    btn.textContent='Masuk';btn.disabled=false;
+    document.getElementById('login-wrap').style.display='none';
+    document.getElementById('app').style.display='block';
+    document.getElementById('user-badge').textContent=CU.username;
+    document.getElementById('sb-user').textContent='👤 '+CU.username;
+    document.getElementById('jurnal-tgl').value=new Date().toISOString().split('T')[0];
+    document.getElementById('aset-tgl').value=new Date().toISOString().split('T')[0];
+    const ym=new Date().toISOString().slice(0,7);
+    document.getElementById('filter-bulan').value=ym;
+    document.getElementById('bb-bulan').value=ym;
+    await refreshAll();
+  }catch(e){
+    btn.textContent='Masuk';btn.disabled=false;
+    document.getElementById('login-err').textContent=e.message||'Username atau password salah';
+  }
 }
 function keluar(){CU=null;document.getElementById('login-wrap').style.display='flex';document.getElementById('app').style.display='none';}
 

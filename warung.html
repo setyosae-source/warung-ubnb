@@ -1945,6 +1945,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
@@ -2174,9 +2175,11 @@ function selSD(k,item){
 async function doLogin(){
   const u=document.getElementById('inp-user').value.trim(),p=document.getElementById('inp-pass').value.trim();
   if(!u||!p){setLE('Isi username dan password');return;}
-  const{data,error}=await sb.from('users').select('*').eq('username',u).eq('password',p).single();
-  if(error||!data){setLE('Username atau password salah');return;}
-  loginOK(data);
+  try{
+    const userData=await UBNBAuth.login(sb,u,p);
+    const cu=UBNBAuth.saveSession('wu',userData);
+    loginOK(cu);
+  }catch(e){setLE(e.message||'Username atau password salah');}
 }
 function setLE(m){const e=document.getElementById('login-err');e.textContent=m;e.style.display='block';}
 async function loginOK(data){
@@ -2221,7 +2224,7 @@ function restoreNavGroups(){
     }
   });
 }
-function doLogout(){CU=null;KR=[];document.body.classList.remove('pemilik');localStorage.removeItem('wu');localStorage.removeItem('wu_page');document.getElementById('app').style.display='none';document.getElementById('login-wrap').style.display='flex';['inp-user','inp-pass'].forEach(id=>document.getElementById(id).value='');document.getElementById('login-err').style.display='none';closeSidebar();}
+function doLogout(){CU=null;KR=[];document.body.classList.remove('pemilik');UBNBAuth.clearAllSessions();localStorage.removeItem('wu_page');document.getElementById('app').style.display='none';document.getElementById('login-wrap').style.display='flex';['inp-user','inp-pass'].forEach(id=>document.getElementById(id).value='');document.getElementById('login-err').style.display='none';closeSidebar();}
 document.getElementById('inp-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
 // ===== MODAL ESCAPE & BACK HANDLER =====
@@ -2344,7 +2347,21 @@ window.addEventListener('popstate', e=>{
     history.pushState({page: currentPage}, '', '#'+currentPage);
   }
 });
-window.addEventListener('load',async()=>{const s=localStorage.getItem('wu');if(!s)return;try{const u=JSON.parse(s);const{data,error}=await sb.from('users').select('*').eq('id',u.id).single();if(error||!data){localStorage.removeItem('wu');return;}loginOK(data);}catch(e){localStorage.removeItem('wu');}});
+window.addEventListener('load',async()=>{
+  const saved=UBNBAuth.loadSession('wu'); // otomatis cek expiry 8 jam
+  if(!saved)return;
+  // Verifikasi role dari server
+  const cu=await UBNBAuth.verifySession(sb,'wu');
+  if(!cu){UBNBAuth.clearAllSessions();return;}
+  loginOK(cu);
+  UBNBAuth.startExpiryTimer('wu',()=>{
+    CU=null;KR=[];
+    document.body.classList.remove('pemilik');
+    UBNBAuth.clearAllSessions();
+    document.getElementById('app').style.display='none';
+    document.getElementById('login-wrap').style.display='flex';
+  });
+});
 
 async function loadAll(){
   await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB(),lLaundry(),lService(),lAnggota(),lJamaah()]);
