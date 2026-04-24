@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapping BMT Akad → Anggota | UBNB</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --hijau:#1a6640;--hijau2:#0f4428;--hijau-light:#e8f5ee;
+  --amber:#92400e;--amber-light:#fef3c7;
+  --red:#991b1b;--red-light:#fef2f2;
+  --border:#d1d5db;--bg:#f9fafb;--surface:#fff;
+  --text:#111827;--muted:#6b7280;--radius:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+
+.topbar{background:linear-gradient(135deg,var(--hijau2),var(--hijau));color:white;
+  padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+.topbar-title{font-size:16px;font-weight:700;}
+.topbar-sub{font-size:11px;opacity:.75;margin-top:2px;}
+.badge-count{background:rgba(255,255,255,.2);border-radius:99px;padding:3px 10px;font-size:12px;font-weight:700;}
+
+.main{max-width:900px;margin:0 auto;padding:20px 16px;}
+
+.info-bar{background:var(--amber-light);border:1px solid #fde68a;border-radius:var(--radius);
+  padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--amber);}
+
+.progress-wrap{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;}
+.progress-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;}
+.progress-bar{height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--hijau);border-radius:99px;transition:width .4s;}
+.progress-text{font-size:12px;color:var(--muted);margin-top:6px;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:10px;overflow:hidden;transition:box-shadow .15s;}
+.card:hover{box-shadow:0 2px 12px rgba(0,0,0,.08);}
+.card.done{border-color:#86efac;background:#f0fdf4;}
+.card.skipped{border-color:#d1d5db;background:#f9fafb;opacity:.7;}
+
+.card-head{display:grid;grid-template-columns:1fr auto;align-items:center;padding:12px 14px;gap:12px;}
+.no-akad{font-size:11px;font-weight:700;color:var(--muted);font-family:monospace;}
+.nama-bmt{font-size:15px;font-weight:700;color:var(--text);}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
+.chip-aktif{background:#fee2e2;color:var(--red);}
+.chip-lunas{background:#e5e7eb;color:var(--muted);}
+.chip-done{background:#dcfce7;color:#166534;}
+.nilai-info{font-size:11px;color:var(--muted);margin-top:3px;}
+
+.card-body{padding:0 14px 14px;}
+.search-anggota{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:.2s;}
+.search-anggota:focus{border-color:var(--hijau);}
+.dropdown-list{max-height:200px;overflow-y:auto;border:1.5px solid var(--hijau);
+  border-radius:8px;margin-top:4px;display:none;background:white;z-index:10;position:relative;}
+.dropdown-list.open{display:block;}
+.dl-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;}
+.dl-item:hover{background:var(--hijau-light);}
+.dl-item.selected{background:var(--hijau-light);}
+.dl-item:last-child{border-bottom:none;}
+.dl-anggota{font-weight:700;color:var(--hijau);}
+.dl-sub{font-size:10px;color:var(--muted);margin-top:1px;}
+.dl-empty{padding:12px;text-align:center;color:var(--muted);font-size:12px;}
+
+.action-row{display:flex;gap:8px;margin-top:10px;}
+.btn{padding:7px 16px;border:none;border-radius:6px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;transition:.15s;}
+.btn:hover{opacity:.9;}
+.btn-save{background:var(--hijau);color:white;}
+.btn-save:disabled{background:#d1d5db;cursor:not-allowed;}
+.btn-skip{background:#f3f4f6;color:var(--muted);}
+.btn-reset{background:#fee2e2;color:var(--red);font-size:11px;padding:5px 10px;}
+
+.selected-info{background:var(--hijau-light);border:1px solid #86efac;border-radius:6px;
+  padding:8px 12px;margin-top:8px;font-size:12px;display:none;}
+.selected-info.show{display:block;}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#1a6640;color:white;padding:10px 20px;border-radius:99px;
+  font-size:13px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;z-index:999;}
+.toast.show{opacity:1;}
+
+.summary-done{background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);
+  padding:16px;text-align:center;display:none;margin-bottom:20px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">🔗 Mapping BMT Akad → Anggota UBNB</div>
+    <div class="topbar-sub">Identifikasi nasabah BMT yang belum terlink ke data jamaah</div>
+  </div>
+  <span class="badge-count" id="sisa-count">22 perlu dikonfirmasi</span>
+</div>
+
+<div class="main">
+
+  <div class="info-bar">
+    ⚠️ Penting untuk SHU: Angsuran BMT bobot 25% dari komponen aktivitas. 
+    Hubungkan setiap akad ke anggota yang benar agar angsuran terhitung mulai 1 Mei 2026.
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">Progress mapping</div>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+    <div class="progress-text" id="prog-text">0 dari 22 selesai</div>
+  </div>
+
+  <div class="summary-done" id="summary-done">
+    <div style="font-size:24px;margin-bottom:8px;">✅</div>
+    <div style="font-weight:700;font-size:15px;color:var(--hijau);">Semua akad sudah di-mapping!</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+      Data tersimpan ke Supabase. Angsuran mulai 1 Mei akan otomatis masuk SHU.
+    </div>
+  </div>
+
+  <div id="akad-list"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SURL,SKEY);
+
+const AKAD_LIST=[{"id": 14, "no_akad": "BMT/2024/02/002", "nama_di_bmt": "MAS ANDRE", "status": "Belum Lunas", "total": 5832000, "sisa": 4332000}, {"id": 15, "no_akad": "BMT/2024/03/003", "nama_di_bmt": "ALDINO", "status": "Lunas", "total": 5632000, "sisa": 0}, {"id": 16, "no_akad": "BMT/2024/09/004", "nama_di_bmt": "JEMIRIN", "status": "Belum Lunas", "total": 31104000, "sisa": 9072000}, {"id": 17, "no_akad": "BMT/2024/10/005", "nama_di_bmt": "DENNY PW1", "status": "Belum Lunas", "total": 18522000, "sisa": 6464000}, {"id": 18, "no_akad": "BMT/2024/12/006", "nama_di_bmt": "RUSMAN", "status": "Lunas", "total": 15660000, "sisa": 0}, {"id": 20, "no_akad": "BMT/2025/03/008", "nama_di_bmt": "AINAN", "status": "Belum Lunas", "total": 15030000, "sisa": 5010000}, {"id": 21, "no_akad": "BMT/2025/03/009", "nama_di_bmt": "AZIZ", "status": "Belum Lunas", "total": 20430000, "sisa": 5675000}, {"id": 23, "no_akad": "BMT/2025/08/011", "nama_di_bmt": "HIRZAN", "status": "Belum Lunas", "total": 7414000, "sisa": 4942333}, {"id": 24, "no_akad": "BMT/2025/10/012", "nama_di_bmt": "KELOMPOK 3", "status": "Belum Lunas", "total": 7700550, "sisa": 4620550}, {"id": 26, "no_akad": "BMT/2025/11/014", "nama_di_bmt": "TANTE AKBAR", "status": "Belum Lunas", "total": 3844000, "sisa": 2562668}, {"id": 27, "no_akad": "BMT/2025/11/015", "nama_di_bmt": "SYAKUR", "status": "Belum Lunas", "total": 27155000, "sisa": 14770000}, {"id": 28, "no_akad": "BMT/2025/11/016", "nama_di_bmt": "MAS TYO", "status": "Belum Lunas", "total": 7473000, "sisa": 4473000}, {"id": 29, "no_akad": "BMT/2025/11/017", "nama_di_bmt": "AKBAR KABUL", "status": "Belum Lunas", "total": 11500000, "sisa": 8624998}, {"id": 30, "no_akad": "BMT/2025/12/018", "nama_di_bmt": "BU KARNO", "status": "Belum Lunas", "total": 9919999, "sisa": 7431999}, {"id": 31, "no_akad": "BMT/2025/12/019", "nama_di_bmt": "P EKO ABDILLAH", "status": "Belum Lunas", "total": 3472000, "sisa": 1157332}, {"id": 32, "no_akad": "BMT/2025/12/020", "nama_di_bmt": "P AGUNG 1", "status": "Belum Lunas", "total": 9840557, "sisa": 8540557}, {"id": 33, "no_akad": "BMT/2025/12/021", "nama_di_bmt": "BU DEWI", "status": "Belum Lunas", "total": 1500000, "sisa": 1192500}, {"id": 34, "no_akad": "BMT/2026/02/022", "nama_di_bmt": "REZA PW1", "status": "Belum Lunas", "total": 18708098, "sisa": 17308098}, {"id": 35, "no_akad": "BMT/2026/03/023", "nama_di_bmt": "AGUNG 2", "status": "Belum Lunas", "total": 42141000, "sisa": 40641000}, {"id": 36, "no_akad": "BMT/2026/03/024", "nama_di_bmt": "REZA PW1", "status": "Belum Lunas", "total": 1320000, "sisa": 1100000}, {"id": 38, "no_akad": "BMT/2026/03/026", "nama_di_bmt": "BU MEDHI", "status": "Belum Lunas", "total": 11500000, "sisa": 11500000}, {"id": 39, "no_akad": "BMT/2026/03/027", "nama_di_bmt": "MAS FAJAR", "status": "Belum Lunas", "total": 21542000, "sisa": 21542000}];
+
+let aAnggota=[]; // semua anggota saham aktif
+let selectedMap={}; // akadId → {anggota_id, jamaah_did, nama}
+let doneSet=new Set();
+let skipSet=new Set();
+
+const fmt=n=>'Rp '+Math.round(n||0).toLocaleString('id-ID');
+
+// ── Load anggota saham ─────────────────────────────────────────────
+async function loadAnggota(){
+  const{data}=await sb.from('ubnb_saham')
+    .select('id,no_anggota,nama,kelompok,jamaah_did,status')
+    .eq('status','Aktif')
+    .order('nama');
+  aAnggota=data||[];
+  render();
+}
+
+// ── Render semua kartu ─────────────────────────────────────────────
+function render(){
+  const el=document.getElementById('akad-list');
+  el.innerHTML=AKAD_LIST.map(a=>cardHTML(a)).join('');
+  updateProgress();
+}
+
+function cardHTML(a){
+  const done=doneSet.has(a.id);
+  const skipped=skipSet.has(a.id);
+  const sel=selectedMap[a.id];
+  const chipClass=a.status==='Belum Lunas'?'chip-aktif':'chip-lunas';
+
+  return `<div class="card ${done?'done':skipped?'skipped':''}" id="card-${a.id}">
+    <div class="card-head">
+      <div>
+        <div class="no-akad">${a.no_akad}</div>
+        <div class="nama-bmt">${a.nama_di_bmt}</div>
+        <div class="nilai-info">
+          ${fmt(a.total)} total
+          ${a.sisa>0?'· sisa '+fmt(a.sisa):''}
+          &nbsp;<span class="chip ${chipClass}">${a.status}</span>
+          ${done?'&nbsp;<span class="chip chip-done">✅ Tersimpan</span>':''}
+        </div>
+      </div>
+      ${done?`<button class="btn btn-reset" onclick="resetCard(${a.id})">Ubah</button>`:''}
+    </div>
+    ${!done?`
+    <div class="card-body">
+      <input class="search-anggota" id="inp-${a.id}" 
+        placeholder="Ketik nama anggota yang sebenarnya..."
+        oninput="filterDropdown(${a.id},this.value)"
+        onfocus="openDropdown(${a.id})"
+        autocomplete="off"/>
+      <div class="dropdown-list" id="dd-${a.id}"></div>
+      <div class="selected-info ${sel?'show':''}" id="sel-info-${a.id}">
+        ${sel?`✅ Dipilih: <strong>${sel.nama}</strong> (${sel.no_anggota} · ${sel.kelompok})`:''}
+      </div>
+      <div class="action-row">
+        <button class="btn btn-save" id="btn-save-${a.id}" 
+          onclick="saveMapping(${a.id})"
+          ${sel?'':'disabled'}>
+          💾 Simpan
+        </button>
+        <button class="btn btn-skip" onclick="skipCard(${a.id})">
+          Lewati (bukan anggota)
+        </button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+// ── Dropdown filter ────────────────────────────────────────────────
+function filterDropdown(akadId, q){
+  const dd=document.getElementById('dd-'+akadId);
+  q=q.toLowerCase().trim();
+  const filtered=q
+    ?aAnggota.filter(a=>a.nama.toLowerCase().includes(q)||(a.no_anggota||'').toLowerCase().includes(q))
+    :aAnggota.slice(0,20);
+
+  if(!filtered.length){
+    dd.innerHTML='<div class="dl-empty">Tidak ditemukan</div>';
+  } else {
+    dd.innerHTML=filtered.map(a=>`
+      <div class="dl-item" onclick="selectAnggota(${akadId},${a.id},'${escQ(a.nama)}','${a.no_anggota}','${a.kelompok}','${a.jamaah_did||''}')">
+        <div class="dl-anggota">⭐ ${a.nama}</div>
+        <div class="dl-sub">${a.no_anggota} · ${a.kelompok}</div>
+      </div>`).join('');
+  }
+  dd.classList.add('open');
+}
+
+function escQ(s){return (s||'').replace(/'/g,"\'");}
+
+function openDropdown(akadId){
+  filterDropdown(akadId, document.getElementById('inp-'+akadId).value);
+}
+
+// ── Pilih anggota ──────────────────────────────────────────────────
+function selectAnggota(akadId, anggotaId, nama, noAnggota, kelompok, jamaahDid){
+  selectedMap[akadId]={anggota_id:anggotaId, jamaah_did:jamaahDid||null, nama, no_anggota:noAnggota, kelompok};
+  document.getElementById('inp-'+akadId).value=nama;
+  document.getElementById('dd-'+akadId).classList.remove('open');
+  const info=document.getElementById('sel-info-'+akadId);
+  info.innerHTML=`✅ Dipilih: <strong>${nama}</strong> (${noAnggota} · ${kelompok})`;
+  info.classList.add('show');
+  document.getElementById('btn-save-'+akadId).disabled=false;
+}
+
+// ── Simpan ke Supabase ─────────────────────────────────────────────
+async function saveMapping(akadId){
+  const sel=selectedMap[akadId];
+  if(!sel){toast('Pilih anggota dulu',true);return;}
+  const btn=document.getElementById('btn-save-'+akadId);
+  btn.textContent='Menyimpan...';btn.disabled=true;
+
+  const{error}=await sb.from('bmt_akad').update({
+    anggota_id: sel.anggota_id,
+    jamaah_did: sel.jamaah_did
+  }).eq('id',akadId);
+
+  if(error){
+    toast('Gagal: '+error.message,true);
+    btn.textContent='💾 Simpan';btn.disabled=false;
+    return;
+  }
+
+  doneSet.add(akadId);
+  skipSet.delete(akadId);
+  renderCard(akadId);
+  updateProgress();
+  toast('✅ Tersimpan!');
+}
+
+function skipCard(akadId){
+  skipSet.add(akadId);
+  renderCard(akadId);
+  updateProgress();
+}
+
+function resetCard(akadId){
+  doneSet.delete(akadId);
+  delete selectedMap[akadId];
+  renderCard(akadId);
+  updateProgress();
+}
+
+function renderCard(akadId){
+  const a=AKAD_LIST.find(x=>x.id===akadId);
+  document.getElementById('card-'+akadId).outerHTML=cardHTML(a);
+}
+
+// ── Progress ───────────────────────────────────────────────────────
+function updateProgress(){
+  const total=AKAD_LIST.length;
+  const done=doneSet.size+skipSet.size;
+  const pct=Math.round(done/total*100);
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-text').textContent=done+' dari '+total+' selesai ('+pct+'%)';
+  document.getElementById('sisa-count').textContent=(total-done)+' perlu dikonfirmasi';
+  if(done===total){
+    document.getElementById('summary-done').style.display='block';
+    document.getElementById('summary-done').scrollIntoView({behavior:'smooth'});
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+let _tt;
+function toast(msg,err=false){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.background=err?'#991b1b':'#1a6640';
+  el.classList.add('show');
+  clearTimeout(_tt);
+  _tt=setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+// Tutup dropdown saat klik di luar
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.search-anggota')&&!e.target.closest('.dropdown-list')){
+    document.querySelectorAll('.dropdown-list').forEach(d=>d.classList.remove('open'));
+  }
+});
+
+// Init
+loadAnggota();
+</script>
+</body>
+</html>
