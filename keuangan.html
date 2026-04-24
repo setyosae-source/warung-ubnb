@@ -1093,7 +1093,9 @@ function renderNeraca(){
     // AKTIVA LANCAR
     const pmALSum=pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
     const persediaan=getPersediaan();
-    const totalAL=kas.total+piutang.pokok+(hasPM?pmALSum:persediaan);
+    // Kalau hasPM → total dari pmAL saja (historis)
+    // Kalau tidak → dari data live (kas + piutang + persediaan)
+    const totalAL=hasPM?pmALSum:(kas.total+piutang.pokok+persediaan);
 
     // AKTIVA TETAP
     const aset=getAset();
@@ -1108,7 +1110,7 @@ function renderNeraca(){
     // MODAL
     const modal=getModal();
     const pmMDSum=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-    const totalMD=(hasPM?pmMDSum:modal.nilai)+ldAkhir+labaBersih;
+    const totalMD=(hasPM?pmMDSum:modal.nilai)+(ldAkhir||0)+labaBersih;
     const totalPasiva=totalKW+totalMD;
     const totalAktiva=totalAL+totalAT;
 
@@ -1162,18 +1164,19 @@ function renderNeraca(){
 
   /* Bangun baris per seksi */
   function rowsAL(data, dataB){
+    // Kalau ada pos manual → tampilkan pos manual saja (data historis/tutup buku)
+    if(data.hasPM){
+      return data.pmAL.map(p=>{
+        const nb=dataB?.pmAL?.find(x=>x.uraian===p.uraian);
+        return R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
+      }).join('');
+    }
+    // Kalau tidak ada pos manual → pakai data live dari transaksi
     let r = R('Kas Utama (Bendahara)', data.kas.warung, dataB?.kas?.warung)
           + R('Kas BMT',               data.kas.bmt,    dataB?.kas?.bmt)
           + R('Kas PPOB',              data.kas.ppob,   dataB?.kas?.ppob)
-          + R('Piutang Pokok Pembiayaan', data.piutang.pokok, dataB?.piutang?.pokok);
-    if(data.hasPM){
-      data.pmAL.forEach(p=>{
-        const nb=dataB?.pmAL?.find(x=>x.uraian===p.uraian);
-        r+=R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
-      });
-    } else {
-      r+=R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
-    }
+          + R('Piutang Pokok Pembiayaan', data.piutang.pokok, dataB?.piutang?.pokok)
+          + R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
     return r;
   }
   function rowsAT(data, dataB){
@@ -1197,16 +1200,20 @@ function renderNeraca(){
   function rowsMD(data, dataB){
     let r='';
     if(data.hasPM){
+      // Pos manual sudah include semua komponen modal → tampilkan apa adanya
       data.pmMD.forEach(p=>{
         const nb=dataB?.pmMD?.find(x=>x.uraian===p.uraian);
         r+=R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
       });
+      // Laba ditahan dan laba bersih dari LD tabel
+      if(data.ldAkhir) r+=R('Laba Ditahan', data.ldAkhir, dataB?.ldAkhir);
+      r+=R('Laba Bersih Tahun '+tahun, data.labaBersih, dataB?.labaBersih);
     } else {
       r+=R('Modal Saham ('+data.modal.lembar.toLocaleString('id-ID')+' lbr × Rp10.200)',
            data.modal.nilai, dataB?.modal?.nilai);
+      if(data.ldAkhir) r+=R('Laba Ditahan', data.ldAkhir, dataB?.ldAkhir);
+      r+=R('Laba Bersih Tahun '+tahun, data.labaBersih, dataB?.labaBersih);
     }
-    r+=R('Laba Ditahan',             data.ldAkhir,    dataB?.ldAkhir);
-    r+=R('Laba Bersih Tahun '+tahun, data.labaBersih, dataB?.labaBersih);
     return r;
   }
 
@@ -1270,15 +1277,15 @@ function renderLabaRugi(){
   const ppobAuto = getPPOB(tahun);
 
   if(hasPM){
-    /* SEMBAKO */
-    // Baris: urutan 5=stok awal, 15=pembelian, 25=stok akhir (negatif)
-    const byUrut = k => pmSem.find(p=>p.urutan===k);
-    const semAwal  = parseFloat(byUrut(5)?.nominal||0);
-    const semBeli  = parseFloat(byUrut(15)?.nominal||0);
-    const semAkhir = Math.abs(parseFloat(byUrut(25)?.nominal||0));
+    /* SEMBAKO — semua dari pos manual */
+    // uraian: psda=stok awal, beli=pembelian, psdk=stok akhir(negatif), penj=penjualan, hpp=hpp
+    const byKode = (k) => pmSem.find(p=>p.kode===k);
+    const semAwal  = parseFloat(byKode('psda')?.nominal||0);
+    const semBeli  = parseFloat(byKode('beli')?.nominal||0);
+    const semAkhir = Math.abs(parseFloat(byKode('psdk')?.nominal||0));
+    const semPenj  = parseFloat(byKode('penj')?.nominal||0);
     hppSem = semAwal + semBeli - semAkhir;
-    // Penjualan sembako → dari transaksi otomatis
-    pjSem  = getTrx(tahun).penjualan;
+    pjSem  = semPenj;
     lkSem  = pjSem - hppSem;
     rSemRows = `
       <tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjSem)}</td></tr>
@@ -1287,20 +1294,22 @@ function renderLabaRugi(){
       <tr class="row-indent"><td>Persediaan Barang Dagang Akhir</td><td class="rp">(${rp(semAkhir)})</td></tr>
       <tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
 
-    /* PEMBIAYAAN */
-    pjBMT  = parseFloat(pmBMT.find(p=>p.urutan===10)?.nominal||0);
-    hppBMT = parseFloat(pmBMT.find(p=>p.urutan===20)?.nominal||0);
+    /* PEMBIAYAAN — semua dari pos manual */
+    // uraian: penj=penjualan/pendapatan, beli=dana tersalur
+    const bmtPenj = parseFloat(pmBMT.find(p=>p.kode==='penj')?.nominal||0);
+    const bmtBeli = parseFloat(pmBMT.find(p=>p.kode==='beli')?.nominal||0);
+    pjBMT  = bmtPenj;
+    hppBMT = bmtBeli;
     lkBMT  = pjBMT - hppBMT;
     rBMTRows = pmBMT.map(p=>`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`).join('');
 
-    /* PPOB */
-    pjPPOB  = ppobAuto.penjualan;
-    hppPPOB = ppobAuto.hpp;
-    lkPPOB  = ppobAuto.laba;
-    rPPOBRows = `
-      <tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjPPOB)}</td></tr>
-      <tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppPPOB)}</td></tr>`;
-    pmPPOB.forEach(p=>{rPPOBRows+=`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`;});
+    /* PPOB — semua dari pos manual */
+    const ppobPenj = parseFloat(pmPPOB.find(p=>p.kode==='penj')?.nominal||0);
+    const ppobHpp  = parseFloat(pmPPOB.find(p=>p.kode==='hpp')?.nominal||0);
+    pjPPOB  = ppobPenj;
+    hppPPOB = ppobHpp;
+    lkPPOB  = pjPPOB - hppPPOB;
+    rPPOBRows = pmPPOB.map(p=>`<tr class="row-indent"><td>${p.uraian}</td><td class="rp">${rp(parseFloat(p.nominal))}</td></tr>`).join('');
 
     totalPL    = pmPL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
     totalBiaya = pmBiaya.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
