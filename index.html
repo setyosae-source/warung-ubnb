@@ -746,9 +746,9 @@ body{
     <!-- Filter Bar -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="filter-btn active" onclick="setPmFilter('sesi','all',this)">Semua</button>
-        <button class="filter-btn" onclick="setPmFilter('sesi','pertama',this)">⚡ Pertama Hadir</button>
-        <button class="filter-btn" onclick="setPmFilter('sesi','undian',this)">🎯 Undian</button>
+        <button class="filter-btn active" id="fSesiAll" onclick="setPmFilter('sesi','all',this)">Semua</button>
+        <button class="filter-btn" id="fSesiPertama" onclick="setPmFilter('sesi','pertama',this)">⚡ Pertama Hadir</button>
+        <button class="filter-btn" id="fSesiUndian" onclick="setPmFilter('sesi','undian',this)">🎯 Undian</button>
       </div>
       <div style="width:1px;height:28px;background:rgba(245,200,66,0.2);margin:0 4px;"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -758,11 +758,11 @@ body{
       </div>
       <div style="width:1px;height:28px;background:rgba(245,200,66,0.2);margin:0 4px;"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="filter-btn active" onclick="setPmFilter('kel','all',this)" id="fKelAll">Semua Kelompok</button>
-        <button class="filter-btn" onclick="setPmFilter('kel','PW1',this)">PW1</button>
-        <button class="filter-btn" onclick="setPmFilter('kel','PW2',this)">PW2</button>
-        <button class="filter-btn" onclick="setPmFilter('kel','PW3',this)">PW3</button>
-        <button class="filter-btn" onclick="setPmFilter('kel','PW4',this)">PW4</button>
+        <button class="filter-btn active" id="fKelAll" onclick="setPmFilter('kel','all',this)">Semua Kelompok</button>
+        <button class="filter-btn" id="fKelPW1" onclick="setPmFilter('kel','PW1',this)">PW1</button>
+        <button class="filter-btn" id="fKelPW2" onclick="setPmFilter('kel','PW2',this)">PW2</button>
+        <button class="filter-btn" id="fKelPW3" onclick="setPmFilter('kel','PW3',this)">PW3</button>
+        <button class="filter-btn" id="fKelPW4" onclick="setPmFilter('kel','PW4',this)">PW4</button>
       </div>
     </div>
     <!-- Counter -->
@@ -1177,12 +1177,11 @@ let allPemenang=[], filterMode='all';
 
 async function loadAll(){
   try {
-    const [hdRes, pmRes, hwRes, shRes, spRes, jmRes] = await Promise.all([
+    const [hdRes, pmRes, hwRes, shRes, jmRes] = await Promise.all([
       sb.from('mpps_hadir').select('*'),
       sb.from('mpps_pemenang').select('*').order('waktu',{ascending:true}),
       sb.from('mpps_hadiah').select('*'),
       sb.from('ubnb_saham').select('*').eq('status','Aktif'),
-      sb.from('mpps_sponsor').select('*').eq('status','approved').order('created_at'),
       sb.from('jamaah_desa').select('did,kelompok'),
     ]);
 
@@ -1190,14 +1189,13 @@ async function loadAll(){
     allPemenang = pmRes.data||[];
     const hadiah = hwRes.data||[];
     const saham = shRes.data||[];
-    const sponsors = spRes.data||[];
     const jamaah = jmRes.data||[];
 
     renderStats(hadir, allPemenang, hadiah, saham);
     renderKehadiran(hadir, jamaah);
     renderPemenang();
     renderKeuangan(saham, hadir);
-    renderSponsor(sponsors);
+    renderSponsor();
     renderAnggota(jamaah, saham);
   } catch(e) {
     console.error(e);
@@ -1221,10 +1219,11 @@ function renderKehadiran(hadir, jamaah){
   kels.forEach(k=>counts[k]={L:0,P:0});
   hadir.forEach(h=>{
     const k = h.kelompok;
-    const jk = (h.jenis_kelamin||'').toUpperCase().trim();
+    const jk = (h.jenis_kelamin||'').toLowerCase().trim();
     if(k && counts[k]){
-      if(jk==='P') counts[k].P++;
-      else counts[k].L++; // L dan kosong masuk L
+      if(jk==='perempuan' || jk==='p') counts[k].P++;
+      else if(jk==='laki-laki' || jk==='l') counts[k].L++;
+      // kosong/unknown diabaikan
     }
   });
   const maxVal = Math.max(...kels.map(k=>Math.max(counts[k].L, counts[k].P)), 1);
@@ -1264,18 +1263,19 @@ function renderKehadiran(hadir, jamaah){
 // ── PEMENANG ──
 let pmFilterSesi='all', pmFilterJk='all', pmFilterKel='all';
 
+// Grup tombol filter per tipe
+const pmFilterGroups = {
+  sesi: ['fSesiAll','fSesiPertama','fSesiUndian'],
+  jk:   ['fJkAll','fJkL','fJkP'],
+  kel:  ['fKelAll','fKelPW1','fKelPW2','fKelPW3','fKelPW4'],
+};
+
 function setPmFilter(type, val, el){
-  if(type==='sesi'){
-    pmFilterSesi=val;
-    document.querySelectorAll('.pemenang-filter .filter-btn, .pemenang-section .filter-btn').forEach(b=>{
-      if(['all','pertama','undian'].includes(b.textContent.replace(/[^a-zA-Z]/g,'').toLowerCase()||b.getAttribute('onclick')?.match(/'([^']+)'/)?.[1])) b.classList.remove('active');
-    });
-  } else if(type==='jk'){
-    pmFilterJk=val;
-    ['fJkAll','fJkL','fJkP'].forEach(id=>document.getElementById(id)?.classList.remove('active'));
-  } else if(type==='kel'){
-    pmFilterKel=val;
-  }
+  if(type==='sesi') pmFilterSesi=val;
+  else if(type==='jk') pmFilterJk=val;
+  else if(type==='kel') pmFilterKel=val;
+  // Reset hanya tombol dalam grup yang sama
+  pmFilterGroups[type].forEach(id=>document.getElementById(id)?.classList.remove('active'));
   el.classList.add('active');
   renderPemenang();
 }
@@ -1287,7 +1287,14 @@ function renderPemenang(){
   let data = [...allPemenang];
   if(pmFilterSesi==='pertama') data=data.filter(p=>p.tipe&&p.tipe.startsWith('pertama'));
   if(pmFilterSesi==='undian') data=data.filter(p=>!p.tipe||p.tipe==='undian');
-  if(pmFilterJk!=='all') data=data.filter(p=>(p.jenis_kelamin||'L').toUpperCase()===pmFilterJk);
+  if(pmFilterJk!=='all'){
+    const isP = pmFilterJk==='P';
+    data=data.filter(p=>{
+      const jk=(p.jenis_kelamin||'').toLowerCase().trim();
+      if(isP) return jk==='perempuan'||jk==='p';
+      else return jk==='laki-laki'||jk==='l'||jk==='';
+    });
+  }
   if(pmFilterKel!=='all') data=data.filter(p=>p.kelompok===pmFilterKel);
 
   document.getElementById('pmCounter').textContent =
@@ -1301,7 +1308,8 @@ function renderPemenang(){
   const kelColors={PW1:'#60a5fa',PW2:'#f472b6',PW3:'#34d399',PW4:'#fbbf24'};
   tbody.innerHTML = data.map((p,i)=>{
     const isPertama = p.tipe&&p.tipe.startsWith('pertama');
-    const isL = p.jenis_kelamin==='L';
+    const jkLower = (p.jenis_kelamin||'').toLowerCase().trim();
+    const isL = jkLower==='laki-laki'||jkLower==='l'||jkLower==='';
     const sesiLabel = isPertama
       ? `<span style="background:rgba(245,200,66,0.2);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;">⚡ Pertama</span>`
       : `<span style="background:rgba(29,158,117,0.2);color:#4ecca3;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;">🎯 Undian</span>`;
@@ -1389,25 +1397,46 @@ function fmtRpShort(n){
 }
 
 // ── SPONSOR ──
-function renderSponsor(sponsors){
+async function renderSponsor(){
   const wrap = document.getElementById('sponsor-slots');
-  // Data sponsor aktif dari mpps_sponsor (status=aktif)
-  const sponsorAktif = [
-    { nama: 'Bakso Pentol Surya', desc: 'Bakso pentol kenyal gurih khas Kampung Inggris', icon: '🍜', kontribusi: 'Hadiah' },
-    { nama: 'Warung Sayur Barokah', desc: 'Sayuran pilihan segar, bersih & berkualitas', icon: '🥬', kontribusi: 'Hadiah' },
-    { nama: 'Sarana Jaya Farm', desc: 'Telur ayam segar berkualitas tinggi dari kandang sendiri', icon: '🥚', kontribusi: 'Kontribusi' },
-    { nama: 'Gubukan KRasti', desc: 'Vendor menu gubukan premium — Zuppa Soup, Lasagna & aneka sajian', icon: '🍱', kontribusi: 'Kontribusi' },
-    { nama: 'Dapoer Zafran', desc: 'Bebek nusantara paling legendaris di Desa Perwira', icon: '🦆', kontribusi: 'Hadiah' },
-    { nama: 'Kios Lauk Danish', desc: 'Lauk mentah segar pilihan — ikan, ayam & daging berkualitas', icon: '🐟', kontribusi: 'Hadiah' },
-  ];
-  wrap.innerHTML = sponsorAktif.map(s=>`
-    <div class="sponsor-card">
-      <div style="font-size:32px;margin-bottom:8px;">${s.icon}</div>
-      <div class="sponsor-name">${s.nama}</div>
-      <div class="sponsor-type" style="margin-top:4px;font-size:11px;color:var(--text-muted);">${s.desc}</div>
-      <div style="margin-top:8px;display:inline-block;background:rgba(29,158,117,0.2);color:#4ecca3;
-        padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;">✓ ${s.kontribusi}</div>
-    </div>`).join('');
+  wrap.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px;">Memuat sponsor...</div>';
+  
+  const {data} = await sb.from('mpps_sponsor')
+    .select('id,nama_usaha,keterangan_kontribusi,logo_url,jenis_kontribusi')
+    .eq('status','aktif')
+    .order('id');
+
+  if(!data||!data.length){
+    wrap.innerHTML = '<div class="sponsor-empty">🤝<br>Data sponsor tidak tersedia</div>';
+    return;
+  }
+
+  const icons = {
+    1:'🍜', 3:'🥬', 5:'🥚', 6:'🍱', 7:'🦆', 8:'💍', 9:'🐟'
+  };
+
+  wrap.innerHTML = data.map(s=>{
+    const hasLogo = s.logo_url && s.logo_url.startsWith('data:');
+    const icon = icons[s.id] || '🏢';
+    const badgeColor = s.jenis_kontribusi==='uang'
+      ? 'rgba(245,200,66,0.2);color:var(--gold)'
+      : 'rgba(29,158,117,0.2);color:#4ecca3';
+    const badgeLabel = s.jenis_kontribusi==='uang' ? '💰 Kontribusi' : '🎁 Hadiah';
+
+    return `<div class="sponsor-card" style="min-width:180px;">
+      ${hasLogo
+        ? `<img src="${s.logo_url}" alt="${s.nama_usaha}"
+            style="width:80px;height:80px;object-fit:contain;border-radius:10px;margin-bottom:10px;
+            background:white;padding:4px;">`
+        : `<div style="font-size:36px;margin-bottom:10px;">${icon}</div>`}
+      <div class="sponsor-name" style="font-size:13px;">${s.nama_usaha}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.5;">
+        ${s.keterangan_kontribusi ? s.keterangan_kontribusi.substring(0,60)+'...' : ''}
+      </div>
+      <div style="margin-top:8px;display:inline-block;background:${badgeColor};
+        padding:2px 10px;border-radius:100px;font-size:10px;font-weight:700;">${badgeLabel}</div>
+    </div>`;
+  }).join('');
 }
 
 // ── ANGGOTA ──
