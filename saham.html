@@ -420,6 +420,31 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
     <!-- ========== PAGE: MPPS & SHU ========== -->
     <div class="page" id="page-mpps">
+
+      <!-- ===== KEBIJAKAN SHU CARD (paling atas) ===== -->
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span>⚖️ Kebijakan SHU</span>
+          <button class="btn sm gold" onclick="document.getElementById('form-kebijakan').style.display=document.getElementById('form-kebijakan').style.display==='none'?'block':'none'">➕ Buat/Ubah</button>
+        </div>
+        <div id="kebijakan-aktif-info">
+          <div style="padding:10px;font-size:12px;color:var(--text-muted);text-align:center">Memuat kebijakan...</div>
+        </div>
+        <div id="form-kebijakan" style="display:none;margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px">
+          <input type="hidden" id="keb-mpps-id">
+          <div class="irow"><label>Periode</label><input type="text" id="keb-periode" placeholder="2027" maxlength="4"></div>
+          <div class="irow"><label>Tgl Mulai Berlaku ⭐</label><input type="date" id="keb-tgl-mulai"></div>
+          <div class="irow"><label>Tgl Berakhir</label><input type="date" id="keb-tgl-akhir"></div>
+          <div class="irow"><label>Pool Saham (%)</label><input type="number" id="keb-rasio-saham" value="60" min="0" max="100" step="5" oninput="sinkronRasio('saham')"></div>
+          <div class="irow"><label>Pool Transaksi (%)</label><input type="number" id="keb-rasio-trx" value="40" min="0" max="100" step="5" oninput="sinkronRasio('trx')"></div>
+          <div class="irow"><label>Catatan</label><input type="text" id="keb-catatan" placeholder="Keputusan MPPS..."></div>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn secondary" style="flex:1" onclick="document.getElementById('form-kebijakan').style.display='none'">Batal</button>
+            <button class="btn gold" style="flex:2" onclick="simpanKebijakanSHU()">💾 Simpan Kebijakan</button>
+          </div>
+        </div>
+      </div>
+
       <div class="two-col">
         <!-- Form MPPS -->
         <div class="card">
@@ -446,32 +471,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         </div>
       </div>
 
-      <!-- SHU Section -->
-      <!-- ===== KEBIJAKAN SHU CARD ===== -->
-      <div class="card">
-        <div class="card-title" style="justify-content:space-between">
-          <span>⚖️ Kebijakan SHU</span>
-          <button class="btn sm gold" onclick="document.getElementById('form-kebijakan').style.display=document.getElementById('form-kebijakan').style.display==='none'?'block':'none'">➕ Buat/Ubah</button>
-        </div>
-        <div id="kebijakan-aktif-info">
-          <div style="padding:10px;font-size:12px;color:var(--text-muted);text-align:center">Memuat kebijakan...</div>
-        </div>
-        <div id="form-kebijakan" style="display:none;margin-top:12px;border-top:1px solid var(--border-light);padding-top:12px">
-          <input type="hidden" id="keb-mpps-id">
-          <div class="irow"><label>Periode</label><input type="text" id="keb-periode" placeholder="2027" maxlength="4"></div>
-          <div class="irow"><label>Tgl Mulai Berlaku ⭐</label><input type="date" id="keb-tgl-mulai"></div>
-          <div class="irow"><label>Tgl Berakhir</label><input type="date" id="keb-tgl-akhir"></div>
-          <div class="irow"><label>Pool Saham (%)</label><input type="number" id="keb-rasio-saham" value="60" min="0" max="100" step="5" oninput="sinkronRasio('saham')"></div>
-          <div class="irow"><label>Pool Transaksi (%)</label><input type="number" id="keb-rasio-trx" value="40" min="0" max="100" step="5" oninput="sinkronRasio('trx')"></div>
-          <div class="irow"><label>Catatan</label><input type="text" id="keb-catatan" placeholder="Keputusan MPPS..."></div>
-          <div class="btn-row" style="margin-top:10px">
-            <button class="btn secondary" style="flex:1" onclick="document.getElementById('form-kebijakan').style.display='none'">Batal</button>
-            <button class="btn gold" style="flex:2" onclick="simpanKebijakanSHU()">💾 Simpan Kebijakan</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" id="shu-section"  style="display:none">
+      <div class="card" id="shu-section" style="display:none">
         <div class="card-title" style="justify-content:space-between">
           <span>💰 Hitung SHU — Periode <strong id="shu-periode-label">-</strong></span>
           <span style="font-size:11px;color:var(--text-muted)" id="shu-info-label"></span>
@@ -1981,6 +1981,8 @@ function exportBagiHasil(){
 // ===== BAGI HASIL + APPROVAL =====
 function renderBagiHasil(){
   const el=document.getElementById('bagi-hasil-list');if(!el)return;
+
+  // Notif approval pending untuk user ini
   const pendingUntukSaya=(aApproval||[]).filter(a=>a.status==='pending'&&a.request_by!==CU.username);
   const notifHTML=pendingUntukSaya.length?`
     <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
@@ -1995,46 +1997,118 @@ function renderBagiHasil(){
           </div>
         </div>`).join('')}
     </div>`:'';
-  const tahunAda=new Set((aBH||[]).map(b=>b.periode));
-  const tahunMin=2022;const tahunMax=new Date().getFullYear();
-  const tahunBelum=[];
-  for(let t=tahunMin;t<=tahunMax;t++){if(!tahunAda.has(String(t)))tahunBelum.push(t);}
-  const belumHTML=tahunBelum.length?`
-    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
-      <div style="font-weight:700;color:#991b1b;margin-bottom:6px">❌ Tahun Belum Ada Bagi Hasil</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${tahunBelum.map(t=>`<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:99px;font-size:11px;cursor:pointer;font-weight:700"
-          onclick="bukaBuatBagiHasil(${t})">${t} — Buat Sekarang →</span>`).join('')}
-      </div>
-    </div>`:'';
-  const listHTML=(aBH||[]).length?`
-    <div style="overflow-x:auto"><table class="tbl">
-      <thead><tr><th>Periode</th><th>Total Dibagi</th><th>Rp/Lembar</th><th>Tgl Bagi</th><th>Catatan</th><th>Status</th><th>Aksi</th></tr></thead>
-      <tbody>${(aBH||[]).map(b=>{
-        const totalLembar=aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
-        const rpLbr=b.total_dibagi&&totalLembar?Math.round(b.total_dibagi/totalLembar):0;
-        const isPendingDel=(aApproval||[]).some(a=>a.target_id===b.id&&a.tipe==='hapus_bagi_hasil'&&a.status==='pending');
-        const isPendingEdit=(aApproval||[]).some(a=>a.target_id===b.id&&a.tipe==='edit_bagi_hasil'&&a.status==='pending');
-        return`<tr>
-          <td><strong style="font-size:15px">${b.periode}</strong></td>
-          <td><strong style="color:var(--hijau)">${rp(b.total_dibagi)}</strong></td>
-          <td style="font-size:11px">${rp(rpLbr)}/lbr</td>
-          <td style="font-size:11px">${b.tanggal_bagi||'-'}</td>
-          <td style="font-size:11px;color:var(--text-muted)">${b.catatan||'-'}</td>
-          <td>${isPendingDel
-            ?'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">⏳ Pending Hapus</span>'
-            :isPendingEdit
-              ?'<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">⏳ Pending Edit</span>'
-              :'<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">✅ Aktif</span>'}
-          </td>
-          <td style="white-space:nowrap">${!isPendingDel&&!isPendingEdit?`
-            <button class="btn sm secondary" style="padding:4px 8px;margin-right:4px" onclick="bukaEditBagiHasil(${b.id})">✏️ Edit</button>
-            <button class="btn sm danger" style="padding:4px 8px" onclick="requestHapusBagiHasil(${b.id},'${b.periode}',${b.total_dibagi})">🗑️ Hapus</button>
-          `:'<span style="font-size:11px;color:var(--text-muted)">Menunggu approval...</span>'}</td>
-        </tr>`;
-      }).join('')}</tbody></table></div>`
-    :'<div class="empty"><div class="ei">📊</div>Belum ada data bagi hasil</div>';
-  el.innerHTML=notifHTML+belumHTML+listHTML;
+
+  // List bagi hasil
+  if(!(aBH||[]).length){
+    el.innerHTML=notifHTML+'<div class="empty"><div class="ei">📊</div>Belum ada data bagi hasil. Klik "+ Buat Baru" untuk menambahkan.</div>';
+    return;
+  }
+
+  const listHTML=`<div style="overflow-x:auto"><table class="tbl">
+    <thead><tr>
+      <th>Periode</th><th>Total SHU</th><th>Rp/Lembar</th>
+      <th>Tgl Bagi</th><th>Catatan</th><th>Status</th><th>Aksi</th>
+    </tr></thead>
+    <tbody>${(aBH||[]).map(b=>{
+      const totalLembar=aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
+      const rpLbr=b.total_dibagi&&totalLembar?Math.round(b.total_dibagi/totalLembar):0;
+      const isPendingDel=(aApproval||[]).some(a=>a.target_id===b.id&&a.tipe==='hapus_bagi_hasil'&&a.status==='pending');
+      const isPendingEdit=(aApproval||[]).some(a=>a.target_id===b.id&&a.tipe==='edit_bagi_hasil'&&a.status==='pending');
+
+      // Cek apakah MPPS dan laporan SHU sudah ada untuk periode ini
+      const mppsAda=aMPPS.some(m=>m.periode===b.periode);
+      const lapSHUAda=(aLapSHU||[]).some(l=>l.periode===b.periode&&l.status!=='deleted');
+
+      const aksiHTML=isPendingDel||isPendingEdit
+        ?'<span style="font-size:11px;color:var(--text-muted)">Menunggu approval...</span>'
+        :`<div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;gap:4px">
+              <button class="btn sm secondary" style="padding:4px 6px" onclick="bukaEditBagiHasil(${b.id})">✏️</button>
+              <button class="btn sm danger" style="padding:4px 6px" onclick="requestHapusBagiHasil(${b.id},'${b.periode}',${b.total_dibagi})">🗑️</button>
+            </div>
+            ${!mppsAda?`<button class="btn sm gold" style="padding:4px 8px;font-size:10px" onclick="generateMPPS('${b.periode}',${b.total_dibagi},${rpLbr},'${b.tanggal_bagi||''}')">📅 Generate MPPS</button>`
+              :'<span style="font-size:10px;color:var(--hijau)">✅ MPPS ada</span>'}
+            ${!lapSHUAda?`<button class="btn sm" style="padding:4px 8px;font-size:10px;background:var(--blue);color:white" onclick="generateLapSHU(${b.id},'${b.periode}')">📄 Generate Laporan</button>`
+              :'<span style="font-size:10px;color:var(--hijau)">✅ Laporan ada</span>'}
+          </div>`;
+
+      return`<tr>
+        <td><strong style="font-size:15px">${b.periode}</strong></td>
+        <td><strong style="color:var(--hijau)">${rp(b.total_dibagi)}</strong></td>
+        <td style="font-size:11px">${rp(rpLbr)}/lbr</td>
+        <td style="font-size:11px">${b.tanggal_bagi||'-'}</td>
+        <td style="font-size:11px;color:var(--text-muted)">${b.catatan||'-'}</td>
+        <td>${isPendingDel
+          ?'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">⏳ Pending Hapus</span>'
+          :isPendingEdit
+            ?'<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">⏳ Pending Edit</span>'
+            :'<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">✅ Aktif</span>'}
+        </td>
+        <td>${aksiHTML}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+
+  el.innerHTML=notifHTML+listHTML;
+}
+
+// ===== GENERATE MPPS dari Bagi Hasil =====
+async function generateMPPS(periode, totalSHU, shuPerLembar, tanggalBagi){
+  if(!confirm(`Generate data MPPS untuk periode ${periode}?\n\nSHU/lembar: ${rp(shuPerLembar)}\nTotal SHU: ${rp(totalSHU)}`))return;
+  const{error}=await sb.from('ubnb_mpps').insert([{
+    periode,
+    tanggal_mpps: tanggalBagi||new Date().toISOString().split('T')[0],
+    harga_saham_baru: HARGA_SAHAM,
+    shu_per_lembar: shuPerLembar,
+    total_shu: totalSHU,
+    catatan: `Regenerate dari data bagi hasil ${periode}`,
+    operator: CU.username
+  }]);
+  if(error){toast('Gagal generate MPPS: '+error.message,true);return;}
+  toast(`✅ MPPS ${periode} berhasil di-generate!`);
+  await loadAll();renderMPPS();renderDashboard();
+}
+
+// ===== GENERATE LAPORAN SHU dari Bagi Hasil =====
+async function generateLapSHU(bagiHasilId, periode){
+  if(!confirm(`Generate laporan SHU untuk periode ${periode}?`))return;
+
+  // Ambil detail per kelompok
+  const{data:detail,error}=await sb.from('ubnb_saham_bagi_hasil_detail')
+    .select('saham_id, jumlah_lembar, jumlah_diterima')
+    .eq('bagi_hasil_id', bagiHasilId);
+  if(error||!detail){toast('Gagal ambil detail: '+(error?.message||''),true);return;}
+
+  // Hitung per kelompok
+  const perKelompok={};
+  detail.forEach(d=>{
+    const s=aSaham.find(x=>x.id===d.saham_id);
+    const kel=s?.kelompok||'Unknown';
+    if(!perKelompok[kel])perKelompok[kel]={anggota:0,lembar:0,shu:0};
+    perKelompok[kel].anggota++;
+    perKelompok[kel].lembar+=d.jumlah_lembar||0;
+    perKelompok[kel].shu+=parseFloat(d.jumlah_diterima||0);
+  });
+
+  // Hapus laporan lama yang deleted untuk periode ini dulu (bersih)
+  await sb.from('ubnb_laporan_shu').delete()
+    .eq('periode',periode).eq('status','deleted');
+
+  // Insert laporan per kelompok
+  const rows=Object.entries(perKelompok).map(([kel,v])=>({
+    periode,
+    kelompok:kel,
+    total_anggota:v.anggota,
+    total_lembar_proporsional:v.lembar,
+    total_shu:v.shu,
+    status:'aktif',
+    html_content:null
+  }));
+
+  const{error:err2}=await sb.from('ubnb_laporan_shu').insert(rows);
+  if(err2){toast('Gagal generate laporan: '+err2.message,true);return;}
+  toast(`✅ Laporan SHU ${periode} berhasil di-generate! ${rows.length} kelompok.`);
+  await loadAll();renderMPPS();renderLapSHUList();
 }
 
 async function requestHapusBagiHasil(id,periode,total){
