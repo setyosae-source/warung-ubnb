@@ -482,6 +482,15 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         </div>
       </div>
 
+      <!-- Bagi Hasil -->
+      <div class="card">
+        <div class="card-title">
+          <span>💰 Bagi Hasil / SHU</span>
+          <button class="btn sm gold" onclick="bukaBuatBagiHasil(new Date().getFullYear())">➕ Buat Baru</button>
+        </div>
+        <div id="bagi-hasil-list"><div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center">Memuat...</div></div>
+      </div>
+
       <!-- KU Kelompok -->
       <div class="card">
         <div class="card-title"><span>👥 Keuangan (KU) Kelompok</span></div>
@@ -659,6 +668,7 @@ function closeSidebar(){document.getElementById('sidebar').classList.remove('ope
 
 // ===== SHOW PAGE =====
 let currentPage='dashboard';
+let aApproval=[];
 function showPage(id,el,pushState=true){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -705,19 +715,20 @@ window.addEventListener('load',()=>{const s=localStorage.getItem('saham_user');i
 
 // ===== LOAD DATA =====
 async function loadAll(){
-  const[{data:s},{data:t},{data:b},{data:bd},{data:m},{data:ku},{data:ls},{data:kb},{data:rt}]=await Promise.all([
+  const[{data:s},{data:t},{data:b},{data:bd},{data:m},{data:ku},{data:ls},{data:kb},{data:rt},{data:ap}]=await Promise.all([
     sb.from('ubnb_saham').select('*').order('jumlah_lembar',{ascending:false}),
     sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}),
-    sb.from('ubnb_saham_bagi_hasil').select('*').order('periode',{ascending:false}),
+    sb.from('ubnb_saham_bagi_hasil').select('*').neq('status','deleted').order('periode',{ascending:false}),
     sb.from('ubnb_saham_bagi_hasil_detail').select('*'),
     sb.from('ubnb_mpps').select('*').order('tanggal_mpps',{ascending:false}),
     sb.from('ubnb_ku_kelompok').select('*').order('kelompok'),
     sb.from('ubnb_laporan_shu').select('id,periode,kelompok,total_anggota,total_shu,status,created_at').order('created_at',{ascending:false}),
     sb.from('ubnb_kebijakan_shu').select('*').order('created_at',{ascending:false}),
     sb.from('ubnb_trx_rekap_anggota').select('*'),
+    sb.from('ubnb_approval_request').select('*').eq('status','pending').order('created_at',{ascending:false}),
   ]);
   aSaham=s||[];aTrx=t||[];aBH=b||[];aBHDetail=bd||[];aMPPS=m||[];aKU=ku||[];aLapSHU=ls||[];
-  aKebijakan=kb||[];aRekapTrx=rt||[];
+  aKebijakan=kb||[];aRekapTrx=rt||[];aApproval=ap||[];
   if(aMPPS.length)HARGA_SAHAM=aMPPS[0].harga_saham_baru||10200;
   renderKebijakan();
 }
@@ -1641,6 +1652,7 @@ function renderMPPS(){
       <td>${kelBadge(k.kelompok)}</td><td><strong>${k.nama_ku}</strong></td><td>${k.no_hp||'-'}</td>
       <td><button onclick="editKU(${k.id},'${k.kelompok}','${k.nama_ku}','${k.no_hp||''}')" class="btn sm secondary">✏️ Edit</button></td>
     </tr>`).join('')}</tbody></table>`;
+  renderBagiHasil();
 }
 async function hapusMPPS(id,periode){
   if(!confirm('Hapus MPPS '+periode+'?'))return;
@@ -1954,6 +1966,189 @@ function exportBagiHasil(){
   XLSX.writeFile(wb,'UBNB_Saham_SHU_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx');
   toast('✅ Export berhasil!');
 }
+// ===== BAGI HASIL + APPROVAL =====
+function renderBagiHasil(){
+  const el=document.getElementById('bagi-hasil-list');if(!el)return;
+  const pendingUntukSaya=(aApproval||[]).filter(a=>a.status==='pending'&&a.request_by!==CU.username);
+  const notifHTML=pendingUntukSaya.length?`
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
+      <div style="font-weight:700;color:#92400e;margin-bottom:6px">⏳ ${pendingUntukSaya.length} Request Menunggu Approval Anda</div>
+      ${pendingUntukSaya.map(a=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #fde68a;gap:8px">
+          <div style="flex:1;font-size:11px"><span style="font-weight:700">${a.tipe==='hapus_bagi_hasil'?'🗑️ Hapus':'✏️ Edit'}</span>
+            ${a.target_info} · oleh <strong>${a.request_by}</strong></div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button onclick="approveRequest(${a.id},'approved')" class="btn sm primary" style="padding:4px 10px">✅ Approve</button>
+            <button onclick="approveRequest(${a.id},'rejected')" class="btn sm danger" style="padding:4px 10px">❌ Tolak</button>
+          </div>
+        </div>`).join('')}
+    </div>`:'';
+  const tahunAda=new Set((aBH||[]).map(b=>b.periode));
+  const tahunMin=2022;const tahunMax=new Date().getFullYear();
+  const tahunBelum=[];
+  for(let t=tahunMin;t<=tahunMax;t++){if(!tahunAda.has(String(t)))tahunBelum.push(t);}
+  const belumHTML=tahunBelum.length?`
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
+      <div style="font-weight:700;color:#991b1b;margin-bottom:6px">❌ Tahun Belum Ada Bagi Hasil</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${tahunBelum.map(t=>`<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:99px;font-size:11px;cursor:pointer;font-weight:700"
+          onclick="bukaBuatBagiHasil(${t})">${t} — Buat Sekarang →</span>`).join('')}
+      </div>
+    </div>`:'';
+  const listHTML=(aBH||[]).length?`
+    <div style="overflow-x:auto"><table class="tbl">
+      <thead><tr><th>Periode</th><th>Total Dibagi</th><th>Rp/Lembar</th><th>Tgl Bagi</th><th>Catatan</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody>${(aBH||[]).map(b=>{
+        const totalLembar=aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
+        const rpLbr=b.total_dibagi&&totalLembar?Math.round(b.total_dibagi/totalLembar):0;
+        const isPendingDel=(aApproval||[]).some(a=>a.target_id===b.id&&a.tipe==='hapus_bagi_hasil'&&a.status==='pending');
+        const isPendingEdit=(aApproval||[]).some(a=>a.target_id===b.id&&a.tipe==='edit_bagi_hasil'&&a.status==='pending');
+        return`<tr>
+          <td><strong style="font-size:15px">${b.periode}</strong></td>
+          <td><strong style="color:var(--hijau)">${rp(b.total_dibagi)}</strong></td>
+          <td style="font-size:11px">${rp(rpLbr)}/lbr</td>
+          <td style="font-size:11px">${b.tanggal_bagi||'-'}</td>
+          <td style="font-size:11px;color:var(--text-muted)">${b.catatan||'-'}</td>
+          <td>${isPendingDel
+            ?'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">⏳ Pending Hapus</span>'
+            :isPendingEdit
+              ?'<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">⏳ Pending Edit</span>'
+              :'<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">✅ Aktif</span>'}
+          </td>
+          <td style="white-space:nowrap">${!isPendingDel&&!isPendingEdit?`
+            <button class="btn sm secondary" style="padding:4px 8px;margin-right:4px" onclick="bukaEditBagiHasil(${b.id})">✏️ Edit</button>
+            <button class="btn sm danger" style="padding:4px 8px" onclick="requestHapusBagiHasil(${b.id},'${b.periode}',${b.total_dibagi})">🗑️ Hapus</button>
+          `:'<span style="font-size:11px;color:var(--text-muted)">Menunggu approval...</span>'}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`
+    :'<div class="empty"><div class="ei">📊</div>Belum ada data bagi hasil</div>';
+  el.innerHTML=notifHTML+belumHTML+listHTML;
+}
+
+async function requestHapusBagiHasil(id,periode,total){
+  if(!confirm(`Request hapus Bagi Hasil ${periode}?\nTotal: ${rp(total)}\n\nPerlu diapprove oleh 1 pemilik lain.`))return;
+  const existing=(aApproval||[]).find(a=>a.target_id===id&&a.status==='pending');
+  if(existing){toast('Sudah ada request pending untuk data ini',true);return;}
+  const{error}=await sb.from('ubnb_approval_request').insert([{
+    tipe:'hapus_bagi_hasil',target_id:id,
+    target_info:`Bagi Hasil ${periode} — ${rp(total)}`,
+    status:'pending',request_by:CU.username,
+    catatan:`Request hapus bagi hasil periode ${periode}`
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  await sb.from('ubnb_saham_bagi_hasil').update({status:'pending_delete'}).eq('id',id);
+  toast('✅ Request hapus terkirim. Menunggu approval pemilik lain.');
+  await loadAll();renderMPPS();
+}
+
+async function approveRequest(approvalId,action){
+  const approval=(aApproval||[]).find(a=>a.id===approvalId);if(!approval)return;
+  if(approval.request_by===CU.username){toast('Tidak bisa approve request sendiri',true);return;}
+  if(action==='approved'){
+    if(approval.tipe==='hapus_bagi_hasil'){
+      await sb.from('ubnb_saham_bagi_hasil_detail').delete().eq('bagi_hasil_id',approval.target_id);
+      await sb.from('ubnb_saham_bagi_hasil').update({
+        status:'deleted',deleted_at:new Date().toISOString(),deleted_by:CU.username
+      }).eq('id',approval.target_id);
+    }else if(approval.tipe==='edit_bagi_hasil'&&approval.payload){
+      await sb.from('ubnb_saham_bagi_hasil').update({...approval.payload,status:'aktif'}).eq('id',approval.target_id);
+    }
+    toast('✅ Diapprove dan dieksekusi.');
+  }else{
+    await sb.from('ubnb_saham_bagi_hasil').update({status:'aktif'}).eq('id',approval.target_id);
+    toast('❌ Request ditolak.');
+  }
+  await sb.from('ubnb_approval_request').update({
+    status:action,approve_by:CU.username,approve_at:new Date().toISOString()
+  }).eq('id',approvalId);
+  await loadAll();renderMPPS();
+}
+
+function bukaEditBagiHasil(id){
+  const b=(aBH||[]).find(x=>x.id===id);if(!b)return;
+  document.getElementById('modal-edit-bh')?.remove();
+  const modalHTML=`<div id="modal-edit-bh" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:white;border-radius:16px;max-width:480px;width:100%;padding:24px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:16px;color:var(--hijau-dark)">✏️ Edit Bagi Hasil ${b.periode}</div>
+      <div class="irow"><label>Total Dibagi (Rp)</label><input type="number" id="ebh-total" value="${Math.round(b.total_dibagi||0)}"></div>
+      <div class="irow"><label>Tanggal Bagi</label><input type="date" id="ebh-tgl" value="${b.tanggal_bagi||''}"></div>
+      <div class="irow"><label>Catatan</label><input type="text" id="ebh-catatan" value="${b.catatan||''}"></div>
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:16px">
+        ⚠️ Edit ini perlu diapprove oleh 1 pemilik lain sebelum berlaku.</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('modal-edit-bh').remove()"
+          style="flex:1;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer">Batal</button>
+        <button onclick="submitEditBagiHasil(${b.id},'${b.periode}',${Math.round(b.total_dibagi||0)})"
+          style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--hijau);color:white;cursor:pointer;font-weight:700">Kirim Request Edit</button>
+      </div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend',modalHTML);
+}
+
+async function submitEditBagiHasil(id,periode,totalLama){
+  const total=parseInt(document.getElementById('ebh-total').value)||0;
+  const tgl=document.getElementById('ebh-tgl').value;
+  const catatan=document.getElementById('ebh-catatan').value.trim();
+  if(!total||!tgl){toast('Lengkapi data',true);return;}
+  const existing=(aApproval||[]).find(a=>a.target_id===id&&a.status==='pending');
+  if(existing){toast('Sudah ada request pending untuk data ini',true);return;}
+  const payload={total_dibagi:total,tanggal_bagi:tgl,catatan:catatan||null};
+  const{error}=await sb.from('ubnb_approval_request').insert([{
+    tipe:'edit_bagi_hasil',target_id:id,
+    target_info:`Bagi Hasil ${periode} — ubah dari ${rp(totalLama)} → ${rp(total)}`,
+    payload,status:'pending',request_by:CU.username,
+    catatan:`Request edit bagi hasil ${periode}`
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  await sb.from('ubnb_saham_bagi_hasil').update({status:'pending_edit'}).eq('id',id);
+  document.getElementById('modal-edit-bh')?.remove();
+  toast('✅ Request edit terkirim. Menunggu approval pemilik lain.');
+  await loadAll();renderMPPS();
+}
+
+function bukaBuatBagiHasil(tahun){
+  document.getElementById('modal-buat-bh')?.remove();
+  const modalHTML=`<div id="modal-buat-bh" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:white;border-radius:16px;max-width:480px;width:100%;padding:24px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:16px;color:var(--hijau-dark)">➕ Buat Bagi Hasil ${tahun}</div>
+      <div class="irow"><label>Total Dibagi (Rp)</label><input type="number" id="bbh-total" placeholder="0"></div>
+      <div class="irow"><label>Tanggal Bagi</label><input type="date" id="bbh-tgl"></div>
+      <div class="irow"><label>Catatan</label><input type="text" id="bbh-catatan" placeholder="SHU MPPS ${tahun}..."></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button onclick="document.getElementById('modal-buat-bh').remove()"
+          style="flex:1;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;background:white;cursor:pointer">Batal</button>
+        <button onclick="simpanBagiHasilBaru(${tahun})"
+          style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--hijau);color:white;cursor:pointer;font-weight:700">💾 Simpan</button>
+      </div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend',modalHTML);
+}
+
+async function simpanBagiHasilBaru(tahun){
+  const total=parseInt(document.getElementById('bbh-total').value)||0;
+  const tgl=document.getElementById('bbh-tgl').value;
+  const catatan=document.getElementById('bbh-catatan').value.trim();
+  if(!total||!tgl){toast('Lengkapi data',true);return;}
+  const{data:newBH,error}=await sb.from('ubnb_saham_bagi_hasil').insert([{
+    periode:String(tahun),total_laba:0,pct_bagi_hasil:0,
+    total_dibagi:total,tanggal_bagi:tgl,
+    catatan:catatan||null,operator:CU.username,status:'aktif'
+  }]).select().single();
+  if(error){toast('Gagal: '+error.message,true);return;}
+  const totalLembar=aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0);
+  const perLembar=totalLembar>0?total/totalLembar:0;
+  const details=aSaham.filter(s=>(s.jumlah_lembar||0)>0).map(s=>({
+    bagi_hasil_id:newBH.id,saham_id:s.id,
+    jumlah_lembar:s.jumlah_lembar,
+    jumlah_diterima:Math.round(s.jumlah_lembar*perLembar),
+    sudah_dibayar:false
+  }));
+  if(details.length)await sb.from('ubnb_saham_bagi_hasil_detail').insert(details);
+  document.getElementById('modal-buat-bh')?.remove();
+  toast(`✅ Bagi Hasil ${tahun} dibuat! ${details.length} anggota · ${rp(Math.round(perLembar))}/lbr`);
+  await loadAll();renderMPPS();
+}
+
 </script>
 </body>
 </html>
