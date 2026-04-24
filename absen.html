@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Absen MPPS — UBNB Perwira</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
 <style>
 :root{
 --hijau:#1a6640;--hijau-dark:#0f4428;--hijau-light:#e8f5ee;
@@ -540,6 +541,29 @@ async function doHadir(){
 }
 
 async function catatHadir(btn){
+  // ── CEK DUPLIKAT via DB sebelum insert ─────────────────
+  // (double protection: hadirMap di atas sudah cek, ini cek ulang ke server
+  //  untuk kasus race condition atau data belum ter-load di hadirMap)
+  const sudah=await UBNBAuth.cekSudahHadir(sb,selNama,selKel||'');
+  if(sudah){
+    btn.innerHTML='✅ Hadir';btn.disabled=false;
+    // Tampilkan sukses dengan nomor lama — tidak insert baru
+    tampilSukses(selNama,selKel,selIsAnggota,selJK,sudah.nomor);
+    // Tambahkan keterangan nomor sudah pernah didapat
+    setTimeout(()=>{
+      const nEl=document.getElementById('sukses-nomor');
+      if(nEl&&!document.getElementById('_sudah_info')){
+        const info=document.createElement('div');
+        info.id='_sudah_info';
+        info.style.cssText='font-size:11px;color:rgba(255,255,255,0.7);margin-top:4px;';
+        info.textContent='(Nomor absen sebelumnya — tetap berlaku)';
+        nEl.parentNode.insertBefore(info,nEl.nextSibling);
+      }
+    },100);
+    return;
+  }
+
+  // ── BELUM HADIR — insert normal ────────────────────────
   const{count}=await sb.from('mpps_hadir').select('*',{count:'exact',head:true});
   const nomor=String((count||0)+1).padStart(4,'0');
 
@@ -554,7 +578,20 @@ async function catatHadir(btn){
 
   btn.innerHTML='✅ Hadir';btn.disabled=false;
 
-  if(error){alert('Gagal catat hadir: '+error.message);return;}
+  if(error){
+    // Handle unique constraint violation (race condition — dua orang scan bersamaan)
+    if(error.code==='23505'){
+      const sudahRace=await UBNBAuth.cekSudahHadir(sb,selNama,selKel||'');
+      if(sudahRace){
+        tampilSukses(selNama,selKel,selIsAnggota,selJK,sudahRace.nomor);
+      } else {
+        alert('Gagal catat hadir: '+error.message);
+      }
+    } else {
+      alert('Gagal catat hadir: '+error.message);
+    }
+    return;
+  }
 
   await loadData();
   tampilSukses(selNama,selKel,selIsAnggota,selJK,nomor);
