@@ -135,13 +135,38 @@ let skipSet=new Set();
 
 const fmt=n=>'Rp '+Math.round(n||0).toLocaleString('id-ID');
 
-// ── Load anggota saham ─────────────────────────────────────────────
+// ── Load anggota saham + cek status DB ────────────────────────────
 async function loadAnggota(){
-  const{data}=await sb.from('ubnb_saham')
+  // Load semua anggota saham aktif
+  const{data:sa}=await sb.from('ubnb_saham')
     .select('id,no_anggota,nama,kelompok,jamaah_did,status')
     .eq('status','Aktif')
     .order('nama');
-  aAnggota=data||[];
+  aAnggota=sa||[];
+
+  // Cek DB: akad mana yang sudah punya anggota_id
+  const ids=AKAD_LIST.map(a=>a.id);
+  const{data:linked}=await sb.from('bmt_akad')
+    .select('id,anggota_id,jamaah_did')
+    .in('id',ids)
+    .not('anggota_id','is',null);
+  
+  // Tandai yang sudah terlink sebagai done
+  (linked||[]).forEach(row=>{
+    doneSet.add(row.id);
+    // Cari nama anggota dari aAnggota
+    const anggota=aAnggota.find(a=>a.id===row.anggota_id);
+    if(anggota){
+      selectedMap[row.id]={
+        anggota_id:row.anggota_id,
+        jamaah_did:row.jamaah_did,
+        nama:anggota.nama,
+        no_anggota:anggota.no_anggota,
+        kelompok:anggota.kelompok
+      };
+    }
+  });
+
   render();
 }
 
@@ -169,6 +194,7 @@ function cardHTML(a){
           &nbsp;<span class="chip ${chipClass}">${a.status}</span>
           ${done?'&nbsp;<span class="chip chip-done">✅ Tersimpan</span>':''}
         </div>
+        ${done&&sel?`<div style="margin-top:6px;font-size:12px;color:#166534;font-weight:600;">→ ${sel.nama} (${sel.no_anggota||''})</div>`:''}
       </div>
       ${done?`<button class="btn btn-reset" onclick="resetCard(${a.id})">Ubah</button>`:''}
     </div>
@@ -265,11 +291,14 @@ function skipCard(akadId){
   updateProgress();
 }
 
-function resetCard(akadId){
+async function resetCard(akadId){
+  // Hapus link dari DB
+  await sb.from('bmt_akad').update({anggota_id:null,jamaah_did:null}).eq('id',akadId);
   doneSet.delete(akadId);
   delete selectedMap[akadId];
   renderCard(akadId);
   updateProgress();
+  toast('Link dihapus — silakan pilih ulang');
 }
 
 function renderCard(akadId){
