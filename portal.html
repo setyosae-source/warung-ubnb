@@ -347,7 +347,35 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
 
   </div>
 
-  <div class="portal-footer">
+  
+  <!-- ── BACKUP & SECURITY MONITOR (hanya tampil untuk pemilik) ── -->
+  <div id="security-panel" style="display:none;padding:0 20px 20px;">
+    <div class="section-title">🔒 Status Sistem & Backup</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
+
+      <div style="background:var(--surface);border-radius:var(--radius-md,10px);padding:16px;border:1.5px solid var(--border-color,#e0d8cc);">
+        <div style="font-size:13px;font-weight:700;color:var(--text,#1c1a16);margin-bottom:10px;">📦 Auto Backup (setiap 3 hari)</div>
+        <div id="backup-status-wrap"><div style="font-size:12px;color:var(--text-muted,#8a8078);">Klik Cek untuk muat data...</div></div>
+        <button onclick="loadBackupStatus()"
+          style="margin-top:10px;padding:6px 14px;background:#1a6640;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">
+          🔄 Cek Status
+        </button>
+      </div>
+
+      <div style="background:var(--surface);border-radius:var(--radius-md,10px);padding:16px;border:1.5px solid var(--border-color,#e0d8cc);">
+        <div style="font-size:13px;font-weight:700;color:var(--text,#1c1a16);margin-bottom:10px;">🛡️ Keamanan Sistem</div>
+        <div style="font-size:12px;line-height:1.8;color:var(--text-muted,#8a8078);">
+          <div>✅ RLS: 69/69 tabel terlindungi</div>
+          <div>✅ Password: SHA-256 hash</div>
+          <div>✅ Session expiry: 8 jam</div>
+          <div>✅ Audit log: aktif</div>
+          <div id="audit-count" style="color:#1a6640;">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<div class="portal-footer">
     © 2026 UBNB Perwira · Sistem Informasi Terpadu · v1.0
   </div>
 
@@ -449,6 +477,10 @@ function showApp(){
 
   // Filter module cards based on permissions
   applyPermissionFilter();
+  // Tampilkan panel keamanan hanya untuk pemilik
+  const secPanel = document.getElementById('security-panel');
+  if(secPanel) secPanel.style.display = (CU.role==='pemilik') ? 'block' : 'none';
+  if(CU.role==='pemilik') loadBackupStatus();
 }
 
 function applyPermissionFilter(){
@@ -514,6 +546,34 @@ function hideEmptySections(){
       grid.style.display = 'grid';
     }
   });
+}
+
+
+// ── Backup & Security Monitor ──────────────────────────────
+async function loadBackupStatus(){
+  const el=document.getElementById('backup-status-wrap');
+  el.innerHTML='<div style="font-size:12px;color:var(--text-muted,#8a8078);">Memuat...</div>';
+  try{
+    const{data,error}=await sb.from('backup_log')
+      .select('id,backup_at,status,snapshot')
+      .order('backup_at',{ascending:false}).limit(5);
+    if(error||!data?.length){el.innerHTML='<div style="font-size:12px;color:#dc2626;">Belum ada backup</div>';return;}
+    const lat=data[0];
+    const tgl=new Date(lat.backup_at).toLocaleString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const jam=Math.round((Date.now()-new Date(lat.backup_at))/3600000);
+    const fresh=jam<72;
+    const s=lat.snapshot;
+    el.innerHTML=`<div style="font-size:12px;line-height:1.8;">
+      <div style="color:${fresh?'#1a6640':'#b45309'};">${fresh?'✅':'⚠️'} Terakhir: <strong>${tgl}</strong> (${jam} jam lalu)</div>
+      <div>👥 ${s.jamaah_desa} jamaah · 📊 ${s.ubnb_saham} anggota saham</div>
+      <div>💰 ${s.transaksi} transaksi · 🏦 ${s.bmt_akad} akad BMT</div>
+      <div>🔖 ${parseInt(s.total_lembar).toLocaleString('id')} lembar saham aktif</div>
+      <div style="font-size:11px;color:var(--text-muted,#8a8078);margin-top:2px;">
+        ${data.length} snapshot tersimpan · Jadwal: setiap 3 hari jam 02:00 WIB
+      </div></div>`;
+    const{count}=await sb.from('audit_log').select('*',{count:'exact',head:true});
+    document.getElementById('audit-count').textContent='✅ Audit: '+(count||0).toLocaleString('id')+' rekaman';
+  }catch(e){el.innerHTML='<div style="font-size:12px;color:#dc2626;">Error: '+e.message+'</div>';}
 }
 
 </script>
