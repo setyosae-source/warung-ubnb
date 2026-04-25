@@ -1440,13 +1440,69 @@ function renderDeviasi(){
   const t2=parseInt(document.getElementById('dev-t2')?.value);
   if(t1===t2){document.getElementById('deviasi-content').innerHTML='<div class="empty"><div class="ei">⚠️</div>Pilih dua tahun berbeda</div>';return;}
   const calc=th=>{
-    const kas=getKas(),piutang=getPiutang(),persediaan=getPersediaan(),aset=getAset(),modal=getModal();
-    const trx=getTrx(th),ppobD=getPPOB(th),bmt=getBMT(th),biaya=getBiaya(th),zakat=getZakat(th);
-    const lb=hitungLabaBersih(th);
-    return{kas:kas.total,piutang:piutang.pokok,persediaan,aset:aset.buku,total_aktiva:kas.total+piutang.pokok+persediaan+aset.buku,
-      modal:modal.nilai,laba_bersih:lb,penjualan_sembako:trx.penjualan,hpp_sembako:trx.hpp,
-      laba_kotor_sembako:trx.laba,penjualan_ppob:ppobD.penjualan,laba_kotor_ppob:ppobD.laba,
-      margin_bmt:bmt.margin,total_biaya:biaya.total,total_zakat:zakat};
+    // Cek apakah ada pos manual untuk tahun ini
+    const pmAL=getPosManual(th,'neraca','aktiva_lancar');
+    const pmAT=getPosManual(th,'neraca','aktiva_tetap');
+    const pmLR_sem=getPosManual(th,'labarugi','sembako');
+    const pmLR_bmt=getPosManual(th,'labarugi','pembiayaan');
+    const pmLR_ppob=getPosManual(th,'labarugi','ppob');
+    const pmLR_biaya=getPosManual(th,'labarugi','biaya');
+    const pmLR_zakat=getPosManual(th,'labarugi','zakat');
+    const hasPM=!!(pmAL.length||pmLR_sem.length);
+    const ld=getLD(th);
+    const lb=ld?parseFloat(ld.laba_bersih_tahun||0):hitungLabaBersih(th);
+
+    let kas_total,piutang,persediaan,aset_buku,total_aktiva,modal_nilai;
+    let penj_sem,hpp_sem,lk_sem,penj_ppob,lk_ppob,margin_bmt,total_biaya,total_zakat;
+
+    if(hasPM){
+      // Dari pos manual (data historis)
+      kas_total = ['1-101','1-102','1-103'].reduce((s,k)=>{
+        const p=pmAL.find(x=>x.kode===k); return s+(p?parseFloat(p.nominal||0):0);},0);
+      piutang = (pmAL.find(x=>x.kode==='1-111')||{nominal:0});
+      piutang = parseFloat(piutang.nominal||0);
+      persediaan = parseFloat((pmAL.find(x=>x.kode==='1-121')||{nominal:0}).nominal||0);
+      const aset_bruto=parseFloat((pmAT.find(x=>x.kode==='1-201')||{nominal:0}).nominal||0);
+      const akum=Math.abs(parseFloat((pmAT.find(x=>x.kode==='1-291')||{nominal:0}).nominal||0));
+      aset_buku = aset_bruto - akum;
+      total_aktiva = kas_total + piutang + persediaan + aset_buku;
+      const pmMD=getPosManual(th,'neraca','modal');
+      modal_nilai = pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+      // Laba rugi dari pos manual
+      penj_sem  = parseFloat((pmLR_sem.find(x=>x.kode==='penj')||{nominal:0}).nominal||0);
+      hpp_sem   = parseFloat((pmLR_sem.find(x=>x.kode==='hpp')||{nominal:0}).nominal||0);
+      lk_sem    = penj_sem - hpp_sem;
+      penj_ppob = parseFloat((pmLR_ppob.find(x=>x.kode==='penj')||{nominal:0}).nominal||0);
+      const hpp_ppob=parseFloat((pmLR_ppob.find(x=>x.kode==='hpp')||{nominal:0}).nominal||0);
+      lk_ppob   = penj_ppob - hpp_ppob;
+      const bmt_penj=parseFloat((pmLR_bmt.find(x=>x.kode==='penj')||{nominal:0}).nominal||0);
+      const bmt_beli=parseFloat((pmLR_bmt.find(x=>x.kode==='beli')||{nominal:0}).nominal||0);
+      margin_bmt = bmt_penj - bmt_beli;
+      total_biaya = pmLR_biaya.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+      total_zakat = pmLR_zakat.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    } else {
+      // Dari data live + jurnal
+      const jrAL=getSaldoKelompok('aktiva_lancar',th);
+      kas_total=['1-101','1-102','1-103'].reduce((s,k)=>{
+        const a=jrAL.find(x=>x.kode===k);return s+(a?a.nominal:0);},0);
+      piutang=(jrAL.find(x=>x.kode==='1-111')||{nominal:0}).nominal;
+      persediaan=(jrAL.find(x=>x.kode==='1-121')||{nominal:0}).nominal;
+      const jrAT=getSaldoKelompok('aktiva_tetap',th);
+      aset_buku=jrAT.reduce((s,a)=>s+a.nominal,0);
+      total_aktiva=kas_total+piutang+persediaan+aset_buku;
+      const jrMD=getSaldoKelompok('modal',th);
+      modal_nilai=jrMD.reduce((s,a)=>s+a.nominal,0);
+      const trx=getTrx(th),ppobD=getPPOB(th),bmt=getBMT(th);
+      const biaya=getBiaya(th),zakatV=getZakat(th);
+      penj_sem=trx.penjualan; hpp_sem=trx.hpp; lk_sem=trx.laba;
+      penj_ppob=ppobD.penjualan; lk_ppob=ppobD.laba;
+      margin_bmt=bmt.margin; total_biaya=biaya.total; total_zakat=zakatV;
+    }
+    return{kas:kas_total,piutang,persediaan,aset:aset_buku,total_aktiva,
+      modal:modal_nilai,laba_bersih:lb,
+      penjualan_sembako:penj_sem,hpp_sembako:hpp_sem,laba_kotor_sembako:lk_sem,
+      penjualan_ppob:penj_ppob,laba_kotor_ppob:lk_ppob,
+      margin_bmt,total_biaya,total_zakat};
   };
   const d1=calc(t1),d2=calc(t2);
   const items=[
