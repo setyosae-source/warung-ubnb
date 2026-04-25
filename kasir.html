@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+  if(t==='riwayat'){document.getElementById('riwayat-tgl').value=new Date().toISOString().slice(0,10);loadRiwayat();}
+}<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8"/>
@@ -641,7 +642,11 @@ function updateFAB(){
 
 function showingJual(){return document.getElementById('page-jual').classList.contains('active');}
 
-function resetJual(){KR=[];renderKeranjang();updateFAB();closeSheet();sdSel.pel=null;document.getElementById('sdd-pel').textContent='👤 Pelanggan (opsional)';}
+function resetJual(){
+  sdSel.pel=null;
+  const _dp=document.getElementById('sdd-pel');
+  if(_dp){_dp.innerHTML='👤 Pilih Pelanggan <span style="color:#e53e3e;font-size:11px;">★ Wajib</span>';_dp.style.borderColor='#e53e3e';_dp.style.boxShadow='';}
+KR=[];renderKeranjang();updateFAB();closeSheet();sdSel.pel=null;document.getElementById('sdd-pel').textContent='👤 Pelanggan (opsional)';}
 
 // ===== BAYAR =====
 function setMetode(m){
@@ -652,6 +657,9 @@ function setMetode(m){
     btn.style.flex='1';btn.style.fontSize='12px';
   });
   document.getElementById('bayar-wrap').style.display=m==='belum'?'none':'block';
+
+  if(m==='tunai')generateQuickNominal();
+  else{const qn=document.getElementById('quick-nominal');if(qn)qn.style.display='none';}
 }
 
 function updateKembalian(){
@@ -667,6 +675,14 @@ function updateKembalian(){
 
 async function bayar(){
   if(!KR.length){toast('Keranjang kosong',true);return;}
+  if(!sdSel.pel){
+    toast('Pilih pelanggan dulu!',true);
+    const _el=document.getElementById('sdd-pel');
+    _el.style.borderColor='#e53e3e';
+    _el.style.boxShadow='0 0 0 2px rgba(229,62,62,.3)';
+    setTimeout(()=>{_el.style.boxShadow='';},1500);
+    return;
+  }
   const total=KR.reduce((s,k)=>s+k.hE*k.qty,0);
   const bayarVal=metodeBayar==='belum'?0:parseInt(document.getElementById('jual-bayar').value)||0;
   if(metodeBayar!=='belum'&&bayarVal<total){toast('Uang kurang!',true);return;}
@@ -804,9 +820,19 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.sd-wrap'))document.querySelectorAll('.sd-dropdown').forEach(d=>d.style.display='none');
 });
 
+function tambahNamaUmum(){
+  document.querySelectorAll('.sd-dropdown').forEach(d=>d.style.display='none');
+  const nama=(prompt('Masukkan nama pelanggan:','')||'').trim();
+  if(!nama)return;
+  selSD('pel',{id:null,anggota_id:null,jamaah_did:null,label:nama,sumber:'umum'});
+}
+
 function selSD(k,item){
   sdSel[k]=item;
-  document.getElementById('sdd-'+k).textContent=item.label;
+  const _disp=document.getElementById('sdd-'+k);
+  const _icon=item.sumber==='anggota'?'⭐ ':item.sumber==='jamaah'?'👤 ':'🙍 ';
+  _disp.textContent=_icon+item.label;
+  if(k==='pel') _disp.style.borderColor=item.sumber==='anggota'?'#38a169':'#3182ce';
   document.getElementById('sdl-'+k).style.display='none';
   if(k==='bprod'){
     const b=aB.find(x=>x.id===item.id);
@@ -817,14 +843,20 @@ function selSD(k,item){
 
 function renderPelDropdown(){
   let html='';
+  // 1. Anggota Saham (masuk SHU)
   html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">⭐ Anggota Saham — masuk SHU</div>`;
   html+=aSahamAnggota.map(a=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:a.id,jamaah_did:null,label:a.nama,sumber:"anggota"})})'><div>⭐ ${a.nama}<div style="font-size:10px;opacity:0.7">${a.no_anggota} · ${a.kelompok}</div></div></div>`).join('');
-  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">👤 Jamaah Desa — tidak masuk SHU</div>`;
-  html+=aJamaah.slice(0,50).map(j=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:j.did,label:j.nama,sumber:"jamaah"})})'><div>👤 ${j.nama}<div style="font-size:10px;opacity:0.7">${j.kelompok?'Kel. '+j.kelompok:''}</div></div></div>`).join('');
-  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">✏️ Lainnya</div>`;
-  html+=`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:"umum"})})'><div>Umum<div style="font-size:10px;opacity:0.7">Tidak masuk SHU</div></div></div>`;
+  // 2. Jamaah Desa (jika ada)
+  if(aJamaah&&aJamaah.length){
+    html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">👤 Jamaah Desa</div>`;
+    html+=aJamaah.map(j=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:j.did,label:j.nama,sumber:"jamaah"})})'><div>${j.nama}<div style="font-size:10px;opacity:0.7">KK: ${j.nama_kk||'—'} · Klp ${j.kelompok}</div></div></div>`).join('');
+  }
+  // 3. Tambah nama baru
+  html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:#6b7280;background:#f9fafb;text-transform:uppercase;letter-spacing:.5px">➕ Lainnya</div>`;
+  html+=`<div class="sd-option" onclick="tambahNamaUmum()" style="color:var(--blue,#3182ce);font-weight:600;">➕ Ketik nama baru...</div>`;
   document.getElementById('sdo-pel').innerHTML=html;
 }
+
 function renderSupDropdown(){
   const items=[{id:null,label:'Tanpa supplier'},...aSup.map(s=>({id:s.id,label:s.nama}))];
   document.getElementById('sdo-sup').innerHTML=items.map(i=>`<div class="sd-option" onclick='selSD("sup",${JSON.stringify(i)})'>${i.label}</div>`).join('');
@@ -862,6 +894,59 @@ function closeSheet(){document.getElementById('sheet-overlay').classList.remove(
 function openMod(id){document.getElementById(id).style.display='flex';}
 function closeMod(id){document.getElementById(id).style.display='none';}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay[style*="flex"]').forEach(m=>m.style.display='none');});
+
+// === RIWAYAT & REPRINT ===
+async function loadRiwayat(){
+  const tgl=document.getElementById('riwayat-tgl')?.value||new Date().toISOString().slice(0,10);
+  const{data}=await sb.from('transaksi').select('id,waktu,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali')
+    .gte('waktu',tgl+'T00:00:00').lte('waktu',tgl+'T23:59:59').order('waktu',{ascending:false});
+  renderRiwayat(data||[]);
+}
+function renderRiwayat(list){
+  const el=document.getElementById('riwayat-list');if(!el)return;
+  if(!list.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div>Belum ada transaksi</div>';return;}
+  el.innerHTML=list.map(t=>{
+    const items=Array.isArray(t.items)?t.items:[];
+    const jam=new Date(t.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    return '<div style="border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px;">'+
+        '<div><div style="font-weight:700;font-size:13px;">'+(t.pelanggan||'Umum')+'</div>'+
+        '<div style="font-size:11px;color:#888;">'+jam+' - '+(t.kasir||'-')+' - '+(t.metode_bayar||'-')+'</div></div>'+
+        '<div style="text-align:right;"><div style="font-weight:800;color:#38a169;">'+fmt(t.total)+'</div>'+
+        '<div style="font-size:10px;color:'+(t.status_bayar==='lunas'?'#38a169':'#e53e3e')+';">'+(t.status_bayar||'-')+'</div></div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#888;margin-bottom:8px;">'+items.slice(0,3).map(i=>i.nama+' x'+i.qty).join(', ')+(items.length>3?'...':'')+'</div>'+
+      '<button onclick="printStruk('+t.id+')" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:6px;background:white;font-size:12px;cursor:pointer;">&#128424; Cetak Ulang Struk</button>'+
+    '</div>';
+  }).join('');
+}
+async function printStruk(trxId){
+  const{data}=await sb.from('transaksi').select('*').eq('id',trxId).single();
+  if(!data){toast('Data tidak ditemukan',true);return;}
+  const items=Array.isArray(data.items)?data.items:[];
+  const waktu=new Date(data.waktu).toLocaleString('id-ID');
+  const w=window.open('','_blank','width=320,height=600');
+  if(!w){toast('Popup diblokir browser',true);return;}
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+    '<style>body{font-family:monospace;font-size:12px;width:280px;margin:0 auto;padding:8px;}'+
+    '.c{text-align:center;}.l{border-top:1px dashed #000;margin:6px 0;}'+
+    '.r{display:flex;justify-content:space-between;}.b{font-weight:700;}</style></head><body>'+
+    '<div class="c b" style="font-size:14px;">UBNB DESA PERWIRA</div>'+
+    '<div class="c" style="font-size:10px;">'+waktu+'</div>'+
+    '<div class="c" style="font-size:10px;">Kasir: '+(data.kasir||'-')+'</div>'+
+    '<div class="l"></div><div>Pelanggan: '+(data.pelanggan||'Umum')+'</div><div class="l"></div>'+
+    items.map(i=>'<div>'+i.nama+'</div><div class="r"><span>  '+fmtQty(i.qty)+' x '+fmt(i.harga)+'</span><span>'+fmt((i.subtotal||i.qty*i.harga))+'</span></div>').join('')+
+    '<div class="l"></div>'+
+    '<div class="r b"><span>TOTAL</span><span>'+fmt(data.total)+'</span></div>'+
+    '<div class="r"><span>Bayar ('+(data.metode_bayar||'-')+')</span><span>'+fmt(data.bayar||data.total)+'</span></div>'+
+    ((data.kembali||0)>0?'<div class="r"><span>Kembali</span><span>'+fmt(data.kembali)+'</span></div>':'')+
+    '<div class="l"></div>'+
+    '<div class="c" style="font-size:10px;">Alhamdulillah, Jazaakumullohu Khoiro</div>'+
+    '<div class="c" style="font-size:10px;">ubnb.pw</div>'+
+    '<scr'+'ipt>window.onload=function(){window.print();window.close();};</scr'+'ipt></body></html>');
+  w.document.close();
+}
+
 </script>
 </body>
 </html>
