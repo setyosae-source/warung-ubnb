@@ -818,7 +818,7 @@ async function refreshAll(){
     {data:kas},{data:br},{data:akad},{data:angs},
     {data:trx},{data:ppob},{data:beli},{data:saham},
     {data:aset},{data:aps},{data:ld},
-    {data:ju},{data:jd},{data:coa},{data:pm},
+    {data:ju},{data:jd},{data:coa},{data:pm},{data:nsnap},
     {data:laundry},{data:service},{data:wadiah},{data:modalPeny}
   ]=await Promise.all([
     sb.from('kas').select('*'),
@@ -836,6 +836,7 @@ async function refreshAll(){
     sb.from('jurnal_detail').select('*'),
     sb.from('coa').select('*').eq('is_aktif',true).order('kode'),
     sb.from('ubnb_laporan_keuangan').select('*').order('urutan'),
+    sb.from('neraca_snapshot').select('*').order('kode_akun'),
     sb.from('laundry_order').select('total_harga,tgl_masuk,status_bayar,status'),
     sb.from('service_order').select('total_harga,tgl_masuk,status_bayar,status'),
     sb.from('ubnb_wadiah_tabungan').select('saldo,status'),
@@ -845,6 +846,7 @@ async function refreshAll(){
     transaksi:trx||[],ppob:ppob||[],pembelian:beli||[],ubnb_saham:saham||[],
     aset_tetap:aset||[],aset_penyusutan:aps||[],laba_ditahan:ld||[],
     jurnal_umum:ju||[],jurnal_detail:jd||[],coa:coa||[],pos_manual:pm||[],
+    neraca_snapshot:nsnap||[],
     laundry:laundry||[],service:service||[],wadiah:wadiah||[],modal_penyertaan:modalPeny||[]};
   populateBBSelect();
   renderDashboard();renderJurnal();renderCOA();renderAset();
@@ -912,6 +914,22 @@ function pct(dev,base){if(!base)return'—';return((dev/Math.abs(base))*100).toF
 function fmtTgl(t){if(!t)return'-';return new Date(t).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});}
 
 // ===== DATA HELPERS =====
+// Hitung saldo per kelompok dari jurnal_detail — untuk neraca live (tahun berjalan)
+function getSaldoKelompok(kelompok, tahun){
+  const cutoff = tahun+'-12-31';
+  const jIds = D.jurnal_umum
+    .filter(j=>j.status==='posted'&&j.tanggal&&j.tanggal<=cutoff)
+    .map(j=>j.id);
+  const result={};
+  D.coa.filter(c=>c.kelompok===kelompok).forEach(c=>{
+    let debit=0,kredit=0;
+    D.jurnal_detail.filter(jd=>jIds.includes(jd.jurnal_id)&&jd.kode_akun===c.kode)
+      .forEach(jd=>{debit+=parseFloat(jd.debit||0);kredit+=parseFloat(jd.kredit||0);});
+    const saldo=c.jenis==='debit'?debit-kredit:kredit-debit;
+    if(saldo!==0) result[c.kode]={kode:c.kode,uraian:c.nama,nominal:saldo};
+  });
+  return Object.values(result);
+}
 function getKas(){
   const w=D.kas.filter(k=>k.modul==='warung').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
   const pp=D.kas.filter(k=>k.modul==='ppob').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
@@ -1090,30 +1108,35 @@ function renderNeraca(){
     const lbLD=ld?parseFloat(ld.laba_bersih_tahun||0):0;
     const labaBersih=hasPM?lbLD:hitungLabaBersih(thn);
 
-    // AKTIVA LANCAR
-    const pmALSum=pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-    const persediaan=getPersediaan();
-    // Kalau hasPM → total dari pmAL saja (historis)
-    // Kalau tidak → dari data live (kas + piutang + persediaan)
-    const totalAL=hasPM?pmALSum:(kas.total+piutang.pokok+persediaan);
-
-    // AKTIVA TETAP
-    const aset=getAset();
-    const pmATSum=pmAT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-    const totalAT=hasPM?pmATSum:aset.buku;
-
-    // KEWAJIBAN
-    const hutang=getHutang();
-    const pmKWSum=pmKW.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-    const totalKW=hasPM?pmKWSum:hutang;
-
-    // MODAL
-    const modal=getModal();
-    const pmMDSum=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-    const totalMD=(hasPM?pmMDSum:modal.nilai)+(ldAkhir||0)+labaBersih;
+    // AKTIVA LANCAR, TETAP, KEWAJIBAN, MODAL
+    // hasPM=true  → pakai pos manual (data historis / tutup buku)
+    // hasPM=false → pakai jurnal realtime (bukan kas/piutang statis)
+    let totalAL,totalAT,totalKW,totalMD;
+    if(hasPM){
+      totalAL=pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+      totalAT=pmAT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+      totalKW=pmKW.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+      totalMD=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0)+(ldAkhir||0)+labaBersih;
+    } else {
+      // Baca dari jurnal_detail realtime via getSaldoKelompok
+      const jrAL=getSaldoKelompok('aktiva_lancar',thn);
+      const jrAT=getSaldoKelompok('aktiva_tetap',thn);
+      const jrKW=getSaldoKelompok('kewajiban',thn);
+      const jrMD=getSaldoKelompok('modal',thn);
+      totalAL=jrAL.reduce((s,a)=>s+a.nominal,0);
+      totalAT=jrAT.reduce((s,a)=>s+a.nominal,0);
+      totalKW=jrKW.reduce((s,a)=>s+a.nominal,0);
+      totalMD=jrMD.reduce((s,a)=>s+a.nominal,0)+(ldAkhir||0)+labaBersih;
+      // Inject ke pmAL/AT/KW/MD agar rowsAL/AT/KW/MD bisa render baris per akun
+      pmAL.push(...jrAL);
+      pmAT.push(...jrAT);
+      pmKW.push(...jrKW);
+      pmMD.push(...jrMD);
+    }
     const totalPasiva=totalKW+totalMD;
     const totalAktiva=totalAL+totalAT;
-
+    const kas=getKas(),piutang=getPiutang(),aset=getAset(),modal=getModal();
+    const hutang=getHutang(),persediaan=getPersediaan();
     return {kas,piutang,persediaan,aset,hutang,modal,
             pmAL,pmAT,pmKW,pmMD,hasPM,
             ldAkhir,labaBersih,
