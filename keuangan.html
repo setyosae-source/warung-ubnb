@@ -1115,7 +1115,8 @@ function renderNeraca(){
       totalAL=pmAL.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
       totalAT=pmAT.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
       totalKW=pmKW.reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-      totalMD=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0)+(ldAkhir||0)+labaBersih;
+      totalMD=pmMD.reduce((s,p)=>s+parseFloat(p.nominal||0),0)+labaBersih;
+      // Catatan: ldAkhir (Laba Ditahan) sudah masuk totalKW via pos manual 2-201
     } else {
       // Baca dari jurnal_detail realtime via getSaldoKelompok
       const jrAL=getSaldoKelompok('aktiva_lancar',thn);
@@ -1222,17 +1223,20 @@ function renderNeraca(){
   function rowsMD(data, dataB){
     let r='';
     if(data.hasPM){
-      // Pos manual sudah include semua komponen modal → tampilkan apa adanya
+      // Mode historis: pmMD dari pos manual (Modal Awal + Saham)
+      // Laba Ditahan sudah ada di Kewajiban (2-201) → JANGAN tambah lagi di sini
+      // Hanya tampil Laba Bersih Tahun saja
       data.pmMD.forEach(p=>{
         const nb=dataB?.pmMD?.find(x=>x.uraian===p.uraian);
         r+=R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
       });
-      // Laba ditahan dan laba bersih dari LD tabel
-      if(data.ldAkhir) r+=R('Laba Ditahan', data.ldAkhir, dataB?.ldAkhir);
       r+=R('Laba Bersih Tahun '+tahun, data.labaBersih, dataB?.labaBersih);
     } else {
-      r+=R('Modal Saham ('+data.modal.lembar.toLocaleString('id-ID')+' lbr × Rp10.200)',
-           data.modal.nilai, dataB?.modal?.nilai);
+      // Mode live: dari jurnal — pmMD sudah diisi oleh getSaldoKelompok
+      data.pmMD.forEach(p=>{
+        const nb=dataB?.pmMD?.find(x=>x.uraian===p.uraian);
+        r+=R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
+      });
       if(data.ldAkhir) r+=R('Laba Ditahan', data.ldAkhir, dataB?.ldAkhir);
       r+=R('Laba Bersih Tahun '+tahun, data.labaBersih, dataB?.labaBersih);
     }
