@@ -520,12 +520,19 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
     <!-- ===== BUKU BESAR ===== -->
     <div class="page" id="page-buku-besar">
       <div class="card">
-        <div class="card-title"><h3>📗 Buku Besar</h3></div>
+        <div class="card-title">
+          <h3>📗 Buku Besar</h3>
+          <div class="btn-row no-print">
+            <button class="btn primary sm" onclick="window.print()">🖨️ Cetak</button>
+            <button class="btn gold sm" onclick="exportBukuBesar()">📥 Excel</button>
+          </div>
+        </div>
         <div class="filter-bar">
           <select id="bb-akun" onchange="renderBukuBesar()" style="width:260px;">
             <option value="">— Pilih Akun —</option>
           </select>
-          <input type="month" id="bb-bulan" onchange="renderBukuBesar()">
+          <input type="month" id="bb-bulan" onchange="renderBukuBesar()" title="Filter per bulan">
+          <button class="btn secondary sm" onclick="document.getElementById('bb-bulan').value='';renderBukuBesar()">Semua</button>
         </div>
         <div id="bb-content"></div>
       </div>
@@ -1091,7 +1098,7 @@ function showPage(name,el){
     else{renderKasKu();renderKasSummaryKu();}
   }
   if(name==='penyusutan')renderPenyusutan();
-  if(name==='buku-besar')renderBukuBesar();
+  if(name==='buku-besar'){populateBBSelect();renderBukuBesar();}
 }
 function toggleSidebar(){
   document.getElementById('sidebar').classList.toggle('open');
@@ -1983,6 +1990,56 @@ function renderBukuBesar(){
     </table></div>`;
 }
 
+function exportBukuBesar(){
+  const coaId=parseInt(document.getElementById('bb-akun')?.value);
+  if(!coaId){toast('Pilih akun dulu',true);return;}
+  const XLSX=window.XLSX;
+  if(!XLSX){toast('Library Excel belum siap',true);return;}
+  const akun=D.coa.find(c=>c.id===coaId);
+  const bulan=document.getElementById('bb-bulan')?.value||'';
+  let details=D.jurnal_detail.filter(d=>d.coa_id===coaId);
+  if(bulan){
+    const jIds=D.jurnal_umum.filter(j=>j.tanggal?.startsWith(bulan)).map(j=>j.id);
+    details=details.filter(d=>jIds.includes(d.jurnal_id));
+  }
+  let saldo=0;
+  const rows=details.map(d=>{
+    const j=D.jurnal_umum.find(x=>x.id===d.jurnal_id);
+    saldo+=akun?.jenis==='debit'
+      ?parseFloat(d.debit||0)-parseFloat(d.kredit||0)
+      :parseFloat(d.kredit||0)-parseFloat(d.debit||0);
+    return[j?.tanggal||'',j?.no_jurnal||'',d.keterangan||j?.keterangan||'-',
+      parseFloat(d.debit||0),parseFloat(d.kredit||0),saldo];
+  }).sort((a,b)=>new Date(a[0])-new Date(b[0]));
+  const totD=rows.reduce((s,r)=>s+r[3],0);
+  const totK=rows.reduce((s,r)=>s+r[4],0);
+  const fmt='#,##0';
+  const data=[
+    ['BUKU BESAR'],
+    ['UB NAMBAH BAROKAH DESA PERWIRA'],
+    ['Akun: '+akun?.kode+' - '+akun?.nama],
+    [bulan?'Periode: '+bulan:'Semua Periode'],
+    [],
+    ['Tanggal','No. Jurnal','Keterangan','Debit','Kredit','Saldo'],
+    ...rows,
+    [],
+    ['','','TOTAL',totD,totK,saldo],
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=6;R<=range.e.r;R++){
+    for(let C=3;C<=5;C++){
+      const cell=ws[XLSX.utils.encode_cell({r:R,c:C})];
+      if(cell&&typeof cell.v==='number') cell.z=fmt;
+    }
+  }
+  ws['!cols']=[{wch:12},{wch:20},{wch:35},{wch:18},{wch:18},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,(akun?.kode||'BB').replace(/[\\/*?:[\]]/g,''));
+  XLSX.writeFile(wb,'UBNB_BB_'+(akun?.kode||'')+'_'+(bulan||'semua')+'.xlsx');
+  toast('✅ Export Buku Besar '+akun?.nama+' berhasil!');
+}
+
 // ===== COA =====
 function renderCOA(){
   const kelLabels={aktiva_lancar:'Aktiva Lancar',aktiva_tetap:'Aktiva Tetap',kewajiban:'Kewajiban',modal:'Modal',pendapatan:'Pendapatan',hpp:'HPP',biaya:'Biaya',zakat:'Zakat'};
@@ -2261,33 +2318,111 @@ async function hapusPos(id){
 function exportNeraca(){
   const d=window._neracaData;if(!d){toast('Buka Neraca dulu',true);return;}
   const XLSX=window.XLSX;
-  const ws=XLSX.utils.aoa_to_sheet([
-    ['NERACA'],['UB NAMBAH BAROKAH DESA PERWIRA'],['PER 31 DESEMBER '+d.tahun],[],
-    ['AKTIVA'],['  Kas Utama',d.kas.warung],['  Kas BMT',d.kas.bmt],['  Kas PPOB',d.kas.ppob],
-    ['  Piutang Pembiayaan',d.piutang.pokok],['  Persediaan',d.persediaan],
-    ['TOTAL AKTIVA LANCAR',d.kas.total+d.piutang.pokok+d.persediaan],[],
-    ['  Aset Tetap (Nilai Buku)',d.aset.buku],['TOTAL AKTIVA TETAP',d.aset.buku],
-    ['TOTAL AKTIVA',d.totalAktiva],[],
-    ['PASIVA'],['  Hutang Usaha',d.hutang],['  Modal Saham',d.modal.nilai],
-    ['  Laba Ditahan',d.ldAkhir],['  Laba Bersih',d.labaBersih],
+  if(!XLSX){toast('Library Excel belum siap',true);return;}
+  const kas=d.kas||{warung:0,bmt:0,ppob:0,total:0};
+  const piutang=d.piutang||{pokok:0};
+  const aset=d.aset||{buku:0};
+  const modal=d.modal||{nilai:0,lembar:0};
+  const fmt='#,##0';
+  const rows=[
+    ['NERACA'],
+    ['UB NAMBAH BAROKAH DESA PERWIRA'],
+    ['Per 31 Desember '+d.tahun],
+    [],
+    ['AKTIVA',''],
+    ['AKTIVA LANCAR',''],
+    ['  Kas Utama (Bendahara)',kas.warung],
+    ['  Kas BMT',kas.bmt],
+    ['  Kas PPOB',kas.ppob],
+    ['  Piutang Pembiayaan BMT',piutang.pokok],
+    ['  Persediaan',d.persediaan||0],
+    ['TOTAL AKTIVA LANCAR',kas.total+(piutang.pokok||0)+(d.persediaan||0)],
+    [],
+    ['AKTIVA TETAP',''],
+    ['  Aset Tetap (Nilai Buku)',aset.buku||0],
+    ['TOTAL AKTIVA TETAP',aset.buku||0],
+    [],
+    ['TOTAL AKTIVA',d.totalAktiva],
+    [],
+    ['PASIVA',''],
+    ['KEWAJIBAN',''],
+    ['  Hutang Usaha',d.hutang||0],
+    ['TOTAL KEWAJIBAN',d.hutang||0],
+    [],
+    ['MODAL',''],
+    ['  Modal Saham ('+modal.lembar.toLocaleString('id-ID')+' lembar)',modal.nilai],
+    ['  Laba Ditahan',d.ldAkhir||0],
+    ['  Laba Bersih '+d.tahun,d.labaBersih||0],
+    ['TOTAL MODAL',(modal.nilai||0)+(d.ldAkhir||0)+(d.labaBersih||0)],
+    [],
     ['TOTAL PASIVA',d.totalPasiva],
-  ]);
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Neraca');
-  XLSX.writeFile(wb,'UBNB_Neraca_'+d.tahun+'.xlsx');toast('✅ Export berhasil!');
+    [],
+    [d.totalAktiva===d.totalPasiva?'✅ Neraca Seimbang':'⚠️ Selisih: '+(d.totalAktiva-d.totalPasiva),''],
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  // Format angka
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=range.s.r;R<=range.e.r;R++){
+    const cell=ws[XLSX.utils.encode_cell({r:R,c:1})];
+    if(cell&&typeof cell.v==='number'){cell.z=fmt;}
+  }
+  // Lebar kolom
+  ws['!cols']=[{wch:35},{wch:20}];
+  // Bold header
+  ['A1','A2','A3'].forEach(a=>{if(ws[a])ws[a].s={font:{bold:true}};});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Neraca '+d.tahun);
+  XLSX.writeFile(wb,'UBNB_Neraca_'+d.tahun+'.xlsx');
+  toast('✅ Export Neraca '+d.tahun+' berhasil!');
 }
 function exportLR(){
   const d=window._lrData;if(!d){toast('Buka Laba Rugi dulu',true);return;}
   const XLSX=window.XLSX;
-  const ws=XLSX.utils.aoa_to_sheet([
-    ['LAPORAN LABA RUGI'],['UB NAMBAH BAROKAH DESA PERWIRA'],['PER 31 DESEMBER '+d.tahun],[],
-    ['SEMBAKO'],['  Penjualan',d.trx.penjualan],['  HPP',d.trx.hpp],['  Laba Kotor',d.trx.laba],[],
-    ['PEMBIAYAAN'],['  Margin BMT',d.bmt.margin],[],
-    ['PPOB'],['  Penjualan',d.ppobD.penjualan],['  HPP',d.ppobD.hpp],['  Laba Kotor',d.ppobD.laba],[],
-    ['Pendapatan Lain-lain',d.totalPL],['Biaya Operasional',d.biaya.total],
-    ['Zakat Tijaroh',d.totalZakat],[],['LABA BERSIH',d.labaBersih],
-  ]);
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Laba Rugi');
-  XLSX.writeFile(wb,'UBNB_LabaRugi_'+d.tahun+'.xlsx');toast('✅ Export berhasil!');
+  if(!XLSX){toast('Library Excel belum siap',true);return;}
+  const fmt='#,##0';
+  // Ambil nilai dengan fallback 0
+  const pjSem=d.pjSem||0, hppSem=d.hppSem||0, lkSem=d.lkSem||0;
+  const pjBMT=d.pjBMT||0, lkBMT=d.lkBMT||0;
+  const pjPPOB=d.pjPPOB||0, hppPPOB=d.hppPPOB||0, lkPPOB=d.lkPPOB||0;
+  const rows=[
+    ['LAPORAN LABA RUGI'],
+    ['UB NAMBAH BAROKAH DESA PERWIRA'],
+    ['Per 31 Desember '+d.tahun],
+    [],
+    ['PENDAPATAN',''],
+    ['Sembako & Warung',''],
+    ['  Penjualan',pjSem],
+    ['  HPP',-hppSem],
+    ['  Laba Kotor Sembako',lkSem],
+    [],
+    ['Pembiayaan BMT',''],
+    ['  Margin Diterima',pjBMT],
+    ['  Laba Kotor BMT',lkBMT],
+    [],
+    ['PPOB',''],
+    ['  Penjualan',pjPPOB],
+    ['  HPP',-hppPPOB],
+    ['  Laba Kotor PPOB',lkPPOB],
+    [],
+    ['Pendapatan Lain-lain',d.totalPL||0],
+    [],
+    ['BIAYA OPERASIONAL',-(d.totalBiaya||0)],
+    ['Zakat Tijaroh',-(d.totalZakat||0)],
+    [],
+    ['LABA BERSIH',d.labaBersih||0],
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  // Format angka kolom B
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=range.s.r;R<=range.e.r;R++){
+    const cell=ws[XLSX.utils.encode_cell({r:R,c:1})];
+    if(cell&&typeof cell.v==='number'){cell.z=fmt;}
+  }
+  ws['!cols']=[{wch:30},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Laba Rugi '+d.tahun);
+  XLSX.writeFile(wb,'UBNB_LabaRugi_'+d.tahun+'.xlsx');
+  toast('✅ Export Laba Rugi '+d.tahun+' berhasil!');
 }
 
 // ═══════════════════════════════════════════════════════════
