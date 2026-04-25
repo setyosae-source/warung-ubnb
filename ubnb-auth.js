@@ -56,17 +56,6 @@
       .eq('password_hash', hashed)
       .single();
 
-    // Fallback plaintext (masa transisi — masih aman karena hash sudah ada di DB)
-    if(error || !data){
-      const res = await sb
-        .from('users')
-        .select('id,username,nama,role,permissions')
-        .eq('username', username)
-        .eq('password', password)
-        .single();
-      data  = res.data;
-      error = res.error;
-    }
 
     if(error || !data) throw new Error('Username atau password salah');
     return data; // caller pilih key mana untuk saveSession
