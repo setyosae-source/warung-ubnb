@@ -2104,77 +2104,44 @@ function exportLR(){
 
 function renderKasKu(){
   const el=document.getElementById('kas-list');if(!el)return;
-  if(!D.kas||D.kas.length===0){
-    el.innerHTML='';
-    return;
-  }
-  // Update dropdown filter
-  const fEl=document.getElementById('kas-filter-id');
-  if(fEl){
-    const prev=fEl.value;
-    fEl.innerHTML='<option value="">— Pilih Kas —</option>'+
-      D.kas.map(k=>`<option value="${k.id}">${k.nama} (${rp(k.saldo)})</option>`).join('');
-    if(prev)fEl.value=prev;
-  }
-  // Update dropdown transfer
-  ['transfer-dari','transfer-ke'].forEach(id=>{
-    const s=document.getElementById(id);if(!s)return;
-    const prev=s.value;
-    s.innerHTML='<option value="">— Pilih —</option>'+
-      D.kas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
-    if(prev)s.value=prev;
-  });
-  if(!D.kas.length){el.innerHTML='<div class="empty"><div class="ei">💳</div>Belum ada kas</div>';return;}
-  el.innerHTML=D.kas.map(k=>{
-    const coa=getFnKodeCOA(k.id);
-    const saldoJurnal=getSaldoAkun(coa,2026);
-    const isAktif=!k.keterangan?.includes('TIDAK AKTIF');
-    return `<div style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;opacity:${isAktif?1:.5};box-sizing:border-box;width:100%;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-        <div>
-          <div style="font-weight:700;font-size:14px;">${k.nama}</div>
-          ${k.keterangan?`<div style="font-size:11px;color:var(--gray);">${k.keterangan}</div>`:''}
-          <div style="font-size:11px;color:var(--gray);margin-top:3px;">
-            COA: <strong>${coa}</strong> &nbsp;·&nbsp; Modul: ${k.modul||'-'}
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:18px;font-weight:800;font-family:monospace;color:${k.saldo>=0?'var(--hijau)':'var(--red)'};">${rp(k.saldo)}</div>
-          <div style="font-size:11px;color:var(--gray);">saldo tabel</div>
-          <div style="font-size:11px;color:var(--amber);">jurnal: ${rp(saldoJurnal)}</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="btn sm primary" style="flex:1" onclick="openModalMutasiKas(${k.id})">💰 Mutasi</button>
-        <button class="btn sm" onclick="openModalKas(${k.id})">✏️ Edit</button>
-        <button class="btn sm secondary" onclick="renderKasMutasi(${k.id})">📋 Cashflow</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function getFnKodeCOA(kasId){
-  const map={1:'1-101',2:'1-103',5:'1-102',8:'1-104',9:'1-105',10:'1-106',11:'1-107'};
-  return map[kasId]||'1-101';
+  const opts='<option value="">— Pilih Kas —</option>'+D.kas.map(k=>'<option value="'+k.id+'">'+k.nama+' ('+rp(k.saldo)+')</option>').join('');
+  ['kas-filter-id','transfer-dari','transfer-ke'].forEach(id=>{const s=document.getElementById(id);if(!s)return;const v=s.value;s.innerHTML=opts;if(v)s.value=v;});
+  if(!D.kas||D.kas.length===0){el.innerHTML='<div class="empty"><div class="ei">💳</div>Belum ada kas</div>';return;}
+  const yr=new Date().getFullYear();
+  el.innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr>'+
+    '<th>Nama Kas</th><th>Modul</th><th>COA</th>'+
+    '<th class="r">Saldo Tabel</th><th class="r">Saldo Jurnal</th>'+
+    '<th class="r no-print">Aksi</th></tr></thead><tbody>'+
+    D.kas.map(k=>{
+      const coa=getFnKodeCOA(k.id);
+      const sJ=getSaldoAkun(coa,yr);
+      const off=k.keterangan?.includes('TIDAK AKTIF');
+      return '<tr style="opacity:'+(off?.5:1)+'">'
+        +'<td><strong>'+k.nama+'</strong></td>'
+        +'<td>'+( k.modul||'-')+'</td>'
+        +'<td><code>'+coa+'</code></td>'
+        +'<td class="rp" style="color:'+(k.saldo>=0?'var(--hijau)':'var(--red)')+';">'+rp(k.saldo)+'</td>'
+        +'<td class="rp" style="color:var(--amber);font-size:11px;">'+rp(sJ)+'</td>'
+        +'<td class="no-print" style="white-space:nowrap;">'
+          +'<button class="btn blue sm" onclick="openModalMutasiKas('+k.id+')">💰 Mutasi</button> '
+          +'<button class="btn secondary sm" onclick="openModalKas('+k.id+')">✏️</button> '
+          +'<button class="btn sm" onclick="renderKasMutasi('+k.id+')">📋</button>'
+        +'</td></tr>';
+    }).join('')+
+  '</tbody></table></div>';
 }
 
 function renderKasSummaryKu(){
   const el=document.getElementById('kas-summary');if(!el)return;
   if(!D.kas||D.kas.length===0){el.innerHTML='';return;}
-  const total=D.kas.reduce((s,k)=>s+parseFloat(k.saldo||0),0);
   const aktif=D.kas.filter(k=>!k.keterangan?.includes('TIDAK AKTIF'));
-  const card=(label,val,sub,color='var(--hijau)')=>
-    `<div style="background:white;border-radius:8px;padding:12px;border-left:4px solid ${color};box-shadow:0 1px 3px rgba(0,0,0,.07);min-width:0;">
-      <div style="font-size:11px;color:var(--gray);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
-      <div style="font-size:16px;font-weight:700;color:${color};">${val}</div>
-      <div style="font-size:11px;color:var(--gray);">${sub}</div>
-    </div>`;
-  el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px;margin-bottom:8px;">
-    ${card('Total Saldo Kas',rp(total),aktif.length+' akun aktif')}
-    ${D.kas.filter(k=>!k.keterangan?.includes('TIDAK AKTIF')).map(k=>
-      card(k.nama,rp(k.saldo),k.modul||'-',k.saldo>=0?'var(--hijau)':'var(--red)')
-    ).join('')}
-  </div>`;
+  const total=aktif.reduce((s,k)=>s+parseFloat(k.saldo||0),0);
+  el.innerHTML='<div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:0;">'+
+    '<div class="stat-card g"><div class="stat-lbl">Total Saldo</div><div class="stat-val g">'+rp(total)+'</div><div class="stat-sub">'+aktif.length+' akun aktif</div></div>'+
+    aktif.map(k=>
+      '<div class="stat-card '+(k.saldo>=0?'':'r')+'"><div class="stat-lbl">'+k.nama+'</div><div class="stat-val" style="font-size:14px;color:'+(k.saldo>=0?'var(--hijau)':'var(--red)')+';">'+rp(k.saldo)+'</div><div class="stat-sub">'+( k.modul||'-')+'</div></div>'
+    ).join('')+
+  '</div>';
 }
 
 async function renderKasMutasi(kasId){
@@ -2436,43 +2403,30 @@ async function recalcAllSaldo(){
 </script>
 
 <!-- ══ PAGE: MANAJEMEN KAS ══════════════════════════════════ -->
-<div class="page" id="page-kas" style="overflow-x:hidden;box-sizing:border-box;">
-
-  <!-- Header + tombol -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-    <div>
-      <div style="font-size:16px;font-weight:700;color:var(--hijau)">💳 Manajemen Kas</div>
-      <div style="font-size:12px;color:var(--gray);margin-top:2px">Saldo, mutasi, dan transfer antar kas</div>
-    </div>
-    <div style="display:flex;gap:6px;">
-      <button class="btn secondary sm" onclick="recalcAllSaldo()">🔄 Recalc</button>
-      <button class="btn primary sm" onclick="openModalKas()">＋ Kas Baru</button>
-    </div>
-  </div>
-
-  <!-- Summary -->
-  <div id="kas-summary" style="margin-bottom:8px;"></div>
-
-  <!-- Daftar kas -->
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header">
-      <div class="card-title">📋 Daftar Akun Kas</div>
-      <button class="btn primary sm" onclick="openModalTransfer()">↔ Transfer Kas</button>
-    </div>
-    <div id="kas-list"></div>
-  </div>
-
-  <!-- Riwayat mutasi -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">🔄 Cashflow Kas</div>
-      <select id="kas-filter-id" onchange="renderKasMutasi()"
-        style="height:32px;font-size:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;">
-        <option value="">— Pilih Kas —</option>
-      </select>
-    </div>
-    <div id="kas-mutasi-list"></div>
-  </div>
+<div class="page" id="page-kas">
+      <div class="card">
+        <div class="card-title">
+          <h3>💳 Manajemen Kas</h3>
+          <div class="btn-row">
+            <button class="btn secondary" onclick="recalcAllSaldo()">🔄 Recalc</button>
+            <button class="btn primary" onclick="openModalTransfer()">↔ Transfer</button>
+            <button class="btn primary" onclick="openModalKas()">+ Kas Baru</button>
+          </div>
+        </div>
+        <div id="kas-summary" style="margin:8px 0 12px;"></div>
+        <div id="kas-list"></div>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <div class="card-title">
+          <h3>🔄 Cashflow Kas</h3>
+          <div class="tahun-bar">
+            <select id="kas-filter-id" onchange="renderKasMutasi()" style="height:32px;font-size:12px;">
+              <option value="">— Pilih Kas —</option>
+            </select>
+          </div>
+        </div>
+        <div id="kas-mutasi-list"><div class="empty"><div class="ei">💳</div>Pilih kas untuk lihat cashflow</div></div>
+      </div>
 </div>
 
 <!-- ══ MODAL: TAMBAH/EDIT KAS ══════════════════════════════ -->
