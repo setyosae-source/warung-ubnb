@@ -466,6 +466,14 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           <div class="irow"><label>Periode</label><input type="text" id="mpps-periode" placeholder="2025" maxlength="4"></div>
           <div class="irow"><label>Tanggal MPPS</label><input type="date" id="mpps-tgl"></div>
           <div class="irow">
+            <label>% Laba Ditahan MPPS</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="number" id="mpps-pct-ld" value="5" min="0" max="100" step="0.5"
+                style="width:80px;" oninput="hitungPanduanHargaMPPS()">
+              <span style="font-size:12px;color:var(--text-muted);">% dari laba bersih yang ditahan (keputusan MPPS)</span>
+            </div>
+          </div>
+          <div class="irow">
             <label>Harga Saham Baru (Rp)</label>
             <input type="number" id="mpps-harga" placeholder="10200" oninput="hitungMPPS()">
           </div>
@@ -1771,7 +1779,8 @@ async function hitungPanduanHargaMPPS(){
     const tahunLalu = new Date().getFullYear()-1;
 
     // Panggil fungsi DB fn_kalkulasi_harga_saham
-    const{data,error} = await sb.rpc('fn_kalkulasi_harga_saham', {p_tahun: tahunLalu});
+    const pctLd = parseFloat(document.getElementById('mpps-pct-ld')?.value)||5;
+    const{data,error} = await sb.rpc('fn_kalkulasi_harga_saham', {p_tahun: tahunLalu, p_pct_ld: pctLd});
     if(error || !data) {
       el.innerHTML='<em style="color:var(--red)">⚠️ Data neraca '+tahunLalu+' belum tersedia</em>';
       return;
@@ -1783,10 +1792,12 @@ async function hitungPanduanHargaMPPS(){
     el.innerHTML =
       `<div style="background:var(--hijau-light);border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.9;">` +
       `<strong>📊 Kalkulasi dari Neraca ${tahunLalu}:</strong><br>` +
-      `Modal Awal (3-101) &nbsp;&nbsp;&nbsp;: ${rp(d.modal_awal)}<br>` +
-      `Saham Baru (3-102) &nbsp;&nbsp;&nbsp;: ${rp(d.saham_baru)}<br>` +
-      `Akumulasi Laba Ditahan : ${rp(d.akumulasi_ld)}<br>` +
-      `<strong>Total Modal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.total_modal)}</strong><br>` +
+      `Modal Awal (3-101) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.modal_awal)}<br>` +
+      `Saham Baru (3-102) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.saham_baru)}<br>` +
+      `LD Akhir ${tahunLalu} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.ld_akhir)}<br>` +
+      `+ LD MPPS (${d.pct_ld_mpps}% × laba bersih): ${rp(d.ld_mpps)}<br>` +
+      `<strong>Akumulasi LD &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.akumulasi_ld)}</strong><br>` +
+      `<strong>Total Modal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.total_modal)}</strong><br>` +
       `÷ ${d.total_lembar.toLocaleString('id-ID')} lembar beredar<br>` +
       `<strong style="color:var(--hijau-dark);font-size:13px;">` +
       `→ Harga Saham Baru: ${rp(d.harga_baru)}/lembar ` +
@@ -1819,7 +1830,8 @@ async function simpanMPPS(){
   const shu=parseFloat(document.getElementById('mpps-shu')?.value)||0;
   const catatan=document.getElementById('mpps-catatan')?.value.trim();
   if(!periode||!tgl||!harga){toast('Lengkapi data MPPS',true);return;}
-  const{data,error}=await sb.from('ubnb_mpps').insert([{periode,tanggal_mpps:tgl,harga_saham_baru:harga,shu_per_lembar:shu,total_shu:Math.round(aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0)*shu),catatan:catatan||null,operator:CU.username}]).select('id').single();
+  const pctLdMPPS=parseFloat(document.getElementById('mpps-pct-ld')?.value)||5;
+  const{data,error}=await sb.from('ubnb_mpps').insert([{periode,tanggal_mpps:tgl,harga_saham_baru:harga,shu_per_lembar:shu,total_shu:Math.round(aSaham.reduce((a,s)=>a+(s.jumlah_lembar||0),0)*shu),catatan:catatan||null,operator:CU.username,pct_ld_mpps:pctLdMPPS}]).select('id').single();
   // Sync ke ubnb_harga_saham jika harga berubah
   if(!error && harga !== HARGA_SAHAM){
     const tahunMPPS = parseInt(periode?.split('/')?.[0]||new Date().getFullYear());
