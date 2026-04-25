@@ -338,6 +338,9 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
       <div class="nav-item" onclick="showPage('laba-ditahan',this)">
         <span class="nav-icon">💰</span>Laba Ditahan
       </div>
+      <div class="nav-item" onclick="showPage('kas',this)">
+        <span class="nav-icon">💳</span>Manajemen Kas
+      </div>
       <div class="nav-item" onclick="showPage('pos-manual',this)">
         <span class="nav-icon">✏️</span>Pos Manual
       </div>
@@ -818,10 +821,10 @@ async function refreshAll(){
     {data:kas},{data:br},{data:akad},{data:angs},
     {data:trx},{data:ppob},{data:beli},{data:saham},
     {data:aset},{data:aps},{data:ld},
-    {data:ju},{data:jd},{data:coa},{data:pm},{data:nsnap},
+    {data:ju},{data:jd},{data:coa},{data:pm},{data:nsnap},{data:kasMut},{data:kasDef},
     {data:laundry},{data:service},{data:wadiah},{data:modalPeny}
   ]=await Promise.all([
-    sb.from('kas').select('*'),
+    sb.from('kas').select('*').order('id'),
     sb.from('barang').select('id,stok,harga_beli').gt('stok',0),
     sb.from('bmt_akad').select('*'),
     sb.from('bmt_angsuran').select('jumlah,created_at,akad_id'),
@@ -837,6 +840,8 @@ async function refreshAll(){
     sb.from('coa').select('*').eq('is_aktif',true).order('kode'),
     sb.from('ubnb_laporan_keuangan').select('*').order('urutan'),
     sb.from('neraca_snapshot').select('*').order('kode_akun'),
+    sb.from('kas_mutasi').select('*').order('tanggal',{ascending:false}).order('created_at',{ascending:false}),
+    sb.from('kas_default').select('*'),
     sb.from('laundry_order').select('total_harga,tgl_masuk,status_bayar,status'),
     sb.from('service_order').select('total_harga,tgl_masuk,status_bayar,status'),
     sb.from('ubnb_wadiah_tabungan').select('saldo,status'),
@@ -846,7 +851,7 @@ async function refreshAll(){
     transaksi:trx||[],ppob:ppob||[],pembelian:beli||[],ubnb_saham:saham||[],
     aset_tetap:aset||[],aset_penyusutan:aps||[],laba_ditahan:ld||[],
     jurnal_umum:ju||[],jurnal_detail:jd||[],coa:coa||[],pos_manual:pm||[],
-    neraca_snapshot:nsnap||[],
+    neraca_snapshot:nsnap||[],kas_mutasi:kasMut||[],kas_default:kasDef||[],
     laundry:laundry||[],service:service||[],wadiah:wadiah||[],modal_penyertaan:modalPeny||[]};
   populateBBSelect();
   renderDashboard();renderJurnal();renderCOA();renderAset();
@@ -889,6 +894,7 @@ function showPage(name,el){
   if(name==='neraca')renderNeraca();
   if(name==='labarugi')renderLabaRugi();
   if(name==='deviasi')renderDeviasi();
+  if(name==='kas'){renderKasKu();renderKasSummaryKu();}
   if(name==='penyusutan')renderPenyusutan();
   if(name==='buku-besar')renderBukuBesar();
 }
@@ -2063,6 +2069,455 @@ function exportLR(){
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Laba Rugi');
   XLSX.writeFile(wb,'UBNB_LabaRugi_'+d.tahun+'.xlsx');toast('✅ Export berhasil!');
 }
+
+// ═══════════════════════════════════════════════════════════
+// MANAJEMEN KAS — fungsi lengkap
+// ═══════════════════════════════════════════════════════════
+
+function renderKasKu(){
+  const el=document.getElementById('kas-list');if(!el)return;
+  // Update dropdown filter
+  const fEl=document.getElementById('kas-filter-id');
+  if(fEl){
+    const prev=fEl.value;
+    fEl.innerHTML='<option value="">— Pilih Kas —</option>'+
+      D.kas.map(k=>`<option value="${k.id}">${k.nama} (${rp(k.saldo)})</option>`).join('');
+    if(prev)fEl.value=prev;
+  }
+  // Update dropdown transfer
+  ['transfer-dari','transfer-ke'].forEach(id=>{
+    const s=document.getElementById(id);if(!s)return;
+    const prev=s.value;
+    s.innerHTML='<option value="">— Pilih —</option>'+
+      D.kas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+    if(prev)s.value=prev;
+  });
+  if(!D.kas.length){el.innerHTML='<div class="empty"><div class="ei">💳</div>Belum ada kas</div>';return;}
+  el.innerHTML=D.kas.map(k=>{
+    const coa=getFnKodeCOA(k.id);
+    const saldoJurnal=getSaldoAkun(coa,2026);
+    const isAktif=!k.keterangan?.includes('TIDAK AKTIF');
+    return `<div style="background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;opacity:${isAktif?1:.5}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div>
+          <div style="font-weight:700;font-size:14px;">${k.nama}</div>
+          ${k.keterangan?`<div style="font-size:11px;color:var(--gray);">${k.keterangan}</div>`:''}
+          <div style="font-size:11px;color:var(--gray);margin-top:3px;">
+            COA: <strong>${coa}</strong> &nbsp;·&nbsp; Modul: ${k.modul||'-'}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:18px;font-weight:800;font-family:monospace;color:${k.saldo>=0?'var(--hijau)':'var(--red)'};">${rp(k.saldo)}</div>
+          <div style="font-size:11px;color:var(--gray);">saldo tabel</div>
+          <div style="font-size:11px;color:var(--amber);">jurnal: ${rp(saldoJurnal)}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn sm primary" style="flex:1" onclick="openModalMutasiKas(${k.id})">💰 Mutasi</button>
+        <button class="btn sm" onclick="openModalKas(${k.id})">✏️ Edit</button>
+        <button class="btn sm secondary" onclick="renderKasMutasi(${k.id})">📋 Cashflow</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getFnKodeCOA(kasId){
+  const map={1:'1-101',2:'1-103',5:'1-102',8:'1-104',9:'1-105',10:'1-106',11:'1-107'};
+  return map[kasId]||'1-101';
+}
+
+function renderKasSummaryKu(){
+  const el=document.getElementById('kas-summary');if(!el)return;
+  const total=D.kas.reduce((s,k)=>s+parseFloat(k.saldo||0),0);
+  const aktif=D.kas.filter(k=>!k.keterangan?.includes('TIDAK AKTIF'));
+  el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:4px;">
+    <div class="stat-card" style="border-left:4px solid var(--hijau);">
+      <div class="stat-label">Total Saldo Kas</div>
+      <div class="stat-value green">${rp(total)}</div>
+      <div style="font-size:11px;color:var(--gray);">${aktif.length} akun aktif</div>
+    </div>
+    ${D.kas.filter(k=>!k.keterangan?.includes('TIDAK AKTIF')).map(k=>`
+    <div class="stat-card">
+      <div class="stat-label" style="font-size:11px;">${k.nama}</div>
+      <div style="font-size:15px;font-weight:700;color:${k.saldo>=0?'var(--hijau)':'var(--red)'};">${rp(k.saldo)}</div>
+      <div style="font-size:11px;color:var(--gray);">${k.modul||'-'}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+async function renderKasMutasi(kasId){
+  // Bisa dipanggil dari tombol atau dari dropdown
+  const fEl=document.getElementById('kas-filter-id');
+  if(kasId){if(fEl)fEl.value=kasId;}
+  else{kasId=parseInt(fEl?.value);}
+  const el=document.getElementById('kas-mutasi-list');if(!el)return;
+  if(!kasId){el.innerHTML='<div class="empty"><div class="ei">💳</div>Pilih kas untuk lihat cashflow</div>';return;}
+
+  const{data}=await sb.from('kas_mutasi').select('*')
+    .eq('kas_id',kasId).order('tanggal',{ascending:true}).order('created_at',{ascending:true});
+  if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
+
+  let saldo=0;
+  const rows=data.map(m=>{
+    const masuk=m.tipe==='masuk';
+    saldo+=masuk?parseFloat(m.jumlah):-parseFloat(m.jumlah);
+    const tgl=m.tanggal?new Date(m.tanggal+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'—';
+    return `<tr>
+      <td>${tgl}</td>
+      <td>${m.keterangan||'-'}</td>
+      <td style="color:var(--hijau);font-family:monospace;text-align:right;">${masuk?rp(m.jumlah):'—'}</td>
+      <td style="color:var(--red);font-family:monospace;text-align:right;">${!masuk?rp(m.jumlah):'—'}</td>
+      <td style="font-family:monospace;text-align:right;font-weight:700;color:${saldo>=0?'var(--hijau)':'var(--red)'};">${rp(saldo)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<table class="tbl"><thead><tr>
+    <th>Tanggal</th><th>Keterangan</th>
+    <th class="r" style="color:var(--hijau);">Masuk</th>
+    <th class="r" style="color:var(--red);">Keluar</th>
+    <th class="r">Saldo</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+  document.getElementById('kas-mutasi-list').scrollIntoView({behavior:'smooth'});
+}
+
+function openModalKas(id){
+  if(id){
+    const k=D.kas.find(x=>x.id===id);if(!k)return;
+    document.getElementById('kas-ku-id').value=id;
+    document.getElementById('kas-ku-nama').value=k.nama;
+    document.getElementById('kas-ku-saldo').value=k.saldo;
+    document.getElementById('kas-ku-ket').value=k.keterangan||'';
+    document.getElementById('kas-ku-modul').value=k.modul||'warung';
+    document.getElementById('modal-kas-ku-title').textContent='Edit Kas';
+  } else {
+    document.getElementById('kas-ku-id').value='';
+    document.getElementById('kas-ku-nama').value='';
+    document.getElementById('kas-ku-saldo').value='0';
+    document.getElementById('kas-ku-ket').value='';
+    document.getElementById('kas-ku-modul').value='warung';
+    document.getElementById('modal-kas-ku-title').textContent='Tambah Kas';
+  }
+  openModal('modal-kas-ku');
+}
+
+async function simpanKasKu(){
+  const id=document.getElementById('kas-ku-id').value;
+  const nama=document.getElementById('kas-ku-nama').value.trim();
+  const saldo=parseFloat(document.getElementById('kas-ku-saldo').value)||0;
+  const ket=document.getElementById('kas-ku-ket').value.trim();
+  const modul=document.getElementById('kas-ku-modul').value;
+  if(!nama){toast('Nama kas wajib diisi',true);return;}
+  if(id){
+    await sb.from('kas').update({nama,keterangan:ket,modul}).eq('id',parseInt(id));
+    // Jika saldo berubah, catat mutasi koreksi
+    const k=D.kas.find(x=>x.id===parseInt(id));
+    if(k&&k.saldo!==saldo){
+      const diff=saldo-k.saldo;
+      await sb.from('kas_mutasi').insert([{
+        kas_id:parseInt(id),tipe:diff>0?'masuk':'keluar',kategori:'koreksi',
+        jumlah:Math.abs(diff),tanggal:new Date().toISOString().slice(0,10),
+        keterangan:'Koreksi saldo manual',operator:CU.username
+      }]);
+      await sb.from('kas').update({saldo}).eq('id',parseInt(id));
+    }
+  } else {
+    const{data:newK}=await sb.from('kas').insert([{nama,saldo:0,keterangan:ket,modul}]).select().single();
+    if(saldo>0&&newK){
+      await sb.from('kas_mutasi').insert([{
+        kas_id:newK.id,tipe:'masuk',kategori:'masuk',jumlah:saldo,
+        tanggal:new Date().toISOString().slice(0,10),
+        keterangan:'Saldo Awal',operator:CU.username
+      }]);
+      await sb.from('kas').update({saldo}).eq('id',newK.id);
+    }
+  }
+  closeModal('modal-kas-ku');await refreshAll();toast(id?'Kas diperbarui':'Kas ditambahkan');
+}
+
+function openModalMutasiKas(kasId){
+  const k=D.kas.find(x=>x.id===kasId);if(!k)return;
+  document.getElementById('mutasi-kas-id').value=kasId;
+  document.getElementById('mutasi-kas-info').innerHTML=
+    `<strong>${k.nama}</strong><br>Saldo saat ini: <span style="color:var(--hijau);font-weight:700;">${rp(k.saldo)}</span>`;
+  document.getElementById('mutasi-jumlah').value='';
+  document.getElementById('mutasi-ket').value='';
+  document.getElementById('mutasi-tipe').value='masuk';
+  document.getElementById('mutasi-tgl').value=new Date().toISOString().slice(0,10);
+  openModal('modal-mutasi-kas');
+}
+
+async function simpanMutasiKas(){
+  const kasId=parseInt(document.getElementById('mutasi-kas-id').value);
+  const tipe=document.getElementById('mutasi-tipe').value;
+  const jumlah=parseFloat(document.getElementById('mutasi-jumlah').value)||0;
+  const ket=document.getElementById('mutasi-ket').value.trim()||tipe==='masuk'?'Top Up':'Pengeluaran';
+  const tgl=document.getElementById('mutasi-tgl').value;
+  if(!jumlah){toast('Masukkan jumlah',true);return;}
+  const k=D.kas.find(x=>x.id===kasId);if(!k)return;
+  // Simpan mutasi
+  await sb.from('kas_mutasi').insert([{
+    kas_id:kasId,tipe,kategori:tipe,jumlah,keterangan:ket,
+    tanggal:tgl,operator:CU.username
+  }]);
+  // Update saldo
+  const saldoBaru=tipe==='masuk'?k.saldo+jumlah:k.saldo-jumlah;
+  await sb.from('kas').update({saldo:saldoBaru}).eq('id',kasId);
+  // Buat jurnal otomatis untuk mutasi manual
+  await buatJurnalMutasi(kasId,tipe,jumlah,ket,tgl);
+  closeModal('modal-mutasi-kas');await refreshAll();
+  toast(tipe==='masuk'?`Rp ${jumlah.toLocaleString('id-ID')} masuk ke ${k.nama}`:`Rp ${jumlah.toLocaleString('id-ID')} keluar dari ${k.nama}`);
+}
+
+async function buatJurnalMutasi(kasId,tipe,jumlah,ket,tgl){
+  const kode=getFnKodeCOA(kasId);
+  const{data:coa}=await sb.from('coa').select('id,nama').eq('kode',kode).single();
+  if(!coa)return;
+  // Cari akun lawan — biaya lain-lain atau pendapatan lain
+  const lawanKode=tipe==='masuk'?'4-401':'6-101';
+  const{data:lawanCoa}=await sb.from('coa').select('id,nama').eq('kode',lawanKode).single();
+  if(!lawanCoa)return;
+  const tahun=new Date(tgl).getFullYear();
+  // Ambil no jurnal berikutnya
+  const{data:lastJ}=await sb.from('jurnal_umum')
+    .select('no_jurnal').like('no_jurnal',`JU-${tahun}-%`)
+    .order('no_jurnal',{ascending:false}).limit(1);
+  const last=lastJ?.[0]?.no_jurnal;
+  const num=last&&/\d+$/.test(last)?parseInt(last.match(/\d+$/)[0])+1:1;
+  const noJurnal=`JU-${tahun}-${String(num).padStart(3,'0')}`;
+  const{data:ju}=await sb.from('jurnal_umum').insert([{
+    no_jurnal:noJurnal,tanggal:tgl,
+    keterangan:(tipe==='masuk'?'Penerimaan':'Pengeluaran')+' Kas - '+ket,
+    referensi:`KAS-${kasId}-${Date.now()}`,
+    total_debit:jumlah,total_kredit:jumlah,status:'posted',operator:CU.username
+  }]).select().single();
+  if(!ju)return;
+  await sb.from('jurnal_detail').insert([
+    {jurnal_id:ju.id,coa_id:tipe==='masuk'?coa.id:lawanCoa.id,
+     kode_akun:tipe==='masuk'?kode:lawanKode,
+     nama_akun:tipe==='masuk'?coa.nama:lawanCoa.nama,debit:jumlah,kredit:0},
+    {jurnal_id:ju.id,coa_id:tipe==='masuk'?lawanCoa.id:coa.id,
+     kode_akun:tipe==='masuk'?lawanKode:kode,
+     nama_akun:tipe==='masuk'?lawanCoa.nama:coa.nama,debit:0,kredit:jumlah}
+  ]);
+}
+
+function openModalTransfer(){
+  document.getElementById('transfer-dari').value='';
+  document.getElementById('transfer-ke').value='';
+  document.getElementById('transfer-jumlah').value='';
+  document.getElementById('transfer-ket').value='';
+  document.getElementById('transfer-tgl').value=new Date().toISOString().slice(0,10);
+  document.getElementById('transfer-dari-info').textContent='';
+  document.getElementById('transfer-ke-info').textContent='';
+  document.getElementById('transfer-preview').style.display='none';
+  openModal('modal-transfer-kas');
+}
+
+function updateTransferInfo(){
+  const dariId=parseInt(document.getElementById('transfer-dari').value);
+  const keId=parseInt(document.getElementById('transfer-ke').value);
+  const jumlah=parseFloat(document.getElementById('transfer-jumlah').value)||0;
+  const dariKas=D.kas.find(k=>k.id===dariId);
+  const keKas=D.kas.find(k=>k.id===keId);
+  document.getElementById('transfer-dari-info').textContent=
+    dariKas?`Saldo: ${rp(dariKas.saldo)} → ${rp(dariKas.saldo-jumlah)} setelah transfer`:'';
+  document.getElementById('transfer-ke-info').textContent=
+    keKas?`Saldo: ${rp(keKas.saldo)} → ${rp(keKas.saldo+jumlah)} setelah transfer`:'';
+  const prev=document.getElementById('transfer-preview');
+  if(dariKas&&keKas&&jumlah>0){
+    const dariCOA=getFnKodeCOA(dariId);
+    const keCOA=getFnKodeCOA(keId);
+    prev.style.display='block';
+    prev.innerHTML=`<strong>Jurnal yang akan terbuat:</strong><br>
+      DEBIT &nbsp; ${keCOA} ${keKas.nama} &nbsp;&nbsp; ${rp(jumlah)}<br>
+      KREDIT ${dariCOA} ${dariKas.nama} ${rp(jumlah)}`;
+  } else {prev.style.display='none';}
+}
+
+async function simpanTransferKas(){
+  const dariId=parseInt(document.getElementById('transfer-dari').value);
+  const keId=parseInt(document.getElementById('transfer-ke').value);
+  const jumlah=parseFloat(document.getElementById('transfer-jumlah').value)||0;
+  const ket=document.getElementById('transfer-ket').value.trim()||'Transfer Kas';
+  const tgl=document.getElementById('transfer-tgl').value;
+  if(!dariId||!keId){toast('Pilih kas asal dan tujuan',true);return;}
+  if(dariId===keId){toast('Kas asal dan tujuan harus berbeda',true);return;}
+  if(!jumlah){toast('Masukkan jumlah transfer',true);return;}
+  const dariKas=D.kas.find(k=>k.id===dariId);
+  const keKas=D.kas.find(k=>k.id===keId);
+  if(!dariKas||!keKas)return;
+  if(dariKas.saldo<jumlah){toast(`Saldo ${dariKas.nama} tidak cukup (${rp(dariKas.saldo)})`,true);return;}
+
+  // Update saldo kedua kas
+  await sb.from('kas').update({saldo:dariKas.saldo-jumlah}).eq('id',dariId);
+  await sb.from('kas').update({saldo:keKas.saldo+jumlah}).eq('id',keId);
+
+  // Catat mutasi kedua kas
+  await sb.from('kas_mutasi').insert([
+    {kas_id:dariId,tipe:'keluar',kategori:'transfer',jumlah,
+     keterangan:`Transfer ke ${keKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username},
+    {kas_id:keId,tipe:'masuk',kategori:'transfer',jumlah,
+     keterangan:`Transfer dari ${dariKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username}
+  ]);
+
+  // Buat jurnal transfer
+  const dariCOA=getFnKodeCOA(dariId);
+  const keCOA=getFnKodeCOA(keId);
+  const{data:coaDari}=await sb.from('coa').select('id,nama').eq('kode',dariCOA).single();
+  const{data:coaKe}=await sb.from('coa').select('id,nama').eq('kode',keCOA).single();
+  if(coaDari&&coaKe){
+    const tahun=new Date(tgl).getFullYear();
+    const{data:lastJ}=await sb.from('jurnal_umum')
+      .select('no_jurnal').like('no_jurnal',`JU-${tahun}-%`)
+      .order('no_jurnal',{ascending:false}).limit(1);
+    const last=lastJ?.[0]?.no_jurnal;
+    const num=last&&/\d+$/.test(last)?parseInt(last.match(/\d+$/)[0])+1:1;
+    const noJ=`JU-${tahun}-${String(num).padStart(3,'0')}`;
+    const{data:ju}=await sb.from('jurnal_umum').insert([{
+      no_jurnal:noJ,tanggal:tgl,
+      keterangan:`Transfer Kas: ${dariKas.nama} → ${keKas.nama} - ${ket}`,
+      referensi:`TRF-${dariId}-${keId}-${Date.now()}`,
+      total_debit:jumlah,total_kredit:jumlah,status:'posted',operator:CU.username
+    }]).select().single();
+    if(ju){
+      await sb.from('jurnal_detail').insert([
+        {jurnal_id:ju.id,coa_id:coaKe.id,kode_akun:keCOA,nama_akun:coaKe.nama,debit:jumlah,kredit:0},
+        {jurnal_id:ju.id,coa_id:coaDari.id,kode_akun:dariCOA,nama_akun:coaDari.nama,debit:0,kredit:jumlah}
+      ]);
+    }
+  }
+
+  closeModal('modal-transfer-kas');await refreshAll();
+  toast(`✅ Transfer ${rp(jumlah)} dari ${dariKas.nama} ke ${keKas.nama} berhasil!`);
+}
+
+async function recalcAllSaldo(){
+  toast('⏳ Menghitung ulang saldo semua kas...');
+  for(const k of D.kas){
+    const{data}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',k.id);
+    if(!data)continue;
+    const saldo=data.reduce((s,m)=>m.tipe==='masuk'?s+parseFloat(m.jumlah):s-parseFloat(m.jumlah),0);
+    await sb.from('kas').update({saldo}).eq('id',k.id);
+  }
+  await refreshAll();toast('✅ Saldo semua kas sudah dihitung ulang!');
+}
+
 </script>
+
+<!-- ══ PAGE: MANAJEMEN KAS ══════════════════════════════════ -->
+<div class="page" id="page-kas">
+
+  <!-- Header + tombol -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div>
+      <div style="font-size:16px;font-weight:700;color:var(--hijau)">💳 Manajemen Kas</div>
+      <div style="font-size:12px;color:var(--gray);margin-top:2px">Saldo, mutasi, dan transfer antar kas</div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn secondary sm" onclick="recalcAllSaldo()">🔄 Recalc</button>
+      <button class="btn primary sm" onclick="openModalKas()">＋ Kas Baru</button>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div id="kas-summary" style="margin-bottom:16px;"></div>
+
+  <!-- Daftar kas -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header">
+      <div class="card-title">📋 Daftar Akun Kas</div>
+      <button class="btn primary sm" onclick="openModalTransfer()">↔ Transfer Kas</button>
+    </div>
+    <div id="kas-list"></div>
+  </div>
+
+  <!-- Riwayat mutasi -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🔄 Cashflow Kas</div>
+      <select id="kas-filter-id" onchange="renderKasMutasi()"
+        style="height:32px;font-size:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;">
+        <option value="">— Pilih Kas —</option>
+      </select>
+    </div>
+    <div id="kas-mutasi-list"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: TAMBAH/EDIT KAS ══════════════════════════════ -->
+<div class="modal-overlay" id="modal-kas-ku">
+  <div class="modal">
+    <div class="modal-title" id="modal-kas-ku-title">Tambah Kas</div>
+    <input type="hidden" id="kas-ku-id"/>
+    <div class="irow"><label>Nama Kas</label><input type="text" id="kas-ku-nama" placeholder="cth: Kas Utama"/></div>
+    <div class="irow"><label>Saldo Awal</label><input type="number" id="kas-ku-saldo" value="0" placeholder="0"/></div>
+    <div class="irow"><label>Modul</label>
+      <select id="kas-ku-modul">
+        <option value="warung">Warung</option>
+        <option value="ppob">PPOB</option>
+        <option value="bmt">BMT</option>
+        <option value="laundry">Laundry</option>
+        <option value="service">Service</option>
+      </select>
+    </div>
+    <div class="irow"><label>Keterangan</label><input type="text" id="kas-ku-ket" placeholder="Opsional"/></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-kas-ku')">Batal</button>
+      <button class="btn primary" onclick="simpanKasKu()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: MUTASI KAS ═══════════════════════════════════ -->
+<div class="modal-overlay" id="modal-mutasi-kas">
+  <div class="modal">
+    <div class="modal-title">💰 Mutasi Kas</div>
+    <input type="hidden" id="mutasi-kas-id"/>
+    <div id="mutasi-kas-info" style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:13px;"></div>
+    <div class="irow"><label>Tipe</label>
+      <select id="mutasi-tipe" onchange="updateMutasiUI()">
+        <option value="masuk">➕ Masuk</option>
+        <option value="keluar">➖ Keluar</option>
+      </select>
+    </div>
+    <div class="irow"><label>Jumlah</label><input type="number" id="mutasi-jumlah" placeholder="0"/></div>
+    <div class="irow"><label>Tanggal</label><input type="date" id="mutasi-tgl"/></div>
+    <div class="irow"><label>Keterangan</label><input type="text" id="mutasi-ket" placeholder="Keterangan mutasi"/></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-mutasi-kas')">Batal</button>
+      <button class="btn primary" onclick="simpanMutasiKas()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: TRANSFER KAS ════════════════════════════════ -->
+<div class="modal-overlay" id="modal-transfer-kas">
+  <div class="modal">
+    <div class="modal-title">↔ Transfer Antar Kas</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">
+      Dana dipindahkan dari satu akun kas ke akun kas lain. Jurnal otomatis terbuat.
+    </div>
+    <div class="irow"><label>Dari Kas</label>
+      <select id="transfer-dari" onchange="updateTransferInfo()">
+        <option value="">— Pilih —</option>
+      </select>
+    </div>
+    <div id="transfer-dari-info" style="font-size:12px;color:var(--gray);margin:-8px 0 10px 0;padding-left:2px;"></div>
+    <div class="irow"><label>Ke Kas</label>
+      <select id="transfer-ke" onchange="updateTransferInfo()">
+        <option value="">— Pilih —</option>
+      </select>
+    </div>
+    <div id="transfer-ke-info" style="font-size:12px;color:var(--gray);margin:-8px 0 10px 0;padding-left:2px;"></div>
+    <div class="irow"><label>Jumlah</label><input type="number" id="transfer-jumlah" placeholder="0" oninput="updateTransferInfo()"/></div>
+    <div id="transfer-preview" style="display:none;background:var(--hijau-light);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;margin-bottom:12px;line-height:1.7;"></div>
+    <div class="irow"><label>Tanggal</label><input type="date" id="transfer-tgl"/></div>
+    <div class="irow"><label>Keterangan</label><input type="text" id="transfer-ket" placeholder="Opsional"/></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-transfer-kas')">Batal</button>
+      <button class="btn primary" onclick="simpanTransferKas()">Transfer</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
