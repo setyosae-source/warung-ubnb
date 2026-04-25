@@ -241,6 +241,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="nav-item" onclick="showPage('laporan',this)"><span class="nav-icon">📋</span>Laporan</div>
       <div class="nav-item" onclick="showPage('mpps',this)"><span class="nav-icon">📅</span>MPPS & SHU</div>
       <div class="nav-item" onclick="showPage('shu-laporan',this)"><span class="nav-icon">📄</span>Laporan SHU</div>
+      <div class="nav-item" onclick="showPage('pengajuan-saham',this)" id="nav-pengajuan-saham"><span class="nav-icon">📥</span>Pengajuan Saham <span id="badge-pengajuan" style="background:#e53e3e;color:white;border-radius:99px;font-size:10px;padding:1px 6px;margin-left:4px;display:none">0</span></div>
     </div>
     <div class="sb-footer">
       <div class="sb-user" id="sb-user">-</div>
@@ -517,6 +518,27 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       </div>
     </div>
 
+    <!-- ========== PAGE: PENGAJUAN SAHAM ========== -->
+    <div class="page" id="page-pengajuan-saham">
+      <div class="card">
+        <div class="card-title">
+          <span>📥 Pengajuan Tambah Saham</span>
+          <div style="display:flex;gap:8px;">
+            <select id="flt-pjy-saham-status" onchange="renderPengajuanSaham()" style="height:32px;font-size:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-family:inherit;">
+              <option value="">Semua Status</option>
+              <option value="pending">⏳ Pending</option>
+              <option value="approved">✅ Disetujui</option>
+              <option value="rejected">❌ Ditolak</option>
+            </select>
+          </div>
+        </div>
+        <!-- Stats -->
+        <div id="pjy-saham-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;"></div>
+        <!-- List -->
+        <div id="pjy-saham-list"></div>
+      </div>
+    </div>
+
   </div><!-- end main-wrap -->
 </div><!-- end app -->
 
@@ -740,6 +762,7 @@ window.addEventListener('load',async()=>{
 
 // ===== LOAD DATA =====
 async function loadAll(){
+  await loadPengajuanSaham();
   const[{data:s},{data:t},{data:b},{data:bd},{data:m},{data:ku},{data:ls},{data:kb},{data:rt},{data:ap}]=await Promise.all([
     sb.from('ubnb_saham').select('*').order('jumlah_lembar',{ascending:false}),
     sb.from('ubnb_saham_trx').select('*').order('tanggal',{ascending:false}),
@@ -2289,6 +2312,136 @@ async function simpanBagiHasilBaru(tahun){
   document.getElementById('modal-buat-bh')?.remove();
   toast(`✅ Bagi Hasil ${tahun} dibuat! ${details.length} anggota · ${rp(Math.round(perLembar))}/lbr`);
   await loadAll();renderMPPS();
+}
+
+
+// ═══ PENGAJUAN SAHAM ═══════════════════════════════════════
+let aPengajuanSaham = [];
+
+async function loadPengajuanSaham(){
+  const{data}=await sb.from('pengajuan_saham').select('*').order('created_at',{ascending:false});
+  aPengajuanSaham=data||[];
+  // Update badge
+  const pending=aPengajuanSaham.filter(p=>p.status==='pending').length;
+  const badge=document.getElementById('badge-pengajuan');
+  if(badge){badge.textContent=pending;badge.style.display=pending>0?'inline':'none';}
+}
+
+function renderPengajuanSaham(){
+  const el=document.getElementById('pjy-saham-list');
+  const statsEl=document.getElementById('pjy-saham-stats');
+  if(!el)return;
+
+  const pending=aPengajuanSaham.filter(p=>p.status==='pending').length;
+  const approved=aPengajuanSaham.filter(p=>p.status==='approved').length;
+  const rejected=aPengajuanSaham.filter(p=>p.status==='rejected').length;
+  if(statsEl) statsEl.innerHTML=
+    '<div style="background:#fef3c7;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#92400e;">'+pending+'</div><div style="font-size:11px;color:#92400e;">⏳ Pending</div></div>'+
+    '<div style="background:#dcfce7;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#166534;">'+approved+'</div><div style="font-size:11px;color:#166534;">✅ Disetujui</div></div>'+
+    '<div style="background:#fee2e2;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#991b1b;">'+rejected+'</div><div style="font-size:11px;color:#991b1b;">❌ Ditolak</div></div>';
+
+  const flt=document.getElementById('flt-pjy-saham-status')?.value||'';
+  let data=flt?aPengajuanSaham.filter(p=>p.status===flt):aPengajuanSaham;
+
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">📥</div>Belum ada pengajuan</div>';return;}
+
+  const statusBadge={
+    pending:'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">⏳ Pending</span>',
+    approved:'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">✅ Disetujui</span>',
+    rejected:'<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">❌ Ditolak</span>',
+  };
+
+  el.innerHTML=data.map(p=>`
+    <div style="border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div>
+          <div style="font-weight:700;font-size:14px;">${p.nama_anggota}</div>
+          <div style="font-size:12px;color:var(--text-muted);">Keluarga: ${p.nama_keluarga||'—'}</div>
+          <div style="font-size:12px;color:var(--text-muted);">WA: ${p.no_wa||'—'} &nbsp;·&nbsp; ${p.jumlah_lembar} lembar</div>
+          ${p.keterangan?'<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">📝 '+p.keterangan+'</div>':''}
+          ${p.catatan_admin?'<div style="font-size:12px;color:var(--red);margin-top:2px;">Admin: '+p.catatan_admin+'</div>':''}
+        </div>
+        <div style="text-align:right;">
+          ${statusBadge[p.status]||p.status}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${new Date(p.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</div>
+          ${p.direview_oleh?'<div style="font-size:10px;color:var(--text-muted);">by '+p.direview_oleh+'</div>':''}
+        </div>
+      </div>
+      ${p.status==='pending'?`
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn gold sm" style="flex:1;" onclick="approvePengajuanSaham(${p.id},'${p.nama_anggota}',${p.jumlah_lembar},'${p.nama_keluarga||''}','${p.no_wa||''}')">✅ Approve & Buat Anggota</button>
+        <button class="btn danger sm" onclick="rejectPengajuanSaham(${p.id})">❌ Tolak</button>
+        <button class="btn sm" onclick="hapusPengajuanSaham(${p.id})">🗑️</button>
+      </div>`:''}
+    </div>`).join('');
+}
+
+async function approvePengajuanSaham(id, nama, lembar, keluarga, wa){
+  const kelompok = prompt('Kelompok anggota baru? (PW1/PW2/PW3/PW4)', 'PW4');
+  if(!kelompok) return;
+  const harga = parseInt(prompt('Harga per lembar (Rp)?', '10200'))||10200;
+
+  // Cek apakah nama sudah ada
+  const{data:existing}=await sb.from('ubnb_saham').select('id,nama').ilike('nama',nama.trim());
+  if(existing&&existing.length>0){
+    if(!confirm('Anggota dengan nama "'+nama+'" sudah ada ('+existing[0].nama+'). Tetap buat baru?')) return;
+  }
+
+  // Buat anggota baru di ubnb_saham
+  const noAnggota='UBNB-'+kelompok+'/'+String(Date.now()).slice(-5);
+  const{data:newA,error}=await sb.from('ubnb_saham').insert([{
+    no_anggota:noAnggota, nama:nama.trim(),
+    nama_keluarga:keluarga||nama, kelompok,
+    jumlah_lembar:lembar, nilai_per_lembar:harga,
+    total_nilai:lembar*harga, no_hp:wa||null,
+    status:'aktif', jenis:'anggota'
+  }]).select().single();
+
+  if(error){toast('Gagal buat anggota: '+error.message,true);return;}
+
+  // Catat transaksi beli
+  await sb.from('ubnb_saham_trx').insert([{
+    saham_id:newA.id, tipe:'beli',
+    jumlah_lembar:lembar, harga_per_lembar:harga,
+    total_nilai:lembar*harga,
+    tanggal:new Date().toISOString().slice(0,10),
+    catatan:'Dari pengajuan dashboard keluarga', operator:CU?.username||'admin'
+  }]);
+
+  // Update status pengajuan
+  await sb.from('pengajuan_saham').update({
+    status:'approved',
+    direview_oleh:CU?.username||'admin',
+    direview_at:new Date().toISOString(),
+    catatan_admin:'Anggota dibuat: '+noAnggota
+  }).eq('id',id);
+
+  toast('✅ Anggota baru dibuat! No: '+noAnggota);
+  await loadAll();
+  await loadPengajuanSaham();
+  renderPengajuanSaham();
+}
+
+async function rejectPengajuanSaham(id){
+  const alasan=prompt('Alasan penolakan:','');
+  if(alasan===null) return;
+  await sb.from('pengajuan_saham').update({
+    status:'rejected',
+    direview_oleh:CU?.username||'admin',
+    direview_at:new Date().toISOString(),
+    catatan_admin:alasan||'Ditolak oleh admin'
+  }).eq('id',id);
+  toast('Pengajuan ditolak');
+  await loadPengajuanSaham();
+  renderPengajuanSaham();
+}
+
+async function hapusPengajuanSaham(id){
+  if(!confirm('Hapus pengajuan ini?')) return;
+  await sb.from('pengajuan_saham').delete().eq('id',id);
+  await loadPengajuanSaham();
+  renderPengajuanSaham();
+  toast('Pengajuan dihapus');
 }
 
 </script>
