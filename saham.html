@@ -687,6 +687,63 @@ function bukaWindowCetak(html){
   <button onclick="window.close()" style="background:#666;color:white;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer">✕ Tutup</button>
 </div>
 ${html}
+
+<!-- ══ MODAL: KONFIRMASI APPROVE SAHAM ═══════════════════ -->
+<div class="overlay" id="modal-approve-saham" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">
+      <h3>✅ Konfirmasi Pengajuan Saham</h3>
+      <button class="btn-close" onclick="document.getElementById('modal-approve-saham').classList.remove('show')">✕</button>
+    </div>
+    <input type="hidden" id="apv-id"/>
+    <input type="hidden" id="apv-total-val"/>
+
+    <!-- Info dari jamaah_desa -->
+    <div id="apv-jamaah-info" style="margin-bottom:8px;"></div>
+
+    <!-- Cari jamaah manual -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <input type="text" id="apv-cari-jamaah" placeholder="🔍 Cari nama di jamaah..."
+        style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;"
+        oninput="cariJamaahApv()"/>
+      <a href="jamaah.html" target="_blank" class="btn secondary sm" style="white-space:nowrap;text-decoration:none;line-height:2;">
+        ➕ Tambah Jamaah
+      </a>
+    </div>
+    <div id="apv-cari-hasil" style="margin-bottom:10px;"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div class="irow"><label>Nama Anggota</label><input type="text" id="apv-nama" oninput="hitungApvTotal()"/></div>
+      <div class="irow"><label>Nama Keluarga</label><input type="text" id="apv-keluarga"/></div>
+      <div class="irow"><label>Kelompok</label>
+        <select id="apv-kelompok" onchange="hitungApvTotal()">
+          <option value="PW1">PW1</option><option value="PW2">PW2</option>
+          <option value="PW3">PW3</option><option value="PW4" selected>PW4</option>
+        </select>
+      </div>
+      <div class="irow"><label>No. WA</label><input type="text" id="apv-wa" placeholder="08xxx" oninput="hitungApvTotal()"/></div>
+      <div class="irow"><label>Jumlah Lembar</label><input type="number" id="apv-lembar" min="1" oninput="hitungApvTotal()"/></div>
+      <div class="irow"><label>Harga/Lembar (Rp)</label><input type="number" id="apv-harga" value="10200" oninput="hitungApvTotal()"/></div>
+    </div>
+
+    <div style="background:var(--gold-light);border-radius:8px;padding:12px 14px;margin-bottom:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--gold-dark);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Total Tagihan</div>
+      <div id="apv-total" style="font-size:24px;font-weight:800;color:var(--gold-dark);">Rp 0</div>
+    </div>
+
+    <div class="irow" style="margin-bottom:14px;">
+      <label>Preview Pesan WA <span style="font-weight:400;color:var(--text-muted)">(bisa diedit)</span></label>
+      <textarea id="apv-pesan-wa" rows="10" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;line-height:1.6;resize:vertical;"></textarea>
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <button class="btn secondary" style="flex:1;" onclick="document.getElementById('modal-approve-saham').classList.remove('show')">Batal</button>
+      <a id="apv-btn-wa" href="#" target="_blank" class="btn gold" style="flex:1;text-align:center;text-decoration:none;">📱 Kirim WA</a>
+      <button id="apv-btn-eksekusi" class="btn primary" style="flex:2;" onclick="eksekusiApproveSaham()">✅ Buat Anggota & Approve</button>
+    </div>
+  </div>
+</div>
+
 </body></html>`);
   w.document.close();
   w.onload=()=>{setTimeout(()=>w.print(),400);};
@@ -2377,50 +2434,191 @@ function renderPengajuanSaham(){
     </div>`).join('');
 }
 
+// Buka modal konfirmasi sebelum approve — dengan lookup jamaah_desa
 async function approvePengajuanSaham(id, nama, lembar, keluarga, wa){
-  const kelompok = prompt('Kelompok anggota baru? (PW1/PW2/PW3/PW4)', 'PW4');
-  if(!kelompok) return;
-  const harga = parseInt(prompt('Harga per lembar (Rp)?', '10200'))||10200;
+  // Isi nilai awal dari pengajuan
+  document.getElementById('apv-id').value = id;
+  document.getElementById('apv-nama').value = nama;
+  document.getElementById('apv-lembar').value = lembar;
+  document.getElementById('apv-keluarga').value = keluarga||nama;
+  document.getElementById('apv-wa').value = wa||'';
+  document.getElementById('apv-kelompok').value = 'PW4';
+  document.getElementById('apv-harga').value = '10200';
+  document.getElementById('apv-jamaah-info').innerHTML = '<em style="color:var(--text-muted)">🔍 Mencari data jamaah...</em>';
 
-  // Cek apakah nama sudah ada
-  const{data:existing}=await sb.from('ubnb_saham').select('id,nama').ilike('nama',nama.trim());
-  if(existing&&existing.length>0){
-    if(!confirm('Anggota dengan nama "'+nama+'" sudah ada ('+existing[0].nama+'). Tetap buat baru?')) return;
+  // Lookup ke jamaah_desa — cari by nama anggota dan nama_kk
+  const [resNama, resKK] = await Promise.all([
+    sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok,kelompok_nama,no_hp')
+      .ilike('nama', '%'+nama.trim()+'%').limit(3),
+    sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok,kelompok_nama')
+      .ilike('nama_kk', '%'+(keluarga||nama).trim()+'%').limit(3)
+  ]);
+
+  const jamaahMatch = resNama.data||[];
+  const kkMatch = resKK.data||[];
+
+  let infoHTML = '';
+
+  if(jamaahMatch.length > 0){
+    const j = jamaahMatch[0];
+    infoHTML += '<div style="background:#dcfce7;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px;">' +
+      '✅ <strong>Jamaah ditemukan:</strong> '+j.nama+' — KK: '+j.nama_kk+' — Kelompok: PW'+j.kelompok+' ('+j.kelompok_nama+')' +
+      (j.no_hp?'<br>📱 WA: '+j.no_hp:'') +
+      '</div>';
+    // Auto-fill kelompok dari jamaah
+    if(j.kelompok) document.getElementById('apv-kelompok').value = 'PW'+j.kelompok;
+    // Auto-fill WA jika kosong
+    if(!wa && j.no_hp) document.getElementById('apv-wa').value = j.no_hp;
+    // Auto-fill nama dengan nama resmi di jamaah
+    document.getElementById('apv-nama').value = j.nama;
+    document.getElementById('apv-keluarga').value = j.nama_kk;
+  } else {
+    infoHTML += '<div style="background:#fef3c7;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px;">' +
+      '⚠️ <strong>Nama "'+nama+'" tidak ditemukan</strong> di data jamaah. Periksa kembali.' +
+      '</div>';
   }
 
-  // Buat anggota baru di ubnb_saham
-  const noAnggota='UBNB-'+kelompok+'/'+String(Date.now()).slice(-5);
-  const{data:newA,error}=await sb.from('ubnb_saham').insert([{
-    no_anggota:noAnggota, nama:nama.trim(),
-    nama_keluarga:keluarga||nama, kelompok,
-    jumlah_lembar:lembar, nilai_per_lembar:harga,
-    total_nilai:lembar*harga, no_hp:wa||null,
-    status:'aktif', jenis:'anggota'
-  }]).select().single();
+  if(kkMatch.length > 0 && jamaahMatch.length === 0){
+    infoHTML += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">'+
+      'Keluarga "'+keluarga+'" ditemukan: '+kkMatch.map(k=>k.nama).join(', ')+'</div>';
+  }
 
-  if(error){toast('Gagal buat anggota: '+error.message,true);return;}
+  document.getElementById('apv-jamaah-info').innerHTML = infoHTML;
+  hitungApvTotal();
+  document.getElementById('modal-approve-saham').classList.add('show');
+}
 
-  // Catat transaksi beli
-  await sb.from('ubnb_saham_trx').insert([{
-    saham_id:newA.id, tipe:'beli',
-    jumlah_lembar:lembar, harga_per_lembar:harga,
-    total_nilai:lembar*harga,
-    tanggal:new Date().toISOString().slice(0,10),
-    catatan:'Dari pengajuan dashboard keluarga', operator:CU?.username||'admin'
-  }]);
+async function cariJamaahApv(){
+  const q = document.getElementById('apv-cari-jamaah').value.trim();
+  const el = document.getElementById('apv-cari-hasil');
+  if(q.length < 2){el.innerHTML='';return;}
+  const{data}=await sb.from('jamaah_desa')
+    .select('did,nama,nama_kk,kelompok,kelompok_nama,no_hp')
+    .or('nama.ilike.%'+q+'%,nama_kk.ilike.%'+q+'%')
+    .limit(5);
+  if(!data||!data.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--red);padding:6px 10px;background:#fee2e2;border-radius:8px;">❌ Tidak ditemukan. <a href="jamaah.html" target="_blank" style="color:var(--red);font-weight:700;">Tambah ke jamaah dulu →</a></div>';
+    return;
+  }
+  el.innerHTML='<div style="border:1.5px solid var(--border);border-radius:8px;overflow:hidden;">'+
+    data.map(j=>`<div style="padding:8px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;"
+      onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''"
+      onclick="pilihJamaahApv('${j.nama}','${j.nama_kk}','PW${j.kelompok}','${j.no_hp||''}')">
+      <div><strong>${j.nama}</strong><br><span style="color:var(--text-muted);">KK: ${j.nama_kk} · PW${j.kelompok} · ${j.kelompok_nama}</span></div>
+      <span style="color:var(--hijau);font-size:11px;">Pilih →</span>
+    </div>`).join('')+
+  '</div>';
+}
 
-  // Update status pengajuan
-  await sb.from('pengajuan_saham').update({
-    status:'approved',
-    direview_oleh:CU?.username||'admin',
-    direview_at:new Date().toISOString(),
-    catatan_admin:'Anggota dibuat: '+noAnggota
-  }).eq('id',id);
+function pilihJamaahApv(nama, kk, kelompok, hp){
+  document.getElementById('apv-nama').value = nama;
+  document.getElementById('apv-keluarga').value = kk;
+  document.getElementById('apv-kelompok').value = kelompok;
+  if(hp) document.getElementById('apv-wa').value = hp;
+  document.getElementById('apv-jamaah-info').innerHTML =
+    '<div style="background:#dcfce7;border-radius:8px;padding:10px 12px;font-size:12px;">'+
+    '✅ <strong>Dipilih dari jamaah:</strong> '+nama+' — KK: '+kk+' — '+kelompok+'</div>';
+  document.getElementById('apv-cari-hasil').innerHTML = '';
+  document.getElementById('apv-cari-jamaah').value = '';
+  hitungApvTotal();
+}
 
-  toast('✅ Anggota baru dibuat! No: '+noAnggota);
-  await loadAll();
-  await loadPengajuanSaham();
-  renderPengajuanSaham();
+function hitungApvTotal(){
+  const lembar = parseInt(document.getElementById('apv-lembar').value)||0;
+  const harga  = parseInt(document.getElementById('apv-harga').value)||10200;
+  const total  = lembar * harga;
+  document.getElementById('apv-total').textContent = 'Rp ' + total.toLocaleString('id-ID');
+  document.getElementById('apv-total-val').value = total;
+  // Preview pesan WA
+  const nama    = document.getElementById('apv-nama').value;
+  const kel     = document.getElementById('apv-kelompok').value;
+  const wa      = document.getElementById('apv-wa').value;
+  const pesan   =
+    'Assalamu\'alaikum, '+nama+' 🙏\n\n'+
+    'Kami informasikan pengajuan pembelian saham UBNB Desa Perwira Anda telah kami terima dengan rincian:\n\n'+
+    '📋 *Detail Pembelian Saham*\n'+
+    'Nama Anggota : '+nama+'\n'+
+    'Kelompok     : '+kel+'\n'+
+    'Jumlah Lembar: '+lembar+' lembar\n'+
+    'Harga/Lembar : Rp '+harga.toLocaleString('id-ID')+'\n'+
+    '━━━━━━━━━━━━━━━\n'+
+    '*TOTAL TAGIHAN: Rp '+total.toLocaleString('id-ID')+'*\n\n'+
+    '💳 *Pembayaran*\n'+
+    'Silakan transfer/setor tunai ke Bendahara UBNB:\n'+
+    'Bpk/Ibu Bendahara Desa Perwira\n\n'+
+    'Setelah pembayaran, konfirmasi ke nomor ini dengan mengirimkan bukti transfer.\n\n'+
+    'Jazaakumullahu Khoiro 🙏\n'+
+    '_UBNB Desa Perwira_';
+  document.getElementById('apv-pesan-wa').value = pesan;
+  // Update link WA
+  const noWA = (wa||'').replace(/[^0-9]/g,'');
+  const waFinal = noWA.startsWith('0') ? '62'+noWA.slice(1) : noWA;
+  document.getElementById('apv-btn-wa').href = waFinal
+    ? 'https://wa.me/'+waFinal+'?text='+encodeURIComponent(pesan)
+    : '#';
+  document.getElementById('apv-btn-wa').style.opacity = waFinal ? '1' : '.5';
+}
+
+async function eksekusiApproveSaham(){
+  const id      = parseInt(document.getElementById('apv-id').value);
+  const nama    = document.getElementById('apv-nama').value.trim();
+  const lembar  = parseInt(document.getElementById('apv-lembar').value);
+  const keluarga= document.getElementById('apv-keluarga').value.trim();
+  const wa      = document.getElementById('apv-wa').value.trim();
+  const kelompok= document.getElementById('apv-kelompok').value;
+  const harga   = parseInt(document.getElementById('apv-harga').value)||10200;
+  const total   = lembar * harga;
+  const btn     = document.getElementById('apv-btn-eksekusi');
+
+  btn.disabled=true; btn.textContent='⏳ Memproses...';
+  try{
+    // Cek duplikat nama
+    const{data:existing}=await sb.from('ubnb_saham').select('id,nama').ilike('nama',nama);
+    if(existing&&existing.length>0){
+      if(!confirm('Nama "'+nama+'" sudah ada di data saham. Tetap buat anggota baru?')){
+        btn.disabled=false; btn.textContent='✅ Buat Anggota & Approve';
+        return;
+      }
+    }
+    // Generate no anggota
+    const{data:lastA}=await sb.from('ubnb_saham')
+      .select('no_anggota').like('no_anggota','UBNB-%')
+      .order('no_anggota',{ascending:false}).limit(1);
+    const lastNum = lastA?.[0]?.no_anggota?.match(/\d+$/)?.[0]||'0';
+    const noAnggota='UBNB-'+kelompok+'/'+String(parseInt(lastNum)+1).padStart(5,'0');
+
+    // Insert anggota baru
+    const{data:newA,error}=await sb.from('ubnb_saham').insert([{
+      no_anggota:noAnggota, nama, nama_keluarga:keluarga||nama,
+      kelompok, jumlah_lembar:lembar, nilai_per_lembar:harga,
+      total_nilai:total, no_hp:wa||null, status:'aktif', jenis:'anggota'
+    }]).select().single();
+    if(error) throw error;
+
+    // Catat transaksi beli
+    await sb.from('ubnb_saham_trx').insert([{
+      saham_id:newA.id, tipe:'beli', jumlah_lembar:lembar,
+      harga_per_lembar:harga, total_nilai:total,
+      tanggal:new Date().toISOString().slice(0,10),
+      catatan:'Dari pengajuan dashboard keluarga', operator:CU?.username||'admin'
+    }]);
+
+    // Update status pengajuan jadi approved
+    await sb.from('pengajuan_saham').update({
+      status:'approved', direview_oleh:CU?.username||'admin',
+      direview_at:new Date().toISOString(),
+      catatan_admin:'Anggota dibuat: '+noAnggota+' | Tagihan: Rp '+total.toLocaleString('id-ID')
+    }).eq('id',id);
+
+    document.getElementById('modal-approve-saham').classList.remove('show');
+    toast('✅ Anggota '+noAnggota+' berhasil dibuat! Tagihan Rp '+total.toLocaleString('id-ID'));
+    await loadAll();
+    await loadPengajuanSaham();
+    renderPengajuanSaham();
+  }catch(err){
+    toast('Gagal: '+err.message, true);
+    btn.disabled=false; btn.textContent='✅ Buat Anggota & Approve';
+  }
 }
 
 async function rejectPengajuanSaham(id){
