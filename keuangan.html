@@ -964,7 +964,7 @@ const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let CU=null;
-let D={kas:[],barang:[],bmt_akad:[],bmt_angsuran:[],transaksi:[],ppob:[],
+let D={kas:[],harga_saham:[],barang:[],bmt_akad:[],bmt_angsuran:[],transaksi:[],ppob:[],
   pembelian:[],ubnb_saham:[],aset_tetap:[],aset_penyusutan:[],
   laba_ditahan:[],jurnal_umum:[],jurnal_detail:[],coa:[],pos_manual:[],
   neraca_snapshot:[],kas_mutasi:[],kas_default:[],
@@ -1003,11 +1003,12 @@ async function refreshAll(){
       catch(e){console.warn('Load gagal:',tbl,e);return [];}
     };
     const[
-      kas,br,akad,angs,trx,ppob,beli,saham,
+      kas,hargaSaham,br,akad,angs,trx,ppob,beli,saham,
       aset,aps,ld,ju,jd,coa,pm,nsnap,kasMut,kasDef,
       laundry,service,wadiah,modalPeny
     ]=await Promise.all([
       load('kas',          sb.from('kas').select('*').order('id')),
+      load('harga_saham',  sb.from('ubnb_harga_saham').select('harga_baru,berlaku_mulai').order('berlaku_mulai',{ascending:false}).limit(1)),
       load('barang',       sb.from('barang').select('id,stok,harga_beli').gt('stok',0)),
       load('bmt_akad',     sb.from('bmt_akad').select('*')),
       load('bmt_angsuran', sb.from('bmt_angsuran').select('jumlah,created_at,akad_id')),
@@ -1030,7 +1031,7 @@ async function refreshAll(){
       load('wadiah',       sb.from('ubnb_wadiah_tabungan').select('saldo,status')),
       load('modal_peny',   sb.from('ubnb_modal_penyertaan').select('jumlah_modal,status').eq('status','aktif')),
     ]);
-    D={kas,barang:br,bmt_akad:akad,bmt_angsuran:angs,
+    D={kas,harga_saham:hargaSaham,barang:br,bmt_akad:akad,bmt_angsuran:angs,
       transaksi:trx,ppob,pembelian:beli,ubnb_saham:saham,
       aset_tetap:aset,aset_penyusutan:aps,laba_ditahan:ld,
       jurnal_umum:ju,jurnal_detail:jd,coa,pos_manual:pm,
@@ -1188,7 +1189,14 @@ function getModalPenyertaan(){
   return{total:(D.modal_penyertaan||[]).reduce((s,m)=>s+parseFloat(m.jumlah_modal||0),0),jumlah:(D.modal_penyertaan||[]).length};
 }
 
-function getModal(){const l=D.ubnb_saham.reduce((s,x)=>s+parseFloat(x.jumlah_lembar||0),0);return{lembar:l,nilai:l*10200};}
+function getModal(){
+  const l=D.ubnb_saham.reduce((s,x)=>s+parseFloat(x.jumlah_lembar||0),0);
+  // Baca dari ubnb_harga_saham (master) — satu-satunya sumber kebenaran
+  const harga=D.harga_saham&&D.harga_saham.length>0
+    ? parseFloat(D.harga_saham[0].harga_baru||10200)
+    : 10200;
+  return{lembar:l,nilai:l*harga,harga};
+}
 function getLD(tahun){return D.laba_ditahan.find(l=>l.tahun===tahun)||null;}
 
 function getTrx(tahun){
