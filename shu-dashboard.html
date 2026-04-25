@@ -861,72 +861,77 @@ function hitungSimulasi(){
 }
 
 async function jalankanSimulasi(){
-  const totalSHU=parseFloat(document.getElementById('sim-total-shu').value)||0;
-  const shuPerLembar=parseFloat(document.getElementById('sim-shu-lembar').value)||0;
-  const pctSaham=(parseFloat(document.getElementById('sim-pct-saham').value)||60)/100;
-  const pctTrx=(parseFloat(document.getElementById('sim-pct-trx').value)||40)/100;
+  const totalSHU     = parseFloat(document.getElementById('sim-total-shu').value)||0;
+  const shuPerLembar = parseFloat(document.getElementById('sim-shu-lembar').value)||0;
+  const periode      = document.getElementById('sim-periode')?.value||'2026';
 
   if(!totalSHU&&!shuPerLembar){toast('Isi Total SHU atau SHU/Lembar dulu',true);return;}
 
-  const poolSaham=totalSHU*pctSaham;
-  const poolTrx=totalSHU*pctTrx;
+  const btn=document.getElementById('btn-simulasi');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Menghitung...';}
 
-  // Hitung total lembar proporsional (simplified)
-  const totalLembar=aRekap.reduce((s,r)=>s+(r.total_lembar||0),0)||1;
-
-  // Hitung total transaksi terbobot
-  const kebPorsi=aKebijakan?{
-    saham:(aKebijakan.porsi_saham_pct||20)/100,
-    angsuran:(aKebijakan.porsi_angsuran_pct||25)/100,
-    warung:(aKebijakan.porsi_warung_pct||15)/100,
-    ppob:(aKebijakan.porsi_ppob_pct||10)/100,
-    laundry:(aKebijakan.porsi_laundry_pct||10)/100,
-    service:(aKebijakan.porsi_service_pct||10)/100,
-    wadiah:(aKebijakan.porsi_wadiah_pct||10)/100
-  }:{saham:.2,angsuran:.25,warung:.15,ppob:.1,laundry:.1,service:.1,wadiah:.1};
-
-  // Hitung terbobot per anggota
-  const jenis=['saham','angsuran','warung','ppob','laundry','service','wadiah'];
-  aRekap.forEach(r=>{
-    r._terbobot=jenis.reduce((s,j)=>s+(r[j]||0)*(kebPorsi[j]||0),0);
-  });
-  const totalTerbobot=aRekap.reduce((s,r)=>s+(r._terbobot||0),0)||1;
-
-  _simResult=aRekap.map(r=>{
-    const shuSaham=shuPerLembar>0?(r.total_lembar||0)*shuPerLembar:poolSaham*((r.total_lembar||0)/totalLembar);
-    const shuTrx=poolTrx>0?poolTrx*(r._terbobot||0)/totalTerbobot:0;
-    return {...r,shu_saham:Math.round(shuSaham),shu_trx:Math.round(shuTrx),shu_total:Math.round(shuSaham+shuTrx)};
-  }).sort((a,b)=>b.shu_total-a.shu_total);
-
-  // Top 10
-  const top10=_simResult.slice(0,10);
-  document.getElementById('sim-hasil').innerHTML=top10.map((r,i)=>`
-    <div class="rank-item">
-      <div class="rank-no ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}">${i+1}</div>
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:12px">${r.nama}</div>
-        <div style="font-size:10px;color:var(--text-muted)">
-          Saham: ${rp(r.shu_saham)} · Trx: ${rp(r.shu_trx)}
-        </div>
-      </div>
-      <div style="font-weight:800;color:var(--gold);font-size:14px">${rp(r.shu_total)}</div>
-    </div>`).join('');
-
-  // Tabel lengkap
-  document.getElementById('sim-tabel-card').style.display='block';
-  document.getElementById('tbody-simulasi').innerHTML=_simResult.map((r,i)=>`<tr>
-    <td style="color:var(--text-muted)">${i+1}</td>
-    <td><strong>${r.nama}</strong></td>
-    <td><span style="font-size:10px;color:var(--text-muted)">${r.kelompok||'—'}</span></td>
-    <td style="text-align:right">${(r.total_lembar||0).toFixed(1)}</td>
-    <td style="text-align:right;color:#4ade80">${rp(r.shu_saham)}</td>
-    <td style="text-align:right;color:#60a5fa">${rp(r._terbobot||0)}</td>
-    <td style="text-align:right;color:#c084fc">${rp(r.shu_trx)}</td>
-    <td style="text-align:right;font-weight:800;color:var(--gold)">${rp(r.shu_total)}</td>
-  </tr>`).join('');
-
-  toast('✅ Simulasi selesai!');
+  try{
+    const{data,error}=await sb.rpc('fn_kalkulasi_shu_per_anggota',{
+      p_periode: periode,
+      p_total_shu: totalSHU||0,
+      p_shu_per_lembar: shuPerLembar||0
+    });
+    if(error) throw error;
+    aSimulasi=data||[];
+    renderSimulasi(aSimulasi, totalSHU, shuPerLembar);
+    toast('Simulasi selesai — '+aSimulasi.length+' anggota');
+  }catch(err){
+    toast('Gagal: '+err.message,true);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='▶ Jalankan Simulasi';}
+  }
 }
+
+function renderSimulasi(data, totalSHU, shuPerLembar){
+  const el=document.getElementById('sim-hasil');
+  if(!el)return;
+  if(!data||!data.length){el.innerHTML='<div class="empty">Belum ada data</div>';return;}
+  const totSaham=data.reduce((s,r)=>s+parseFloat(r.shu_saham||0),0);
+  const totAktiv=data.reduce((s,r)=>s+parseFloat(r.shu_aktivitas||0),0);
+  const totSHU=data.reduce((s,r)=>s+parseFloat(r.total_shu||0),0);
+  const adaAktiv=data.filter(r=>parseFloat(r.total_aktivitas||0)>0).length;
+  el.innerHTML=
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">'+
+      '<div style="background:var(--hijau-light);border-radius:8px;padding:10px;text-align:center;">'+
+        '<div style="font-size:11px;color:var(--hijau-dark);font-weight:700;">Pool Saham</div>'+
+        '<div style="font-size:16px;font-weight:800;color:var(--hijau-dark);">'+rp(totSaham)+'</div></div>'+
+      '<div style="background:#fef3c7;border-radius:8px;padding:10px;text-align:center;">'+
+        '<div style="font-size:11px;color:#92400e;font-weight:700;">Pool Aktivitas</div>'+
+        '<div style="font-size:16px;font-weight:800;color:#92400e;">'+rp(totAktiv)+'</div>'+
+        '<div style="font-size:10px;color:#92400e;">'+adaAktiv+' anggota aktif</div></div>'+
+      '<div style="background:var(--blue-light);border-radius:8px;padding:10px;text-align:center;">'+
+        '<div style="font-size:11px;color:var(--blue);font-weight:700;">Total Dibagi</div>'+
+        '<div style="font-size:16px;font-weight:800;color:var(--blue);">'+rp(totSHU)+'</div></div>'+
+    '</div>'+
+    '<div style="overflow-x:auto;"><table class="tbl" style="min-width:650px;">'+
+    '<thead><tr><th>Nama</th><th>Kel.</th><th class="r">Lembar</th>'+
+    '<th class="r">SHU Saham</th><th class="r">Nilai Aktivitas</th>'+
+    '<th class="r">SHU Aktivitas</th><th class="r">Total SHU</th></tr></thead><tbody>'+
+    data.map(r=>
+      '<tr>'+
+      '<td style="font-size:12px;">'+r.nama+'</td>'+
+      '<td style="font-size:11px;">'+r.kelompok+'</td>'+
+      '<td class="r" style="font-size:12px;">'+(r.jumlah_lembar||0).toLocaleString('id-ID')+'</td>'+
+      '<td class="r rp" style="color:var(--hijau);">'+rp(r.shu_saham||0)+'</td>'+
+      '<td class="r" style="font-size:11px;color:var(--text-muted);">'+rp(r.total_aktivitas||0)+'</td>'+
+      '<td class="r rp" style="color:var(--gold-dark);">'+rp(r.shu_aktivitas||0)+'</td>'+
+      '<td class="r rp" style="font-weight:700;">'+rp(r.total_shu||0)+'</td>'+
+      '</tr>'
+    ).join('')+
+    '</tbody><tfoot><tr>'+
+    '<td colspan="3" style="font-weight:700;">TOTAL</td>'+
+    '<td class="r rp" style="font-weight:700;color:var(--hijau);">'+rp(totSaham)+'</td>'+
+    '<td class="r"></td>'+
+    '<td class="r rp" style="font-weight:700;color:var(--gold-dark);">'+rp(totAktiv)+'</td>'+
+    '<td class="r rp" style="font-weight:700;">'+rp(totSHU)+'</td>'+
+    '</tr></tfoot></table></div>';
+}
+
 
 function exportSimulasi(){
   if(!_simResult.length){toast('Jalankan simulasi dulu',true);return;}
