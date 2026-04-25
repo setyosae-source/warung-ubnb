@@ -468,8 +468,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
           <div class="irow">
             <label>Harga Saham Baru (Rp)</label>
             <input type="number" id="mpps-harga" placeholder="10200" oninput="hitungMPPS()">
-            <div id="mpps-panduan-harga" style="font-size:11px;color:var(--hijau);margin-top:4px;"></div>
           </div>
+          <div id="mpps-panduan-harga" style="margin-bottom:10px;"></div>
           <div class="irow"><label>SHU per Lembar (Rp)</label><input type="number" id="mpps-shu" placeholder="0" oninput="hitungMPPS()"></div>
           <div id="mpps-preview" style="display:none;background:var(--gold-light);border-radius:var(--radius-xs);padding:12px;margin-bottom:10px">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -1762,27 +1762,46 @@ function getBatches(s,periodeInt){
 }
 
 // ===== MPPS =====
-// Kalkulasi panduan harga saham baru untuk form MPPS (5% dari laba bersih)
+// Kalkulasi harga saham baru dari neraca tahun sebelumnya
+// Formula: (Modal Awal + Saham Baru + Akumulasi Laba Ditahan) / Jumlah Lembar Beredar
 async function hitungPanduanHargaMPPS(){
   const el = document.getElementById('mpps-panduan-harga');
   if(!el) return;
   try{
     const tahunLalu = new Date().getFullYear()-1;
-    const{data:ld}=await sb.from('laba_ditahan').select('laba_bersih_tahun')
-      .eq('tahun',tahunLalu).single();
-    if(!ld) return;
-    const labaBersih = parseFloat(ld.laba_bersih_tahun||0);
-    const totalLembar = aSaham.reduce((s,r)=>s+parseInt(r.jumlah_lembar||0),0);
-    const alokasi5pct = Math.round(labaBersih * 0.05);
-    const tambahan = totalLembar>0 ? Math.floor(alokasi5pct/totalLembar) : 0;
-    const rekomendasiHarga = HARGA_SAHAM + tambahan;
-    el.innerHTML = `💡 Panduan: 5% × laba bersih ${tahunLalu} (Rp ${labaBersih.toLocaleString('id-ID')}) ÷ ${totalLembar.toLocaleString('id-ID')} lembar = `+
-      `<strong>+Rp ${tambahan.toLocaleString('id-ID')}/lembar → Rp ${rekomendasiHarga.toLocaleString('id-ID')}</strong>`+
-      ` <button class="btn sm" style="padding:2px 8px;font-size:10px;" onclick="document.getElementById('mpps-harga').value=${rekomendasiHarga};hitungMPPS()">Pakai</button>`;
-    // Auto-isi kalau field kosong
+
+    // Panggil fungsi DB fn_kalkulasi_harga_saham
+    const{data,error} = await sb.rpc('fn_kalkulasi_harga_saham', {p_tahun: tahunLalu});
+    if(error || !data) {
+      el.innerHTML='<em style="color:var(--red)">⚠️ Data neraca '+tahunLalu+' belum tersedia</em>';
+      return;
+    }
+
+    const d = data;
+    const rp = n => 'Rp '+Math.round(n).toLocaleString('id-ID');
+
+    el.innerHTML =
+      `<div style="background:var(--hijau-light);border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.9;">` +
+      `<strong>📊 Kalkulasi dari Neraca ${tahunLalu}:</strong><br>` +
+      `Modal Awal (3-101) &nbsp;&nbsp;&nbsp;: ${rp(d.modal_awal)}<br>` +
+      `Saham Baru (3-102) &nbsp;&nbsp;&nbsp;: ${rp(d.saham_baru)}<br>` +
+      `Akumulasi Laba Ditahan : ${rp(d.akumulasi_ld)}<br>` +
+      `<strong>Total Modal &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${rp(d.total_modal)}</strong><br>` +
+      `÷ ${d.total_lembar.toLocaleString('id-ID')} lembar beredar<br>` +
+      `<strong style="color:var(--hijau-dark);font-size:13px;">` +
+      `→ Harga Saham Baru: ${rp(d.harga_baru)}/lembar ` +
+      `(+${rp(d.kenaikan_rp)}, +${d.kenaikan_pct}%)</strong>` +
+      ` &nbsp;<button class="btn sm" style="padding:2px 10px;font-size:11px;" ` +
+      `onclick="document.getElementById('mpps-harga').value=${d.harga_baru};hitungMPPS()">` +
+      `Pakai →</button></div>`;
+
+    // Auto-isi field harga kalau masih kosong
     const hargaEl = document.getElementById('mpps-harga');
-    if(hargaEl && !hargaEl.value) hargaEl.value = rekomendasiHarga;
-  }catch(e){ el.innerHTML=''; }
+    if(hargaEl && !hargaEl.value) hargaEl.value = d.harga_baru;
+    hitungMPPS();
+  }catch(e){
+    el.innerHTML='<em style="color:var(--red)">⚠️ Gagal kalkulasi: '+e.message+'</em>';
+  }
 }
 
 function hitungMPPS(){
