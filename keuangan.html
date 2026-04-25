@@ -819,47 +819,54 @@ function keluar(){CU=null;location.reload();}
 // ===== LOAD DATA =====
 async function refreshAll(){
   toast('🔄 Memuat data...');
-  const[
-    {data:kas},{data:br},{data:akad},{data:angs},
-    {data:trx},{data:ppob},{data:beli},{data:saham},
-    {data:aset},{data:aps},{data:ld},
-    {data:ju},{data:jd},{data:coa},{data:pm},{data:nsnap},{data:kasMut},{data:kasDef},
-    {data:laundry},{data:service},{data:wadiah},{data:modalPeny}
-  ]=await Promise.all([
-    sb.from('kas').select('*').order('id'),
-    sb.from('barang').select('id,stok,harga_beli').gt('stok',0),
-    sb.from('bmt_akad').select('*'),
-    sb.from('bmt_angsuran').select('jumlah,created_at,akad_id'),
-    sb.from('transaksi').select('total,hpp,waktu,status_bayar'),
-    sb.from('ppob').select('harga_jual,harga_beli,created_at,status_bayar'),
-    sb.from('pembelian').select('total,tgl_beli,status_bayar'),
-    sb.from('ubnb_saham').select('jumlah_lembar'),
-    sb.from('aset_tetap').select('*').order('tanggal_beli',{ascending:false}),
-    sb.from('aset_penyusutan').select('*').order('tahun'),
-    sb.from('laba_ditahan').select('*').order('tahun',{ascending:false}),
-    sb.from('jurnal_umum').select('*').order('tanggal',{ascending:false}),
-    sb.from('jurnal_detail').select('*'),
-    sb.from('coa').select('*').eq('is_aktif',true).order('kode'),
-    sb.from('ubnb_laporan_keuangan').select('*').order('urutan'),
-    sb.from('neraca_snapshot').select('*').order('kode_akun'),
-    sb.from('kas_mutasi').select('*').order('tanggal',{ascending:false}).order('created_at',{ascending:false}),
-    sb.from('kas_default').select('*'),
-    sb.from('laundry_order').select('total_harga,tgl_masuk,status_bayar,status'),
-    sb.from('service_order').select('total_harga,tgl_masuk,status_bayar,status'),
-    sb.from('ubnb_wadiah_tabungan').select('saldo,status'),
-    sb.from('ubnb_modal_penyertaan').select('jumlah_modal,status').eq('status','aktif'),
-  ]);
-  D={kas:kas||[],barang:br||[],bmt_akad:akad||[],bmt_angsuran:angs||[],
-    transaksi:trx||[],ppob:ppob||[],pembelian:beli||[],ubnb_saham:saham||[],
-    aset_tetap:aset||[],aset_penyusutan:aps||[],laba_ditahan:ld||[],
-    jurnal_umum:ju||[],jurnal_detail:jd||[],coa:coa||[],pos_manual:pm||[],
-    neraca_snapshot:nsnap||[],kas_mutasi:kasMut||[],kas_default:kasDef||[],
-    laundry:laundry||[],service:service||[],wadiah:wadiah||[],modal_penyertaan:modalPeny||[]};
-  populateBBSelect();
-  renderDashboard();renderJurnal();renderCOA();renderAset();
-  renderLDList();renderPosList();
-  renderKasKu();renderKasSummaryKu();
-  toast('✅ Data berhasil dimuat!');
+  try{
+    const load=async(tbl,q)=>{
+      try{const r=await q;return r.data||[];}
+      catch(e){console.warn('Load gagal:',tbl,e);return [];}
+    };
+    const[
+      kas,br,akad,angs,trx,ppob,beli,saham,
+      aset,aps,ld,ju,jd,coa,pm,nsnap,kasMut,kasDef,
+      laundry,service,wadiah,modalPeny
+    ]=await Promise.all([
+      load('kas',          sb.from('kas').select('*').order('id')),
+      load('barang',       sb.from('barang').select('id,stok,harga_beli').gt('stok',0)),
+      load('bmt_akad',     sb.from('bmt_akad').select('*')),
+      load('bmt_angsuran', sb.from('bmt_angsuran').select('jumlah,created_at,akad_id')),
+      load('transaksi',    sb.from('transaksi').select('total,hpp,waktu,status_bayar')),
+      load('ppob',         sb.from('ppob').select('harga_jual,harga_beli,created_at,status_bayar')),
+      load('pembelian',    sb.from('pembelian').select('total,tgl_beli,status_bayar')),
+      load('ubnb_saham',   sb.from('ubnb_saham').select('jumlah_lembar')),
+      load('aset_tetap',   sb.from('aset_tetap').select('*').order('tanggal_beli',{ascending:false})),
+      load('aset_penyus',  sb.from('aset_penyusutan').select('*').order('tahun')),
+      load('laba_ditahan', sb.from('laba_ditahan').select('*').order('tahun',{ascending:false})),
+      load('jurnal_umum',  sb.from('jurnal_umum').select('*').order('tanggal',{ascending:false})),
+      load('jurnal_detail',sb.from('jurnal_detail').select('*')),
+      load('coa',          sb.from('coa').select('*').eq('is_aktif',true).order('kode')),
+      load('lap_keu',      sb.from('ubnb_laporan_keuangan').select('*').order('urutan')),
+      load('neraca_snap',  sb.from('neraca_snapshot').select('*').order('kode_akun')),
+      load('kas_mutasi',   sb.from('kas_mutasi').select('*').order('tanggal',{ascending:false})),
+      load('kas_default',  sb.from('kas_default').select('*')),
+      load('laundry',      sb.from('laundry_order').select('total_harga,tgl_masuk,status_bayar,status')),
+      load('service',      sb.from('service_order').select('total_harga,tgl_masuk,status_bayar,status')),
+      load('wadiah',       sb.from('ubnb_wadiah_tabungan').select('saldo,status')),
+      load('modal_peny',   sb.from('ubnb_modal_penyertaan').select('jumlah_modal,status').eq('status','aktif')),
+    ]);
+    D={kas,barang:br,bmt_akad:akad,bmt_angsuran:angs,
+      transaksi:trx,ppob,pembelian:beli,ubnb_saham:saham,
+      aset_tetap:aset,aset_penyusutan:aps,laba_ditahan:ld,
+      jurnal_umum:ju,jurnal_detail:jd,coa,pos_manual:pm,
+      neraca_snapshot:nsnap,kas_mutasi:kasMut,kas_default:kasDef,
+      laundry,service,wadiah,modal_penyertaan:modalPeny};
+    populateBBSelect();
+    renderDashboard();renderJurnal();renderCOA();renderAset();
+    renderLDList();renderPosList();
+    renderKasKu();renderKasSummaryKu();
+    toast('✅ Data berhasil dimuat!');
+  }catch(err){
+    console.error('refreshAll error:',err);
+    toast('❌ Gagal memuat data: '+err.message,true);
+  }
 }
 
 function populateBBSelect(){
@@ -928,6 +935,16 @@ function fmtTgl(t){if(!t)return'-';return new Date(t).toLocaleDateString('id-ID'
 
 // ===== DATA HELPERS =====
 // Hitung saldo per kelompok dari jurnal_detail — untuk neraca live (tahun berjalan)
+function getSaldoAkun(kode, tahun){
+  const cutoff=tahun+'-12-31';
+  const jIds=D.jurnal_umum.filter(j=>j.status==='posted'&&j.tanggal&&j.tanggal<=cutoff).map(j=>j.id);
+  const coa=D.coa.find(c=>c.kode===kode);
+  if(!coa)return 0;
+  let d=0,k=0;
+  D.jurnal_detail.filter(jd=>jIds.includes(jd.jurnal_id)&&jd.kode_akun===kode)
+    .forEach(jd=>{d+=parseFloat(jd.debit||0);k+=parseFloat(jd.kredit||0);});
+  return coa.jenis==='debit'?d-k:k-d;
+}
 function getSaldoKelompok(kelompok, tahun){
   const cutoff = tahun+'-12-31';
   const jIds = D.jurnal_umum
