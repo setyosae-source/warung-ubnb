@@ -788,7 +788,9 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 let CU=null;
 let D={kas:[],barang:[],bmt_akad:[],bmt_angsuran:[],transaksi:[],ppob:[],
   pembelian:[],ubnb_saham:[],aset_tetap:[],aset_penyusutan:[],
-  laba_ditahan:[],jurnal_umum:[],jurnal_detail:[],coa:[],pos_manual:[]};
+  laba_ditahan:[],jurnal_umum:[],jurnal_detail:[],coa:[],pos_manual:[],
+  neraca_snapshot:[],kas_mutasi:[],kas_default:[],
+  laundry:[],service:[],wadiah:[],modal_penyertaan:[]};
 
 // ===== AUTH =====
 async function doLogin(){
@@ -880,7 +882,8 @@ const PAGE_TITLES={
   aset:{title:'Aset Tetap',sub:'Inventaris & Peralatan'},
   penyusutan:{title:'Penyusutan',sub:'Jadwal Depresiasi Aset'},
   'laba-ditahan':{title:'Laba Ditahan',sub:'Retained Earnings'},
-  'pos-manual':{title:'Pos Manual',sub:'Input Pos Tambahan'}
+  'pos-manual':{title:'Pos Manual',sub:'Input Pos Tambahan'},
+  kas:{title:'Manajemen Kas',sub:'Saldo, Mutasi & Transfer'}
 };
 
 function showPage(name,el){
@@ -895,7 +898,10 @@ function showPage(name,el){
   if(name==='neraca')renderNeraca();
   if(name==='labarugi')renderLabaRugi();
   if(name==='deviasi')renderDeviasi();
-  if(name==='kas'){renderKasKu();renderKasSummaryKu();}
+  if(name==='kas'){
+    if(D.kas.length===0){refreshAll().then(()=>{renderKasKu();renderKasSummaryKu();});}
+    else{renderKasKu();renderKasSummaryKu();}
+  }
   if(name==='penyusutan')renderPenyusutan();
   if(name==='buku-besar')renderBukuBesar();
 }
@@ -2077,6 +2083,10 @@ function exportLR(){
 
 function renderKasKu(){
   const el=document.getElementById('kas-list');if(!el)return;
+  if(!D.kas||D.kas.length===0){
+    el.innerHTML='<div class="empty"><div class="ei">💳</div>Memuat data kas...</div>';
+    return;
+  }
   // Update dropdown filter
   const fEl=document.getElementById('kas-filter-id');
   if(fEl){
@@ -2129,6 +2139,7 @@ function getFnKodeCOA(kasId){
 
 function renderKasSummaryKu(){
   const el=document.getElementById('kas-summary');if(!el)return;
+  if(!D.kas||D.kas.length===0){el.innerHTML='';return;}
   const total=D.kas.reduce((s,k)=>s+parseFloat(k.saldo||0),0);
   const aktif=D.kas.filter(k=>!k.keterangan?.includes('TIDAK AKTIF'));
   el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:4px;">
