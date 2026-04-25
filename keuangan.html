@@ -590,7 +590,10 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
       <div class="card">
         <div class="card-title">
           <h3>💰 Laba Ditahan</h3>
-          <button class="btn primary" onclick="openModalLD()">+ Input Periode</button>
+          <div class="btn-row">
+            <button class="btn gold" onclick="openModalTutupBuku()">🔒 Tutup Buku</button>
+            <button class="btn primary" onclick="openModalLD()">+ Input Periode</button>
+          </div>
         </div>
         <div style="background:var(--blue-light);border-radius:8px;padding:11px 13px;margin-bottom:12px;font-size:12px;color:var(--blue);">
           <strong>Formula:</strong> Laba Ditahan Akhir = Saldo Awal + Laba Bersih − SHU Dibagikan ± Penyesuaian<br>
@@ -815,6 +818,36 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
   </div>
 </div>
 
+
+<!-- ══ MODAL: TUTUP BUKU ════════════════════════════════ -->
+<div class="overlay" id="modal-tutup-buku">
+  <div class="modal">
+    <div class="modal-title"><h3>🔒 Tutup Buku</h3></div>
+    <div style="background:var(--gold2);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;line-height:1.7;">
+      ⚠️ Tutup buku akan membuat <strong>snapshot neraca</strong>, jurnal penutup, dan mengunci data tahun tersebut.
+      Pastikan semua transaksi tahun ini sudah diinput sebelum melanjutkan.
+    </div>
+    <div class="irow">
+      <label>Tahun</label>
+      <select id="tutup-tahun">
+        <option value="2025">2025</option>
+        <option value="2026" selected>2026</option>
+        <option value="2027">2027</option>
+      </select>
+    </div>
+    <div class="irow">
+      <label>SHU Dibagikan (Rp)</label>
+      <input type="number" id="tutup-shu" value="0" placeholder="0"/>
+      <div style="font-size:11px;color:var(--gray);margin-top:3px;">Sisa Hasil Usaha yang akan dibagikan ke anggota</div>
+    </div>
+    <div id="tutup-preview" style="display:none;background:var(--hijau-light);border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.8;margin-bottom:4px;"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modal-tutup-buku')">Batal</button>
+      <button class="btn gold" onclick="previewTutupBuku()">👁 Preview</button>
+      <button class="btn primary" id="btn-eksekusi-tutup" style="display:none;" onclick="eksekusiTutupBuku()">✅ Eksekusi</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ MODAL: TAMBAH/EDIT KAS ══════════════════════════════ -->
 <div class="overlay" id="modal-kas-ku">
@@ -1108,9 +1141,17 @@ function getSaldoKelompok(kelompok, tahun){
   return Object.values(result);
 }
 function getKas(){
-  const w=D.kas.filter(k=>k.modul==='warung').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
-  const pp=D.kas.filter(k=>k.modul==='ppob').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
-  const b=D.kas.filter(k=>k.modul==='bmt').reduce((s,k)=>s+parseFloat(k.saldo||0),0);
+  // Baca dari jurnal (realtime) bukan tabel kas (statis)
+  const yr = new Date().getFullYear();
+  // Kumpulkan semua kas aktif beserta saldo jurnalnya
+  const aktif = D.kas.filter(k=>!k.keterangan?.includes('TIDAK AKTIF'));
+  let w=0, pp=0, b=0;
+  aktif.forEach(k=>{
+    const saldo = getSaldoAkun(k.kode_coa||getFnKodeCOA(k.id), yr);
+    if(k.modul==='warung') w+=saldo;
+    else if(k.modul==='ppob') pp+=saldo;
+    else if(k.modul==='bmt') b+=saldo;
+  });
   return{warung:w,ppob:pp,bmt:b,total:w+pp+b};
 }
 function getPiutang(){
@@ -2547,6 +2588,71 @@ async function simpanTransferKas(){
 
   closeModal('modal-transfer-kas');await refreshAll();
   toast(`✅ Transfer ${rp(jumlah)} dari ${dariKas.nama} ke ${keKas.nama} berhasil!`);
+}
+
+// ═══ TUTUP BUKU ═══════════════════════════════════════════
+function openModalTutupBuku(){
+  document.getElementById('tutup-tahun').value = new Date().getFullYear();
+  document.getElementById('tutup-shu').value = '0';
+  document.getElementById('tutup-preview').style.display='none';
+  document.getElementById('btn-eksekusi-tutup').style.display='none';
+  openModal('modal-tutup-buku');
+}
+
+async function previewTutupBuku(){
+  const tahun = parseInt(document.getElementById('tutup-tahun').value);
+  const shu   = parseFloat(document.getElementById('tutup-shu').value)||0;
+  const prev  = document.getElementById('tutup-preview');
+
+  // Hitung preview dari data lokal
+  const labaBersih = hitungLabaBersih(tahun);
+  const ld = getLD(tahun-1);
+  const ldAwal = ld ? parseFloat(ld.laba_ditahan_akhir||0) : 0;
+  const ldAkhir = ldAwal + labaBersih - shu;
+
+  prev.style.display='block';
+  prev.innerHTML = `<strong>Preview Tutup Buku ${tahun}</strong><br>
+    Laba Bersih ${tahun} &nbsp;&nbsp;&nbsp; : <strong>${rp(labaBersih)}</strong><br>
+    Laba Ditahan Awal &nbsp; : ${rp(ldAwal)}<br>
+    SHU Dibagikan &nbsp;&nbsp;&nbsp;&nbsp; : ${rp(shu)}<br>
+    <strong>Laba Ditahan Akhir : ${rp(ldAkhir)}</strong><br><br>
+    <span style="color:var(--hijau-dark);">✅ Jurnal penutup JU-${tahun}-TUTUP akan dibuat</span><br>
+    <span style="color:var(--hijau-dark);">✅ Snapshot neraca ${tahun} akan disimpan</span>`;
+
+  document.getElementById('btn-eksekusi-tutup').style.display='block';
+}
+
+async function eksekusiTutupBuku(){
+  const tahun = parseInt(document.getElementById('tutup-tahun').value);
+  const shu   = parseFloat(document.getElementById('tutup-shu').value)||0;
+  const btn   = document.getElementById('btn-eksekusi-tutup');
+
+  if(!confirm(`Yakin tutup buku tahun ${tahun}? Proses ini tidak bisa dibatalkan.`)) return;
+
+  btn.disabled=true; btn.textContent='⏳ Memproses...';
+  try{
+    const {data,error} = await sb.rpc('fn_tutup_buku',{
+      p_tahun: tahun, p_operator: CU.username, p_shu: shu
+    });
+    if(error) throw error;
+
+    const r = data;
+    const prev = document.getElementById('tutup-preview');
+    prev.innerHTML = `<strong>✅ Tutup Buku ${tahun} Berhasil!</strong><br>
+      Laba Bersih &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : ${rp(r.laba_bersih)}<br>
+      Laba Ditahan Akhir : ${rp(r.ld_akhir)}<br>
+      SHU Dibagikan &nbsp;&nbsp;&nbsp; : ${rp(r.shu_dibagikan)}<br>
+      Total Aktiva &nbsp;&nbsp;&nbsp;&nbsp; : ${rp(r.total_aktiva)}<br>
+      Balance &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : ${r.balance?'✅ Seimbang':'⚠️ Tidak seimbang'}<br>
+      Jurnal Penutup &nbsp;&nbsp;&nbsp; : <strong>${r.jurnal_penutup}</strong>`;
+
+    btn.style.display='none';
+    await refreshAll();
+    toast('✅ Tutup buku '+tahun+' berhasil! Snapshot dan jurnal penutup sudah dibuat.');
+  }catch(err){
+    toast('❌ Gagal: '+err.message, true);
+    btn.disabled=false; btn.textContent='✅ Eksekusi';
+  }
 }
 
 async function recalcAllSaldo(){
