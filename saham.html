@@ -241,6 +241,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="nav-item" onclick="showPage('laporan',this)"><span class="nav-icon">📋</span>Laporan</div>
       <div class="nav-item" onclick="showPage('mpps',this)"><span class="nav-icon">📅</span>MPPS & SHU</div>
       <div class="nav-item" onclick="showPage('shu-laporan',this)"><span class="nav-icon">📄</span>Laporan SHU</div>
+      <div class="nav-item" onclick="showPage('harga-saham',this)"><span class="nav-icon">💰</span>Harga Saham</div>
       <div class="nav-item" onclick="showPage('pengajuan-saham',this)" id="nav-pengajuan-saham"><span class="nav-icon">📥</span>Pengajuan Saham <span id="badge-pengajuan" style="background:#e53e3e;color:white;border-radius:99px;font-size:10px;padding:1px 6px;margin-left:4px;display:none">0</span></div>
     </div>
     <div class="sb-footer">
@@ -518,6 +519,18 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       </div>
     </div>
 
+    <!-- ========== PAGE: HARGA SAHAM ========== -->
+    <div class="page" id="page-harga-saham">
+      <div class="card">
+        <div class="card-title">
+          <span>💰 Harga Saham Per Periode</span>
+          <button class="btn gold sm" onclick="openModalHargaSaham()">+ Tetapkan Harga Baru</button>
+        </div>
+        <div id="harga-saham-aktif" style="margin-bottom:14px;"></div>
+        <div id="harga-saham-list"></div>
+      </div>
+    </div>
+
     <!-- ========== PAGE: PENGAJUAN SAHAM ========== -->
     <div class="page" id="page-pengajuan-saham">
       <div class="card">
@@ -540,6 +553,33 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
     </div>
 
   </div><!-- end main-wrap -->
+
+<!-- ══ MODAL: TETAPKAN HARGA SAHAM ═══════════════════════ -->
+<div class="overlay" id="modal-harga-saham" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">
+      <h3>💰 Tetapkan Harga Saham Baru</h3>
+      <button class="btn-close" onclick="document.getElementById('modal-harga-saham').classList.remove('show')">✕</button>
+    </div>
+    <div id="hs-preview-kalkulasi" style="background:var(--hijau-light);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.8;"></div>
+    <div class="irow"><label>Tahun Penetapan</label><input type="number" id="hs-tahun" placeholder="2026" oninput="kalkulasiHargaBaru()"/></div>
+    <div class="irow">
+      <label>Laba Ditahan yang Dialokasikan (Rp)</label>
+      <input type="number" id="hs-laba" placeholder="0" oninput="kalkulasiHargaBaru()"/>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Bagian laba ditahan yang akan dijadikan kenaikan nilai saham</div>
+    </div>
+    <div class="irow"><label>Harga Baru per Lembar (Rp)</label>
+      <input type="number" id="hs-harga-baru" placeholder="10200" oninput="updateKalkulasi()"/>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Otomatis terhitung, atau bisa diisi manual</div>
+    </div>
+    <div class="irow"><label>Berlaku Mulai</label><input type="date" id="hs-berlaku-mulai"/></div>
+    <div class="irow"><label>Catatan</label><input type="text" id="hs-catatan" placeholder="Ditetapkan dalam MPPS 2026..."/></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="document.getElementById('modal-harga-saham').classList.remove('show')">Batal</button>
+      <button class="btn primary" onclick="simpanHargaSaham()">💾 Tetapkan</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ MODAL: KONFIRMASI APPROVE SAHAM ═══════════════════ -->
 <div class="overlay" id="modal-approve-saham" onclick="if(event.target===this)this.classList.remove('show')">
@@ -575,10 +615,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         </select>
       </div>
       <div class="irow"><label>No. WA</label><input type="text" id="apv-wa" placeholder="08xxx" oninput="hitungApvTotal()"/></div>
-      <div style="display:flex;gap:10px;">
-        <div class="irow" style="flex:1;"><label>Jumlah Lembar</label><input type="number" id="apv-lembar" min="1" oninput="hitungApvTotal()"/></div>
-        <div class="irow" style="flex:1;"><label>Harga/Lembar (Rp)</label><input type="number" id="apv-harga" value="10200" oninput="hitungApvTotal()"/></div>
-      </div>
+      <div class="irow"><label>Jumlah Lembar</label><input type="number" id="apv-lembar" min="1" oninput="hitungApvTotal()"/></div>
+      <div class="irow"><label>Harga/Lembar (Rp)</label><input type="number" id="apv-harga" value="10200" oninput="hitungApvTotal()"/></div>
     </div>
 
     <div style="background:var(--gold-light);border-radius:8px;padding:12px 14px;margin-bottom:14px;text-align:center;">
@@ -768,12 +806,13 @@ function showPage(id,el,pushState=true){
   document.getElementById('page-'+id)?.classList.add('active');
   if(el)el.classList.add('active');
   else{document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')?.includes("'"+id+"'"))n.classList.add('active');});}
-  const titles={dashboard:'Dashboard Saham',daftar:'Daftar Pemegang Saham',transaksi:'Transaksi Saham',laporan:'Laporan',mpps:'MPPS & SHU','shu-laporan':'Laporan SHU','pengajuan-saham':'Pengajuan Tambah Saham'};
+  const titles={dashboard:'Dashboard Saham',daftar:'Daftar Pemegang Saham',transaksi:'Transaksi Saham',laporan:'Laporan',mpps:'MPPS & SHU','shu-laporan':'Laporan SHU','harga-saham':'Harga Saham Per Periode','pengajuan-saham':'Pengajuan Tambah Saham'};
   document.getElementById('topbar-title').textContent=titles[id]||id;
   if(id==='daftar')renderDaftar();
   if(id==='transaksi'){setDefaultTrxHarga();loadRiwayatTrx();}
   if(id==='mpps')renderMPPS();
   if(id==='shu-laporan')renderLapSHUList();
+  if(id==='harga-saham'){renderHargaSaham();}
   if(id==='pengajuan-saham'){loadPengajuanSaham().then(()=>renderPengajuanSaham());}
   closeSidebar();
   if(pushState && id !== currentPage){history.pushState({page:id},'',window.location.pathname+'#'+id);}
@@ -823,6 +862,7 @@ window.addEventListener('load',async()=>{
 
 // ===== LOAD DATA =====
 async function loadAll(){
+  await loadHargaSaham();
   await loadPengajuanSaham();
   const[{data:s},{data:t},{data:b},{data:bd},{data:m},{data:ku},{data:ls},{data:kb},{data:rt},{data:ap}]=await Promise.all([
     sb.from('ubnb_saham').select('*').order('jumlah_lembar',{ascending:false}),
@@ -2376,6 +2416,129 @@ async function simpanBagiHasilBaru(tahun){
 }
 
 
+// ═══ HARGA SAHAM PER PERIODE ══════════════════════════════
+let aHargaSaham = [];
+let hargaSahamAktif = 10200;
+
+async function loadHargaSaham(){
+  const{data}=await sb.from('ubnb_harga_saham').select('*').order('tahun',{ascending:false});
+  aHargaSaham=data||[];
+  // Set harga aktif
+  if(aHargaSaham.length) hargaSahamAktif = parseInt(aHargaSaham[0].harga_baru);
+}
+
+function renderHargaSaham(){
+  const el=document.getElementById('harga-saham-list');
+  const aktifEl=document.getElementById('harga-saham-aktif');
+  if(!el)return;
+
+  // Tampilkan harga aktif
+  if(aHargaSaham.length && aktifEl){
+    const h=aHargaSaham[0];
+    aktifEl.innerHTML=`<div style="background:var(--gold-light);border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:11px;color:var(--gold-dark);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Harga Saham Berlaku Sekarang</div>
+        <div style="font-size:28px;font-weight:800;color:var(--gold-dark);">Rp ${parseInt(h.harga_baru).toLocaleString('id-ID')}</div>
+        <div style="font-size:12px;color:var(--gold-dark);">Berlaku sejak ${new Date(h.berlaku_mulai).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:12px;color:var(--gold-dark);">Naik Rp ${parseInt(h.kenaikan_rp||0).toLocaleString('id-ID')}</div>
+        <div style="font-size:11px;color:var(--gold-dark);">(+${h.kenaikan_pct||0}%)</div>
+      </div>
+    </div>`;
+  }
+
+  if(!aHargaSaham.length){el.innerHTML='<div class="empty"><div class="ei">💰</div>Belum ada data harga</div>';return;}
+
+  el.innerHTML=`<table class="tbl"><thead><tr>
+    <th>Tahun</th><th>Harga Lama</th><th>Harga Baru</th>
+    <th class="r">Kenaikan</th><th>Berlaku Mulai</th><th>Catatan</th>
+  </tr></thead><tbody>`+
+  aHargaSaham.map(h=>`<tr>
+    <td><strong>${h.tahun}</strong></td>
+    <td style="font-family:monospace;">Rp ${parseInt(h.harga_lama).toLocaleString('id-ID')}</td>
+    <td style="font-family:monospace;color:var(--hijau);font-weight:700;">Rp ${parseInt(h.harga_baru).toLocaleString('id-ID')}</td>
+    <td class="r" style="color:var(--gold-dark);">+Rp ${parseInt(h.kenaikan_rp||0).toLocaleString('id-ID')} (${h.kenaikan_pct||0}%)</td>
+    <td>${new Date(h.berlaku_mulai).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</td>
+    <td style="font-size:11px;color:var(--text-muted);">${h.catatan||'-'}</td>
+  </tr>`).join('')+
+  '</tbody></table>';
+}
+
+async function openModalHargaSaham(){
+  const tahun = new Date().getFullYear();
+  document.getElementById('hs-tahun').value = tahun;
+  document.getElementById('hs-berlaku-mulai').value = tahun+'-01-01';
+  document.getElementById('hs-catatan').value = '';
+
+  // Ambil total lembar beredar
+  const{data}=await sb.from('ubnb_saham').select('jumlah_lembar').eq('status','aktif');
+  const totalLembar=(data||[]).reduce((s,r)=>s+parseInt(r.jumlah_lembar||0),0);
+
+  // Ambil laba ditahan dari tabel
+  const{data:ld}=await sb.from('laba_ditahan').select('laba_ditahan_akhir').eq('tahun',tahun-1).single();
+  const labaDitahan=parseFloat(ld?.laba_ditahan_akhir||0);
+
+  document.getElementById('hs-laba').value = Math.round(labaDitahan/2); // default 50% laba ditahan
+  document.getElementById('hs-harga-baru').value = hargaSahamAktif;
+
+  // Preview kalkulasi
+  document.getElementById('hs-preview-kalkulasi').innerHTML =
+    `📊 Total lembar beredar: <strong>${totalLembar.toLocaleString('id-ID')} lembar</strong><br>`+
+    `💰 Laba ditahan ${tahun-1}: <strong>Rp ${labaDitahan.toLocaleString('id-ID')}</strong><br>`+
+    `💵 Harga berlaku sekarang: <strong>Rp ${hargaSahamAktif.toLocaleString('id-ID')}/lembar</strong>`;
+
+  kalkulasiHargaBaru();
+  document.getElementById('modal-harga-saham').classList.add('show');
+}
+
+function kalkulasiHargaBaru(){
+  const laba = parseFloat(document.getElementById('hs-laba').value)||0;
+  // Hitung total lembar dari aSaham
+  const totalLembar = aSaham.reduce((s,r)=>s+parseInt(r.jumlah_lembar||0),0);
+  const tambahan = totalLembar>0 ? Math.floor(laba/totalLembar) : 0;
+  const hargaBaru = hargaSahamAktif + tambahan;
+  document.getElementById('hs-harga-baru').value = hargaBaru;
+}
+
+function updateKalkulasi(){
+  // Harga baru diedit manual — tidak override
+}
+
+async function simpanHargaSaham(){
+  const tahun = parseInt(document.getElementById('hs-tahun').value);
+  const laba  = parseFloat(document.getElementById('hs-laba').value)||0;
+  const hargaBaru = parseInt(document.getElementById('hs-harga-baru').value);
+  const mulai = document.getElementById('hs-berlaku-mulai').value;
+  const catatan = document.getElementById('hs-catatan').value.trim();
+  const totalLembar = aSaham.reduce((s,r)=>s+parseInt(r.jumlah_lembar||0),0);
+
+  if(!tahun||!hargaBaru||!mulai){toast('Isi tahun, harga, dan tanggal berlaku',true);return;}
+  if(hargaBaru < hargaSahamAktif){
+    if(!confirm('Harga baru (Rp '+hargaBaru.toLocaleString('id-ID')+') lebih rendah dari harga berlaku (Rp '+hargaSahamAktif.toLocaleString('id-ID')+'). Yakin?')) return;
+  }
+
+  // Tutup periode lama
+  await sb.from('ubnb_harga_saham')
+    .update({berlaku_akhir: new Date(mulai).toISOString().slice(0,10)})
+    .is('berlaku_akhir', null).lt('id', 999999);
+
+  // Insert harga baru
+  const{error}=await sb.from('ubnb_harga_saham').insert([{
+    tahun, harga_lama:hargaSahamAktif, harga_baru:hargaBaru,
+    laba_ditahan:laba, total_lembar:totalLembar,
+    berlaku_mulai:mulai, catatan:catatan||('Ditetapkan dalam MPPS '+tahun),
+    operator:CU?.username||'admin'
+  }]);
+  if(error){toast('Gagal: '+error.message,true);return;}
+
+  hargaSahamAktif = hargaBaru;
+  document.getElementById('modal-harga-saham').classList.remove('show');
+  await loadHargaSaham();
+  renderHargaSaham();
+  toast('✅ Harga saham '+tahun+' ditetapkan: Rp '+hargaBaru.toLocaleString('id-ID')+'/lembar');
+}
+
 // ═══ PENGAJUAN SAHAM ═══════════════════════════════════════
 let aPengajuanSaham = [];
 
@@ -2446,7 +2609,7 @@ async function approvePengajuanSaham(id, nama, lembar, keluarga, wa){
   document.getElementById('apv-keluarga').value = keluarga||nama;
   document.getElementById('apv-wa').value = wa||'';
   document.getElementById('apv-kelompok').value = 'PW4';
-  document.getElementById('apv-harga').value = '10200';
+  document.getElementById('apv-harga').value = hargaSahamAktif||10200;
   document.getElementById('apv-jamaah-info').innerHTML = '<em style="color:var(--text-muted)">🔍 Mencari data jamaah...</em>';
 
   // Lookup ke jamaah_desa — cari by nama anggota dan nama_kk
