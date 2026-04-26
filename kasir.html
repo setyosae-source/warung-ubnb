@@ -382,7 +382,7 @@ const {createClient}=supabase;
 const sb=createClient(SURL,SKEY);
 
 let CU=null, aB=[], aPel=[], aSup=[], aKB=[], aBatch=[], aSahamAnggota=[], aJamaah=[];
-let KR=[], KB=[], editHarga=false; // keranjang jual & beli
+let KR=[], KB=[], editHarga=false, aT=[], aBeli=[]; // keranjang jual & beli
 let katFilter='', metodeBayar='tunai';
 let sdSel={prod:null, bprod:null, pel:null, sup:null};
 
@@ -437,12 +437,14 @@ window.addEventListener('DOMContentLoaded',async()=>{
 
 // ===== LOAD DATA =====
 async function loadAll(){
-  await Promise.all([lB(),lPel(),lSup(),lBatch(),lAnggota(),lJamaah()]);
+  await Promise.all([lB(),lPel(),lSup(),lBatch(),lAnggota(),lJamaah(),lT(),lBeli()]);
   renderProduk();
   renderPelDropdown();
   renderSupDropdown();
   renderBprodDropdown();
 }
+async function lT(){const{data}=await sb.from('transaksi').select('id,waktu,tgl_transaksi,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali').order('waktu',{ascending:false}).limit(200);aT=data||[];}
+async function lBeli(){const{data}=await sb.from('pembelian').select('id,waktu,tgl_beli,supplier_nama,total,items,operator,status_bayar').order('waktu',{ascending:false}).limit(200);aBeli=data||[];}
 
 async function lB(){const{data}=await sb.from('barang').select('*').order('nama');aB=data||[];}
 async function lPel(){const{data}=await sb.from('pelanggan').select('*').order('nama');aPel=data||[];}
@@ -717,7 +719,7 @@ async function bayar(){
 
   toast('Transaksi berhasil! '+fmt(total));
   closeSheet();
-  if(data)tampilStruk({...data,kasir:CU.username});
+  if(data){aT.unshift(data);tampilStruk({...data,kasir:CU.username});}
   resetJual();
   await lB();
   renderProduk();
@@ -915,42 +917,28 @@ function generateQuickNominal(){
 }
 
 // ═══ RIWAYAT ═══
-async function loadRiwayat(){
-  const el=document.getElementById('riwayat-list');
-  if(el)el.innerHTML='<div style="text-align:center;padding:30px;color:#888;">⏳ Memuat...</div>';
-  try{
-    const tglEl=document.getElementById('riwayat-tgl');
-    if(tglEl&&!tglEl.value)tglEl.value=new Date().toISOString().slice(0,10);
-    const tglFilter=tglEl?.value||'';
-    const tgl3bln=new Date();tgl3bln.setMonth(tgl3bln.getMonth()-3);
-    const cutoff=tgl3bln.toISOString();
-    const[resJual,resBeli]=await Promise.all([
-      sb.from('transaksi').select('id,waktu,tgl_transaksi,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali').gte('waktu',cutoff).order('waktu',{ascending:false}),
-      sb.from('pembelian').select('id,waktu,tgl_beli,supplier_nama,total,items,operator,status_bayar').gte('waktu',cutoff).order('waktu',{ascending:false})
-    ]);
-    if(resJual.error)throw new Error('Transaksi: '+resJual.error.message);
-    if(resBeli.error)throw new Error('Pembelian: '+resBeli.error.message);
-    const jualList=(resJual.data||[]).map(d=>({...d,_jenis:'jual'}));
-    const beliList=(resBeli.data||[]).map(d=>({...d,_jenis:'beli',
-      pelanggan:d.supplier_nama||'Supplier',
-      kasir:d.operator||'-',
-      metode_bayar:d.status_bayar||'-',
-      items:d.items||[],
-      total:d.total||0
-    }));
-    let all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
-    if(tglFilter){
-      all=all.filter(t=>{
-        const w=(t.waktu||'').slice(0,10);
-        const td=(t.tgl_transaksi||t.tgl_beli||'').slice(0,10);
-        return w===tglFilter||td===tglFilter;
-      });
-    }
-    renderRiwayat(all);
-  }catch(err){
-    const el2=document.getElementById('riwayat-list');
-    if(el2)el2.innerHTML='<div style="padding:20px;color:#e53e3e;text-align:center;">❌ Error: '+err.message+'</div>';
+function loadRiwayat(){
+  const tglEl=document.getElementById('riwayat-tgl');
+  if(tglEl&&!tglEl.value)tglEl.value=new Date().toISOString().slice(0,10);
+  const tglFilter=tglEl?.value||'';
+  // Render dari array yg sudah diload saat login
+  const jualList=aT.map(d=>({...d,_jenis:'jual'}));
+  const beliList=aBeli.map(d=>({...d,_jenis:'beli',
+    pelanggan:d.supplier_nama||'Supplier',
+    kasir:d.operator||'-',
+    metode_bayar:d.status_bayar||'-',
+    items:d.items||[],
+    total:d.total||0
+  }));
+  let all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
+  if(tglFilter){
+    all=all.filter(t=>{
+      const w=(t.waktu||'').slice(0,10);
+      const td=(t.tgl_transaksi||t.tgl_beli||'').slice(0,10);
+      return w===tglFilter||td===tglFilter;
+    });
   }
+  renderRiwayat(all);
 }
 
 function renderRiwayat(list){
