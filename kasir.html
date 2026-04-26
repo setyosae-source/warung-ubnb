@@ -459,6 +459,7 @@ function showTab(tab){
   document.getElementById('tab-'+tab).classList.add('active');
   const fab=document.getElementById('cart-fab');
   fab.style.display=tab==='jual'&&KR.length>0?'flex':'none';
+  if(tab==='riwayat'){document.getElementById('riwayat-tgl').value=new Date().toISOString().slice(0,10);loadRiwayat();}
 }
 
 // ===== PRODUK GRID =====
@@ -915,18 +916,32 @@ function generateQuickNominal(){
 
 // ═══ RIWAYAT ═══
 async function loadRiwayat(){
-  const tgl=document.getElementById('riwayat-tgl')?.value||new Date().toISOString().slice(0,10);
+  const tglFilter=document.getElementById('riwayat-tgl')?.value||'';
+  // Ambil 3 bulan terakhir (seperti warung)
+  const tgl3bln=new Date();tgl3bln.setMonth(tgl3bln.getMonth()-3);
+  const cutoff=tgl3bln.toISOString();
   const[{data:jual},{data:beli}]=await Promise.all([
-    sb.from('transaksi').select('id,waktu,tgl_transaksi,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali')
-      .or('tgl_transaksi.eq.'+tgl+',waktu.gte.'+tgl+'T00:00:00')
-      .lte('waktu',tgl+'T23:59:59').order('waktu',{ascending:false}),
-    sb.from('pembelian').select('id,waktu,tgl_beli,supplier_nama,total,items,operator,status_bayar')
-      .or('tgl_beli.eq.'+tgl+',waktu.gte.'+tgl+'T00:00:00')
-      .lte('waktu',tgl+'T23:59:59').order('waktu',{ascending:false})
+    sb.from('transaksi').select('*').gte('waktu',cutoff).order('waktu',{ascending:false}),
+    sb.from('pembelian').select('*').gte('waktu',cutoff).order('waktu',{ascending:false})
   ]);
+  // Gabung dan tandai jenis
   const jualList=(jual||[]).map(d=>({...d,_jenis:'jual'}));
-  const beliList=(beli||[]).map(d=>({...d,_jenis:'beli',pelanggan:d.supplier_nama||'Supplier',kasir:d.operator||'-',metode_bayar:d.status_bayar||'-'}));
-  const all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
+  const beliList=(beli||[]).map(d=>({...d,_jenis:'beli',
+    pelanggan:d.supplier_nama||'Supplier',
+    kasir:d.operator||'-',
+    metode_bayar:d.status_bayar||'-',
+    items:d.items||[],
+    total:d.total||0
+  }));
+  let all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
+  // Filter per tanggal jika dipilih
+  if(tglFilter){
+    all=all.filter(t=>{
+      const tglTrx=(t.tgl_transaksi||t.tgl_beli||t.waktu||'').slice(0,10);
+      const waktuTgl=(t.waktu||'').slice(0,10);
+      return tglTrx===tglFilter||waktuTgl===tglFilter;
+    });
+  }
   renderRiwayat(all);
 }
 
