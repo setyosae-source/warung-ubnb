@@ -459,7 +459,7 @@ function showTab(tab){
   document.getElementById('tab-'+tab).classList.add('active');
   const fab=document.getElementById('cart-fab');
   fab.style.display=tab==='jual'&&KR.length>0?'flex':'none';
-  if(tab==='riwayat'){document.getElementById('riwayat-tgl').value=new Date().toISOString().slice(0,10);loadRiwayat();}
+  if(tab==='riwayat'){setTimeout(loadRiwayat,100);}
 }
 
 // ===== PRODUK GRID =====
@@ -916,38 +916,46 @@ function generateQuickNominal(){
 
 // ═══ RIWAYAT ═══
 async function loadRiwayat(){
-  const tglFilter=document.getElementById('riwayat-tgl')?.value||'';
-  // Ambil 3 bulan terakhir (seperti warung)
-  const tgl3bln=new Date();tgl3bln.setMonth(tgl3bln.getMonth()-3);
-  const cutoff=tgl3bln.toISOString();
-  const[{data:jual},{data:beli}]=await Promise.all([
-    sb.from('transaksi').select('*').gte('waktu',cutoff).order('waktu',{ascending:false}),
-    sb.from('pembelian').select('*').gte('waktu',cutoff).order('waktu',{ascending:false})
-  ]);
-  // Gabung dan tandai jenis
-  const jualList=(jual||[]).map(d=>({...d,_jenis:'jual'}));
-  const beliList=(beli||[]).map(d=>({...d,_jenis:'beli',
-    pelanggan:d.supplier_nama||'Supplier',
-    kasir:d.operator||'-',
-    metode_bayar:d.status_bayar||'-',
-    items:d.items||[],
-    total:d.total||0
-  }));
-  let all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
-  // Filter per tanggal jika dipilih
-  if(tglFilter){
-    all=all.filter(t=>{
-      const tglTrx=(t.tgl_transaksi||t.tgl_beli||t.waktu||'').slice(0,10);
-      const waktuTgl=(t.waktu||'').slice(0,10);
-      return tglTrx===tglFilter||waktuTgl===tglFilter;
-    });
+  const el=document.getElementById('riwayat-list');
+  if(el)el.innerHTML='<div style="text-align:center;padding:30px;color:#888;">⏳ Memuat...</div>';
+  try{
+    const tglEl=document.getElementById('riwayat-tgl');
+    if(tglEl&&!tglEl.value)tglEl.value=new Date().toISOString().slice(0,10);
+    const tglFilter=tglEl?.value||'';
+    const tgl3bln=new Date();tgl3bln.setMonth(tgl3bln.getMonth()-3);
+    const cutoff=tgl3bln.toISOString();
+    const[resJual,resBeli]=await Promise.all([
+      sb.from('transaksi').select('id,waktu,tgl_transaksi,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali').gte('waktu',cutoff).order('waktu',{ascending:false}),
+      sb.from('pembelian').select('id,waktu,tgl_beli,supplier_nama,total,items,operator,status_bayar').gte('waktu',cutoff).order('waktu',{ascending:false})
+    ]);
+    if(resJual.error)throw new Error('Transaksi: '+resJual.error.message);
+    if(resBeli.error)throw new Error('Pembelian: '+resBeli.error.message);
+    const jualList=(resJual.data||[]).map(d=>({...d,_jenis:'jual'}));
+    const beliList=(resBeli.data||[]).map(d=>({...d,_jenis:'beli',
+      pelanggan:d.supplier_nama||'Supplier',
+      kasir:d.operator||'-',
+      metode_bayar:d.status_bayar||'-',
+      items:d.items||[],
+      total:d.total||0
+    }));
+    let all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
+    if(tglFilter){
+      all=all.filter(t=>{
+        const w=(t.waktu||'').slice(0,10);
+        const td=(t.tgl_transaksi||t.tgl_beli||'').slice(0,10);
+        return w===tglFilter||td===tglFilter;
+      });
+    }
+    renderRiwayat(all);
+  }catch(err){
+    const el2=document.getElementById('riwayat-list');
+    if(el2)el2.innerHTML='<div style="padding:20px;color:#e53e3e;text-align:center;">❌ Error: '+err.message+'</div>';
   }
-  renderRiwayat(all);
 }
 
 function renderRiwayat(list){
   const el=document.getElementById('riwayat-list');if(!el)return;
-  if(!list.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div>Belum ada transaksi</div>';return;}
+  if(!list.length){el.innerHTML='<div class="empty" style="text-align:center;padding:40px 20px;color:#888;"><div style="font-size:40px;margin-bottom:8px;">&#128203;</div>Belum ada transaksi</div>';return;}
   el.innerHTML=list.map(t=>{
     const items=Array.isArray(t.items)?t.items:[];
     const jam=new Date(t.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
@@ -1046,7 +1054,7 @@ async function printStruk(trxId){
 </script>
 
   <!-- RIWAYAT -->
-  <div class="page" id="page-riwayat" style="overflow-y:auto;padding:12px;">
+  <div class="page" id="page-riwayat" style="overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <strong style="font-size:14px;">📋 Riwayat Transaksi</strong>
       <input type="date" id="riwayat-tgl" onchange="loadRiwayat()"
