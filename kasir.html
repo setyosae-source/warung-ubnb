@@ -741,6 +741,7 @@ async function bayar(){
 
   toast('Transaksi berhasil! '+fmt(total));
   closeSheet();
+  if(data&&confirm('Transaksi berhasil! Cetak struk?'))printStruk(data.id);
   resetJual();
   await lB();
   renderProduk();
@@ -918,9 +919,17 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelect
 // === RIWAYAT & REPRINT ===
 async function loadRiwayat(){
   const tgl=document.getElementById('riwayat-tgl')?.value||new Date().toISOString().slice(0,10);
-  const{data}=await sb.from('transaksi').select('id,waktu,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali')
-    .gte('waktu',tgl+'T00:00:00').lte('waktu',tgl+'T23:59:59').order('waktu',{ascending:false});
-  renderRiwayat(data||[]);
+  const[{data:jual},{data:beli}]=await Promise.all([
+    sb.from('transaksi').select('id,waktu,pelanggan,total,metode_bayar,items,kasir,status_bayar,bayar,kembali')
+      .gte('waktu',tgl+'T00:00:00').lte('waktu',tgl+'T23:59:59').order('waktu',{ascending:false}),
+    sb.from('pembelian').select('id,waktu,supplier,total_harga,items,kasir,metode_bayar')
+      .gte('waktu',tgl+'T00:00:00').lte('waktu',tgl+'T23:59:59').order('waktu',{ascending:false})
+  ]);
+  // Gabung dan tandai jenisnya
+  const jualList=(jual||[]).map(d=>({...d,_jenis:'jual'}));
+  const beliList=(beli||[]).map(d=>({...d,_jenis:'beli',pelanggan:d.supplier||'Supplier',total:d.total_harga}));
+  const all=[...jualList,...beliList].sort((a,b)=>new Date(b.waktu)-new Date(a.waktu));
+  renderRiwayat(all);
 }
 function renderRiwayat(list){
   const el=document.getElementById('riwayat-list');if(!el)return;
@@ -928,15 +937,23 @@ function renderRiwayat(list){
   el.innerHTML=list.map(t=>{
     const items=Array.isArray(t.items)?t.items:[];
     const jam=new Date(t.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
-    return '<div style="border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">'+
+    const isJual=t._jenis!=='beli';
+    const warna=isJual?'#38a169':'#3182ce';
+    const badge=isJual?'🛒 Jual':'📦 Beli';
+    return '<div style="border:1.5px solid '+(isJual?'var(--border)':'#bee3f8')+';border-radius:8px;padding:12px;margin-bottom:8px;background:'+(isJual?'white':'#ebf8ff')+';">'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:6px;">'+
-        '<div><div style="font-weight:700;font-size:13px;">'+(t.pelanggan||'Umum')+'</div>'+
-        '<div style="font-size:11px;color:#888;">'+jam+' - '+(t.kasir||'-')+' - '+(t.metode_bayar||'-')+'</div></div>'+
-        '<div style="text-align:right;"><div style="font-weight:800;color:#38a169;">'+fmt(t.total)+'</div>'+
-        '<div style="font-size:10px;color:'+(t.status_bayar==='lunas'?'#38a169':'#e53e3e')+';">'+(t.status_bayar||'-')+'</div></div>'+
+        '<div>'+
+          '<div style="font-weight:700;font-size:13px;">'+(t.pelanggan||'Umum')+
+            ' <span style="font-size:10px;padding:2px 6px;border-radius:10px;background:'+(isJual?'#c6f6d5':'#bee3f8')+';color:'+warna+';">'+badge+'</span></div>'+
+          '<div style="font-size:11px;color:#888;">'+jam+' · '+(t.kasir||'-')+' · '+(t.metode_bayar||'-')+'</div>'+
+        '</div>'+
+        '<div style="text-align:right;">'+
+          '<div style="font-weight:800;color:'+warna+';">'+fmt(t.total||0)+'</div>'+
+          (isJual?'<div style="font-size:10px;color:'+(t.status_bayar==='lunas'?'#38a169':'#e53e3e')+';">'+(t.status_bayar||'-')+'</div>':'')+
+        '</div>'+
       '</div>'+
-      '<div style="font-size:11px;color:#888;margin-bottom:8px;">'+items.slice(0,3).map(i=>i.nama+' x'+i.qty).join(', ')+(items.length>3?'...':'')+'</div>'+
-      '<button onclick="printStruk('+t.id+')" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:6px;background:white;font-size:12px;cursor:pointer;">&#128424; Cetak Ulang Struk</button>'+
+      '<div style="font-size:11px;color:#888;margin-bottom:8px;">'+items.slice(0,3).map(i=>i.nama+' x'+(i.qty||1)).join(', ')+(items.length>3?'...':'')+'</div>'+
+      (isJual?'<button onclick="printStruk('+t.id+')" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:6px;background:white;font-size:12px;cursor:pointer;">&#128424; Cetak Ulang Struk</button>':'')+
     '</div>';
   }).join('');
 }
