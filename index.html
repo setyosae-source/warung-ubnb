@@ -197,6 +197,28 @@ body{
 .shu-search-title{font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;
   display:flex;align-items:center;gap:8px;}
 .shu-search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;}
+.shu-autocomplete-wrap{position:relative;flex:1;min-width:200px;}
+.shu-autocomplete-wrap .shu-search-input{width:100%;}
+.shu-autocomplete-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;
+  background:var(--navy-dark);border:1.5px solid rgba(245,200,66,0.4);
+  border-radius:10px;max-height:260px;overflow-y:auto;z-index:50;
+  box-shadow:0 12px 32px rgba(0,0,0,0.5);display:none;}
+.shu-autocomplete-dropdown.show{display:block;}
+.shu-autocomplete-dropdown::-webkit-scrollbar{width:6px;}
+.shu-autocomplete-dropdown::-webkit-scrollbar-thumb{background:rgba(245,200,66,0.3);border-radius:3px;}
+.shu-ac-item{padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;
+  align-items:center;gap:8px;border-bottom:1px solid rgba(245,200,66,0.08);transition:background .1s;}
+.shu-ac-item:last-child{border-bottom:none;}
+.shu-ac-item:hover,.shu-ac-item.active{background:rgba(245,200,66,0.12);}
+.shu-ac-name{font-size:13px;color:#fff;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.shu-ac-name b{color:var(--gold);font-weight:800;}
+.shu-ac-tag{font-size:10px;background:rgba(59,130,246,0.2);color:#93c5fd;
+  padding:1px 7px;border-radius:99px;font-weight:700;flex-shrink:0;}
+.shu-ac-empty{padding:14px;text-align:center;font-size:11px;color:var(--text-muted);}
+.shu-ac-hint{padding:8px 14px;font-size:10px;color:var(--text-muted);
+  background:rgba(0,0,0,0.2);text-align:center;font-style:italic;
+  border-top:1px solid rgba(245,200,66,0.08);}
 .shu-search-input{flex:1;min-width:200px;padding:11px 16px;
   background:rgba(255,255,255,0.06);border:1.5px solid rgba(245,200,66,0.25);
   border-radius:10px;color:var(--text);font-size:13px;outline:none;font-family:inherit;
@@ -636,8 +658,8 @@ body{
     <p class="sec-sub">Sisa Hasil Usaha tahun buku 2026 telah dibagikan kepada seluruh anggota</p>
     <div class="sec-divider"></div>
 
-    <!-- Stats (hidden by default, muncul setelah pilih keluarga) -->
-    <div class="shu-stats" id="shu-stats" style="display:none;">
+    <!-- Stats -->
+    <div class="shu-stats" id="shu-stats">
       <div class="shu-stat">
         <div class="shu-stat-icon">💎</div>
         <div class="shu-stat-value" id="shu-total">—</div>
@@ -660,17 +682,23 @@ body{
       </div>
     </div>
 
-    <!-- Per kelompok (hidden by default) -->
-    <div class="shu-kelompok-grid" id="shu-kelompok-grid" style="display:none;"></div>
+    <!-- Per kelompok -->
+    <div class="shu-kelompok-grid" id="shu-kelompok-grid"></div>
 
     <!-- Search -->
     <div class="shu-search-box">
       <div class="shu-search-title">🔍 Cek SHU per Keluarga</div>
       <div class="shu-search-row">
-        <input type="text" class="shu-search-input" id="shu-search-input" 
-               placeholder="Ketik nama keluarga..." 
-               oninput="searchSHU()" autocomplete="off">
-        <select class="shu-kel-filter" id="shu-kel-filter" onchange="searchSHU()">
+        <div class="shu-autocomplete-wrap">
+          <input type="text" class="shu-search-input" id="shu-search-input" 
+                 placeholder="Ketik 2 huruf nama keluarga..." 
+                 oninput="onSearchInput()" 
+                 onfocus="onSearchInput()"
+                 onblur="setTimeout(closeAutocomplete, 200)"
+                 autocomplete="off">
+          <div class="shu-autocomplete-dropdown" id="shu-autocomplete-dropdown"></div>
+        </div>
+        <select class="shu-kel-filter" id="shu-kel-filter" onchange="onSearchInput()">
           <option value="">Semua Kelompok</option>
           <option value="PW1">PW1</option>
           <option value="PW2">PW2</option>
@@ -682,7 +710,7 @@ body{
       <div class="shu-result-list" id="shu-result-list" style="margin-top:14px;">
         <div class="shu-empty">
           <div class="shu-empty-icon">💡</div>
-          <div>Ketik nama keluarga atau pilih kelompok</div>
+          <div>Ketik nama keluarga lalu pilih dari daftar</div>
         </div>
       </div>
 
@@ -1923,66 +1951,92 @@ async function loadSHU(){
   }
 }
 
-function searchSHU(){
+// Variabel state autocomplete
+let _activePick = null;
+
+function escapeRegex(s){return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function highlightMatch(text, q){
+  if(!q) return escapeHtml(text);
+  const re = new RegExp('('+escapeRegex(q)+')','i');
+  return escapeHtml(text).replace(re, '<b>$1</b>');
+}
+
+// Triggered saat user ngetik di input atau ganti dropdown kelompok
+function onSearchInput(){
   const q = (document.getElementById('shu-search-input').value||'').trim().toLowerCase();
   const kel = document.getElementById('shu-kel-filter').value;
-  const listEl = document.getElementById('shu-result-list');
-  const statsEl = document.getElementById('shu-stats');
-  const kelGridEl = document.getElementById('shu-kelompok-grid');
+  const dd = document.getElementById('shu-autocomplete-dropdown');
   
+  // Kalau input dikosongkan, hide dropdown + reset hasil
   if(!q && !kel){
-    listEl.innerHTML = `<div class="shu-empty">
-      <div class="shu-empty-icon">💡</div>
-      <div>Ketik nama keluarga atau pilih kelompok</div>
-    </div>`;
-    statsEl.style.display = 'none';
-    kelGridEl.style.display = 'none';
+    closeAutocomplete();
+    resetResult();
+    _activePick = null;
+    return;
+  }
+  
+  // Kalau cuma kelompok dipilih (input kosong), filter list kelompok itu
+  // Kalau ada query, butuh minimal 2 huruf untuk autocomplete
+  if(q && q.length < 2){
+    dd.innerHTML = '<div class="shu-ac-empty">Ketik minimal 2 huruf...</div>';
+    dd.classList.add('show');
     return;
   }
   
   let filtered = SHU_DATA;
-  if(kel) filtered = filtered.filter(d=>d.kelompok===kel);
-  if(q) filtered = filtered.filter(d=>
-    (d.nama_keluarga||'').toLowerCase().includes(q)
-  );
+  if(kel) filtered = filtered.filter(d => d.kelompok === kel);
+  if(q) filtered = filtered.filter(d => (d.nama_keluarga||'').toLowerCase().includes(q));
   
   if(!filtered.length){
-    listEl.innerHTML = `<div class="shu-empty">
-      <div class="shu-empty-icon">🔍</div>
-      <div>Tidak ditemukan. Coba kata kunci lain.</div>
-    </div>`;
-    statsEl.style.display = 'none';
-    kelGridEl.style.display = 'none';
+    dd.innerHTML = '<div class="shu-ac-empty">🔍 Tidak ditemukan</div>';
+    dd.classList.add('show');
     return;
   }
   
-  // Tampilkan 1 hasil teratas saja (yang paling cocok / SHU tertinggi)
-  // Kalau ada beberapa kandidat, prioritaskan exact match
-  let pick = filtered[0];
-  if(q){
-    const exact = filtered.find(d => (d.nama_keluarga||'').toLowerCase() === q);
-    if(exact) pick = exact;
-  }
+  // Render dropdown - max 15 saran
+  const items = filtered.slice(0, 15);
+  dd.innerHTML = items.map((d, idx) => `
+    <div class="shu-ac-item" onclick="pickFamily(${SHU_DATA.indexOf(d)})">
+      <div class="shu-ac-name">${highlightMatch(d.nama_keluarga, q)}</div>
+      <span class="shu-ac-tag">${d.kelompok}</span>
+    </div>
+  `).join('') + (filtered.length > 15 
+    ? `<div class="shu-ac-hint">+${filtered.length-15} lainnya — pertegas kata kunci</div>`
+    : '');
+  dd.classList.add('show');
+}
+
+function closeAutocomplete(){
+  document.getElementById('shu-autocomplete-dropdown').classList.remove('show');
+}
+
+function resetResult(){
+  document.getElementById('shu-result-list').innerHTML = `
+    <div class="shu-empty">
+      <div class="shu-empty-icon">💡</div>
+      <div>Ketik nama keluarga lalu pilih dari daftar</div>
+    </div>`;
+}
+
+// Dipanggil saat user klik salah satu item dropdown
+function pickFamily(idx){
+  const pick = SHU_DATA[idx];
+  if(!pick) return;
+  _activePick = pick;
   
-  const moreCount = filtered.length - 1;
+  // Set input ke nama yang dipilih
+  document.getElementById('shu-search-input').value = pick.nama_keluarga;
+  closeAutocomplete();
   
-  // Sekarang baru tampilkan stats umum & kelompok grid
-  statsEl.style.display = '';
-  kelGridEl.style.display = '';
-  
-  listEl.innerHTML = `
+  // Tampilkan kartu hasil
+  document.getElementById('shu-result-list').innerHTML = `
     <a href="dashboard-keluarga.html" class="shu-single-card">
       <div class="shu-single-label">Total SHU Keluarga</div>
       <div class="shu-single-name">${escapeHtml(pick.nama_keluarga)}</div>
       <div class="shu-single-kel">${pick.kelompok}${pick.jumlah_anggota>1?` · ${pick.jumlah_anggota} anggota`:''}</div>
       <div class="shu-single-amount">${rpFmt(pick.shu)}</div>
       <div class="shu-single-hint">🔐 Klik untuk lihat detail di Dashboard Keluarga →</div>
-    </a>
-    ${moreCount > 0 ? `
-      <div class="shu-more-hint">
-        ℹ️ Ada <strong>${moreCount} keluarga lain</strong> dengan kata kunci serupa. Pertegas pencarian untuk hasil tepat.
-      </div>` : ''}
-  `;
+    </a>`;
 }
 
 function escapeHtml(s){
