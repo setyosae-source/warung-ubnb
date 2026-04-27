@@ -335,7 +335,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">
-      <span>🤝 Tambah Mitra Baru</span>
+      <span id="modal-mitra-title">🤝 Tambah Mitra Baru</span>
       <button class="modal-close" onclick="document.getElementById('modal-mitra').classList.remove('show')">✕</button>
     </div>
     <div class="row2">
@@ -378,6 +378,69 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="display:flex;gap:8px;">
       <button class="btn secondary" style="flex:1" onclick="document.getElementById('modal-mitra').classList.remove('show')">Batal</button>
       <button class="btn primary" style="flex:2" id="btn-simpan-mitra" onclick="simpanMitra()">💾 Simpan Mitra</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDIT PENYERTAAN -->
+<div class="overlay" id="modal-edit-peny">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">
+      <span>✏️ Edit Penyertaan</span>
+      <button class="modal-close" onclick="document.getElementById('modal-edit-peny').classList.remove('show')">✕</button>
+    </div>
+    <div style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:14px;font-size:11px;line-height:1.6;">
+      <div style="font-family:monospace;color:var(--muted);" id="mep-no">—</div>
+      <div style="font-weight:700;" id="mep-mitra">—</div>
+      <div style="color:var(--muted);" id="mep-akad-info">—</div>
+    </div>
+    <div class="row2">
+      <div class="irow">
+        <label>Modal (Rp)</label>
+        <input type="number" id="mep-modal" oninput="hitungPreviewEditPeny()">
+      </div>
+      <div class="irow">
+        <label>Total Ujroh (Rp)</label>
+        <input type="number" id="mep-ujroh" oninput="hitungPreviewEditPeny()">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="irow">
+        <label>Nisbah Mitra (%)</label>
+        <input type="number" id="mep-nisbah" min="1" max="99" oninput="hitungPreviewEditPeny()">
+      </div>
+      <div class="irow">
+        <label>Jangka (bulan)</label>
+        <input type="number" id="mep-jangka" oninput="hitungPreviewEditPeny()">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="irow">
+        <label>Tgl Mulai</label>
+        <input type="date" id="mep-tgl-mulai">
+      </div>
+      <div class="irow">
+        <label>Jatuh Tempo</label>
+        <input type="date" id="mep-tgl-jt">
+      </div>
+    </div>
+    <div class="irow">
+      <label>Status</label>
+      <select id="mep-status">
+        <option value="aktif">Aktif</option>
+        <option value="lunas">Lunas</option>
+        <option value="ditarik">Ditarik</option>
+      </select>
+    </div>
+    <div class="irow">
+      <label>Catatan</label>
+      <textarea id="mep-catatan" rows="2"></textarea>
+    </div>
+    <div class="preview-box" id="mep-preview" style="display:none;"></div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn secondary" style="flex:1" onclick="document.getElementById('modal-edit-peny').classList.remove('show')">Batal</button>
+      <button class="btn primary" style="flex:2" id="btn-simpan-edit-peny" onclick="simpanEditPenyertaan()">💾 Update Penyertaan</button>
     </div>
   </div>
 </div>
@@ -586,6 +649,9 @@ function renderBHItem(b){
   const buktiHtml=b.sudah_dibayar&&b.bukti_transfer_url
     ?`<button class="btn sm secondary" onclick="lihatBukti('${b.bukti_transfer_url.replace(/'/g,"\\'")}','${nasabah}')">🧾 Lihat Bukti</button>`
     :'';
+  const batalHtml=b.sudah_dibayar
+    ?`<button class="btn sm danger" onclick="batalkanKonfirmasi(${b.id})">↩️ Batalkan</button>`
+    :'';
   const konfirmasiBtn=!b.sudah_dibayar
     ?`<button class="btn sm primary" onclick="bukaModalBayar(${b.id})">✅ Konfirmasi Bayar</button>`
     :'';
@@ -606,7 +672,7 @@ function renderBHItem(b){
         <div style="margin-top:4px;">${badgeHtml}</div>
       </div>
     </div>
-    <div class="bh-actions">${konfirmasiBtn}${buktiHtml}</div>
+    <div class="bh-actions">${konfirmasiBtn}${buktiHtml}${batalHtml}</div>
   </div>`;
 }
 
@@ -616,14 +682,20 @@ function renderMitra(){
   if(!aMitra.length){elM.innerHTML='<div class="empty"><p>Belum ada mitra</p></div>';return;}
   elM.innerHTML=aMitra.map(m=>{
     const peM=aPenyertaan.filter(p=>p.mitra_id===m.id&&p.status==='aktif');
+    const peMAll=aPenyertaan.filter(p=>p.mitra_id===m.id);
     const totalModal=peM.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
     const totalDibayar=aBH.filter(b=>b.mitra_id===m.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.total_ke_mitra||0),0);
     return `<div class="mitra-card">
       <div class="mitra-avatar">🏛️</div>
       <div style="flex:1;min-width:0;">
         <div class="mitra-nama">${m.nama}</div>
-        <div class="mitra-kode">${m.kode} · ${m.jenis}${m.pic?` · PIC: ${m.pic}`:''}</div>
-        ${m.catatan?`<div style="font-size:10px;color:var(--muted);margin-top:2px;">${m.catatan}</div>`:''}
+        <div class="mitra-kode">${m.kode} · ${m.jenis}${m.pic?` · PIC: ${m.pic}`:''}${m.no_telp?` · ${m.no_telp}`:''}</div>
+        ${m.alamat?`<div style="font-size:10px;color:var(--muted);margin-top:2px;">📍 ${m.alamat}</div>`:''}
+        ${m.catatan?`<div style="font-size:10px;color:var(--muted);margin-top:2px;">📝 ${m.catatan}</div>`:''}
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn sm secondary" onclick="editMitra(${m.id})">✏️ Edit</button>
+          <button class="btn sm danger" onclick="hapusMitra(${m.id},'${(m.nama||'').replace(/'/g,"\\'")}',${peMAll.length})">🗑️ Hapus</button>
+        </div>
       </div>
       <div class="mitra-stats">
         <div class="mitra-total">${rp(totalModal)}</div>
@@ -635,7 +707,9 @@ function renderMitra(){
 
   const elP=document.getElementById('list-penyertaan-aktif');
   if(!aPenyertaan.length){elP.innerHTML='<div class="empty"><p>Belum ada penyertaan</p></div>';return;}
-  elP.innerHTML=aPenyertaan.map(pe=>`
+  elP.innerHTML=aPenyertaan.map(pe=>{
+    const bhCount=aBH.filter(b=>b.penyertaan_id===pe.id).length;
+    return `
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
         <div>
@@ -654,15 +728,44 @@ function renderMitra(){
         <span>⏰ JT: ${fmtTgl(pe.tgl_jatuh_tempo)}</span>
         <span>💰 ${rp(pe.bh_mitra_perbulan)}/bln</span>
       </div>
-    </div>`).join('');
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn sm secondary" onclick="editPenyertaan(${pe.id})">✏️ Edit</button>
+        <button class="btn sm secondary" onclick="ubahStatusPenyertaan(${pe.id},'${pe.status}')">🔄 Status</button>
+        <button class="btn sm danger" onclick="hapusPenyertaan(${pe.id},'${(pe.no_penyertaan||'').replace(/'/g,"\\'")}',${bhCount})">🗑️ Hapus</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// ===== TAMBAH MITRA =====
+// ===== TAMBAH/EDIT MITRA =====
+let _editMitraId=null;
+
 function openModalMitra(){
+  _editMitraId=null;
+  document.getElementById('modal-mitra-title').textContent='🤝 Tambah Mitra Baru';
+  document.getElementById('btn-simpan-mitra').innerHTML='💾 Simpan Mitra';
+  document.getElementById('mt-kode').readOnly=false;
   ['mt-kode','mt-nama','mt-alamat','mt-pic','mt-telp','mt-catatan'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('mt-jenis').value='koperasi';
   document.getElementById('modal-mitra').classList.add('show');
 }
+
+function editMitra(id){
+  const m=aMitra.find(x=>x.id===id);if(!m)return;
+  _editMitraId=id;
+  document.getElementById('modal-mitra-title').textContent='✏️ Edit Mitra';
+  document.getElementById('btn-simpan-mitra').innerHTML='💾 Update Mitra';
+  document.getElementById('mt-kode').value=m.kode||'';
+  document.getElementById('mt-kode').readOnly=true;
+  document.getElementById('mt-nama').value=m.nama||'';
+  document.getElementById('mt-jenis').value=m.jenis||'koperasi';
+  document.getElementById('mt-alamat').value=m.alamat||'';
+  document.getElementById('mt-pic').value=m.pic||'';
+  document.getElementById('mt-telp').value=m.no_telp||'';
+  document.getElementById('mt-catatan').value=m.catatan||'';
+  document.getElementById('modal-mitra').classList.add('show');
+}
+
 async function simpanMitra(){
   const kode=document.getElementById('mt-kode').value.trim().toUpperCase();
   const nama=document.getElementById('mt-nama').value.trim();
@@ -670,17 +773,26 @@ async function simpanMitra(){
   if(!kode||!nama){toast('Kode dan nama wajib diisi',true);return;}
 
   const btn=document.getElementById('btn-simpan-mitra');
+  const oldLabel=btn.innerHTML;
   btn.innerHTML='<span class="spinner"></span>';btn.disabled=true;
 
-  const {error}=await sb.from('bmt_mitra_penyerta').insert([{
+  const payload={
     kode, nama, jenis,
     alamat:document.getElementById('mt-alamat').value.trim()||null,
     pic:document.getElementById('mt-pic').value.trim()||null,
     no_telp:document.getElementById('mt-telp').value.trim()||null,
     catatan:document.getElementById('mt-catatan').value.trim()||null
-  }]);
+  };
 
-  btn.innerHTML='💾 Simpan Mitra';btn.disabled=false;
+  let error;
+  if(_editMitraId){
+    delete payload.kode;
+    ({error}=await sb.from('bmt_mitra_penyerta').update(payload).eq('id',_editMitraId));
+  } else {
+    ({error}=await sb.from('bmt_mitra_penyerta').insert([payload]));
+  }
+
+  btn.innerHTML=oldLabel;btn.disabled=false;
 
   if(error){
     if(error.message.includes('duplicate')||error.code==='23505'){
@@ -688,11 +800,146 @@ async function simpanMitra(){
     } else toast('Gagal: '+error.message,true);
     return;
   }
-  toast('✅ Mitra berhasil ditambahkan');
+  toast(_editMitraId?'✅ Mitra berhasil diupdate':'✅ Mitra berhasil ditambahkan');
   document.getElementById('modal-mitra').classList.remove('show');
+  _editMitraId=null;
   await loadAll();
   fillMitraDropdowns();
   renderMitra();
+}
+
+async function hapusMitra(id,nama,jumlahPenyertaan){
+  if(jumlahPenyertaan>0){
+    toast(`Tidak bisa hapus — mitra masih punya ${jumlahPenyertaan} penyertaan`,true);
+    return;
+  }
+  if(!confirm(`Hapus mitra "${nama}"?\n\nTindakan ini tidak dapat dibatalkan.`))return;
+  const {error}=await sb.from('bmt_mitra_penyerta').delete().eq('id',id);
+  if(error){toast('Gagal hapus: '+error.message,true);return;}
+  toast('✅ Mitra dihapus');
+  await loadAll();
+  fillMitraDropdowns();
+  renderMitra();
+  renderDashboard();
+}
+
+// ===== EDIT/HAPUS PENYERTAAN =====
+let _editPenyertaanId=null;
+
+function editPenyertaan(id){
+  const p=aPenyertaan.find(x=>x.id===id);if(!p)return;
+  _editPenyertaanId=id;
+  document.getElementById('mep-no').textContent=p.no_penyertaan;
+  document.getElementById('mep-mitra').textContent=p.bmt_mitra_penyerta?.nama||'—';
+  document.getElementById('mep-akad-info').textContent=p.keterangan_akad||'—';
+  document.getElementById('mep-modal').value=p.jumlah_modal||0;
+  document.getElementById('mep-ujroh').value=p.total_ujroh||0;
+  document.getElementById('mep-nisbah').value=p.nisbah_mitra_pct||56;
+  document.getElementById('mep-tgl-mulai').value=p.tgl_mulai||'';
+  document.getElementById('mep-tgl-jt').value=p.tgl_jatuh_tempo||'';
+  document.getElementById('mep-jangka').value=p.jangka_bulan||12;
+  document.getElementById('mep-status').value=p.status||'aktif';
+  document.getElementById('mep-catatan').value=p.catatan||'';
+  document.getElementById('modal-edit-peny').classList.add('show');
+  hitungPreviewEditPeny();
+}
+
+function hitungPreviewEditPeny(){
+  const modal=parseFloat(document.getElementById('mep-modal').value)||0;
+  const ujroh=parseFloat(document.getElementById('mep-ujroh').value)||0;
+  const nisbahM=parseFloat(document.getElementById('mep-nisbah').value)||0;
+  const jangka=parseInt(document.getElementById('mep-jangka').value)||12;
+  const prev=document.getElementById('mep-preview');
+  if(!modal||!ujroh){prev.style.display='none';return;}
+  const bhMitra=Math.round(ujroh*nisbahM/100);
+  const bhUbnb=Math.round(ujroh*(100-nisbahM)/100);
+  const ret=modal>0?(bhMitra/modal*100).toFixed(2):0;
+  prev.style.display='block';
+  prev.innerHTML=`
+    <div class="preview-row"><span>BH Mitra/bln</span><strong style="color:var(--hijau)">${rp(Math.round(bhMitra/jangka))}</strong></div>
+    <div class="preview-row"><span>BH UBNB/bln</span><strong>${rp(Math.round(bhUbnb/jangka))}</strong></div>
+    <div class="preview-row"><span>Return mitra/thn</span><strong>${ret}%</strong></div>`;
+}
+
+async function simpanEditPenyertaan(){
+  if(!_editPenyertaanId)return;
+  const modal=parseFloat(document.getElementById('mep-modal').value)||0;
+  const ujroh=parseFloat(document.getElementById('mep-ujroh').value)||0;
+  const nisbahM=parseFloat(document.getElementById('mep-nisbah').value)||0;
+  const jangka=parseInt(document.getElementById('mep-jangka').value)||12;
+  const tglMulai=document.getElementById('mep-tgl-mulai').value;
+  const tglJT=document.getElementById('mep-tgl-jt').value||null;
+  const status=document.getElementById('mep-status').value;
+  const catatan=document.getElementById('mep-catatan').value.trim()||null;
+
+  if(!modal||!ujroh){toast('Modal dan ujroh wajib diisi',true);return;}
+  if(nisbahM<=0||nisbahM>=100){toast('Nisbah harus 1-99%',true);return;}
+  if(!tglMulai){toast('Tanggal mulai wajib',true);return;}
+
+  const btn=document.getElementById('btn-simpan-edit-peny');
+  btn.innerHTML='<span class="spinner"></span>';btn.disabled=true;
+
+  const bhMitra=Math.round(ujroh*nisbahM/100);
+  const bhUbnb=Math.round(ujroh*(100-nisbahM)/100);
+  const returnPct=modal>0?parseFloat((bhMitra/modal*100).toFixed(2)):0;
+
+  const {error}=await sb.from('bmt_penyertaan_eksternal').update({
+    jumlah_modal:modal,
+    total_ujroh:ujroh,
+    ujroh_per_bulan:Math.round(ujroh/jangka),
+    nisbah_ubnb_pct:100-nisbahM,
+    nisbah_mitra_pct:nisbahM,
+    bh_ubnb_total:bhUbnb,
+    bh_mitra_total:bhMitra,
+    bh_ubnb_perbulan:Math.round(bhUbnb/jangka),
+    bh_mitra_perbulan:Math.round(bhMitra/jangka),
+    margin_modal_pct:returnPct,
+    tgl_mulai:tglMulai,
+    tgl_jatuh_tempo:tglJT,
+    jangka_bulan:jangka,
+    status,
+    catatan,
+    updated_at:new Date().toISOString()
+  }).eq('id',_editPenyertaanId);
+
+  btn.innerHTML='💾 Update Penyertaan';btn.disabled=false;
+
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Penyertaan berhasil diupdate');
+  document.getElementById('modal-edit-peny').classList.remove('show');
+  _editPenyertaanId=null;
+  await loadAll();
+  renderDashboard();renderMitra();renderPending();renderLunas();
+}
+
+async function ubahStatusPenyertaan(id,statusSekarang){
+  const opts=['aktif','lunas','ditarik'].filter(s=>s!==statusSekarang);
+  const pilihan=prompt(`Status sekarang: ${statusSekarang}\n\nUbah ke (ketik salah satu):\n${opts.map(o=>'- '+o).join('\n')}`);
+  if(!pilihan)return;
+  const statusBaru=pilihan.toLowerCase().trim();
+  if(!['aktif','lunas','ditarik'].includes(statusBaru)){toast('Status tidak valid',true);return;}
+  if(statusBaru===statusSekarang){toast('Status tidak berubah');return;}
+  const {error}=await sb.from('bmt_penyertaan_eksternal').update({status:statusBaru,updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Status diubah ke '+statusBaru);
+  await loadAll();
+  renderDashboard();renderMitra();
+}
+
+async function hapusPenyertaan(id,noP,bhCount){
+  if(bhCount>0){
+    if(!confirm(`⚠️ PERHATIAN!\n\nPenyertaan ${noP} sudah punya ${bhCount} catatan tagihan/pembayaran BH.\n\nMenghapus penyertaan akan menghapus SEMUA catatan tagihan & riwayat pembayaran terkait.\n\nLanjutkan? (Tindakan tidak dapat dibatalkan)`))return;
+    if(!confirm(`Konfirmasi sekali lagi:\n\nHapus penyertaan ${noP} beserta ${bhCount} catatan BH?`))return;
+    const {error:e1}=await sb.from('bmt_penyertaan_bh_eksternal').delete().eq('penyertaan_id',id);
+    if(e1){toast('Gagal hapus BH: '+e1.message,true);return;}
+  } else {
+    if(!confirm(`Hapus penyertaan ${noP}?\n\nTindakan ini tidak dapat dibatalkan.`))return;
+  }
+  const {error}=await sb.from('bmt_penyertaan_eksternal').delete().eq('id',id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Penyertaan dihapus');
+  await loadAll();
+  renderDashboard();renderMitra();renderPending();renderLunas();
 }
 
 // ===== PENYERTAAN BARU =====
@@ -950,6 +1197,29 @@ async function simpanKonfirmasi(){
   }finally{
     btn.innerHTML='✅ Konfirmasi';btn.disabled=false;
   }
+}
+
+async function batalkanKonfirmasi(bhId){
+  const b=aBH.find(x=>x.id===bhId);if(!b)return;
+  if(!confirm(`Batalkan konfirmasi pembayaran ke ${b.bmt_mitra_penyerta?.nama||'mitra'}?\n\nBukti transfer akan tetap tersimpan tapi status berubah jadi Pending kembali.`))return;
+  const {error}=await sb.from('bmt_penyertaan_bh_eksternal').update({
+    sudah_dibayar:false,
+    tgl_bayar_mitra:null,
+    dikonfirmasi_oleh:null,
+    tgl_konfirmasi:null
+  }).eq('id',bhId);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  // Kurangi akumulasi total_bh_dibayar di penyertaan
+  const pe=aPenyertaan.find(p=>p.id===b.penyertaan_id);
+  if(pe){
+    await sb.from('bmt_penyertaan_eksternal').update({
+      total_bh_dibayar:Math.max(0,parseFloat(pe.total_bh_dibayar||0)-parseFloat(b.bh_ke_mitra||0)),
+      updated_at:new Date().toISOString()
+    }).eq('id',pe.id);
+  }
+  toast('✅ Konfirmasi dibatalkan');
+  await loadAll();
+  renderDashboard();renderPending();renderLunas();
 }
 
 function lihatBukti(url,nasabah){
