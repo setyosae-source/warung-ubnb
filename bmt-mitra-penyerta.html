@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Penyertaan Mitra — BMT UBNB</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="ubnb-auth.js"></script>
+<style>
+:root{
+  --hijau:#1a6640;--hijau2:#2e7d52;--hijau-light:#e8f5ee;--hijau-dark:#0f3d28;
+  --gold:#c9a84c;--gold-light:#faeeda;--gold-dark:#854F0B;
+  --red:#c0392b;--red-light:#fdecea;
+  --blue:#1e5fa8;--blue-light:#e8f0fb;
+  --bg:#f5f7f5;--surface:#fff;--border:rgba(0,0,0,0.08);
+  --text:#0d2b0f;--muted:#5a7a5c;
+  --radius:12px;--radius-sm:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+
+/* LOGIN */
+#login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));display:flex;align-items:center;justify-content:center;z-index:500;padding:20px;}
+.login-card{background:white;border-radius:20px;padding:36px 30px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+.login-logo{text-align:center;margin-bottom:24px;}
+.login-logo .icon{width:56px;height:56px;background:var(--hijau-light);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 10px;}
+.login-logo h1{font-size:17px;font-weight:700;color:var(--hijau-dark);}
+.login-logo p{font-size:11px;color:var(--muted);margin-top:2px;}
+.lfield{margin-bottom:12px;}
+.lfield label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px;}
+.lfield input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s;}
+.lfield input:focus{border-color:var(--hijau);}
+.btn-login{width:100%;padding:11px;background:var(--hijau);color:white;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn-login:hover{background:var(--hijau2);}
+#login-err{color:var(--red);font-size:11px;text-align:center;margin-top:6px;}
+
+/* TOPBAR */
+#app{display:none;}
+.topbar{background:var(--hijau-dark);color:white;padding:0 16px;height:50px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-left{display:flex;align-items:center;gap:10px;}
+.topbar-title{font-size:14px;font-weight:700;}
+.topbar-sub{font-size:10px;opacity:.6;}
+.user-badge{background:rgba(255,255,255,.15);padding:3px 10px;border-radius:99px;font-size:11px;}
+.btn-keluar{background:transparent;border:1px solid rgba(255,255,255,.3);color:white;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;}
+
+/* TABS */
+.tab-bar{background:var(--hijau2);display:flex;overflow-x:auto;scrollbar-width:none;}
+.tab-bar::-webkit-scrollbar{display:none;}
+.tab-btn{padding:10px 16px;color:rgba(255,255,255,.65);font-size:12px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit;transition:all .2s;}
+.tab-btn.active{color:var(--gold);border-bottom-color:var(--gold);}
+
+/* MAIN */
+.main{max-width:900px;margin:0 auto;padding:16px;}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:16px;margin-bottom:12px;}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+/* STAT GRID */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}
+@media(max-width:600px){.stat-grid{grid-template-columns:1fr 1fr;}}
+.stat{background:var(--hijau-light);border-radius:var(--radius-sm);padding:12px 14px;border:1px solid rgba(26,102,64,.15);}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px;}
+.stat-val{font-size:20px;font-weight:800;color:var(--hijau-dark);}
+.stat-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+
+/* BH LIST */
+.bh-item{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;margin-bottom:8px;transition:border-color .2s;}
+.bh-item:hover{border-color:var(--hijau2);}
+.bh-item.pending{border-left:4px solid var(--gold);}
+.bh-item.lunas{border-left:4px solid var(--hijau2);}
+.bh-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.bh-info{}
+.bh-nasabah{font-size:13px;font-weight:700;}
+.bh-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;}
+.bh-amounts{text-align:right;flex-shrink:0;}
+.bh-total{font-size:15px;font-weight:800;color:var(--hijau);}
+.bh-breakdown{font-size:10px;color:var(--muted);margin-top:2px;}
+.bh-actions{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-pending{background:var(--gold-light);color:var(--gold-dark);}
+.badge-lunas{background:var(--hijau-light);color:var(--hijau-dark);}
+
+/* BUTTONS */
+.btn{padding:6px 12px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;}
+.btn.primary{background:var(--hijau);color:white;}
+.btn.primary:hover{background:var(--hijau2);}
+.btn.gold{background:var(--gold);color:white;}
+.btn.gold:hover{background:var(--gold-dark);}
+.btn.secondary{background:var(--bg);color:var(--text);border:1px solid var(--border);}
+.btn.danger{background:var(--red-light);color:var(--red);}
+.btn.sm{padding:4px 10px;font-size:10px;}
+
+/* BUKTI TRANSFER PREVIEW */
+.bukti-wrap{margin-top:8px;}
+.bukti-img{width:100%;max-width:320px;border-radius:var(--radius-sm);border:1px solid var(--border);cursor:pointer;display:block;}
+.bukti-pdf{display:inline-flex;align-items:center;gap:6px;background:var(--blue-light);color:var(--blue);padding:6px 12px;border-radius:var(--radius-sm);font-size:11px;font-weight:700;text-decoration:none;}
+
+/* MODAL KONFIRMASI */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-end;justify-content:center;padding:0;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px;max-height:90vh;overflow-y:auto;}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{font-size:14px;font-weight:800;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;}
+.modal-close{background:var(--bg);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.irow{margin-bottom:12px;}
+.irow label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px;}
+.irow input,.irow textarea,.irow select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;outline:none;transition:border-color .2s;}
+.irow input:focus,.irow textarea:focus{border-color:var(--hijau);}
+
+/* UPLOAD AREA */
+.upload-area{border:2px dashed var(--border);border-radius:var(--radius-sm);padding:20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);}
+.upload-area:hover,.upload-area.drag{border-color:var(--hijau);background:var(--hijau-light);}
+.upload-area p{font-size:12px;color:var(--muted);margin-top:6px;}
+.upload-preview{margin-top:10px;}
+.upload-preview img{max-width:200px;max-height:150px;border-radius:var(--radius-sm);border:1px solid var(--border);}
+
+/* PENYERTAAN INFO */
+.peny-header{background:linear-gradient(135deg,var(--hijau-dark),var(--hijau));border-radius:var(--radius);padding:16px;color:white;margin-bottom:12px;}
+.peny-no{font-size:11px;opacity:.7;font-family:monospace;}
+.peny-nama{font-size:18px;font-weight:800;margin:4px 0;}
+.peny-detail{font-size:11px;opacity:.75;line-height:1.6;}
+
+/* PROGRES PEMBAYARAN */
+.prog-track{background:rgba(255,255,255,.2);border-radius:99px;height:6px;margin:10px 0 4px;}
+.prog-fill{height:100%;border-radius:99px;background:var(--gold);transition:width .5s;}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty-icon{font-size:40px;margin-bottom:10px;}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f3d28;color:white;padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+#toast.show{opacity:1;}
+#toast.err{background:var(--red);}
+
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.page{display:none;}
+.page.active{display:block;}
+
+/* RINGKASAN MITRA */
+.mitra-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.mitra-avatar{width:44px;height:44px;background:var(--hijau-light);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.mitra-nama{font-size:13px;font-weight:700;}
+.mitra-kode{font-size:10px;color:var(--muted);font-family:monospace;}
+.mitra-stats{margin-left:auto;text-align:right;flex-shrink:0;}
+.mitra-total{font-size:15px;font-weight:800;color:var(--hijau);}
+.mitra-sub{font-size:10px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">🤝</div>
+      <h1>Penyertaan Mitra</h1>
+      <p>Manajemen Modal & Bagi Hasil Eksternal</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-u" onkeydown="if(event.key==='Enter')login()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-p" onkeydown="if(event.key==='Enter')login()"></div>
+    <button class="btn-login" onclick="login()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="topbar-title">🤝 Penyertaan Mitra</div>
+        <div class="topbar-sub">Modal Eksternal BMT UBNB</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="user-badge" id="user-badge">—</span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+    <button class="tab-btn" onclick="showPage('tagihan',this)">💳 Tagihan Pending</button>
+    <button class="tab-btn" onclick="showPage('riwayat',this)">📜 Riwayat Bayar</button>
+    <button class="tab-btn" onclick="showPage('mitra',this)">🤝 Data Mitra</button>
+  </div>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="peny-header" id="peny-header">
+        <div class="peny-no">Memuat...</div>
+      </div>
+
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat"><div class="stat-lbl">Total Modal</div><div class="stat-val" id="s-modal">—</div></div>
+        <div class="stat"><div class="stat-lbl">Tagihan Pending</div><div class="stat-val" id="s-pending">—</div></div>
+        <div class="stat"><div class="stat-lbl">Sudah Dibayar</div><div class="stat-val" id="s-lunas">—</div></div>
+        <div class="stat"><div class="stat-lbl">BH UBNB Diterima</div><div class="stat-val" id="s-ubnb">—</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Progress Pengembalian Modal</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+          <span id="prog-label">—</span>
+          <span id="prog-pct" style="font-weight:700;">0%</span>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="prog-sub">—</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Tagihan Bulan Ini <span id="badge-bulan" style="font-size:11px;color:var(--muted)"></span></div>
+        <div id="tagihan-bulan-ini"></div>
+      </div>
+    </div>
+
+    <!-- TAGIHAN PENDING -->
+    <div class="page" id="page-tagihan">
+      <div class="card">
+        <div class="card-title">
+          <span>💳 Tagihan Belum Dibayar</span>
+          <span id="total-pending-label" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+        <div id="list-pending"></div>
+      </div>
+    </div>
+
+    <!-- RIWAYAT -->
+    <div class="page" id="page-riwayat">
+      <div class="card">
+        <div class="card-title">📜 Riwayat Pembayaran ke Mitra</div>
+        <div id="list-lunas"></div>
+      </div>
+    </div>
+
+    <!-- MITRA -->
+    <div class="page" id="page-mitra">
+      <div class="card">
+        <div class="card-title">🤝 Data Mitra Penyerta Modal</div>
+        <div id="list-mitra"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 Penyertaan Aktif</div>
+        <div id="list-penyertaan-aktif"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL KONFIRMASI BAYAR -->
+<div class="overlay" id="modal-bayar">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">
+      <span>✅ Konfirmasi Pembayaran</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div id="modal-bh-info" style="background:var(--hijau-light);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;font-size:12px;line-height:1.6;"></div>
+
+    <div class="irow">
+      <label>Tanggal Transfer</label>
+      <input type="date" id="inp-tgl-bayar">
+    </div>
+
+    <div class="irow">
+      <label>Upload Bukti Transfer</label>
+      <div class="upload-area" id="upload-area" onclick="document.getElementById('inp-file').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+        <div style="font-size:28px;">📎</div>
+        <p>Klik atau seret foto/PDF bukti transfer<br><span style="font-size:10px;">JPG, PNG, PDF — maks 5MB</span></p>
+      </div>
+      <input type="file" id="inp-file" accept="image/*,application/pdf" style="display:none" onchange="previewFile(this)">
+      <div class="upload-preview" id="upload-preview" style="display:none;"></div>
+    </div>
+
+    <div class="irow">
+      <label>Catatan (opsional)</label>
+      <textarea id="inp-catatan" rows="2" placeholder="Misal: Transfer via BCA, no ref 123456"></textarea>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button class="btn secondary" style="flex:1" onclick="closeModal()">Batal</button>
+      <button class="btn primary" style="flex:1" id="btn-konfirmasi" onclick="simpanKonfirmasi()">
+        ✅ Konfirmasi Sudah Dibayar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LIHAT BUKTI -->
+<div class="overlay" id="modal-bukti">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">
+      <span>🧾 Bukti Transfer</span>
+      <button class="modal-close" onclick="document.getElementById('modal-bukti').classList.remove('show')">✕</button>
+    </div>
+    <div id="modal-bukti-content"></div>
+  </div>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase;
+const sb=createClient(SURL,SKEY);
+
+let CU=null, aBH=[], aPenyertaan=[], aMitra=[], _modalBHId=null, _uploadFile=null;
+const rp=n=>'Rp '+Math.round(n||0).toLocaleString('id-ID');
+const fmtTgl=d=>d?new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+const today=()=>new Date().toISOString().slice(0,10);
+
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show'+(err?' err':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3500);
+}
+
+async function login(){
+  const u=document.getElementById('inp-u').value.trim();
+  const p=document.getElementById('inp-p').value;
+  const btn=document.getElementById('btn-login');
+  btn.innerHTML='<span class="spinner"></span>';btn.disabled=true;
+  try{
+    CU=await UBNBAuth.login(sb,u,p);
+    document.getElementById('login-wrap').style.display='none';
+    document.getElementById('app').style.display='block';
+    document.getElementById('user-badge').textContent=CU.username;
+    await loadAll();
+    renderDashboard();
+  }catch(e){
+    document.getElementById('login-err').textContent=e.message||'Login gagal';
+    btn.innerHTML='Masuk';btn.disabled=false;
+  }
+}
+function keluar(){CU=null;location.reload();}
+
+async function loadAll(){
+  const [{data:bh},{data:pe},{data:m}]=await Promise.all([
+    sb.from('bmt_penyertaan_bh_eksternal')
+      .select('*,bmt_mitra_penyerta(nama),bmt_akad(nama_jamaah,no_akad)')
+      .order('tgl_angsuran'),
+    sb.from('bmt_penyertaan_eksternal')
+      .select('*,bmt_mitra_penyerta(nama,kode)')
+      .order('created_at'),
+    sb.from('bmt_mitra_penyerta').select('*').order('nama')
+  ]);
+  aBH=bh||[]; aPenyertaan=pe||[]; aMitra=m||[];
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const pe=aPenyertaan[0];
+  if(!pe){
+    document.getElementById('peny-header').innerHTML='<div style="opacity:.7">Belum ada penyertaan aktif</div>';
+    return;
+  }
+  const m=pe.bmt_mitra_penyerta;
+  const angsuranCount=aBH.length;
+  const lunasBH=aBH.filter(b=>b.sudah_dibayar);
+  const pendingBH=aBH.filter(b=>!b.sudah_dibayar);
+  const totalLunas=lunasBH.reduce((s,b)=>s+parseFloat(b.total_ke_mitra||0),0);
+  const totalPending=pendingBH.reduce((s,b)=>s+parseFloat(b.total_ke_mitra||0),0);
+  const totalUBNB=lunasBH.reduce((s,b)=>s+parseFloat(b.bh_ubnb||0),0);
+  const pokkok=parseFloat(pe.total_pokok_kembali||0);
+  const modal=parseFloat(pe.jumlah_modal||0);
+  const pct=modal>0?Math.min(100,Math.round(pokkok/modal*100)):0;
+
+  document.getElementById('peny-header').innerHTML=`
+    <div class="peny-no">${pe.no_penyertaan} &nbsp;|&nbsp; ${m?.kode||''}</div>
+    <div class="peny-nama">${m?.nama||'—'}</div>
+    <div class="peny-detail">
+      ${pe.keterangan_akad}<br>
+      Modal: ${rp(modal)} &nbsp;·&nbsp; Nisbah mitra: ${pe.nisbah_mitra_pct}% &nbsp;·&nbsp; Jatuh tempo: ${fmtTgl(pe.tgl_jatuh_tempo)}
+    </div>
+    <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+    <div style="font-size:10px;opacity:.7;margin-top:2px;">Pokok kembali ${pct}% &nbsp;·&nbsp; ${angsuranCount}/12 angsuran</div>`;
+
+  document.getElementById('s-modal').textContent=rp(modal);
+  document.getElementById('s-pending').textContent=rp(totalPending);
+  document.getElementById('s-pending').style.color=totalPending>0?'#c9a84c':'inherit';
+  document.getElementById('s-lunas').textContent=rp(totalLunas);
+  document.getElementById('s-ubnb').textContent=rp(totalUBNB);
+
+  // Progress bar
+  document.getElementById('prog-label').textContent=`${rp(pokkok)} dari ${rp(modal)}`;
+  document.getElementById('prog-pct').textContent=pct+'%';
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-sub').textContent=
+    `Sisa: ${rp(modal-pokkok)} &nbsp;·&nbsp; Jatuh tempo: ${fmtTgl(pe.tgl_jatuh_tempo)}`;
+
+  // Tagihan bulan ini
+  const bulanIni=new Date().toISOString().slice(0,7);
+  const tagBulanIni=pendingBH.filter(b=>b.tgl_angsuran&&b.tgl_angsuran.startsWith(bulanIni));
+  document.getElementById('badge-bulan').textContent=tagBulanIni.length?`${tagBulanIni.length} tagihan`:'';
+  const el=document.getElementById('tagihan-bulan-ini');
+  if(!tagBulanIni.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">✅</div><p>Tidak ada tagihan bulan ini</p></div>';
+  } else {
+    el.innerHTML=tagBulanIni.map(b=>renderBHItem(b,true)).join('');
+  }
+
+  renderPending();
+  renderLunas();
+  renderMitra();
+}
+
+function renderBHItem(b,compact=false){
+  const nasabah=b.bmt_akad?.nama_jamaah||'—';
+  const noAkad=b.bmt_akad?.no_akad||'—';
+  const statusClass=b.sudah_dibayar?'lunas':'pending';
+  const badgeHtml=b.sudah_dibayar
+    ?`<span class="badge badge-lunas">✅ Lunas ${fmtTgl(b.tgl_bayar_mitra)}</span>`
+    :`<span class="badge badge-pending">⏳ Pending</span>`;
+
+  const buktiHtml=b.sudah_dibayar&&b.bukti_transfer_url
+    ?`<button class="btn sm secondary" onclick="lihatBukti('${b.bukti_transfer_url}','${nasabah}')">🧾 Lihat Bukti</button>`
+    :'';
+
+  const konfirmasiBtn=!b.sudah_dibayar
+    ?`<button class="btn sm primary" onclick="bukaModal(${b.id})">✅ Konfirmasi Bayar</button>`
+    :'';
+
+  return `
+    <div class="bh-item ${statusClass}">
+      <div class="bh-row">
+        <div class="bh-info">
+          <div class="bh-nasabah">${nasabah}</div>
+          <div class="bh-detail">
+            ${noAkad} &nbsp;·&nbsp; Bulan ke-${b.bulan_ke} &nbsp;·&nbsp; ${fmtTgl(b.tgl_angsuran)}<br>
+            Pokok: ${rp(b.pokok_ke_mitra)} &nbsp;+&nbsp; BH: ${rp(b.bh_ke_mitra)}
+            ${b.dikonfirmasi_oleh?`<br><span style="color:var(--hijau)">✓ Dikonfirmasi oleh ${b.dikonfirmasi_oleh}</span>`:''}
+          </div>
+        </div>
+        <div class="bh-amounts">
+          <div class="bh-total">${rp(b.total_ke_mitra)}</div>
+          <div class="bh-breakdown">BH UBNB: ${rp(b.bh_ubnb)}</div>
+          <div style="margin-top:4px;">${badgeHtml}</div>
+        </div>
+      </div>
+      ${!compact?`<div class="bh-actions">${konfirmasiBtn}${buktiHtml}</div>`:''}
+    </div>`;
+}
+
+function renderPending(){
+  const pending=aBH.filter(b=>!b.sudah_dibayar);
+  const el=document.getElementById('list-pending');
+  const total=pending.reduce((s,b)=>s+parseFloat(b.total_ke_mitra||0),0);
+  document.getElementById('total-pending-label').textContent=
+    pending.length?`${pending.length} tagihan — Total: ${rp(total)}`:'';
+  if(!pending.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">✅</div><p>Tidak ada tagihan pending</p></div>';
+    return;
+  }
+  el.innerHTML=pending.map(b=>renderBHItem(b)).join('');
+}
+
+function renderLunas(){
+  const lunas=aBH.filter(b=>b.sudah_dibayar).slice().reverse();
+  const el=document.getElementById('list-lunas');
+  if(!lunas.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">📜</div><p>Belum ada pembayaran</p></div>';
+    return;
+  }
+  el.innerHTML=lunas.map(b=>renderBHItem(b)).join('');
+}
+
+function renderMitra(){
+  const elM=document.getElementById('list-mitra');
+  if(!aMitra.length){elM.innerHTML='<div class="empty"><p>Belum ada mitra</p></div>';return;}
+  elM.innerHTML=aMitra.map(m=>{
+    const peBHm=aBH.filter(b=>b.mitra_id===m.id);
+    const total=peBHm.filter(b=>b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.total_ke_mitra||0),0);
+    return `<div class="mitra-card">
+      <div class="mitra-avatar">🏛️</div>
+      <div>
+        <div class="mitra-nama">${m.nama}</div>
+        <div class="mitra-kode">${m.kode} &nbsp;·&nbsp; ${m.jenis}</div>
+        ${m.catatan?`<div style="font-size:10px;color:var(--muted);margin-top:2px;">${m.catatan}</div>`:''}
+      </div>
+      <div class="mitra-stats">
+        <div class="mitra-total">${rp(total)}</div>
+        <div class="mitra-sub">total diterima</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const elP=document.getElementById('list-penyertaan-aktif');
+  if(!aPenyertaan.length){elP.innerHTML='<div class="empty"><p>Belum ada penyertaan</p></div>';return;}
+  elP.innerHTML=aPenyertaan.map(pe=>`
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-family:monospace;font-size:10px;color:var(--muted);">${pe.no_penyertaan}</div>
+          <div style="font-weight:700;font-size:13px;">${pe.bmt_mitra_penyerta?.nama||'—'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${pe.keterangan_akad}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:15px;font-weight:800;color:var(--hijau);">${rp(pe.jumlah_modal)}</div>
+          <div style="font-size:10px;color:var(--muted);">Nisbah mitra: ${pe.nisbah_mitra_pct}%</div>
+          <span class="badge" style="background:var(--hijau-light);color:var(--hijau-dark);margin-top:4px;">${pe.status}</span>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;">
+        <span>📅 Mulai: ${fmtTgl(pe.tgl_mulai)}</span>
+        <span>⏰ JT: ${fmtTgl(pe.tgl_jatuh_tempo)}</span>
+        <span>💰 BH/bln: ${rp(pe.bh_mitra_perbulan)}</span>
+        <span>📊 Return: ${pe.margin_modal_pct}%/thn</span>
+      </div>
+    </div>`).join('');
+}
+
+// ===== MODAL KONFIRMASI =====
+function bukaModal(bhId){
+  const b=aBH.find(x=>x.id===bhId);if(!b)return;
+  _modalBHId=bhId;_uploadFile=null;
+  document.getElementById('inp-tgl-bayar').value=today();
+  document.getElementById('inp-catatan').value='';
+  document.getElementById('inp-file').value='';
+  document.getElementById('upload-preview').style.display='none';
+  document.getElementById('upload-area').style.display='block';
+  document.getElementById('modal-bh-info').innerHTML=`
+    <strong>${b.bmt_akad?.nama_jamaah||'—'}</strong> — ${b.bmt_akad?.no_akad||'—'}<br>
+    Bulan ke-${b.bulan_ke} &nbsp;·&nbsp; Angsuran: ${fmtTgl(b.tgl_angsuran)}<br>
+    <span style="font-size:13px;font-weight:800;color:var(--hijau);">Total transfer: ${rp(b.total_ke_mitra)}</span>
+    <span style="color:var(--muted);"> (Pokok ${rp(b.pokok_ke_mitra)} + BH ${rp(b.bh_ke_mitra)})</span>`;
+  document.getElementById('modal-bayar').classList.add('show');
+}
+function closeModal(){document.getElementById('modal-bayar').classList.remove('show');_modalBHId=null;_uploadFile=null;}
+
+function previewFile(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>5*1024*1024){toast('File terlalu besar (maks 5MB)',true);return;}
+  _uploadFile=file;
+  const prev=document.getElementById('upload-preview');
+  const area=document.getElementById('upload-area');
+  area.style.display='none';
+  prev.style.display='block';
+  if(file.type.startsWith('image/')){
+    const reader=new FileReader();
+    reader.onload=e=>prev.innerHTML=`
+      <img src="${e.target.result}" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid var(--border);">
+      <div style="margin-top:6px;display:flex;gap:6px;align-items:center;">
+        <span style="font-size:11px;color:var(--muted);">${file.name}</span>
+        <button class="btn sm secondary" onclick="gantiFile()">Ganti</button>
+      </div>`;
+    reader.readAsDataURL(file);
+  } else {
+    prev.innerHTML=`
+      <div style="background:var(--blue-light);color:var(--blue);padding:8px 12px;border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px;">
+        📄 ${file.name}
+      </div>
+      <div style="margin-top:6px;"><button class="btn sm secondary" onclick="gantiFile()">Ganti</button></div>`;
+  }
+}
+function handleDrop(e){
+  e.preventDefault();document.getElementById('upload-area').classList.remove('drag');
+  const file=e.dataTransfer.files[0];if(!file)return;
+  const dt=new DataTransfer();dt.items.add(file);
+  document.getElementById('inp-file').files=dt.files;
+  previewFile(document.getElementById('inp-file'));
+}
+function gantiFile(){
+  _uploadFile=null;
+  document.getElementById('inp-file').value='';
+  document.getElementById('upload-preview').style.display='none';
+  document.getElementById('upload-area').style.display='block';
+}
+
+async function simpanKonfirmasi(){
+  if(!_modalBHId)return;
+  const tglBayar=document.getElementById('inp-tgl-bayar').value;
+  const catatan=document.getElementById('inp-catatan').value.trim()||null;
+  if(!tglBayar){toast('Tanggal transfer wajib diisi',true);return;}
+  if(!_uploadFile){toast('Bukti transfer wajib diupload',true);return;}
+
+  const btn=document.getElementById('btn-konfirmasi');
+  btn.innerHTML='<span class="spinner"></span> Mengupload...';btn.disabled=true;
+
+  try{
+    // Upload bukti ke Supabase Storage
+    const ext=_uploadFile.name.split('.').pop();
+    const path=`pe-2026-001/bh-${_modalBHId}-${Date.now()}.${ext}`;
+    const {error:upErr}=await sb.storage.from('bmt-bukti-transfer').upload(path,_uploadFile,{upsert:true});
+    if(upErr)throw new Error('Upload gagal: '+upErr.message);
+
+    // Get signed URL (24 jam) — atau public URL jika bucket public
+    const {data:signed}=await sb.storage.from('bmt-bukti-transfer').createSignedUrl(path, 60*60*24*365);
+    const urlBukti=signed?.signedUrl||path;
+
+    btn.innerHTML='<span class="spinner"></span> Menyimpan...';
+
+    // Update record BH
+    const b=aBH.find(x=>x.id===_modalBHId);
+    const {error}=await sb.from('bmt_penyertaan_bh_eksternal').update({
+      sudah_dibayar:true,
+      tgl_bayar_mitra:tglBayar,
+      bukti_transfer_url:urlBukti,
+      catatan_bayar:catatan,
+      dikonfirmasi_oleh:CU.username,
+      tgl_konfirmasi:new Date().toISOString()
+    }).eq('id',_modalBHId);
+    if(error)throw error;
+
+    // Update akumulasi total_bh_dibayar di penyertaan
+    if(b){
+      const pe=aPenyertaan.find(p=>p.id===b.penyertaan_id);
+      if(pe){
+        await sb.from('bmt_penyertaan_eksternal').update({
+          total_bh_dibayar:parseFloat(pe.total_bh_dibayar||0)+parseFloat(b.bh_ke_mitra||0),
+          total_pokok_kembali:parseFloat(pe.total_pokok_kembali||0)+parseFloat(b.pokok_ke_mitra||0),
+          updated_at:new Date().toISOString()
+        }).eq('id',pe.id);
+      }
+    }
+
+    toast('✅ Pembayaran berhasil dikonfirmasi!');
+    closeModal();
+    await loadAll();
+    renderDashboard();
+  }catch(e){
+    toast('Gagal: '+e.message,true);
+  }finally{
+    btn.innerHTML='✅ Konfirmasi Sudah Dibayar';btn.disabled=false;
+  }
+}
+
+// ===== LIHAT BUKTI =====
+function lihatBukti(url,nasabah){
+  const el=document.getElementById('modal-bukti-content');
+  const isImg=url.match(/\.(jpg|jpeg|png|webp)/i);
+  el.innerHTML=`
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">Bukti transfer — ${nasabah}</p>
+    ${isImg
+      ?`<img src="${url}" style="width:100%;border-radius:8px;border:1px solid var(--border);" onerror="this.outerHTML='<p style=color:var(--red)>Gagal memuat gambar</p>'">`
+      :`<a href="${url}" target="_blank" class="bukti-pdf">📄 Buka PDF di tab baru</a>`
+    }
+    <div style="margin-top:12px;"><a href="${url}" target="_blank" class="btn sm secondary">⬇️ Download</a></div>`;
+  document.getElementById('modal-bukti').classList.add('show');
+}
+
+// ===== NAVIGASI =====
+function showPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id)?.classList.add('active');
+  btn?.classList.add('active');
+}
+</script>
+</body>
+</html>
