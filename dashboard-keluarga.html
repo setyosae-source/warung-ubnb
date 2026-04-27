@@ -62,6 +62,30 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 }
 .form-group select option { background:#0f1d2f; color:white; }
 .form-group select:focus, .form-group input:focus { border-color:var(--gold); }
+
+/* Autocomplete dropdown nama keluarga */
+.ac-wrap { position:relative; }
+.ac-dropdown {
+  position:absolute; top:calc(100% + 4px); left:0; right:0;
+  background:#0f1d2f; border:2px solid rgba(245,200,66,0.4);
+  border-radius:var(--radius-sm); max-height:240px; overflow-y:auto;
+  z-index:100; box-shadow:0 12px 32px rgba(0,0,0,0.5); display:none;
+}
+.ac-dropdown.show { display:block; }
+.ac-dropdown::-webkit-scrollbar { width:6px; }
+.ac-dropdown::-webkit-scrollbar-thumb { background:rgba(245,200,66,0.3); border-radius:3px; }
+.ac-item {
+  padding:10px 14px; cursor:pointer; font-size:13px; color:white;
+  border-bottom:1px solid rgba(245,200,66,0.08); transition:background .12s;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.ac-item:last-child { border-bottom:none; }
+.ac-item:hover, .ac-item.active { background:rgba(245,200,66,0.15); color:var(--gold); }
+.ac-item b { color:var(--gold); font-weight:800; }
+.ac-empty { padding:12px 14px; font-size:11px; color:rgba(255,255,255,0.5); text-align:center; }
+.ac-hint { padding:8px 14px; font-size:10px; color:rgba(255,255,255,0.5); 
+  text-align:center; font-style:italic; background:rgba(0,0,0,0.3);
+  border-top:1px solid rgba(245,200,66,0.1); }
 .btn-login {
   width:100%; padding:14px;
   background:linear-gradient(135deg,var(--gold2),var(--gold));
@@ -270,9 +294,15 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 
     <div class="form-group">
       <label>Nama Keluarga</label>
-      <select id="selKeluarga">
-        <option value="">— Pilih nama keluarga —</option>
-      </select>
+      <div class="ac-wrap">
+        <input type="text" id="selKeluarga" placeholder="Ketik nama keluarga..." 
+               autocomplete="off"
+               oninput="onKeluargaInput()" 
+               onfocus="onKeluargaInput()"
+               onblur="setTimeout(closeKeluargaAC, 200)">
+        <input type="hidden" id="selKeluargaPicked" value="">
+        <div class="ac-dropdown" id="keluargaACDropdown"></div>
+      </div>
     </div>
 
     <div class="form-group">
@@ -455,17 +485,25 @@ const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID');
 
 // ===== MINTA KODE AKSES =====
 async function mintaKodeAkses() {
-  const nama = document.getElementById('selKeluarga').value;
+  const namaInput = document.getElementById('selKeluarga').value.trim();
+  const namaPicked = document.getElementById('selKeluargaPicked').value;
   const noWa = document.getElementById('inpWaMinta').value.trim();
   const msgEl = document.getElementById('mintaKodeMsg');
   const btn = document.getElementById('btnMintaKode');
 
   msgEl.style.display = 'none';
 
+  // Validasi nama keluarga harus dari daftar
+  let nama = namaPicked;
+  if (!nama && namaInput) {
+    const found = DAFTAR_KELUARGA.find(n => (n||'').toLowerCase() === namaInput.toLowerCase());
+    if (found) nama = found;
+  }
+
   if (!nama) {
     msgEl.style.display = 'block';
     msgEl.style.color = '#fca5a5';
-    msgEl.textContent = '⚠️ Pilih nama keluarga terlebih dahulu.';
+    msgEl.textContent = '⚠️ Pilih nama keluarga dari daftar yang muncul.';
     return;
   }
   if (!noWa) {
@@ -534,6 +572,9 @@ Mohon dibuatkan kode akses dan dikirimkan ke nomor WA saya. Terima kasih 🙏`;
 }
 
 // ===== LOGIN =====
+// Daftar nama keluarga untuk autocomplete
+let DAFTAR_KELUARGA = [];
+
 async function loadKeluargaList() {
   const { data } = await sb.from('ubnb_saham')
     .select('nama_keluarga')
@@ -541,22 +582,97 @@ async function loadKeluargaList() {
     .not('nama_keluarga','is',null)
     .neq('nama_keluarga','');
 
-  const unique = [...new Set((data||[]).map(d => d.nama_keluarga))].sort();
-  const sel = document.getElementById('selKeluarga');
-  unique.forEach(n => {
-    const opt = document.createElement('option');
-    opt.value = n; opt.textContent = n;
-    sel.appendChild(opt);
-  });
+  DAFTAR_KELUARGA = [...new Set((data||[]).map(d => d.nama_keluarga))].sort();
+}
+
+function escapeHtmlDK(s){
+  return String(s||'').replace(/[&<>"']/g, m=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
+function escapeRegexDK(s){return String(s||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function highlightMatchDK(text, q){
+  if(!q) return escapeHtmlDK(text);
+  const re = new RegExp('('+escapeRegexDK(q)+')','i');
+  return escapeHtmlDK(text).replace(re, '<b>$1</b>');
+}
+
+function onKeluargaInput(){
+  const q = (document.getElementById('selKeluarga').value||'').trim().toLowerCase();
+  const dd = document.getElementById('keluargaACDropdown');
+  const hidden = document.getElementById('selKeluargaPicked');
+
+  // Reset pick saat user ngetik (force pilih ulang)
+  hidden.value = '';
+
+  if(!q){
+    // Tampilkan semua kalau input kosong dan focus
+    if(document.activeElement === document.getElementById('selKeluarga')){
+      renderKeluargaAC(DAFTAR_KELUARGA, '');
+    } else {
+      closeKeluargaAC();
+    }
+    return;
+  }
+
+  if(q.length < 2){
+    dd.innerHTML = '<div class="ac-empty">Ketik minimal 2 huruf...</div>';
+    dd.classList.add('show');
+    return;
+  }
+
+  const filtered = DAFTAR_KELUARGA.filter(n => (n||'').toLowerCase().includes(q));
+  if(!filtered.length){
+    dd.innerHTML = '<div class="ac-empty">🔍 Tidak ditemukan</div>';
+    dd.classList.add('show');
+    return;
+  }
+  renderKeluargaAC(filtered, q);
+}
+
+function renderKeluargaAC(list, q){
+  const dd = document.getElementById('keluargaACDropdown');
+  const items = list.slice(0, 30);
+  dd.innerHTML = items.map(n => `
+    <div class="ac-item" onmousedown="pickKeluarga('${n.replace(/'/g,"\\'")}')">${highlightMatchDK(n, q)}</div>
+  `).join('') + (list.length > 30
+    ? `<div class="ac-hint">+${list.length-30} lainnya — pertegas kata kunci</div>`
+    : '');
+  dd.classList.add('show');
+}
+
+function closeKeluargaAC(){
+  document.getElementById('keluargaACDropdown').classList.remove('show');
+}
+
+function pickKeluarga(nama){
+  document.getElementById('selKeluarga').value = nama;
+  document.getElementById('selKeluargaPicked').value = nama;
+  closeKeluargaAC();
+  // Fokus langsung ke input kode akses
+  document.getElementById('inpKode').focus();
 }
 
 async function doLogin() {
-  const nama = document.getElementById('selKeluarga').value;
+  const namaInput = document.getElementById('selKeluarga').value.trim();
+  const namaPicked = document.getElementById('selKeluargaPicked').value;
   const kode = document.getElementById('inpKode').value.trim();
   const errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
 
-  if (!nama) { errEl.textContent = 'Pilih nama keluarga terlebih dahulu.'; errEl.style.display = 'block'; return; }
+  // Validasi: nama harus exact match dari daftar
+  let nama = namaPicked;
+  if (!nama && namaInput) {
+    // Coba cari exact match (case-insensitive) di daftar
+    const found = DAFTAR_KELUARGA.find(n => (n||'').toLowerCase() === namaInput.toLowerCase());
+    if (found) nama = found;
+  }
+
+  if (!nama) { 
+    errEl.textContent = 'Pilih nama keluarga dari daftar yang muncul.'; 
+    errEl.style.display = 'block'; 
+    return; 
+  }
   if (!kode) { errEl.textContent = 'Masukkan kode akses.'; errEl.style.display = 'block'; return; }
 
   const { data, error } = await sb.from('keluarga_akses')
@@ -863,6 +979,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (saved) {
     CK = saved;
     document.getElementById('selKeluarga').value = saved;
+    document.getElementById('selKeluargaPicked').value = saved;
     showApp();
   }
 
