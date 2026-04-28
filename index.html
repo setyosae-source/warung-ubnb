@@ -192,6 +192,40 @@ body{
 .shu-kel-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--green));
   border-radius:2px;transition:width 1.2s ease;}
 
+.shu-kel-download{margin-top:10px;width:100%;padding:7px 10px;
+  background:rgba(15,110,86,0.25);border:1px solid rgba(29,158,117,0.5);
+  color:#86efac;font-family:inherit;font-size:11px;font-weight:700;
+  border-radius:8px;cursor:pointer;transition:all .2s;}
+.shu-kel-download:hover{background:rgba(15,110,86,0.45);border-color:var(--green);
+  color:#fff;transform:translateY(-1px);}
+.shu-kel-download:active{transform:translateY(0);}
+
+/* Modal password unduh laporan */
+.shu-pwd-overlay{display:none;position:fixed;inset:0;background:rgba(6,14,26,0.85);
+  backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:20px;}
+.shu-pwd-overlay.show{display:flex;}
+.shu-pwd-modal{background:linear-gradient(180deg,#1a3050 0%,#0f2a1e 100%);
+  border:1.5px solid rgba(245,200,66,0.4);border-radius:16px;padding:24px 22px;
+  width:100%;max-width:340px;text-align:center;animation:shuFadeIn .25s ease;
+  box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+.shu-pwd-icon{font-size:36px;margin-bottom:8px;}
+.shu-pwd-title{font-family:'Cinzel',serif;font-size:15px;font-weight:700;color:var(--gold);margin-bottom:4px;}
+.shu-pwd-sub{font-size:11px;color:var(--text-muted);margin-bottom:16px;}
+.shu-pwd-input{width:100%;padding:11px 14px;background:rgba(0,0,0,0.4);
+  border:1.5px solid rgba(245,200,66,0.3);border-radius:8px;color:#fff;font-size:14px;
+  font-family:inherit;outline:none;text-align:center;letter-spacing:2px;transition:border-color .2s;}
+.shu-pwd-input:focus{border-color:var(--gold);}
+.shu-pwd-error{margin-top:8px;font-size:11px;color:#fca5a5;min-height:14px;}
+.shu-pwd-btns{display:flex;gap:8px;margin-top:14px;}
+.shu-pwd-btn{flex:1;padding:10px;border:none;border-radius:8px;font-family:inherit;
+  font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;}
+.shu-pwd-btn.cancel{background:rgba(255,255,255,0.08);color:var(--text-muted);
+  border:1px solid rgba(255,255,255,0.1);}
+.shu-pwd-btn.cancel:hover{background:rgba(255,255,255,0.15);color:#fff;}
+.shu-pwd-btn.submit{background:linear-gradient(135deg,var(--gold2),var(--gold));
+  color:var(--navy-dark);font-weight:900;}
+.shu-pwd-btn.submit:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(245,200,66,0.3);}
+
 .shu-search-box{background:var(--card-bg);border:1px solid var(--card-border);
   border-radius:14px;padding:18px;margin-bottom:18px;}
 .shu-search-title{font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;
@@ -1421,6 +1455,23 @@ body{
   </div>
 </nav>
 
+<!-- MODAL PASSWORD UNDUH LAPORAN SHU -->
+<div class="shu-pwd-overlay" id="shuPwdOverlay" onclick="if(event.target===this) tutupPasswordLaporan()">
+  <div class="shu-pwd-modal">
+    <div class="shu-pwd-icon">🔒</div>
+    <div class="shu-pwd-title">Unduh Laporan SHU <span id="shuPwdKel">—</span></div>
+    <div class="shu-pwd-sub">Masukkan password untuk mengunduh laporan</div>
+    <input type="password" class="shu-pwd-input" id="shuPwdInput" 
+           placeholder="Password" autocomplete="off"
+           onkeydown="if(event.key==='Enter') cekPasswordLaporan()">
+    <div class="shu-pwd-error" id="shuPwdError"></div>
+    <div class="shu-pwd-btns">
+      <button class="shu-pwd-btn cancel" onclick="tutupPasswordLaporan()">Batal</button>
+      <button class="shu-pwd-btn submit" onclick="cekPasswordLaporan()">📄 Unduh</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap"><div class="toast" id="toastMsg"></div></div>
 
 <script src="analytics.js" defer></script>
@@ -1903,6 +1954,9 @@ async function loadSHU(){
           ${Math.round(parseFloat(r.total_lembar_proporsional)).toLocaleString('id-ID')} lembar
         </div>
         <div class="shu-kel-bar"><div class="shu-kel-bar-fill" style="width:${pct}%"></div></div>
+        <button class="shu-kel-download" onclick="mintaPasswordLaporan('${r.kelompok}')" title="Unduh laporan SHU ${r.kelompok}">
+          📄 Unduh Laporan
+        </button>
       </div>`;
     }).join('');
     
@@ -2043,6 +2097,115 @@ function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g, m=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[m]));
+}
+
+// ────────────────────────────────────────
+// UNDUH LAPORAN SHU PER KELOMPOK (password protected)
+// ────────────────────────────────────────
+const SHU_PWD = {
+  PW1: 'shupw1',
+  PW2: 'shupw2',
+  PW3: 'shupw3',
+  PW4: 'shupw4'
+};
+let _shuKelTarget = null;
+
+function mintaPasswordLaporan(kel){
+  _shuKelTarget = kel;
+  document.getElementById('shuPwdKel').textContent = kel;
+  document.getElementById('shuPwdInput').value = '';
+  document.getElementById('shuPwdError').textContent = '';
+  document.getElementById('shuPwdOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('shuPwdInput').focus(), 100);
+}
+
+function tutupPasswordLaporan(){
+  document.getElementById('shuPwdOverlay').classList.remove('show');
+  _shuKelTarget = null;
+}
+
+async function cekPasswordLaporan(){
+  if(!_shuKelTarget) return;
+  const pwd = document.getElementById('shuPwdInput').value.trim().toLowerCase();
+  const expected = (SHU_PWD[_shuKelTarget]||'').toLowerCase();
+  
+  if(!pwd){
+    document.getElementById('shuPwdError').textContent = '⚠️ Masukkan password';
+    return;
+  }
+  if(pwd !== expected){
+    document.getElementById('shuPwdError').textContent = '❌ Password salah';
+    document.getElementById('shuPwdInput').value = '';
+    return;
+  }
+  
+  // Password OK, ambil html_content dari DB
+  document.getElementById('shuPwdError').textContent = '⏳ Memuat laporan...';
+  document.getElementById('shuPwdError').style.color = '#86efac';
+  
+  try {
+    const { data, error } = await sb.from('ubnb_laporan_shu')
+      .select('html_content, periode, total_shu, total_anggota')
+      .is('deleted_at', null)
+      .eq('kelompok', _shuKelTarget)
+      .eq('periode', '2026')
+      .eq('status', 'Final')
+      .single();
+    
+    if(error || !data?.html_content){
+      document.getElementById('shuPwdError').style.color = '#fca5a5';
+      document.getElementById('shuPwdError').textContent = '❌ Laporan belum tersedia';
+      return;
+    }
+    
+    bukaWindowCetakSHU(data.html_content, _shuKelTarget, data.periode);
+    tutupPasswordLaporan();
+  } catch(e) {
+    document.getElementById('shuPwdError').style.color = '#fca5a5';
+    document.getElementById('shuPwdError').textContent = '❌ Gagal: ' + e.message;
+  }
+}
+
+function bukaWindowCetakSHU(html, kel, periode){
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if(!w){ alert('Popup diblokir browser. Izinkan popup untuk membuka laporan.'); return; }
+  
+  w.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>Laporan SHU ${kel} - ${periode} - UBNB Perwira</title>
+<style>
+  body{margin:0;padding:0;background:white;font-family:Arial,sans-serif;
+    -webkit-print-color-adjust:exact!important;
+    print-color-adjust:exact!important;
+    color-adjust:exact!important;
+  }
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
+  @media print{
+    @page{margin:8mm;size:A4;}
+    body{margin:0;}
+    .no-print{display:none!important;}
+  }
+  .no-print{display:block;text-align:center;padding:14px;background:#f0f0f0;border-bottom:1px solid #ddd;
+    position:sticky;top:0;z-index:100;font-family:Arial,sans-serif;}
+  .no-print button{padding:8px 16px;margin:0 4px;border:none;border-radius:6px;
+    font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .no-print .btn-print{background:#1a6640;color:white;}
+  .no-print .btn-close{background:#888;color:white;}
+  .no-print .info{font-size:12px;color:#555;margin-bottom:8px;}
+</style>
+</head><body>
+<div class="no-print">
+  <div class="info">📄 Laporan SHU ${kel} — Periode ${periode} · UBNB Desa Perwira</div>
+  <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+  <button class="btn-close" onclick="window.close()">✕ Tutup</button>
+</div>
+${html}
+</body></html>`);
+  w.document.close();
+  
+  // Auto-trigger print dialog setelah laporan rendered
+  setTimeout(()=>{ try{ w.focus(); }catch(e){} }, 300);
 }
 
 // ── INIT ──
