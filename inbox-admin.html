@@ -177,6 +177,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="tab-btn" onclick="showPage('kode-akses', this)">🔑 Kode Akses <span class="tab-badge zero" id="badge-kode">0</span></button>
     <button class="tab-btn" onclick="showPage('beli-saham', this)">🛒 Beli Saham <span class="tab-badge zero" id="badge-saham">0</span></button>
     <button class="tab-btn" onclick="showPage('pembiayaan', this)">💰 Pembiayaan BMT <span class="tab-badge zero" id="badge-bmt">0</span></button>
+    <button class="tab-btn" onclick="showPage('penyertaan', this)">🏦 Penyertaan Modal <span class="tab-badge zero" id="badge-penyertaan">0</span></button>
     <button class="tab-btn" onclick="showPage('feedback', this)">📝 Feedback MPPS <span class="tab-badge zero" id="badge-feedback">0</span></button>
   </div>
 
@@ -211,6 +212,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <div class="ov-label">Pengajuan Pembiayaan BMT</div>
             <div class="ov-value" id="ov-bmt-val">0</div>
             <div class="ov-sub" id="ov-bmt-sub">Total: 0 · Pending: 0</div>
+          </div>
+          <div class="ov-card" id="ov-penyertaan" onclick="showPageById('penyertaan')">
+            <div class="ov-icon">🏦</div>
+            <div class="ov-label">Penyertaan Modal / Deposito</div>
+            <div class="ov-value" id="ov-penyertaan-val">0</div>
+            <div class="ov-sub" id="ov-penyertaan-sub">Total: 0 · Pending: 0</div>
           </div>
           <div class="ov-card" id="ov-feedback" onclick="showPageById('feedback')">
             <div class="ov-icon">📝</div>
@@ -284,6 +291,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
+    <!-- ===== TAB PENYERTAAN MODAL ===== -->
+    <div class="page" id="page-penyertaan">
+      <div class="card">
+        <div class="card-title">
+          <span>🏦 Pengajuan Penyertaan Modal / Deposito Mudhorobah Muthlaqoh</span>
+        </div>
+        <div class="card-title-info" style="margin-bottom:10px;">
+          ℹ️ Pengajuan dari jamaah untuk menyertakan modal / deposito mudhorobah muthlaqoh. Setelah disetujui, akad dibuat manual via modul saham/BMT lalu di-record ke <code>ubnb_modal_penyertaan</code>.
+        </div>
+        <div class="sub-tabs">
+          <button class="sub-tab active" onclick="filterPenyertaan('pending', this)">⏳ Pending</button>
+          <button class="sub-tab" onclick="filterPenyertaan('dihubungi', this)">💬 Dihubungi</button>
+          <button class="sub-tab" onclick="filterPenyertaan('approved', this)">✅ Disetujui</button>
+          <button class="sub-tab" onclick="filterPenyertaan('semua', this)">📋 Semua</button>
+        </div>
+        <div id="list-penyertaan"></div>
+      </div>
+    </div>
+
     <!-- ===== TAB FEEDBACK ===== -->
     <div class="page" id="page-feedback">
       <div class="card">
@@ -308,10 +334,10 @@ const {createClient}=supabase;
 const sb=createClient(SURL,SKEY);
 
 let CU=null;
-let DATA={kode:[], saham:[], bmt:[], feedback:[]};
+let DATA={kode:[], saham:[], bmt:[], penyertaan:[], feedback:[]};
 let HARGA=10500;
 let _autoTimer=null;
-let _filters={kode:'pending', saham:'baru', bmt:'pending'};
+let _filters={kode:'pending', saham:'baru', bmt:'pending', penyertaan:'pending'};
 
 const fmtTgl=d=>d?new Date(d).toLocaleString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
 const rp=n=>'Rp '+Math.round(parseFloat(n)||0).toLocaleString('id-ID');
@@ -357,21 +383,24 @@ async function loadHarga(){
 
 async function loadAll(){
   try{
-    const [k, s, b, f] = await Promise.all([
+    const [k, s, b, p, f] = await Promise.all([
       sb.from('permintaan_kode_akses').select('*').order('created_at',{ascending:false}),
       sb.from('pengajuan_saham').select('*').order('created_at',{ascending:false}),
       sb.from('bmt_pengajuan').select('*').order('created_at',{ascending:false}),
+      sb.from('pengajuan_penyertaan').select('*').order('created_at',{ascending:false}),
       sb.from('mpps_feedback').select('*').order('created_at',{ascending:false})
     ]);
     DATA.kode = k.data||[];
     DATA.saham = s.data||[];
     DATA.bmt = b.data||[];
+    DATA.penyertaan = p.data||[];
     DATA.feedback = f.data||[];
     
     renderOverview();
     renderKode();
     renderSaham();
     renderBmt();
+    renderPenyertaan();
     renderFeedback();
     document.getElementById('last-update').textContent='Update: '+new Date().toLocaleTimeString('id-ID');
   }catch(e){
@@ -404,6 +433,14 @@ function renderOverview(){
   document.getElementById('ov-bmt').classList.toggle('urgent', bPending>0);
   document.getElementById('ov-bmt-val').classList.toggle('urgent', bPending>0);
   setBadge('badge-bmt', bPending);
+  
+  // Penyertaan Modal
+  const pPending = DATA.penyertaan.filter(r=>!r.status||r.status==='pending').length;
+  document.getElementById('ov-penyertaan-val').textContent = pPending;
+  document.getElementById('ov-penyertaan-sub').textContent = `Total: ${DATA.penyertaan.length} · Pending: ${pPending}`;
+  document.getElementById('ov-penyertaan').classList.toggle('urgent', pPending>0);
+  document.getElementById('ov-penyertaan-val').classList.toggle('urgent', pPending>0);
+  setBadge('badge-penyertaan', pPending);
   
   // Feedback (tidak ada urgent — cuma show total)
   document.getElementById('ov-feedback-val').textContent = DATA.feedback.length;
@@ -672,6 +709,110 @@ Pengurus BMT UBNB`);
   </div>`;
 }
 
+// ===== PENYERTAAN MODAL =====
+function filterPenyertaan(f, btn){
+  _filters.penyertaan = f;
+  document.querySelectorAll('#page-penyertaan .sub-tab').forEach(s=>s.classList.remove('active'));
+  btn.classList.add('active');
+  renderPenyertaan();
+}
+
+function renderPenyertaan(){
+  const f = _filters.penyertaan;
+  let list = DATA.penyertaan;
+  if(f === 'pending') list = list.filter(r=>!r.status||r.status==='pending');
+  else if(f === 'dihubungi') list = list.filter(r=>r.status==='dihubungi');
+  else if(f === 'approved') list = list.filter(r=>r.status==='approved'||r.status==='disetujui');
+  
+  const el = document.getElementById('list-penyertaan');
+  if(!list.length){
+    el.innerHTML = empty('🎉','Tidak ada pengajuan penyertaan');
+    return;
+  }
+  el.innerHTML = list.slice(0,50).map(renderPenyertaanItem).join('');
+}
+
+function renderPenyertaanItem(r){
+  const noWaClean=(r.no_wa||'').replace(/[^0-9]/g,'');
+  const noWaIntl=noWaClean.startsWith('0')?'62'+noWaClean.slice(1):noWaClean;
+  const jenisLabel = {
+    'deposito_muthlaqoh': '🏦 Deposito Mudhorobah Muthlaqoh',
+    'mudhorobah_muqayyadah': '📌 Mudhorobah Muqayyadah',
+    'lainnya': '📋 Lainnya'
+  }[r.jenis] || r.jenis;
+  
+  const pesanWA=encodeURIComponent(
+`Assalamu'alaikum ${r.nama_anggota} 🙏
+
+Pengajuan penyertaan modal di UBNB Desa Perwira:
+- Jenis: ${jenisLabel}
+- Jumlah: ${rp(r.jumlah_modal)}
+- Jangka: ${r.jangka_bulan||'-'} bulan
+
+Sudah kami terima.
+
+Mohon kami diizinkan menghubungi untuk konsultasi & pembuatan akad sesuai syariah.
+
+Barakallahu fiikum 🤲
+
+Pengurus UBNB Desa Perwira`);
+  const waUrl=`https://wa.me/${noWaIntl}?text=${pesanWA}`;
+  
+  const isPending = !r.status || r.status==='pending';
+  const badges={pending:'badge-pending',dihubungi:'badge-diproses',approved:'badge-selesai',disetujui:'badge-selesai',ditolak:'badge-ditolak'};
+  const badgeText={pending:'⏳ Pending',dihubungi:'💬 Dihubungi',approved:'✅ Disetujui',disetujui:'✅ Disetujui',ditolak:'❌ Ditolak'};
+  const cssStatus = isPending?'pending':r.status;
+  
+  let actions = '';
+  if(isPending){
+    actions = `<a href="${waUrl}" target="_blank" class="btn wa sm" onclick="markPenyertaanStatus(${r.id},'dihubungi')">📱 Hubungi via WA</a>
+      <button class="btn primary sm" onclick="markPenyertaanStatus(${r.id},'approved')">✅ Setujui</button>
+      <button class="btn danger sm" onclick="markPenyertaanStatus(${r.id},'ditolak')">❌ Tolak</button>`;
+  } else if(r.status==='dihubungi'){
+    actions = `<a href="${waUrl}" target="_blank" class="btn wa sm">📱 WA Ulang</a>
+      <button class="btn primary sm" onclick="markPenyertaanStatus(${r.id},'approved')">✅ Setujui</button>
+      <button class="btn danger sm" onclick="markPenyertaanStatus(${r.id},'ditolak')">❌ Tolak</button>`;
+  } else {
+    actions = `<a href="${waUrl}" target="_blank" class="btn wa sm">📱 WA</a>
+      <button class="btn secondary sm" onclick="markPenyertaanStatus(${r.id},'pending')">↩️ Buka Lagi</button>`;
+  }
+  
+  return `<div class="req-item ${cssStatus}">
+    <div class="req-row">
+      <div class="req-info">
+        <div class="req-name">👤 ${escapeHtml(r.nama_anggota||'-')} ${r.kelompok?`<span class="badge badge-status">${escapeHtml(r.kelompok)}</span>`:''}</div>
+        <div class="req-keluarga">👨‍👩‍👧 KK: ${escapeHtml(r.nama_keluarga||'-')}</div>
+        <div class="req-detail">
+          <div class="req-detail-item"><span class="req-detail-label">Jenis Akad</span><span class="req-detail-val">${escapeHtml(jenisLabel)}</span></div>
+          <div class="req-detail-item"><span class="req-detail-label">Jumlah Modal</span><span class="req-detail-val big">${rp(r.jumlah_modal)}</span></div>
+          <div class="req-detail-item"><span class="req-detail-label">Jangka Waktu</span><span class="req-detail-val">${r.jangka_bulan||'-'} bulan</span></div>
+          ${r.nisbah_diharapkan?`<div class="req-detail-item"><span class="req-detail-label">Nisbah Diharapkan</span><span class="req-detail-val">${escapeHtml(r.nisbah_diharapkan)}</span></div>`:''}
+          <div class="req-detail-item"><span class="req-detail-label">No WhatsApp</span><span class="req-detail-val">${escapeHtml(r.no_wa||'-')}</span></div>
+        </div>
+        ${r.tujuan?`<div style="margin-top:6px;padding:6px 10px;background:#fffbeb;border-left:3px solid var(--gold);border-radius:4px;font-size:11px;">🎯 <strong>Tujuan:</strong> ${escapeHtml(r.tujuan)}</div>`:''}
+        ${r.keterangan?`<div style="margin-top:6px;padding:6px 10px;background:var(--bg);border-left:3px solid var(--muted);border-radius:4px;font-size:11px;">📝 ${escapeHtml(r.keterangan)}</div>`:''}
+        ${r.catatan_admin?`<div style="margin-top:6px;padding:6px 10px;background:var(--blue-light);border-left:3px solid var(--blue);border-radius:4px;font-size:11px;">👤 <strong>Catatan admin:</strong> ${escapeHtml(r.catatan_admin)}</div>`:''}
+        <div class="req-meta">🕐 ${fmtTgl(r.created_at)}${r.diproses_oleh?` · 👤 ${escapeHtml(r.diproses_oleh)}`:''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+        <span class="badge ${badges[r.status]||'badge-pending'}">${badgeText[r.status]||'⏳ Pending'}</span>
+      </div>
+    </div>
+    <div class="req-actions" style="margin-top:10px;">${actions}</div>
+  </div>`;
+}
+
+async function markPenyertaanStatus(id, newStatus){
+  const {error}=await sb.from('pengajuan_penyertaan').update({
+    status:newStatus,
+    diproses_oleh:CU?.username,
+    diproses_at:new Date().toISOString()
+  }).eq('id',id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  toast('✅ Status: '+newStatus);
+  await loadAll();
+}
+
 // ===== FEEDBACK =====
 function renderFeedback(){
   const list = DATA.feedback;
@@ -755,7 +896,7 @@ function showPageById(id){
 // Cek hash di URL untuk deep-link
 window.addEventListener('hashchange', ()=>{
   const hash = location.hash.replace('#','');
-  if(['overview','kode-akses','beli-saham','pembiayaan','feedback'].includes(hash)){
+  if(['overview','kode-akses','beli-saham','pembiayaan','penyertaan','feedback'].includes(hash)){
     showPageById(hash);
   }
 });
