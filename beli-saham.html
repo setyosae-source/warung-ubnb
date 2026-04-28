@@ -315,7 +315,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
       <div class="field">
         <label>Jumlah Lembar Saham <span class="req">*</span></label>
         <input type="number" id="f-lembar" placeholder="1" min="1" oninput="hitungTotal()">
-        <div class="field-hint">Harga per lembar: <strong>Rp 10.569</strong> (NAB 2026)</div>
+        <div class="field-hint">Harga per lembar: <strong id="harga-display">Rp 10.500</strong> (harga 2026)</div>
       </div>
 
       <div class="calc-box" id="calc-box" style="display:none;">
@@ -325,7 +325,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
         </div>
         <div class="calc-row">
           <span class="calc-label">Harga per lembar</span>
-          <span class="calc-val">Rp 10.569</span>
+          <span class="calc-val" id="calc-harga">Rp 10.500</span>
         </div>
         <div class="calc-row">
           <span class="calc-label">💰 Total Pembayaran</span>
@@ -387,7 +387,7 @@ const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 const { createClient } = supabase;
 const sb = createClient(SURL, SKEY);
 
-const NILAI_PER_LEMBAR = 10569;
+let NILAI_PER_LEMBAR = 10500; // default fallback, akan di-fetch dari DB
 
 // State
 let DAFTAR_KK = []; // [{nama_kk, kelompok, anggota:[{did, nama, jenis_kelamin}]}]
@@ -440,6 +440,31 @@ async function loadStats(){
       document.getElementById('hs-shu').textContent = rpShort(totS);
     }
   }catch(e){ console.error(e); }
+}
+
+async function loadHargaSaham(){
+  try{
+    // Ambil harga yang masih berlaku (berlaku_akhir IS NULL = harga aktif)
+    const today = new Date().toISOString().slice(0,10);
+    const { data } = await sb.from('ubnb_harga_saham')
+      .select('harga_baru, tahun, berlaku_mulai, berlaku_akhir')
+      .lte('berlaku_mulai', today)
+      .or(`berlaku_akhir.is.null,berlaku_akhir.gte.${today}`)
+      .order('berlaku_mulai', {ascending: false})
+      .limit(1);
+    
+    if(data?.length){
+      const harga = parseFloat(data[0].harga_baru);
+      if(harga > 0){
+        NILAI_PER_LEMBAR = harga;
+        const display = rp(harga);
+        document.getElementById('harga-display').textContent = display + ` (${data[0].tahun})`;
+        document.getElementById('calc-harga').textContent = display;
+        // Re-hitung kalau user sudah isi lembar
+        hitungTotal();
+      }
+    }
+  }catch(e){ console.error('Gagal load harga saham:', e); }
 }
 
 async function loadJamaahData(){
@@ -679,6 +704,7 @@ async function kirim(){
 
 // ===== INIT =====
 loadStats();
+loadHargaSaham();
 loadJamaahData();
 </script>
 
