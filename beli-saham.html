@@ -689,6 +689,55 @@ async function kirim(){
     return;
   }
 
+  // Kirim email notifikasi ke admin via Google Apps Script
+  try {
+    const totalRp = rp(lembar * NILAI_PER_LEMBAR);
+    const waNumber = wa.replace(/^0/, '62').replace(/[^0-9]/g, '');
+    const statusLabel = status === 'anggota' ? '📈 Tambah Saham' : '🌱 Beli Pertama Kali';
+    
+    const emailBody = 
+`PENGAJUAN PEMBELIAN SAHAM BARU - UBNB DESA PERWIRA
+
+═══ DATA PEMBELI ═══
+KK: ${CURRENT_KK.nama_kk}
+Nama Pemilik Saham: ${nama}
+Kelompok: ${formatKel(CURRENT_KK.kelompok)}
+Status: ${statusLabel}
+No WhatsApp: ${wa}
+
+═══ DETAIL PEMBELIAN ═══
+Jumlah Lembar: ${lembar} lembar
+Harga per Lembar: ${rp(NILAI_PER_LEMBAR)}
+TOTAL PEMBAYARAN: ${totalRp}
+
+${catatan ? '═══ CATATAN PEMBELI ═══\n' + catatan + '\n\n' : ''}═══ WAKTU ═══
+${new Date().toLocaleString('id-ID', {timeZone: 'Asia/Jakarta'})}
+
+═══ ACTION YANG PERLU DILAKUKAN ═══
+1. Hubungi pembeli via WhatsApp untuk konfirmasi pembayaran
+2. Setelah pembayaran masuk, register saham di saham.html
+3. Update status pengajuan di database
+
+LINK CEPAT WHATSAPP (klik untuk buka WA):
+https://wa.me/${waNumber}?text=Assalamu%27alaikum+${encodeURIComponent(nama)}%2C+terima+kasih+pengajuan+pembelian+${lembar}+lembar+saham+UBNB+%28${encodeURIComponent(totalRp)}%29+atas+nama+keluarga+${encodeURIComponent(CURRENT_KK.nama_kk)}+sudah+kami+terima.+Mohon+konfirmasi+untuk+proses+selanjutnya.
+
+---
+Email otomatis dari sistem UBNB Desa Perwira (beli-saham.html)`;
+
+    fetch('https://script.google.com/macros/s/AKfycby7G4KJFpIwD8ffdPRssc7JG88O1sg4PbGO3SxHJn5hO7kZJsIYusbGXCg8FZBsGAuIgA/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        subject: `🛒 [UBNB] Pembelian Saham: ${nama} (${lembar} lembar - ${totalRp})`,
+        body: emailBody
+      })
+    }).catch(err => console.error('Email send error:', err));
+  } catch(e) {
+    console.error('Gagal kirim email notif:', e);
+    // Tetap lanjut walau email gagal
+  }
+
   document.getElementById('success-summary').innerHTML = `
     <br>• KK: <strong>${escapeHtml(CURRENT_KK.nama_kk)}</strong>
     <br>• Nama: <strong>${escapeHtml(nama)}</strong>
