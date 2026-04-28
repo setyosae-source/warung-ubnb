@@ -550,7 +550,62 @@ async function mintaKodeAkses() {
     }
   }
 
-  // Buka WA ke admin dengan template
+  // PENTING: simpan permintaan ke database DULU supaya admin bisa tau
+  // walau user tidak benar-benar kirim WA
+  try {
+    await sb.from('permintaan_kode_akses').insert([{
+      nama_keluarga: nama,
+      no_wa: noWa,
+      kode_akses: kode,
+      status: 'pending',
+      user_agent: navigator.userAgent.substring(0, 200)
+    }]);
+  } catch(e) {
+    console.error('Gagal log permintaan:', e);
+    // Tetap lanjut walau log gagal
+  }
+
+  // Kirim email notifikasi ke admin via Google Apps Script
+  try {
+    const emailBody = 
+`PERMINTAAN KODE AKSES BARU - DASHBOARD KELUARGA UBNB
+
+Nama Keluarga: ${nama}
+No WhatsApp: ${noWa}
+Kode Akses: ${kode}
+Waktu: ${new Date().toLocaleString('id-ID', {timeZone: 'Asia/Jakarta'})}
+
+ACTION YANG PERLU DILAKUKAN:
+1. Buka WhatsApp Anda
+2. Kirim pesan ke ${noWa}:
+
+  "Assalamu'alaikum, kode akses Dashboard Keluarga ${nama}: ${kode}
+  Cara pakai: buka ubnb.pw klik Dashboard Keluarga, pilih nama keluarga, masukkan kode."
+
+3. Update status di: https://ubnb.pw/permintaan-akses.html
+
+Atau langsung klik link ini untuk buka WA dengan pesan template:
+https://wa.me/${noWa.replace(/^0/, '62').replace(/[^0-9]/g, '')}?text=Assalamu%27alaikum%2C+kode+akses+Dashboard+Keluarga+${encodeURIComponent(nama)}+Anda%3A+%2A${kode}%2A.+Buka+ubnb.pw+%3E+Dashboard+Keluarga+%3E+pilih+nama+keluarga+%3E+masukkan+kode.+Barakallahu+fiikum.
+
+---
+Email otomatis dari sistem UBNB Desa Perwira`;
+
+    // Pakai mode no-cors karena Google Apps Script tidak return CORS headers proper
+    fetch('https://script.google.com/macros/s/AKfycby7G4KJFpIwD8ffdPRssc7JG88O1sg4PbGO3SxHJn5hO7kZJsIYusbGXCg8FZBsGAuIgA/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        subject: `🔔 [UBNB] Kode Akses: ${nama}`,
+        body: emailBody
+      })
+    }).catch(err => console.error('Email send error:', err));
+  } catch(e) {
+    console.error('Gagal kirim email notif:', e);
+    // Tetap lanjut walau email gagal
+  }
+
+  // Buka WA ke admin dengan template (sebagai backup notifikasi)
   const pesan =
 `Assalamu'alaikum Admin UBNB 🙏
 
@@ -565,7 +620,7 @@ Mohon dibuatkan kode akses dan dikirimkan ke nomor WA saya. Terima kasih 🙏`;
 
   msgEl.style.display = 'block';
   msgEl.style.color = '#86efac';
-  msgEl.innerHTML = `✅ Permintaan terkirim ke admin via WhatsApp.<br>Tunggu kode akses dikirim oleh admin ke nomor WA Anda.`;
+  msgEl.innerHTML = `✅ <strong>Permintaan tercatat!</strong><br>Admin akan mengirim kode akses ke nomor WA <strong>${noWa}</strong> dalam 1×24 jam.<br><br><em style="font-size:11px;opacity:0.85;">Tip: Tekan tombol kirim di WhatsApp yang baru terbuka untuk mempercepat respons admin.</em>`;
 
   btn.disabled = false;
   btn.textContent = '📱 Minta Kode Akses via WhatsApp';
