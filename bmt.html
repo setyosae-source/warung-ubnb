@@ -1698,7 +1698,8 @@ function lihatDetail(id){
   _detailAkadId=id;
   document.getElementById('dp-no-akad').textContent=`${a.no_akad} · ${a.jenis_akad||'Murabahah'} · ${a.jangka||'?'} bln`;
   document.getElementById('dp-nama').textContent=a.nama_jamaah;
-  document.getElementById('dp-meta').textContent=`${a.kelompok} · ${a.objek_pembiayaan||'—'} · ${rp(a.total_pembiayaan)}`;
+  const dpInfo=parseFloat(a.uang_muka||0)>0?` · DP ${rp(a.uang_muka)}`:'';
+  document.getElementById('dp-meta').textContent=`${a.kelompok} · ${a.objek_pembiayaan||'—'} · Kewajiban ${rp(a.total_pembiayaan)}${dpInfo}`;
   document.getElementById('dp-btn-mapping').style.display=!a.anggota_id?'block':'none';
   const angs=aAngsuran.filter(x=>x.akad_id===id);
   const tbody=document.getElementById('dp-angs-body');
@@ -1815,8 +1816,9 @@ function pilihPayAkad(id,nama,noAkad){
   document.getElementById('pay-dd').style.display='none';
   const a=aAkad.find(x=>x.id===id);if(!a)return;
   const angs=aAngsuran.filter(x=>x.akad_id===id);
-  const sisaPokok=angs.reduce((s,x)=>s-parseFloat(x.pokok||0),parseFloat(a.total_pembiayaan||0));
-  const sisaMargin=angs.reduce((s,x)=>s-parseFloat(x.margin||0),parseFloat(a.total_margin||0));
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+  const sisaPokok=angs.reduce((s,x)=>s-parseFloat(x.pokok||0),totalKewajiban*parseFloat(a.total_pembiayaan||0)/(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)));
+  const sisaMargin=angs.reduce((s,x)=>s-parseFloat(x.margin||0),totalKewajiban*parseFloat(a.total_margin||0)/(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)));
   const bulanKe=angs.length+1;
   // Preview info akad
   document.getElementById('pay-preview').style.display='block';
@@ -2020,12 +2022,14 @@ function mkTbl(rows){return rows.map(([l1,v1,l2,v2])=>`<tr><td style="background
 function _buildKartuRows(a, styleMode){
   const angs=aAngsuran.filter(x=>x.akad_id===a.id);
   const jangka=a.jangka||12;
-  let rows='',sisa=parseFloat(a.total_pembiayaan||0);
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+  let rows='',sisa=totalKewajiban;
   for(let i=1;i<=jangka;i++){
     const b=angs[i-1];
-    const pk=b?parseFloat(b.pokok||0):Math.round(parseFloat(a.total_pembiayaan||0)/jangka);
-    const mg=b?parseFloat(b.margin||0):Math.round(parseFloat(a.total_margin||0)/jangka);
-    sisa-=pk;
+    const totalBayarBulan=b?parseFloat(b.jumlah||0):Math.round(totalKewajiban/jangka);
+    const pk=b?parseFloat(b.pokok||0):0;
+    const mg=b?parseFloat(b.margin||0):0;
+    sisa-=totalBayarBulan;
     const lunas=!!b;
     // Hitung JT: tanggal_akad + i bulan
     const tglAkad=new Date(a.tanggal_akad);
@@ -2050,7 +2054,7 @@ function _buildKartuRows(a, styleMode){
       <td style="text-align:center">${i}</td>
       <td style="text-align:center;font-size:10px;color:#555">${jtStr}</td>
       <td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td>
-      <td style="text-align:right;font-weight:${b?'700':'400'}">${rp(b?b.jumlah:pk+mg)}</td>
+      <td style="text-align:right;font-weight:${b?'700':'400'}">${rp(b?b.jumlah:Math.round(totalKewajiban/jangka))}</td>
       <td style="text-align:right">${rp(Math.max(0,sisa))}</td>
       <td style="text-align:center;${statusStyle}">${statusIcon}</td>
     </tr>`;
@@ -2061,7 +2065,13 @@ function buildKartuPreview(a){
   const {rows,jangka,paid}=_buildKartuRows(a,'preview');
   return `
     <div class="ppr-header"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div></div>
-    <div class="ppr-sum"><div><div class="s-lbl">Pokok</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div></div>
+    <div class="ppr-sum">
+      <div><div class="s-lbl">Total Kewajiban</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
+      ${parseFloat(a.uang_muka||0)>0?`<div><div class="s-lbl">Uang Muka</div><div class="s-val" style="color:#f0d080">${rp(a.uang_muka)}</div></div>`:''}
+      <div><div class="s-lbl">Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div>
+      <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div>
+      <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div>
+    </div>
     <div style="display:flex;justify-content:space-between;font-size:9pt;margin:8px 0;color:#555"><span>Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span><span>Progress: <strong>${paid}/${jangka} terbayar</strong></span></div>
     <table class="ppr-angs"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Sisa Pokok</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
@@ -2069,7 +2079,13 @@ function buildKartuPreview(a){
 function buildKartuPrint(a){
   const {rows,jangka,paid}=_buildKartuRows(a,'print');
   return `<div class="ph"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="no">${a.no_akad}</div></div></div>
-<div class="sum-box"><div><div class="s-lbl">Pokok Pembiayaan</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div></div>
+<div class="sum-box">
+  <div><div class="s-lbl">Total Kewajiban</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
+  ${parseFloat(a.uang_muka||0)>0?`<div><div class="s-lbl">Uang Muka</div><div class="s-val">${rp(a.uang_muka)}</div></div>`:''}
+  <div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div>
+  <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div>
+  <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div>
+</div>
 <table class="pa"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Sisa Pokok</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="pfooter">Progress: ${paid}/${jangka} terbayar · Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
