@@ -386,6 +386,39 @@ table.bmt-tbl .total-row td{font-weight:700;background:var(--HL);border-top:2px 
   .pfooter{text-align:center;font-size:7pt;color:#aaa;margin-top:12px;font-style:italic;}
 }
 @media(max-width:600px){.two-col{grid-template-columns:1fr;}.stat-grid{grid-template-columns:1fr 1fr;}.three-col{grid-template-columns:1fr 1fr;}}
+
+/* ── PREVIEW CETAK ─────────────────────────────────── */
+.preview-cetak-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:none;align-items:center;justify-content:center;padding:16px;}
+.preview-cetak-overlay.show{display:flex;}
+.preview-cetak-box{background:white;border-radius:var(--r);width:100%;max-width:680px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.preview-cetak-toolbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--B);flex-shrink:0;}
+.preview-cetak-title{font-family:"Playfair Display",serif;font-size:14px;color:var(--H);font-weight:700;}
+.preview-cetak-content{flex:1;overflow-y:auto;padding:20px;background:#f0f0f0;}
+.preview-cetak-paper{background:white;max-width:600px;margin:0 auto;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.15);font-family:Arial,sans-serif;font-size:10pt;line-height:1.5;}
+/* Paper elements */
+.ppr-header{background:#1a5c3a;color:white;padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+.ppr-header h2{font-size:14pt;font-weight:bold;margin:0;}
+.ppr-header p{font-size:8pt;opacity:.8;margin:2px 0 0;}
+.ppr-header h3{font-size:12pt;color:#f0d080;font-weight:bold;text-align:right;margin:0;}
+.ppr-header .ppr-no{font-size:8pt;opacity:.8;text-align:right;margin-top:2px;}
+.ppr-sec{background:#1a5c3a;color:white;font-size:8pt;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:4px 10px;border-left:4px solid #c9a84c;margin:12px 0 0;}
+table.ppr-data{width:100%;border-collapse:collapse;}
+table.ppr-data td{padding:5px 8px;border:1px solid #ddd;font-size:9pt;}
+table.ppr-data td.lbl{background:#f4f0e8;color:#666;font-size:8pt;width:28%;}
+table.ppr-data td.hl{background:#e8f5e9;font-weight:bold;color:#1a5c3a;}
+.ppr-sum{background:#1a5c3a;color:white;display:flex;justify-content:space-around;padding:10px;margin:10px 0;text-align:center;}
+.ppr-sum .s-lbl{font-size:7pt;opacity:.75;text-transform:uppercase;}
+.ppr-sum .s-val{font-size:11pt;font-weight:bold;color:#f0d080;margin-top:2px;}
+table.ppr-angs{width:100%;border-collapse:collapse;font-size:9pt;}
+table.ppr-angs th{background:#1a5c3a;color:white;padding:6px 8px;text-align:center;}
+table.ppr-angs td{padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;}
+table.ppr-angs tr:nth-child(even) td{background:#faf8f3;}
+table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px solid #1a5c3a;color:#1a5c3a;}
+.ppr-ttd{display:flex;justify-content:space-between;margin-top:16px;border-top:1px solid #ccc;padding-top:12px;}
+.ppr-ttd-box{width:120px;text-align:center;}
+.ppr-ttd-box .area{height:44px;border-bottom:1px solid #333;margin-bottom:4px;}
+.ppr-ttd-box .nama{font-size:8pt;font-weight:bold;}
+.ppr-footer{text-align:center;font-size:7pt;color:#aaa;margin-top:12px;font-style:italic;}
 </style>
 
 <!-- ═══════════════════════════════════════
@@ -1220,6 +1253,22 @@ table.bmt-tbl .total-row td{font-weight:700;background:var(--HL);border-top:2px 
     <div id="dbh-actions" class="btn-row"></div>
   </div>
 </div>
+
+<!-- Preview Cetak -->
+<div class="preview-cetak-overlay" id="preview-cetak">
+  <div class="preview-cetak-box">
+    <div class="preview-cetak-toolbar">
+      <div class="preview-cetak-title" id="preview-cetak-title">Preview Dokumen</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn primary sm" onclick="executePrint()">🖨️ Cetak</button>
+        <button class="btn secondary sm" onclick="tutupPreviewCetak()">✕ Tutup</button>
+      </div>
+    </div>
+    <div class="preview-cetak-content">
+      <div class="preview-cetak-paper" id="preview-cetak-paper"></div>
+    </div>
+  </div>
+</div>
 </div><!-- end .app -->
 <script>
 const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
@@ -1522,6 +1571,11 @@ function renderDaftar(){
     if(st&&a.status!==st)return false;
     if(q&&!(a.nama_jamaah||'').toLowerCase().includes(q)&&!(a.no_akad||'').toLowerCase().includes(q))return false;
     return true;
+  }).sort((a,b)=>{
+    // Urutkan berdasarkan tanggal_akad terbaru, fallback ke created_at
+    const da=new Date(a.tanggal_akad||a.created_at||0);
+    const db=new Date(b.tanggal_akad||b.created_at||0);
+    return db-da;
   });
   const tbody=document.getElementById('pmb-daftar-body');
   if(!data.length){tbody.innerHTML='<tr><td colspan="5" class="empty">Tidak ada data</td></tr>';return;}
@@ -1755,27 +1809,109 @@ function hitungSim(){
 function mkTbl(rows){return rows.map(([l1,v1,l2,v2])=>`<tr><td style="background:#f4f0e8;color:var(--M);font-size:11px;padding:6px 10px;width:28%">${l1}</td><td style="padding:6px 10px;font-weight:600">${v1}</td><td style="background:#f4f0e8;color:var(--M);font-size:11px;padding:6px 10px;width:28%">${l2||''}</td><td style="padding:6px 10px;font-weight:600;text-align:right">${v2||''}</td></tr>`).join('');}
 
 // CETAK
-function cetakKartu(){
-  const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
-  if(!a){toast('Buka detail akad dulu',true);return;}
+function buildKartuHTML(a){
   const angs=aAngsuran.filter(x=>x.akad_id===a.id);
   let rows='',sisa=parseFloat(a.total_pembiayaan||0);
-  for(let i=1;i<=(a.jangka||12);i++){
+  const jangka=a.jangka||12;
+  for(let i=1;i<=jangka;i++){
     const b=angs[i-1];
-    const pk=b?parseFloat(b.pokok||0):Math.round(parseFloat(a.total_pembiayaan||0)/(a.jangka||12));
-    const mg=b?parseFloat(b.margin||0):Math.round(parseFloat(a.total_margin||0)/(a.jangka||12));
+    const pk=b?parseFloat(b.pokok||0):Math.round(parseFloat(a.total_pembiayaan||0)/jangka);
+    const mg=b?parseFloat(b.margin||0):Math.round(parseFloat(a.total_margin||0)/jangka);
     sisa-=pk;
-    rows+=`<tr><td>${i}</td><td>${b?fmtTgl(b.tanggal):'—'}</td><td style="text-align:right">${rp(b?b.jumlah:pk+mg)}</td><td style="text-align:right">${rp(pk)}</td><td style="text-align:right">${rp(mg)}</td><td style="text-align:right">${rp(Math.max(0,sisa))}</td><td>${b?'✓':'—'}</td></tr>`;
+    const lunas=!!b;
+    rows+=`<tr${lunas?' style="background:#f0fdf4"':''}><td style="text-align:center">${i}</td><td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td><td style="text-align:right">${rp(b?b.jumlah:pk+mg)}</td><td style="text-align:right">${rp(pk)}</td><td style="text-align:right">${rp(mg)}</td><td style="text-align:right">${rp(Math.max(0,sisa))}</td><td style="text-align:center;font-size:14pt">${lunas?'✓':''}</td></tr>`;
   }
-  document.getElementById('print-area').innerHTML=`<div class="ph"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA</p></div><div><h3>${a.nama_jamaah}</h3><div class="no">${a.no_akad}</div></div></div><div class="sum-box"><div><div class="s-lbl">Pembiayaan</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${a.jangka} Bln</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_per_bulan)}</div></div></div><table class="pa"><thead><tr><th>#</th><th>Tanggal</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table><div class="pfooter">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
-  window.print();
+  const paid=angs.length;
+  return `
+    <div class="ppr-header">
+      <div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div>
+      <div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div>
+    </div>
+    <div class="ppr-sum">
+      <div><div class="s-lbl">Pokok Pembiayaan</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
+      <div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div>
+      <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div>
+      <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_per_bulan)}</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:9pt;margin-bottom:8px;color:#555">
+      <span>Tanggal Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span>
+      <span>Progress: <strong style="color:${paid>=jangka?'#166534':'#92400e'}">${paid}/${jangka} terbayar</strong></span>
+    </div>
+    <table class="ppr-angs">
+      <thead><tr><th>#</th><th>Tanggal</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa</th><th>✓</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA · Konfidensial</div>`;
+}
+function cetakKartu(){
+  const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
+  if(!a){toast('Buka detail akad dulu dari Daftar',true);return;}
+  bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuHTML(a));
+}
+function buildNaskahHTML(a){
+  return `
+    <div class="ppr-header">
+      <div><h2>NASKAH AKAD ${(a.jenis_akad||'MURABAHAH').toUpperCase()}</h2><p>BMT UBNB PERWIRA · ${fmtTgl(a.tanggal_akad)}</p></div>
+      <div><h3>${a.no_akad}</h3><div class="ppr-no">Lembaga Keuangan Syariah</div></div>
+    </div>
+    <div class="ppr-sec">DATA NASABAH</div>
+    <table class="ppr-data">
+      <tr><td class="lbl">Nama Lengkap</td><td>${a.nama_jamaah}</td><td class="lbl">Kelompok</td><td>${a.kelompok}</td></tr>
+      <tr><td class="lbl">Objek Pembiayaan</td><td colspan="3">${a.objek_pembiayaan||'—'}</td></tr>
+    </table>
+    <div class="ppr-sec">DETAIL PEMBIAYAAN</div>
+    <table class="ppr-data">
+      <tr><td class="lbl">Jenis Akad</td><td>${a.jenis_akad||'Murabahah'}</td><td class="lbl">Tanggal Akad</td><td>${fmtTgl(a.tanggal_akad)}</td></tr>
+      <tr><td class="lbl">Pokok Pembiayaan</td><td class="hl">${rp(a.total_pembiayaan)}</td><td class="lbl">Total Margin</td><td class="hl">${rp(a.total_margin)}</td></tr>
+      <tr><td class="lbl">Total Kewajiban</td><td class="hl"><strong>${rp(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0))}</strong></td><td class="lbl">Angsuran/bln</td><td class="hl">${rp(a.angsuran_per_bulan)}</td></tr>
+      <tr><td class="lbl">Tenor</td><td>${a.jangka} Bulan</td><td class="lbl">Status</td><td>${a.status}</td></tr>
+    </table>
+    <div class="ppr-sec">KETENTUAN AKAD</div>
+    <table class="ppr-data">
+      <tr><td colspan="4" style="font-size:9pt;line-height:1.7">
+        Dengan ditandatanganinya dokumen ini, kedua belah pihak menyatakan sepakat untuk melaksanakan
+        pembiayaan dengan akad <strong>${a.jenis_akad||'Murabahah'}</strong> sesuai prinsip syariah Islam
+        sebagaimana telah dimusyawarahkan bersama. Nasabah wajib membayar angsuran setiap bulan
+        sebesar <strong>${rp(a.angsuran_per_bulan)}</strong> selama <strong>${a.jangka} bulan</strong>.
+      </td></tr>
+    </table>
+    <div class="ppr-ttd">
+      <div class="ppr-ttd-box"><div class="area"></div><div class="nama">${a.nama_jamaah}</div><div style="font-size:7pt;color:#666">Nasabah</div></div>
+      <div class="ppr-ttd-box"><div class="area"></div><div class="nama">Ketua BMT</div><div style="font-size:7pt;color:#666">UBNB PERWIRA</div></div>
+      <div class="ppr-ttd-box"><div class="area"></div><div class="nama">Saksi</div><div style="font-size:7pt;color:#666">UBNB PERWIRA</div></div>
+    </div>
+    <div class="ppr-footer">Dokumen ini dibuat dan disepakati kedua belah pihak · BMT UBNB PERWIRA · ${fmtTgl(today())}</div>`;
 }
 function cetakNaskah(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
-  if(!a){toast('Buka detail akad dulu',true);return;}
-  document.getElementById('print-area').innerHTML=`<div class="ph"><div><h2>NASKAH AKAD ${(a.jenis_akad||'MURABAHAH').toUpperCase()}</h2><p>BMT UBNB PERWIRA · ${fmtTgl(a.tanggal_akad)}</p></div><div><h3>${a.no_akad}</h3></div></div><div class="sec">DATA NASABAH</div><table class="pd"><tr><td class="lbl">Nama</td><td>${a.nama_jamaah}</td><td class="lbl">Kelompok</td><td>${a.kelompok}</td></tr><tr><td class="lbl">Objek</td><td colspan="3">${a.objek_pembiayaan||'—'}</td></tr></table><div class="sec">DETAIL PEMBIAYAAN</div><table class="pd"><tr><td class="lbl">Jenis Akad</td><td>${a.jenis_akad||'Murabahah'}</td><td class="lbl">Tanggal</td><td>${fmtTgl(a.tanggal_akad)}</td></tr><tr><td class="lbl">Pokok</td><td class="hl">${rp(a.total_pembiayaan)}</td><td class="lbl">Margin</td><td class="hl">${rp(a.total_margin)}</td></tr><tr><td class="lbl">Tenor</td><td>${a.jangka} Bulan</td><td class="lbl">Angsuran/bln</td><td class="hl">${rp(a.angsuran_per_bulan)}</td></tr></table><div class="ttd"><div class="ttd-box"><div class="area"></div><div class="nama">${a.nama_jamaah}</div><div class="jbt">Nasabah</div></div><div class="ttd-box"><div class="area"></div><div class="nama">Pengurus BMT</div><div class="jbt">UBNB PERWIRA</div></div></div><div class="pfooter">Dokumen ini dibuat dan disepakati kedua belah pihak · BMT UBNB PERWIRA</div>`;
+  if(!a){toast('Buka detail akad dulu dari Daftar',true);return;}
+  bukaPreviewCetak('Naskah Akad — '+a.nama_jamaah, buildNaskahHTML(a));
+}
+// Preview Cetak
+let _printHTML='';
+function bukaPreviewCetak(judul, html){
+  _printHTML=html;
+  document.getElementById('preview-cetak-title').textContent=judul;
+  document.getElementById('preview-cetak-paper').innerHTML=html;
+  document.getElementById('preview-cetak').classList.add('show');
+}
+function tutupPreviewCetak(){document.getElementById('preview-cetak').classList.remove('show');}
+function executePrint(){
+  document.getElementById('print-area').innerHTML=_printHTML
+    .replace(/class="ppr-header"/g,'class="ph"')
+    .replace(/class="ppr-sec"/g,'class="sec"')
+    .replace(/class="ppr-data"/g,'class="pd"')
+    .replace(/class="ppr-sum"/g,'class="sum-box"')
+    .replace(/class="ppr-angs"/g,'class="pa"')
+    .replace(/class="ppr-ttd"/g,'class="ttd"')
+    .replace(/class="ppr-ttd-box"/g,'class="ttd-box"')
+    .replace(/class="ppr-footer"/g,'class="pfooter"')
+    .replace(/class="s-lbl"/g,'class="s-lbl"')
+    .replace(/class="s-val"/g,'class="s-val"');
+  tutupPreviewCetak();
   window.print();
 }
+
 
 // PENGAJUAN
 async function loadPengajuan(){const{data}=await sb.from('bmt_pengajuan').select('*').order('created_at',{ascending:false});aPengajuan=data||[];}
