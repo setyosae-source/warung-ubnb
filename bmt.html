@@ -570,6 +570,14 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="ag b"><div class="ag-lbl">Margin</div><div class="ag-val" id="dash-angs-margin">—</div></div>
     </div>
   </div>
+
+  <!-- PROYEKSI PROFIT BELUM TEREALISASI -->
+  <span class="sec-lbl">📈 Proyeksi Profit Belum Terealisasi</span>
+  <div class="card" style="margin-top:6px">
+    <div id="dash-profit-content">
+      <div style="text-align:center;padding:12px;color:var(--M);font-size:12px">Memuat...</div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ PEMBIAYAAN ═════════════════════════════ -->
@@ -1458,7 +1466,7 @@ function gomain(id,btn){
   const firstSub=sub?sub.querySelector('.snav'):null;
   if(firstSub)firstSub.click();
   // Load data lalu render SETELAH data siap
-  if(id==='dash'){renderDashboard();}
+  if(id==='dash'){renderDashboard();renderProyeksiProfit();}
   if(id==='pmb'){loadAll().then(()=>{renderPmbDash();});}
   if(id==='wad'){loadWadiah().then(()=>{renderWadDash();filterRekening();});}
   if(id==='pmd'){
@@ -1545,7 +1553,66 @@ document.addEventListener('click',e=>{
 });
 
 // DASHBOARD
-async function renderDashboard(){
+async function renderProyeksiProfit(){
+  const el=document.getElementById('dash-profit-content');if(!el)return;
+  const akadAktif=aAkad.filter(a=>a.status!=='Lunas');
+  if(!akadAktif.length){el.innerHTML='<div class="empty"><div class="ei">📊</div><p>Tidak ada akad aktif</p></div>';return;}
+  // Hitung profit per tahun untuk setiap akad aktif
+  const now=new Date();
+  // Kumpulkan profit per bulan dari semua angsuran yang BELUM dibayar
+  const profitPerBulan={}; // {2026-01: X, 2026-02: Y, ...}
+  akadAktif.forEach(a=>{
+    const tglAkad=new Date(a.tanggal_akad);
+    const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
+    const sudahBayar=angsAkad.length;
+    const jangka=a.jangka||12;
+    const marginPerBulan=parseFloat(a.total_margin||0)/jangka;
+    // Hitung sisa angsuran yang belum terbayar
+    for(let n=sudahBayar+1;n<=jangka;n++){
+      const jtBulan=new Date(tglAkad);
+      jtBulan.setMonth(jtBulan.getMonth()+n);
+      const key=jtBulan.getFullYear()+'-'+String(jtBulan.getMonth()+1).padStart(2,'0');
+      profitPerBulan[key]=(profitPerBulan[key]||0)+marginPerBulan;
+    }
+  });
+  // Group per tahun
+  const profitPerTahun={};
+  Object.entries(profitPerBulan).forEach(([k,v])=>{
+    const yr=k.split('-')[0];
+    profitPerTahun[yr]=(profitPerTahun[yr]||0)+v;
+  });
+  const years=Object.keys(profitPerTahun).sort();
+  const totalSemua=Object.values(profitPerTahun).reduce((a,b)=>a+b,0);
+  // Total margin sudah terealisasi (dari angsuran yg sudah dibayar)
+  const marginRealisasi=aAngsuran.reduce((s,x)=>s+(parseFloat(x.margin)||0),0);
+  let html=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">
+    <div class="stat-card emas"><div class="stat-label">Sudah Terealisasi</div><div class="stat-val" style="font-size:15px">${rp(marginRealisasi)}</div></div>
+    <div class="stat-card green"><div class="stat-label">Belum Terealisasi</div><div class="stat-val" style="font-size:15px">${rp(totalSemua)}</div></div>
+  </div>
+  <div style="font-size:11px;font-weight:700;color:var(--M);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Proyeksi per Tahun</div>
+  <div style="display:flex;flex-direction:column;gap:8px">`;
+  years.forEach(yr=>{
+    const v=profitPerTahun[yr];
+    const maxV=Math.max(...Object.values(profitPerTahun));
+    const pct=maxV>0?Math.round(v/maxV*100):0;
+    const isLewat=parseInt(yr)<now.getFullYear();
+    const isSekarang=parseInt(yr)===now.getFullYear();
+    const barColor=isLewat?'var(--M)':isSekarang?'var(--E)':'var(--H3)';
+    html+=`<div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:700;color:${isSekarang?'var(--E)':'var(--T)'}">${yr}${isSekarang?' ← Berjalan':''}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--H)">${rp(Math.round(v))}</span>
+      </div>
+      <div style="height:8px;background:var(--K);border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width .4s"></div>
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderDashboard(){
   const kasBMT=aKas.find(k=>k.id===5)||aKas.find(k=>k.modul&&k.modul.includes('bmt'));
   const kasVal=kasBMT?parseFloat(kasBMT.saldo||0):0;
   const mpTotal=aPenyertaanInternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
@@ -1634,13 +1701,25 @@ function lihatDetail(id){
   const angs=aAngsuran.filter(x=>x.akad_id===id);
   const tbody=document.getElementById('dp-angs-body');
   const tglAkad=new Date(a.tanggal_akad);
+  const isAdmin=CU&&(CU.role==='admin'||CU.role==='owner'||CU.role==='pemilik');
+  // Update header tabel — tambah kolom Aksi jika admin
+  const thead=document.querySelector('#dp-tbl-angs thead tr');
+  if(thead){
+    const hasAksi=thead.querySelector('.th-aksi');
+    if(isAdmin&&!hasAksi){const th=document.createElement('th');th.className='th-aksi';th.style.width='70px';th.textContent='Aksi';thead.appendChild(th);}
+    else if(!isAdmin&&hasAksi){hasAksi.remove();}
+  }
   tbody.innerHTML=angs.length?angs.map((an,i)=>{
     const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i+1);
     const jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
     const st=an.status||'';
     const stBadge=st==='tepat_waktu'?'<span class="badge lunas">✅ Tepat</span>':st==='terlambat'?'<span class="badge red">⚠️ Telat</span>':'<span class="badge lunas">✓</span>';
-    return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(an.tanggal)}</td><td>${rp(an.jumlah)}</td><td>${rp(an.pokok)}</td><td>${stBadge}</td></tr>`;
-  }).join(''):'<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--M)">Belum ada angsuran</td></tr>';
+    const aksiTd=isAdmin?`<td style="text-align:center;white-space:nowrap">
+      <button onclick="editAngsuran(${an.id})" style="background:none;border:none;cursor:pointer;font-size:14px;padding:3px 5px" title="Edit angsuran">✏️</button>
+      <button onclick="hapusAngsuran(${an.id},${id})" style="background:none;border:none;cursor:pointer;font-size:14px;padding:3px 5px" title="Hapus angsuran">🗑️</button>
+    </td>`:'';
+    return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(an.tanggal)}</td><td>${rp(an.jumlah)}</td><td>${rp(an.pokok)}</td><td>${stBadge}</td>${aksiTd}</tr>`;
+  }).join(''):'<tr><td colspan="'+(isAdmin?'7':'6')+'" style="text-align:center;padding:12px;color:var(--M)">Belum ada angsuran</td></tr>';
   document.getElementById('detail-akad').classList.add('show');
   document.getElementById('main-scroll').scrollTo({top:0,behavior:'smooth'});
 }
@@ -1828,7 +1907,7 @@ async function hapusAngsuran(angsId, akadId){
   toast('✅ Angsuran dihapus');
   await loadAll();
   tampilRiwayat(akadId);
-  renderDaftar();renderDashboard();
+  renderDaftar();renderDashboard();renderProyeksiProfit();
   if(_detailAkadId===akadId)lihatDetail(akadId);
 }
 
@@ -1868,7 +1947,7 @@ async function simpanEditAngsuran(){
   _editAngsId=null;
   await loadAll();
   tampilRiwayat(_editAngsAkadId);
-  renderDaftar();renderDashboard();
+  renderDaftar();renderDashboard();renderProyeksiProfit();
   if(_detailAkadId===_editAngsAkadId)lihatDetail(_editAngsAkadId);
 }
 async function simpanAngsuran(){
