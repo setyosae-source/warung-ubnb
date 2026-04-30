@@ -1303,6 +1303,7 @@ async function loadPemodal(){
     aMitra=r2.data||[];
     aPenyertaanEksternal=r3.data||[];
     aBHEksternal=r4.data||[];
+    initBHIDropdown();
   }catch(e){console.error('loadPemodal error:',e);toast('Gagal memuat data pemodal: '+e.message,true);}
 }
 
@@ -1338,11 +1339,11 @@ function gomain(id,btn){
   if(id==='pmb'){loadAll().then(()=>{renderPmbDash();});}
   if(id==='wad'){loadWadiah().then(()=>{renderWadDash();filterRekening();});}
   if(id==='pmd'){
+    window._pmdLoading=true;
     const listEl=document.getElementById('pmd-list-semua');
     if(listEl)listEl.innerHTML='<div class="empty"><div class="ei">\u23f3</div><p>Memuat data...</p></div>';
-    document.getElementById('pmd-tbl-penuh').innerHTML='<tr><td colspan="7" class="empty">Memuat...</td></tr>';
-    document.getElementById('pmd-tbl-spesifik').innerHTML='<tr><td colspan="6" class="empty">Memuat...</td></tr>';
     loadPemodal().then(()=>{
+      window._pmdLoading=false;
       renderPmdStats();
       renderPmdSemua();
       renderPmdPenuh();
@@ -1362,11 +1363,13 @@ function gosub(main,sub,btn){
   if(main==='wad'&&sub==='rek')filterRekening();
   if(main==='wad'&&sub==='trx'){setWadTrxMode('setor');loadSetoranHariIni();}
   if(main==='wad'&&sub==='lap')loadLaporan();
-  // Pemodal — render tiap sub saat diklik (data sudah ada dari loadPemodal di gomain)
-  if(main==='pmd'&&sub==='semua')renderPmdSemua();
-  if(main==='pmd'&&sub==='penuh')renderPmdPenuh();
-  if(main==='pmd'&&sub==='spesifik')renderPmdSpesifik();
-  if(main==='pmd'&&sub==='bh')renderPmdBH();
+  // Pemodal — render tiap sub saat diklik, skip jika sedang loading
+  if(!window._pmdLoading){
+    if(main==='pmd'&&sub==='semua')renderPmdSemua();
+    if(main==='pmd'&&sub==='penuh')renderPmdPenuh();
+    if(main==='pmd'&&sub==='spesifik')renderPmdSpesifik();
+    if(main==='pmd'&&sub==='bh')renderPmdBH();
+  }
 }
 function openModal(id){document.getElementById(id).classList.add('show');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
@@ -2145,13 +2148,6 @@ function initBHIDropdown(){
   sel.innerHTML='<option value="">Pilih penyertaan...</option>'+aPenyertaanInternal.filter(p=>p.status==='aktif').map(p=>`<option value="${p.id}">${p.no_penyertaan} — ${p.ubnb_anggota?.nama||'—'} (${p.jenis})</option>`).join('');
 }
 
-// Override renderPmdStats to also init BHI dropdown
-const _origRenderPmdStats=renderPmdStats;
-// Patch loadPemodal to init dropdown
-const _origLoadPemodal=loadPemodal;
-async function loadPemodal(){
-  await _origLoadPemodal();
-  initBHIDropdown();
-}
+// BHI dropdown diinit di dalam loadPemodal
 </script>
 </html>
