@@ -609,7 +609,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       </div>
     </div>
     <div class="card">
-      <div class="card-title">📋 Akad Terbaru</div>
+      <div class="card-title">🔔 Paling Lama Tidak Bayar</div>
       <div class="tbl-wrap"><table class="bmt-tbl" id="pmb-tbl-terbaru"><tbody><tr><td colspan="5" class="empty">Memuat...</td></tr></tbody></table></div>
     </div>
   </div>
@@ -1724,16 +1724,91 @@ function renderPmbDash(){
   document.getElementById('pmb-angs-total').textContent=fmtRb(angs.reduce((s,a)=>s+parseFloat(a.jumlah||0),0));
   document.getElementById('pmb-angs-margin').textContent=fmtRb(angs.reduce((s,a)=>s+parseFloat(a.margin||0),0));
   const tbody=document.getElementById('pmb-tbl-terbaru');
-  const latest=aAkad.slice(0,8);
-  if(!latest.length){tbody.innerHTML='<tr><td colspan="5" class="empty">Belum ada akad</td></tr>';return;}
-  tbody.innerHTML='<thead><tr><th>No Akad</th><th>Nama</th><th>Akad</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead><tbody>'+
-    latest.map(a=>{
+  // Urutkan akad aktif: paling lama tidak bayar di atas
+  const aktifSorted=aAkad
+    .filter(a=>a.status==='Belum Lunas')
+    .map(a=>{
       const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
+      const tglTerakhirMs=angsAkad.length?Math.max(...angsAkad.map(x=>new Date(x.tanggal).getTime())):0;
       const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
-      const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
-      const sisaAktual=Math.max(0,totalKewajiban-totalBayar);
-      return`<tr onclick="lihatDetail(${a.id})"><td style="font-family:'DM Mono',monospace;font-size:11px">${a.no_akad}</td><td><strong>${a.nama_jamaah}</strong></td><td style="font-size:11px">${a.jenis_akad||'Murabahah'}</td><td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--R);font-weight:700">${rp(sisaAktual)}</td><td><span class="badge ${a.status==='Lunas'?'lunas':'belum'}">${a.status}</span></td></tr>`;
+      const totalKew=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+      const sisa=Math.max(0,totalKew-totalBayar);
+      const hariTanpaBayar=tglTerakhirMs?Math.floor((Date.now()-tglTerakhirMs)/86400000):9999;
+      const tglTerakhirStr=angsAkad.length?angsAkad.reduce((mx,x)=>x.tanggal>mx?x.tanggal:mx,''):'';
+      return{...a,sisa,hariTanpaBayar,tglTerakhirStr};
+    })
+    .sort((a,b)=>b.hariTanpaBayar-a.hariTanpaBayar)
+    .slice(0,8);
+  if(!aktifSorted.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Belum ada akad aktif</td></tr>';return;}
+  tbody.innerHTML='<thead><tr><th>Nama</th><th>Sisa</th><th>Tgl Bayar Terakhir</th><th>Telat</th><th>Angsuran/bln</th><th></th></tr></thead><tbody>'+
+    aktifSorted.map(a=>{
+      const tglStr=a.tglTerakhirStr?fmtTgl(a.tglTerakhirStr):'<span style="color:var(--R);font-weight:700">Belum pernah</span>';
+      const hariLabel=a.hariTanpaBayar>=9999?'—':`${a.hariTanpaBayar} hari`;
+      const hariColor=a.hariTanpaBayar>60?'var(--R)':a.hariTanpaBayar>30?'#f59e0b':'var(--M)';
+      const jamaah=aJamaah.find(j=>a.jamaah_did?j.did===a.jamaah_did:(a.anggota_id&&j.did===String(a.anggota_id)));
+      const noWa=(jamaah?.nomor_wa||'').replace(/\D/g,'');
+      const btnWa=`<button onclick="event.stopPropagation();kirimWA(${a.id},'${noWa}','${a.nama_jamaah.replace(/'/g,"\\'")},${a.kelompok||''}',${a.angsuran_perbulan||0},${a.sisa||0})"
+        style="background:${noWa?'#25D366':'var(--K)'};color:${noWa?'white':'var(--M)'};border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px"
+        title="${noWa?'Kirim pesan WA':'No WA tidak tersedia'}">
+        ${noWa?'📲 WA':'📵 —'}
+      </button>`;
+      return`<tr onclick="lihatDetail(${a.id})">
+        <td><strong>${a.nama_jamaah}</strong><br><span style="font-size:10px;color:var(--M)">${a.kelompok||'—'}</span></td>
+        <td style="font-weight:700;color:var(--R);font-size:11px">${rp(a.sisa)}</td>
+        <td style="font-size:11px;color:var(--M)">${tglStr}</td>
+        <td style="font-weight:700;color:${hariColor};font-size:12px">${hariLabel}</td>
+        <td style="font-size:11px">${rp(a.angsuran_perbulan)}</td>
+        <td>${btnWa}</td>
+      </tr>`;
     }).join('')+'</tbody>';
+}
+
+// Generate & buka pesan WA pengingat angsuran
+function kirimWA(akadId, noWa, namaDanKel, angsuran, sisa){
+  const a=aAkad.find(x=>x.id===akadId);
+  if(!a)return;
+  const bulanIni=new Date().toLocaleDateString('id-ID',{month:'long',year:'numeric'});
+  const namaArr=namaDanKel.split(',');
+  const nama=namaArr[0]||a.nama_jamaah;
+  const kel=namaArr[1]||a.kelompok||'';
+  const sisaAngs=a.jangka-aAngsuran.filter(x=>x.akad_id===akadId).length;
+  const pesan=
+`Assalamu'alaikum, Bapak/Ibu *${nama}* (${kel})
+
+Kami dari *BMT UBNB Perwira* mengingatkan kewajiban angsuran pembiayaan Anda:
+
+📋 *No Akad:* ${a.no_akad}
+🏷️ *Objek:* ${a.objek_pembiayaan||'—'}
+💰 *Angsuran/bln:* ${rp(angsuran)}
+📊 *Sisa Kewajiban:* ${rp(sisa)}
+📅 *Sisa Angsuran:* ${sisaAngs} bulan
+
+Mohon segera melakukan pembayaran angsuran bulan *${bulanIni}*.
+
+Jazaakumulloh khoiro 🙏
+_BMT UBNB Perwira_`;
+
+  if(noWa){
+    const url='https://wa.me/62'+noWa.replace(/^0/,'')+'?text='+encodeURIComponent(pesan);
+    window.open(url,'_blank');
+  } else {
+    // Tampilkan modal copy teks
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    modal.innerHTML=`<div style="background:white;border-radius:12px;padding:20px;max-width:400px;width:100%">
+      <div style="font-weight:700;margin-bottom:8px">📋 Salin Pesan WA — ${nama}</div>
+      <div style="font-size:11px;color:#888;margin-bottom:8px">No WA tidak tersedia. Salin pesan di bawah:</div>
+      <textarea readonly style="width:100%;height:200px;font-size:11px;border:1px solid #ddd;border-radius:8px;padding:8px;resize:none">${pesan}</textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="navigator.clipboard.writeText(this.closest('div[style]').querySelector('textarea').value);this.textContent='✅ Tersalin!'" 
+          style="flex:1;background:#25D366;color:white;border:none;border-radius:8px;padding:10px;cursor:pointer;font-weight:700">📋 Salin</button>
+        <button onclick="this.closest('div[style*=fixed]').remove()" 
+          style="background:#eee;border:none;border-radius:8px;padding:10px;cursor:pointer">Tutup</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  }
 }
 
 // PEMBIAYAAN — DAFTAR
