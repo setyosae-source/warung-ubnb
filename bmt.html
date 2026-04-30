@@ -603,7 +603,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       </div>
       <div class="tbl-wrap">
         <table class="bmt-tbl" id="dp-tbl-angs">
-          <thead><tr><th>Bln</th><th>Tanggal</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Status</th></tr></thead>
+          <thead><tr><th>Bln</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Pokok</th><th>Status</th></tr></thead>
           <tbody id="dp-angs-body"><tr><td colspan="6" style="text-align:center;padding:12px;color:var(--M)">Klik akad untuk lihat angsuran</td></tr></tbody>
         </table>
       </div>
@@ -1333,7 +1333,7 @@ async function loadAll(){
   try{
     const[r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12]=await Promise.all([
       sb.from('bmt_akad').select('*').order('created_at',{ascending:false}),
-      sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}),
+      sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}).order('id',{ascending:true}),
       sb.from('ubnb_anggota').select('id,no_anggota,nama,kelompok,jenis,status,no_hp').eq('status','Aktif').order('nama'),
       sb.from('kas').select('*').order('id'),
       sb.from('jamaah_desa').select('did,nama,kelompok,nomor_wa').order('nama').limit(500),
@@ -1591,7 +1591,14 @@ function lihatDetail(id){
   document.getElementById('dp-btn-mapping').style.display=!a.anggota_id?'block':'none';
   const angs=aAngsuran.filter(x=>x.akad_id===id);
   const tbody=document.getElementById('dp-angs-body');
-  tbody.innerHTML=angs.length?angs.map((an,i)=>`<tr><td>${i+1}</td><td style="font-size:11px">${fmtTgl(an.tanggal)}</td><td>${rp(an.jumlah)}</td><td>${rp(an.pokok)}</td><td>${rp(an.margin)}</td><td><span class="badge lunas">✓</span></td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--M)">Belum ada angsuran</td></tr>';
+  const tglAkad=new Date(a.tanggal_akad);
+  tbody.innerHTML=angs.length?angs.map((an,i)=>{
+    const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i+1);
+    const jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+    const st=an.status||'';
+    const stBadge=st==='tepat_waktu'?'<span class="badge lunas">✅ Tepat</span>':st==='terlambat'?'<span class="badge red">⚠️ Telat</span>':'<span class="badge lunas">✓</span>';
+    return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(an.tanggal)}</td><td>${rp(an.jumlah)}</td><td>${rp(an.pokok)}</td><td>${stBadge}</td></tr>`;
+  }).join(''):'<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--M)">Belum ada angsuran</td></tr>';
   document.getElementById('detail-akad').classList.add('show');
   document.getElementById('main-scroll').scrollTo({top:0,behavior:'smooth'});
 }
@@ -1741,8 +1748,16 @@ function tampilRiwayat(akadId){
   const angs=aAngsuran.filter(x=>x.akad_id===akadId);
   const wrap=document.getElementById('pay-riwayat-wrap');if(!wrap)return;
   if(!angs.length){wrap.innerHTML='';return;}
-  wrap.innerHTML='<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--H)">📋 Riwayat ('+angs.length+' angsuran)</div><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>#</th><th>Tgl</th><th>Jumlah</th><th>Pokok</th><th>Margin</th></tr></thead><tbody>'+
-    angs.map((x,i)=>`<tr><td>${i+1}</td><td style="font-size:11px">${fmtTgl(x.tanggal)}</td><td>${rp(x.jumlah)}</td><td>${rp(x.pokok)}</td><td>${rp(x.margin)}</td></tr>`).join('')+'</tbody></table></div>';
+  const a2=aAkad.find(x=>x.akad_id===akadId)||aAkad.find(x=>x.id===akadId);
+  const tA=a2?new Date(a2.tanggal_akad):null;
+  wrap.innerHTML='<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--H)">📋 Riwayat ('+angs.length+' angsuran)</div><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>#</th><th>JT</th><th>Tgl Bayar</th><th>Jumlah</th><th>Status</th></tr></thead><tbody>'+
+    angs.map((x,i)=>{
+      let jtStr='—';
+      if(tA){const jt=new Date(tA);jt.setMonth(jt.getMonth()+i+1);jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});}
+      const st=x.status||'';
+      const stBadge=st==='tepat_waktu'?'<span class="badge lunas" style="font-size:9px">✅ Tepat</span>':st==='terlambat'?'<span class="badge red" style="font-size:9px">⚠️ Telat</span>':'<span class="badge lunas" style="font-size:9px">✓</span>';
+      return`<tr><td>${i+1}</td><td style="font-size:10px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(x.tanggal)}</td><td>${rp(x.jumlah)}</td><td>${stBadge}</td></tr>`;
+    }).join('')+'</tbody></table></div>';
 }
 async function simpanAngsuran(){
   const akadId=parseInt(document.getElementById('pay-akad-id').value)||0;
@@ -1757,6 +1772,7 @@ async function simpanAngsuran(){
   const sisaPokok=window._paySisaPokok||0;
   const btn=document.getElementById('btn-bayar');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div>';
+  // tgl_jatuh_tempo & status diisi otomatis oleh trigger di DB
   const{error}=await sb.from('bmt_angsuran').insert([{
     akad_id:akadId,tanggal:tgl,jumlah,pokok,margin,
     sisa_pokok:Math.max(0,sisaPokok-pokok),
@@ -1819,8 +1835,35 @@ function _buildKartuRows(a, styleMode){
     const mg=b?parseFloat(b.margin||0):Math.round(parseFloat(a.total_margin||0)/jangka);
     sisa-=pk;
     const lunas=!!b;
-    const bg=lunas?(styleMode==='print'?'background:#e8f5e9':'background:#f0fdf4'):'';
-    rows+=`<tr style="${bg}"><td style="text-align:center">${i}</td><td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td><td style="text-align:right">${rp(b?b.jumlah:pk+mg)}</td><td style="text-align:right">${rp(pk)}</td><td style="text-align:right">${rp(mg)}</td><td style="text-align:right">${rp(Math.max(0,sisa))}</td><td style="text-align:center">${lunas?'✓':''}</td></tr>`;
+    // Hitung JT: tanggal_akad + i bulan
+    const tglAkad=new Date(a.tanggal_akad);
+    const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i);
+    const jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+    // Status & warna baris
+    let bg='',statusIcon='',statusStyle='';
+    if(lunas){
+      const st=b.status||'';
+      if(st==='tepat_waktu'){
+        bg=styleMode==='print'?'background:#e8f5e9':'background:#f0fdf4';
+        statusIcon='✅';statusStyle='color:#166534';
+      }else if(st==='terlambat'){
+        bg=styleMode==='print'?'background:#fff7ed':'background:#fff7ed';
+        statusIcon='⚠️';statusStyle='color:#92400e';
+      }else{
+        bg=styleMode==='print'?'background:#e8f5e9':'background:#f0fdf4';
+        statusIcon='✓';statusStyle='color:#166534';
+      }
+    }
+    rows+=`<tr style="${bg}">
+      <td style="text-align:center">${i}</td>
+      <td style="text-align:center;font-size:10px;color:#666">${jtStr}</td>
+      <td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td>
+      <td style="text-align:right">${rp(b?b.jumlah:pk+mg)}</td>
+      <td style="text-align:right">${rp(pk)}</td>
+      <td style="text-align:right">${rp(mg)}</td>
+      <td style="text-align:right">${rp(Math.max(0,sisa))}</td>
+      <td style="text-align:center;${statusStyle}">${statusIcon}</td>
+    </tr>`;
   }
   return {rows,jangka,paid:angs.length};
 }
@@ -1830,14 +1873,14 @@ function buildKartuPreview(a){
     <div class="ppr-header"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div></div>
     <div class="ppr-sum"><div><div class="s-lbl">Pokok</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div></div>
     <div style="display:flex;justify-content:space-between;font-size:9pt;margin:8px 0;color:#555"><span>Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span><span>Progress: <strong>${paid}/${jangka} terbayar</strong></span></div>
-    <table class="ppr-angs"><thead><tr><th>#</th><th>Tanggal</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="ppr-angs"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
 function buildKartuPrint(a){
   const {rows,jangka,paid}=_buildKartuRows(a,'print');
   return `<div class="ph"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="no">${a.no_akad}</div></div></div>
 <div class="sum-box"><div><div class="s-lbl">Pokok Pembiayaan</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div></div>
-<table class="pa"><thead><tr><th>#</th><th>Tanggal</th><th>Jumlah Bayar</th><th>Pokok</th><th>Margin</th><th>Sisa Pokok</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>
+<table class="pa"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa Pokok</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="pfooter">Progress: ${paid}/${jangka} terbayar · Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
 function cetakKartu(){
