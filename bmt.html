@@ -1659,7 +1659,7 @@ async function simpanBaru(){
   if(!nama){al('b-alert','Nama wajib diisi');return;}
   if(!tgl){al('b-alert','Tanggal wajib diisi');return;}
   if(!baruD.total_pembiayaan){al('b-alert','Hitung kalkulasi dulu');return;}
-  const{data:res,error}=await sb.from('bmt_akad').insert([{no_akad:noAkad,nama_jamaah:nama,kelompok,anggota_id:anggotaId?parseInt(anggotaId):null,tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,harga_beli:baruD.harga_beli,total_pembiayaan:baruD.total_pembiayaan,total_margin:baruD.total_margin,angsuran_per_bulan:baruD.angsuran,jangka:baruD.jangka,status:'Belum Lunas',operator:CU.username}]).select().single();
+  const{data:res,error}=await sb.from('bmt_akad').insert([{no_akad:noAkad,nama_jamaah:nama,kelompok,anggota_id:anggotaId?parseInt(anggotaId):null,tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,harga_beli:baruD.harga_beli,total_pembiayaan:baruD.total_pembiayaan,total_margin:baruD.total_margin,angsuran_perbulan:baruD.angsuran,jangka:baruD.jangka,status:'Belum Lunas',operator:CU.username}]).select().single();
   if(error){al('b-alert','Gagal: '+error.message);return;}
   if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:baruD.total_pembiayaan,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username}]);
   toast('✅ Akad '+noAkad+' berhasil disimpan!');
@@ -1675,7 +1675,7 @@ function searchPayAkad(q){
   const dd=document.getElementById('pay-dd');
   dd.innerHTML=aktif.slice(0,10).map(a=>`<div class="ac-item" onmousedown="pilihPayAkad(${a.id},'${a.nama_jamaah.replace(/'/g,"\\'")}','${a.no_akad}')">
     <div class="ac-name">${a.nama_jamaah} <span style="color:var(--M);font-weight:400">(${a.kelompok})</span></div>
-    <div class="ac-sub">${a.no_akad} · ${a.jenis_akad||'Murabahah'} · Angsuran: ${rp(a.angsuran_per_bulan)}/bln</div>
+    <div class="ac-sub">${a.no_akad} · ${a.jenis_akad||'Murabahah'} · Angsuran: ${rp(a.angsuran_perbulan)}/bln</div>
   </div>`).join('')||'<div class="ac-item" style="color:var(--M)">Tidak ada akad aktif</div>';
   dd.style.display='block';
 }
@@ -1708,7 +1708,7 @@ function pilihPayAkad(id,nama,noAkad){
       </div>
     </div>`;
   // Pre-fill jumlah angsuran
-  document.getElementById('pay-jumlah').value=Math.round(a.angsuran_per_bulan||0)||'';
+  document.getElementById('pay-jumlah').value=Math.round(a.angsuran_perbulan||0)||'';
   // Jatuh tempo
   if(a.tanggal_akad){const jt=new Date(a.tanggal_akad);jt.setMonth(jt.getMonth()+bulanKe);document.getElementById('pay-jatuh-tempo').value=jt.toISOString().slice(0,10);}
   // Enable simpan
@@ -1809,107 +1809,131 @@ function hitungSim(){
 function mkTbl(rows){return rows.map(([l1,v1,l2,v2])=>`<tr><td style="background:#f4f0e8;color:var(--M);font-size:11px;padding:6px 10px;width:28%">${l1}</td><td style="padding:6px 10px;font-weight:600">${v1}</td><td style="background:#f4f0e8;color:var(--M);font-size:11px;padding:6px 10px;width:28%">${l2||''}</td><td style="padding:6px 10px;font-weight:600;text-align:right">${v2||''}</td></tr>`).join('');}
 
 // CETAK
-function buildKartuHTML(a){
+function _buildKartuRows(a, styleMode){
   const angs=aAngsuran.filter(x=>x.akad_id===a.id);
-  let rows='',sisa=parseFloat(a.total_pembiayaan||0);
   const jangka=a.jangka||12;
+  let rows='',sisa=parseFloat(a.total_pembiayaan||0);
   for(let i=1;i<=jangka;i++){
     const b=angs[i-1];
     const pk=b?parseFloat(b.pokok||0):Math.round(parseFloat(a.total_pembiayaan||0)/jangka);
     const mg=b?parseFloat(b.margin||0):Math.round(parseFloat(a.total_margin||0)/jangka);
     sisa-=pk;
     const lunas=!!b;
-    rows+=`<tr${lunas?' style="background:#f0fdf4"':''}><td style="text-align:center">${i}</td><td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td><td style="text-align:right">${rp(b?b.jumlah:pk+mg)}</td><td style="text-align:right">${rp(pk)}</td><td style="text-align:right">${rp(mg)}</td><td style="text-align:right">${rp(Math.max(0,sisa))}</td><td style="text-align:center;font-size:14pt">${lunas?'✓':''}</td></tr>`;
+    const bg=lunas?(styleMode==='print'?'background:#e8f5e9':'background:#f0fdf4'):'';
+    rows+=`<tr style="${bg}"><td style="text-align:center">${i}</td><td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td><td style="text-align:right">${rp(b?b.jumlah:pk+mg)}</td><td style="text-align:right">${rp(pk)}</td><td style="text-align:right">${rp(mg)}</td><td style="text-align:right">${rp(Math.max(0,sisa))}</td><td style="text-align:center">${lunas?'✓':''}</td></tr>`;
   }
-  const paid=angs.length;
+  return {rows,jangka,paid:angs.length};
+}
+function buildKartuPreview(a){
+  const {rows,jangka,paid}=_buildKartuRows(a,'preview');
   return `
-    <div class="ppr-header">
-      <div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div>
-      <div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div>
-    </div>
-    <div class="ppr-sum">
-      <div><div class="s-lbl">Pokok Pembiayaan</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
-      <div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div>
-      <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div>
-      <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_per_bulan)}</div></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;font-size:9pt;margin-bottom:8px;color:#555">
-      <span>Tanggal Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span>
-      <span>Progress: <strong style="color:${paid>=jangka?'#166534':'#92400e'}">${paid}/${jangka} terbayar</strong></span>
-    </div>
-    <table class="ppr-angs">
-      <thead><tr><th>#</th><th>Tanggal</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa</th><th>✓</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA · Konfidensial</div>`;
+    <div class="ppr-header"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div></div>
+    <div class="ppr-sum"><div><div class="s-lbl">Pokok</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:9pt;margin:8px 0;color:#555"><span>Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span><span>Progress: <strong>${paid}/${jangka} terbayar</strong></span></div>
+    <table class="ppr-angs"><thead><tr><th>#</th><th>Tanggal</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
+}
+function buildKartuPrint(a){
+  const {rows,jangka,paid}=_buildKartuRows(a,'print');
+  return `<div class="ph"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="no">${a.no_akad}</div></div></div>
+<div class="sum-box"><div><div class="s-lbl">Pokok Pembiayaan</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div><div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div><div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div><div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div></div>
+<table class="pa"><thead><tr><th>#</th><th>Tanggal</th><th>Jumlah Bayar</th><th>Pokok</th><th>Margin</th><th>Sisa Pokok</th><th>✓</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="pfooter">Progress: ${paid}/${jangka} terbayar · Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
 function cetakKartu(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
   if(!a){toast('Buka detail akad dulu dari Daftar',true);return;}
-  bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuHTML(a));
+  bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuPreview(a), ()=>buildKartuPrint(a));
 }
-function buildNaskahHTML(a){
+function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClass, footClass){
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0);
+  // Narasi per jenis akad
+  const narasi={
+    Murabahah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) telah menjual kepada PIHAK KEDUA (${a.nama_jamaah}) suatu barang/aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan harga pokok sebesar <strong>${rp(a.total_pembiayaan)}</strong> dan keuntungan (margin) sebesar <strong>${rp(a.total_margin)}</strong>, sehingga harga jual total adalah <strong>${rp(totalKewajiban)}</strong>. PIHAK KEDUA setuju untuk membayar secara angsuran sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+    Ijarah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) menyewakan kepada PIHAK KEDUA (${a.nama_jamaah}) suatu aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan nilai aset sebesar <strong>${rp(a.total_pembiayaan)}</strong>. Ujroh (biaya sewa) yang disepakati adalah <strong>${rp(a.total_margin)}</strong> untuk masa sewa <strong>${a.jangka} bulan</strong>, dibayar angsuran <strong>${rp(a.angsuran_perbulan)}</strong> per bulan.`,
+    Mudharabah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) sebagai Shahibul Maal menyertakan modal sebesar <strong>${rp(a.total_pembiayaan)}</strong> kepada PIHAK KEDUA (${a.nama_jamaah}) sebagai Mudharib untuk mengelola usaha berupa <strong>${a.objek_pembiayaan||'—'}</strong>. Keuntungan dibagi sesuai nisbah yang telah disepakati, dibayar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+    Musyarakah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) dan PIHAK KEDUA (${a.nama_jamaah}) bersepakat untuk melakukan kerjasama usaha (Musyarakah) dalam bidang <strong>${a.objek_pembiayaan||'—'}</strong>. Modal PIHAK PERTAMA sebesar <strong>${rp(a.total_pembiayaan)}</strong>. Keuntungan dibagi sesuai nisbah, dibayar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+    Qardh:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) memberikan pinjaman kebajikan (Qardh) kepada PIHAK KEDUA (${a.nama_jamaah}) sebesar <strong>${rp(a.total_pembiayaan)}</strong> tanpa margin/bunga, untuk keperluan <strong>${a.objek_pembiayaan||'—'}</strong>. PIHAK KEDUA wajib mengembalikan sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+  };
+  const teksNarasi=narasi[a.jenis_akad]||narasi['Murabahah'];
   return `
-    <div class="ppr-header">
-      <div><h2>NASKAH AKAD ${(a.jenis_akad||'MURABAHAH').toUpperCase()}</h2><p>BMT UBNB PERWIRA · ${fmtTgl(a.tanggal_akad)}</p></div>
-      <div><h3>${a.no_akad}</h3><div class="ppr-no">Lembaga Keuangan Syariah</div></div>
-    </div>
-    <div class="ppr-sec">DATA NASABAH</div>
-    <table class="ppr-data">
-      <tr><td class="lbl">Nama Lengkap</td><td>${a.nama_jamaah}</td><td class="lbl">Kelompok</td><td>${a.kelompok}</td></tr>
-      <tr><td class="lbl">Objek Pembiayaan</td><td colspan="3">${a.objek_pembiayaan||'—'}</td></tr>
-    </table>
-    <div class="ppr-sec">DETAIL PEMBIAYAAN</div>
-    <table class="ppr-data">
-      <tr><td class="lbl">Jenis Akad</td><td>${a.jenis_akad||'Murabahah'}</td><td class="lbl">Tanggal Akad</td><td>${fmtTgl(a.tanggal_akad)}</td></tr>
-      <tr><td class="lbl">Pokok Pembiayaan</td><td class="hl">${rp(a.total_pembiayaan)}</td><td class="lbl">Total Margin</td><td class="hl">${rp(a.total_margin)}</td></tr>
-      <tr><td class="lbl">Total Kewajiban</td><td class="hl"><strong>${rp(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0))}</strong></td><td class="lbl">Angsuran/bln</td><td class="hl">${rp(a.angsuran_per_bulan)}</td></tr>
-      <tr><td class="lbl">Tenor</td><td>${a.jangka} Bulan</td><td class="lbl">Status</td><td>${a.status}</td></tr>
-    </table>
-    <div class="ppr-sec">KETENTUAN AKAD</div>
-    <table class="ppr-data">
-      <tr><td colspan="4" style="font-size:9pt;line-height:1.7">
-        Dengan ditandatanganinya dokumen ini, kedua belah pihak menyatakan sepakat untuk melaksanakan
-        pembiayaan dengan akad <strong>${a.jenis_akad||'Murabahah'}</strong> sesuai prinsip syariah Islam
-        sebagaimana telah dimusyawarahkan bersama. Nasabah wajib membayar angsuran setiap bulan
-        sebesar <strong>${rp(a.angsuran_per_bulan)}</strong> selama <strong>${a.jangka} bulan</strong>.
-      </td></tr>
-    </table>
-    <div class="ppr-ttd">
-      <div class="ppr-ttd-box"><div class="area"></div><div class="nama">${a.nama_jamaah}</div><div style="font-size:7pt;color:#666">Nasabah</div></div>
-      <div class="ppr-ttd-box"><div class="area"></div><div class="nama">Ketua BMT</div><div style="font-size:7pt;color:#666">UBNB PERWIRA</div></div>
-      <div class="ppr-ttd-box"><div class="area"></div><div class="nama">Saksi</div><div style="font-size:7pt;color:#666">UBNB PERWIRA</div></div>
-    </div>
-    <div class="ppr-footer">Dokumen ini dibuat dan disepakati kedua belah pihak · BMT UBNB PERWIRA · ${fmtTgl(today())}</div>`;
+<div class="${headClass}">
+  <div><h2>AKAD ${(a.jenis_akad||'MURABAHAH').toUpperCase()}</h2><p>BMT UBNB PERWIRA · Lembaga Keuangan Syariah · Desa Perwira</p></div>
+  <div><h3>${a.no_akad}</h3><div class="no">${fmtTgl(a.tanggal_akad)}</div></div>
+</div>
+<div style="text-align:center;font-size:11pt;font-style:italic;margin:10px 0;font-family:serif">
+  <strong>بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</strong>
+</div>
+<div style="text-align:center;font-size:8pt;margin-bottom:12px;color:#444;font-style:italic">
+  "Dengan menyebut nama Allah Yang Maha Pengasih lagi Maha Penyayang"
+</div>
+<div style="font-size:9pt;line-height:1.8;margin-bottom:12px">
+  Pada hari ini, <strong>${fmtTgl(a.tanggal_akad)}</strong>, telah sepakat untuk mengadakan perjanjian pembiayaan syariah, antara:
+</div>
+<div class="${secClass}">PIHAK PERTAMA</div>
+<table class="${tblClass}">
+  <tr><td class="lbl">Nama</td><td colspan="3"><strong>BMT UBNB PERWIRA</strong></td></tr>
+  <tr><td class="lbl">Alamat</td><td colspan="3">Desa Perwira, Kabupaten Bekasi</td></tr>
+  <tr><td class="lbl">Jabatan</td><td colspan="3">Pengurus Baitul Maal wat Tamwil UBNB</td></tr>
+</table>
+<div class="${secClass}">PIHAK KEDUA</div>
+<table class="${tblClass}">
+  <tr><td class="lbl">Nama</td><td><strong>${a.nama_jamaah}</strong></td><td class="lbl">Kelompok</td><td>${a.kelompok||'—'}</td></tr>
+  <tr><td class="lbl">Objek Pembiayaan</td><td colspan="3">${a.objek_pembiayaan||'—'}</td></tr>
+</table>
+<div class="${secClass}">KETENTUAN PEMBIAYAAN</div>
+<table class="${tblClass}">
+  <tr><td class="lbl">Jenis Akad</td><td><strong>${a.jenis_akad||'Murabahah'}</strong></td><td class="lbl">Tanggal Akad</td><td>${fmtTgl(a.tanggal_akad)}</td></tr>
+  <tr><td class="lbl">Jumlah Pembiayaan</td><td class="hl"><strong>${rp(a.total_pembiayaan)}</strong></td><td class="lbl">Keuntungan/Ujroh</td><td class="hl">${rp(a.total_margin)}</td></tr>
+  <tr><td class="lbl">Total Kewajiban</td><td class="hl"><strong>${rp(totalKewajiban)}</strong></td><td class="lbl">Angsuran/bln</td><td class="hl"><strong>${rp(a.angsuran_perbulan)}</strong></td></tr>
+  <tr><td class="lbl">Tenor</td><td>${a.jangka} Bulan</td><td class="lbl">Status</td><td>${a.status}</td></tr>
+</table>
+<div class="${secClass}">NARASI AKAD</div>
+<table class="${tblClass}">
+  <tr><td colspan="4" style="font-size:9pt;line-height:1.8;padding:10px 8px">${teksNarasi}</td></tr>
+</table>
+<div class="${secClass}">PASAL TAMBAHAN</div>
+<table class="${tblClass}">
+  <tr><td colspan="4" style="font-size:9pt;line-height:1.8;padding:10px 8px">
+    1. Apabila PIHAK KEDUA terlambat membayar angsuran, wajib memberitahukan kepada PIHAK PERTAMA.<br>
+    2. PIHAK KEDUA berhak melunasi lebih awal dengan penyesuaian sesuai kesepakatan.<br>
+    3. Segala perselisihan diselesaikan secara musyawarah mufakat berdasarkan prinsip syariah Islam.<br>
+    4. Akad ini dibuat dalam 2 (dua) rangkap, masing-masing pihak memegang satu rangkap.
+  </td></tr>
+</table>
+<div class="${ttdClass}">
+  <div class="${ttdBoxClass}"><div class="area"></div><div class="nama">${a.nama_jamaah}</div><div style="font-size:7pt;color:#666">PIHAK KEDUA · Nasabah</div></div>
+  <div class="${ttdBoxClass}"><div class="area"></div><div class="nama">Pengurus BMT</div><div style="font-size:7pt;color:#666">PIHAK PERTAMA · BMT UBNB</div></div>
+  <div class="${ttdBoxClass}"><div class="area"></div><div class="nama">Saksi</div><div style="font-size:7pt;color:#666">UBNB PERWIRA</div></div>
+</div>
+<div class="${footClass}">Dokumen ini dibuat dan disepakati kedua belah pihak · BMT UBNB PERWIRA · ${fmtTgl(today())}</div>`;
+}
+function buildNaskahPreview(a){
+  return _buildNaskahBody(a,'ppr-header','ppr-sec','ppr-data','ppr-ttd','ppr-ttd-box','ppr-footer');
+}
+function buildNaskahPrint(a){
+  return _buildNaskahBody(a,'ph','sec','pd','ttd','ttd-box','pfooter');
 }
 function cetakNaskah(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
   if(!a){toast('Buka detail akad dulu dari Daftar',true);return;}
-  bukaPreviewCetak('Naskah Akad — '+a.nama_jamaah, buildNaskahHTML(a));
+  bukaPreviewCetak('Naskah Akad — '+a.nama_jamaah, buildNaskahPreview(a), ()=>buildNaskahPrint(a));
 }
 // Preview Cetak
-let _printHTML='';
-function bukaPreviewCetak(judul, html){
-  _printHTML=html;
+let _printFn=null;
+function bukaPreviewCetak(judul, previewHTML, printFn){
+  _printFn=printFn;
   document.getElementById('preview-cetak-title').textContent=judul;
-  document.getElementById('preview-cetak-paper').innerHTML=html;
+  document.getElementById('preview-cetak-paper').innerHTML=previewHTML;
   document.getElementById('preview-cetak').classList.add('show');
 }
 function tutupPreviewCetak(){document.getElementById('preview-cetak').classList.remove('show');}
 function executePrint(){
-  document.getElementById('print-area').innerHTML=_printHTML
-    .replace(/class="ppr-header"/g,'class="ph"')
-    .replace(/class="ppr-sec"/g,'class="sec"')
-    .replace(/class="ppr-data"/g,'class="pd"')
-    .replace(/class="ppr-sum"/g,'class="sum-box"')
-    .replace(/class="ppr-angs"/g,'class="pa"')
-    .replace(/class="ppr-ttd"/g,'class="ttd"')
-    .replace(/class="ppr-ttd-box"/g,'class="ttd-box"')
-    .replace(/class="ppr-footer"/g,'class="pfooter"')
-    .replace(/class="s-lbl"/g,'class="s-lbl"')
-    .replace(/class="s-val"/g,'class="s-val"');
-  tutupPreviewCetak();
-  window.print();
+  if(_printFn){
+    document.getElementById('print-area').innerHTML=_printFn();
+    tutupPreviewCetak();
+    setTimeout(()=>window.print(),100);
+  }
 }
 
 
