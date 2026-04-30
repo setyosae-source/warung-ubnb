@@ -1249,25 +1249,38 @@ window.addEventListener('DOMContentLoaded',async()=>{
 
 // LOAD DATA
 async function loadAll(){
-  const results=await Promise.all([
-    sb.from('bmt_akad').select('*').order('created_at',{ascending:false}),
-    sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}),
-    sb.from('ubnb_anggota').select('id,no_anggota,nama,kelompok,jenis,status,no_hp').eq('status','Aktif').order('nama'),
-    sb.from('kas').select('*').order('id'),
-    sb.from('jamaah_desa').select('did,nama,kelompok,nomor_wa').order('nama').limit(500),
-    sb.from('ubnb_wadiah_tabungan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('no_rekening'),
-    sb.from('ubnb_anggota').select('id,nama,no_anggota,kelompok,status').eq('status','Aktif').order('nama'),
-    sb.from('ubnb_kebijakan_shu').select('*').eq('status','aktif').single(),
-    sb.from('ubnb_modal_penyertaan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('created_at',{ascending:false}),
-    sb.from('ubnb_modal_bagi_hasil').select('*,ubnb_anggota(nama),ubnb_modal_penyertaan(no_penyertaan,jenis)').order('created_at',{ascending:false}),
-    sb.from('bmt_mitra_penyerta').select('*').eq('aktif',true).order('nama'),
-    sb.from('bmt_penyertaan_eksternal').select('*').order('id',{ascending:false}),
-    sb.from('bmt_penyertaan_bh_eksternal').select('*').order('created_at',{ascending:false}),
-  ]);
-  [aAkad,aAngsuran,aSahamAnggota,aKas,aJamaah,aTabungan,aAnggota,,aPenyertaanInternal,aBHInternal,aMitra,aPenyertaanEksternal,aBHEksternal]=results.map(r=>r.data||[]);
-  aKebijakan=results[7].data||null;
-  aAkad.forEach(ak=>{if(ak.anggota_id){const s=aSahamAnggota.find(x=>x.id===ak.anggota_id);if(s)ak._no_hp=s.no_hp;}});
-  isiKasDropdown();fillMitraDropdowns();
+  try{
+    const[r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12]=await Promise.all([
+      sb.from('bmt_akad').select('*').order('created_at',{ascending:false}),
+      sb.from('bmt_angsuran').select('*').order('tanggal',{ascending:true}),
+      sb.from('ubnb_anggota').select('id,no_anggota,nama,kelompok,jenis,status,no_hp').eq('status','Aktif').order('nama'),
+      sb.from('kas').select('*').order('id'),
+      sb.from('jamaah_desa').select('did,nama,kelompok,nomor_wa').order('nama').limit(500),
+      sb.from('ubnb_wadiah_tabungan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('no_rekening'),
+      sb.from('ubnb_anggota').select('id,nama,no_anggota,kelompok,status').eq('status','Aktif').order('nama'),
+      sb.from('ubnb_kebijakan_shu').select('*').eq('status','aktif').maybeSingle(),
+      sb.from('ubnb_modal_penyertaan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('created_at',{ascending:false}),
+      sb.from('ubnb_modal_bagi_hasil').select('*,ubnb_anggota(nama),ubnb_modal_penyertaan(no_penyertaan,jenis)').order('created_at',{ascending:false}),
+      sb.from('bmt_mitra_penyerta').select('*').eq('aktif',true).order('nama'),
+      sb.from('bmt_penyertaan_eksternal').select('*').order('id',{ascending:false}),
+      sb.from('bmt_penyertaan_bh_eksternal').select('*').order('created_at',{ascending:false}),
+    ]);
+    aAkad=r0.data||[];
+    aAngsuran=r1.data||[];
+    aSahamAnggota=r2.data||[];
+    aKas=r3.data||[];
+    aJamaah=r4.data||[];
+    aTabungan=r5.data||[];
+    aAnggota=r6.data||[];
+    aKebijakan=r7.data||null;
+    aPenyertaanInternal=r8.data||[];
+    aBHInternal=r9.data||[];
+    aMitra=r10.data||[];
+    aPenyertaanEksternal=r11.data||[];
+    aBHEksternal=r12.data||[];
+    aAkad.forEach(ak=>{if(ak.anggota_id){const s=aSahamAnggota.find(x=>x.id===ak.anggota_id);if(s)ak._no_hp=s.no_hp;}});
+    isiKasDropdown();fillMitraDropdowns();
+  }catch(e){console.error('loadAll error:',e);toast('Gagal memuat data: '+e.message,true);}
 }
 async function loadWadiah(){
   const[{data:t},{data:kb}]=await Promise.all([
@@ -1277,14 +1290,20 @@ async function loadWadiah(){
   aTabungan=t||[];aKebijakan=kb||null;
 }
 async function loadPemodal(){
-  const[{data:pi},{data:bhi},{data:mi},{data:pe},{data:bhe}]=await Promise.all([
-    sb.from('ubnb_modal_penyertaan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('created_at',{ascending:false}),
-    sb.from('ubnb_modal_bagi_hasil').select('*,ubnb_anggota(nama),ubnb_modal_penyertaan(no_penyertaan,jenis)').order('created_at',{ascending:false}),
-    sb.from('bmt_mitra_penyerta').select('*').eq('aktif',true).order('nama'),
-    sb.from('bmt_penyertaan_eksternal').select('*').order('id',{ascending:false}),
-    sb.from('bmt_penyertaan_bh_eksternal').select('*').order('created_at',{ascending:false}),
-  ]);
-  aPenyertaanInternal=pi||[];aBHInternal=bhi||[];aMitra=mi||[];aPenyertaanEksternal=pe||[];aBHEksternal=bhe||[];
+  try{
+    const[r0,r1,r2,r3,r4]=await Promise.all([
+      sb.from('ubnb_modal_penyertaan').select('*,ubnb_anggota(nama,kelompok,no_anggota)').order('created_at',{ascending:false}),
+      sb.from('ubnb_modal_bagi_hasil').select('*,ubnb_anggota(nama),ubnb_modal_penyertaan(no_penyertaan,jenis)').order('created_at',{ascending:false}),
+      sb.from('bmt_mitra_penyerta').select('*').eq('aktif',true).order('nama'),
+      sb.from('bmt_penyertaan_eksternal').select('*').order('id',{ascending:false}),
+      sb.from('bmt_penyertaan_bh_eksternal').select('*').order('created_at',{ascending:false}),
+    ]);
+    aPenyertaanInternal=r0.data||[];
+    aBHInternal=r1.data||[];
+    aMitra=r2.data||[];
+    aPenyertaanEksternal=r3.data||[];
+    aBHEksternal=r4.data||[];
+  }catch(e){console.error('loadPemodal error:',e);toast('Gagal memuat data pemodal: '+e.message,true);}
 }
 
 // KAS
@@ -1311,12 +1330,26 @@ function gomain(id,btn){
   if(sub){sub.style.display=sub.children.length?'flex':'none';}
   if(btn)btn.classList.add('active');
   curMain=id;closeFab();
-  if(id==='dash')renderDashboard();
-  if(id==='pmb'){loadAll().then(()=>{renderPmbDash();});}
-  if(id==='wad'){loadWadiah().then(()=>{renderWadDash();filterRekening();});}
-  if(id==='pmd'){loadPemodal().then(()=>{renderPmdStats();renderPmdSemua();renderPmdPenuh();renderPmdSpesifik();renderPmdBH();});}
+  // Reset sub-tab pertama (sync)
   const firstSub=sub?sub.querySelector('.snav'):null;
   if(firstSub)firstSub.click();
+  // Load data lalu render SETELAH data siap
+  if(id==='dash'){renderDashboard();}
+  if(id==='pmb'){loadAll().then(()=>{renderPmbDash();});}
+  if(id==='wad'){loadWadiah().then(()=>{renderWadDash();filterRekening();});}
+  if(id==='pmd'){
+    const listEl=document.getElementById('pmd-list-semua');
+    if(listEl)listEl.innerHTML='<div class="empty"><div class="ei">\u23f3</div><p>Memuat data...</p></div>';
+    document.getElementById('pmd-tbl-penuh').innerHTML='<tr><td colspan="7" class="empty">Memuat...</td></tr>';
+    document.getElementById('pmd-tbl-spesifik').innerHTML='<tr><td colspan="6" class="empty">Memuat...</td></tr>';
+    loadPemodal().then(()=>{
+      renderPmdStats();
+      renderPmdSemua();
+      renderPmdPenuh();
+      renderPmdSpesifik();
+      renderPmdBH();
+    });
+  }
 }
 function gosub(main,sub,btn){
   document.querySelectorAll('#pg-'+main+' .spg').forEach(p=>p.classList.remove('show'));
@@ -1329,6 +1362,10 @@ function gosub(main,sub,btn){
   if(main==='wad'&&sub==='rek')filterRekening();
   if(main==='wad'&&sub==='trx'){setWadTrxMode('setor');loadSetoranHariIni();}
   if(main==='wad'&&sub==='lap')loadLaporan();
+  // Pemodal — render tiap sub saat diklik (data sudah ada dari loadPemodal di gomain)
+  if(main==='pmd'&&sub==='semua')renderPmdSemua();
+  if(main==='pmd'&&sub==='penuh')renderPmdPenuh();
+  if(main==='pmd'&&sub==='spesifik')renderPmdSpesifik();
   if(main==='pmd'&&sub==='bh')renderPmdBH();
 }
 function openModal(id){document.getElementById(id).classList.add('show');}
