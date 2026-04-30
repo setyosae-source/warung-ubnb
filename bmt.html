@@ -588,6 +588,17 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="stat-grid">
       <div class="stat-card hijau"><div class="stat-lbl">Akad Aktif</div><div class="stat-val hijau" id="pmb-stat-aktif">—</div><div class="stat-sub" id="pmb-stat-total">dari — total</div></div>
       <div class="stat-card amber"><div class="stat-lbl">Outstanding</div><div class="stat-val amber" id="pmb-stat-out">—</div><div class="stat-sub">sisa kewajiban</div></div>
+      <div class="stat-card emas"><div class="stat-lbl">Margin Masuk</div><div class="stat-val" id="pmb-stat-margin-in">—</div><div class="stat-sub">sudah terealisasi</div></div>
+      <div class="stat-card"><div class="stat-lbl">Proyeksi Margin</div><div class="stat-val" id="pmb-stat-margin-out">—</div><div class="stat-sub">belum terealisasi</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between">
+        <span>📈 Proyeksi Margin Belum Terealisasi</span>
+        <span style="font-size:11px;color:var(--M);font-weight:400">per tahun</span>
+      </div>
+      <div id="pmb-proyeksi-tahun" style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <div style="text-align:center;color:var(--M);font-size:12px">Memuat...</div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">📅 Angsuran Bulan Ini</div>
@@ -1663,6 +1674,50 @@ function renderPmbDash(){
   const totalBayarAktif=aAngsuran.filter(an=>aktif.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
   const sisaKewajiban=Math.max(0,totalKewAktif-totalBayarAktif);
   document.getElementById('pmb-stat-out').textContent=fmtRb(sisaKewajiban);
+  // Proyeksi profit margin
+  const marginMasuk=aAngsuran.filter(an=>aktif.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+(parseFloat(an.margin)||0),0);
+  const marginProyeksi=aktif.reduce((s,a)=>s+parseFloat(a.total_margin||0),0)-marginMasuk;
+  document.getElementById('pmb-stat-margin-in').textContent=fmtRb(Math.max(0,marginMasuk));
+  document.getElementById('pmb-stat-margin-out').textContent=fmtRb(Math.max(0,marginProyeksi));
+  // Proyeksi margin per tahun
+  const profitTahun={};
+  aktif.forEach(a=>{
+    const tglAkad=new Date(a.tanggal_akad);
+    const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
+    const marginSudah=angsAkad.reduce((s,x)=>s+(parseFloat(x.margin)||0),0);
+    const marginSisaA=Math.max(0,parseFloat(a.total_margin||0)-marginSudah);
+    if(marginSisaA<=0)return;
+    const sisaBulan=Math.max(1,(a.jangka||12)-angsAkad.length);
+    const perBulan=marginSisaA/sisaBulan;
+    for(let n=1;n<=sisaBulan;n++){
+      const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+angsAkad.length+n);
+      const yr=jt.getFullYear();
+      profitTahun[yr]=(profitTahun[yr]||0)+perBulan;
+    }
+  });
+  const years=Object.keys(profitTahun).sort();
+  const maxV=Math.max(...Object.values(profitTahun).map(v=>v||0),1);
+  const now2=new Date();
+  const elPT=document.getElementById('pmb-proyeksi-tahun');
+  if(elPT){
+    if(!years.length){elPT.innerHTML='<div style="text-align:center;color:var(--M);font-size:12px">Tidak ada proyeksi</div>';}
+    else{elPT.innerHTML=years.map(yr=>{
+      const v=profitTahun[yr];
+      const pct=Math.round(v/maxV*100);
+      const isNow=parseInt(yr)===now2.getFullYear();
+      const barC=isNow?'var(--E)':'var(--H3)';
+      const lblC=isNow?'var(--E)':'var(--H)';
+      return`<div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:700;color:${lblC}">${yr}${isNow?` <span style="font-size:9px;background:var(--E);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">Berjalan</span>`:''}</span>
+          <span style="font-size:12px;font-weight:800;color:var(--H)">${rp(Math.round(v))}</span>
+        </div>
+        <div style="height:7px;background:var(--K);border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${barC};border-radius:99px"></div>
+        </div>
+      </div>`;
+    }).join('');}
+  }
   const now=new Date();
   const angs=aAngsuran.filter(a=>{const d=new Date(a.tanggal);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   document.getElementById('pmb-angs-jml').textContent=angs.length;
