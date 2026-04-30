@@ -1274,6 +1274,42 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 </div>
 </div><!-- end .app -->
 
+<!-- MODAL EDIT ANGSURAN -->
+<div class="modal-overlay" id="modal-edit-angs" onclick="if(event.target===this)closeModal('modal-edit-angs')">
+  <div class="modal-box">
+    <div class="modal-title">✏️ Edit Angsuran</div>
+    <div id="ea-info" style="font-size:12px;color:var(--M);margin-bottom:12px;padding:8px 10px;background:var(--HL);border-radius:var(--rs)"></div>
+    <div class="fg"><label>Tanggal Bayar</label>
+      <input type="date" id="ea-tgl">
+    </div>
+    <div class="fg"><label>Jumlah Total</label>
+      <input type="number" id="ea-jumlah" placeholder="0">
+    </div>
+    <div class="two-col">
+      <div class="fg"><label>Porsi Pokok</label>
+        <input type="number" id="ea-pokok" placeholder="0">
+      </div>
+      <div class="fg"><label>Porsi Margin</label>
+        <input type="number" id="ea-margin" placeholder="0">
+      </div>
+    </div>
+    <div class="fg"><label>Status</label>
+      <select id="ea-status">
+        <option value="tepat_waktu">✅ Tepat Waktu</option>
+        <option value="terlambat">⚠️ Terlambat</option>
+      </select>
+    </div>
+    <div class="fg"><label>Catatan</label>
+      <input type="text" id="ea-catatan" placeholder="Catatan (opsional)">
+    </div>
+    <div class="alert" id="ea-alert"></div>
+    <div class="btn-row">
+      <button class="btn primary full" onclick="simpanEditAngsuran()">💾 Simpan Perubahan</button>
+      <button class="btn secondary" onclick="closeModal('modal-edit-angs')">Batal</button>
+    </div>
+  </div>
+</div>
+
 <!-- Print area: direct child of body agar @media print bekerja -->
 <div id="print-area" style="display:none"></div>
 <script>
@@ -1756,14 +1792,84 @@ function tampilRiwayat(akadId){
   if(!angs.length){wrap.innerHTML='';return;}
   const a2=aAkad.find(x=>x.akad_id===akadId)||aAkad.find(x=>x.id===akadId);
   const tA=a2?new Date(a2.tanggal_akad):null;
-  wrap.innerHTML='<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--H)">📋 Riwayat ('+angs.length+' angsuran)</div><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>#</th><th>JT</th><th>Tgl Bayar</th><th>Jumlah</th><th>Status</th></tr></thead><tbody>'+
+  const isAdmin=CU&&(CU.role==='admin'||CU.role==='owner'||CU.role==='pemilik');
+  wrap.innerHTML='<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--H)">📋 Riwayat ('+angs.length+' angsuran)</div><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>#</th><th>JT</th><th>Tgl Bayar</th><th>Jumlah</th><th>Status</th>'+(isAdmin?'<th style="width:70px">Aksi</th>':'')+'</tr></thead><tbody>'+
     angs.map((x,i)=>{
       let jtStr='—';
       if(tA){const jt=new Date(tA);jt.setMonth(jt.getMonth()+i+1);jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});}
       const st=x.status||'';
       const stBadge=st==='tepat_waktu'?'<span class="badge lunas" style="font-size:9px">✅ Tepat</span>':st==='terlambat'?'<span class="badge red" style="font-size:9px">⚠️ Telat</span>':'<span class="badge lunas" style="font-size:9px">✓</span>';
-      return`<tr><td>${i+1}</td><td style="font-size:10px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(x.tanggal)}</td><td>${rp(x.jumlah)}</td><td>${stBadge}</td></tr>`;
+      const aksiBtn=isAdmin?`<td style="text-align:center;white-space:nowrap">
+        <button onclick="editAngsuran(${x.id})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px" title="Edit">✏️</button>
+        <button onclick="hapusAngsuran(${x.id},${akadId})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px" title="Hapus">🗑️</button>
+      </td>`:'';
+      return`<tr><td>${i+1}</td><td style="font-size:10px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(x.tanggal)}</td><td>${rp(x.jumlah)}</td><td>${stBadge}</td>${aksiBtn}</tr>`;
     }).join('')+'</tbody></table></div>';
+}
+
+// ── HAPUS ANGSURAN ──
+async function hapusAngsuran(angsId, akadId){
+  if(!CU||(CU.role!=='admin'&&CU.role!=='owner'&&CU.role!=='pemilik')){toast('Hanya admin/owner yang bisa hapus');return;}
+  const angs=aAngsuran.find(x=>x.id===angsId);
+  if(!angs)return;
+  const a=aAkad.find(x=>x.id===akadId);
+  if(!confirm(`Hapus angsuran ${fmtTgl(angs.tanggal)} — ${rp(angs.jumlah)}?\n\nKas mutasi terkait juga akan dihapus.`))return;
+  // Hapus dari bmt_angsuran
+  const{error}=await sb.from('bmt_angsuran').delete().eq('id',angsId);
+  if(error){toast('Gagal hapus: '+error.message,true);return;}
+  // Hapus kas_mutasi terkait (cari berdasarkan tanggal + jumlah + kategori angsuran)
+  await sb.from('kas_mutasi').delete()
+    .eq('kas_id',KAS_BMT_ID).eq('tipe','masuk').eq('kategori','angsuran')
+    .eq('jumlah',angs.jumlah).eq('tanggal',angs.tanggal);
+  // Cek apakah akad perlu dikembalikan ke Belum Lunas
+  if(a&&a.status==='Lunas'){
+    await sb.from('bmt_akad').update({status:'Belum Lunas'}).eq('id',akadId);
+  }
+  toast('✅ Angsuran dihapus');
+  await loadAll();
+  tampilRiwayat(akadId);
+  renderDaftar();renderDashboard();
+  if(_detailAkadId===akadId)lihatDetail(akadId);
+}
+
+// ── EDIT ANGSURAN ──
+let _editAngsId=null, _editAngsAkadId=null;
+function editAngsuran(angsId){
+  if(!CU||(CU.role!=='admin'&&CU.role!=='owner'&&CU.role!=='pemilik')){toast('Hanya admin/owner yang bisa edit');return;}
+  const x=aAngsuran.find(a=>a.id===angsId);
+  if(!x)return;
+  _editAngsId=angsId;
+  _editAngsAkadId=x.akad_id;
+  // Isi form edit
+  document.getElementById('ea-tgl').value=x.tanggal;
+  document.getElementById('ea-jumlah').value=x.jumlah;
+  document.getElementById('ea-pokok').value=x.pokok||'';
+  document.getElementById('ea-margin').value=x.margin||'';
+  document.getElementById('ea-catatan').value=x.catatan||'';
+  document.getElementById('ea-status').value=x.status||'tepat_waktu';
+  document.getElementById('ea-info').textContent='Angsuran '+fmtTgl(x.tanggal)+' — '+rp(x.jumlah);
+  openModal('modal-edit-angs');
+}
+async function simpanEditAngsuran(){
+  if(!_editAngsId)return;
+  const tgl=document.getElementById('ea-tgl').value;
+  const jumlah=parseFloat(document.getElementById('ea-jumlah').value)||0;
+  const pokok=parseFloat(document.getElementById('ea-pokok').value)||0;
+  const margin=parseFloat(document.getElementById('ea-margin').value)||0;
+  const catatan=document.getElementById('ea-catatan').value.trim();
+  const status=document.getElementById('ea-status').value;
+  if(!tgl||!jumlah){al('ea-alert','Tanggal dan jumlah wajib diisi');return;}
+  const{error}=await sb.from('bmt_angsuran').update({
+    tanggal:tgl,jumlah,pokok,margin,catatan:catatan||null,status
+  }).eq('id',_editAngsId);
+  if(error){al('ea-alert','Gagal: '+error.message);return;}
+  toast('✅ Angsuran diperbarui');
+  closeModal('modal-edit-angs');
+  _editAngsId=null;
+  await loadAll();
+  tampilRiwayat(_editAngsAkadId);
+  renderDaftar();renderDashboard();
+  if(_detailAkadId===_editAngsAkadId)lihatDetail(_editAngsAkadId);
 }
 async function simpanAngsuran(){
   const akadId=parseInt(document.getElementById('pay-akad-id').value)||0;
