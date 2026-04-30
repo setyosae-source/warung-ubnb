@@ -1338,7 +1338,7 @@ let aPengajuan=[];
 
 // UTILS
 const rp=n=>'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');
-const fmtRb=n=>{const v=Math.round(Number(n)||0);if(v>=1e9)return'Rp '+(v/1e9).toFixed(1)+'M';if(v>=1e6)return'Rp '+(v/1e6).toFixed(1)+'Jt';if(v>=1e3)return'Rp '+(v/1e3).toFixed(0)+'Rb';return rp(v);};
+const fmtRb=n=>rp(Math.round(Number(n)||0));
 const fmtTgl=v=>{if(!v)return'—';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});};
 const today=()=>new Date().toISOString().split('T')[0];
 function toast(msg,isErr=false){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.className='show'+(isErr?' err':'');clearTimeout(el._t);el._t=setTimeout(()=>el.className='',3000);}
@@ -1558,37 +1558,34 @@ async function renderProyeksiProfit(){
   const el=document.getElementById('dash-profit-content');if(!el)return;
   const akadAktif=aAkad.filter(a=>a.status!=='Lunas');
   if(!akadAktif.length){el.innerHTML='<div class="empty"><div class="ei">📊</div><p>Tidak ada akad aktif</p></div>';return;}
-  // Hitung profit per tahun untuk setiap akad aktif
   const now=new Date();
-  // Kumpulkan profit per bulan dari semua angsuran yang BELUM dibayar
-  const profitPerBulan={}; // {2026-01: X, 2026-02: Y, ...}
+  // Total margin sudah terealisasi (semua akad)
+  const marginRealisasi=aAngsuran.reduce((s,x)=>s+(parseFloat(x.margin)||0),0);
+  // Proyeksi margin belum terealisasi per tahun
+  // Metode: dari total_margin akad aktif, kurangi margin sudah masuk, distribusi sisa ke bulan-bulan JT ke depan
+  const profitPerTahun={};
   akadAktif.forEach(a=>{
     const tglAkad=new Date(a.tanggal_akad);
     const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
-    const sudahBayar=angsAkad.length;
+    const marginSudah=angsAkad.reduce((s,x)=>s+(parseFloat(x.margin)||0),0);
+    const marginSisa=Math.max(0,parseFloat(a.total_margin||0)-marginSudah);
+    if(marginSisa<=0)return;
     const jangka=a.jangka||12;
-    const marginPerBulan=parseFloat(a.total_margin||0)/jangka;
-    // Hitung sisa angsuran yang belum terbayar
-    for(let n=sudahBayar+1;n<=jangka;n++){
+    const sudahBayarBulan=angsAkad.length; // estimasi bulan sudah bayar
+    const sisaBulan=Math.max(1,jangka-sudahBayarBulan);
+    const marginPerBulanSisa=marginSisa/sisaBulan;
+    for(let n=1;n<=sisaBulan;n++){
       const jtBulan=new Date(tglAkad);
-      jtBulan.setMonth(jtBulan.getMonth()+n);
-      const key=jtBulan.getFullYear()+'-'+String(jtBulan.getMonth()+1).padStart(2,'0');
-      profitPerBulan[key]=(profitPerBulan[key]||0)+marginPerBulan;
+      jtBulan.setMonth(jtBulan.getMonth()+sudahBayarBulan+n);
+      const yr=jtBulan.getFullYear();
+      profitPerTahun[yr]=(profitPerTahun[yr]||0)+marginPerBulanSisa;
     }
-  });
-  // Group per tahun
-  const profitPerTahun={};
-  Object.entries(profitPerBulan).forEach(([k,v])=>{
-    const yr=k.split('-')[0];
-    profitPerTahun[yr]=(profitPerTahun[yr]||0)+v;
   });
   const years=Object.keys(profitPerTahun).sort();
   const totalSemua=Object.values(profitPerTahun).reduce((a,b)=>a+b,0);
-  // Total margin sudah terealisasi (dari angsuran yg sudah dibayar)
-  const marginRealisasi=aAngsuran.reduce((s,x)=>s+(parseFloat(x.margin)||0),0);
   let html=`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
-    <div class="stat-card emas"><div class="stat-lbl">✅ Sudah Terealisasi</div><div class="stat-val" style="font-size:15px">${rp(marginRealisasi)}</div></div>
-    <div class="stat-card hijau"><div class="stat-lbl">⏳ Belum Terealisasi</div><div class="stat-val hijau" style="font-size:15px">${rp(totalSemua)}</div></div>
+    <div class="stat-card emas"><div class="stat-lbl">✅ Sudah Terealisasi</div><div class="stat-val" style="font-size:15px">${rp(Math.round(marginRealisasi))}</div></div>
+    <div class="stat-card hijau"><div class="stat-lbl">⏳ Belum Terealisasi</div><div class="stat-val hijau" style="font-size:15px">${rp(Math.round(totalSemua))}</div></div>
   </div>
   <div style="font-size:11px;font-weight:700;color:var(--M);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Proyeksi Margin per Tahun</div>
   <div style="display:flex;flex-direction:column;gap:10px">`;
@@ -1602,7 +1599,7 @@ async function renderProyeksiProfit(){
     const txtColor=isSekarang?'var(--E)':'var(--H)';
     html+=`<div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-        <span style="font-size:13px;font-weight:700;color:${txtColor}">${yr}${isSekarang?' <span style="font-size:10px;background:var(--E);color:white;padding:1px 6px;border-radius:99px;margin-left:4px">Berjalan</span>':''}</span>
+        <span style="font-size:13px;font-weight:700;color:${txtColor}">${yr}${isSekarang?` <span style="font-size:10px;background:var(--E);color:white;padding:1px 6px;border-radius:99px;margin-left:4px">Berjalan</span>`:''}</span>
         <span style="font-size:13px;font-weight:800;color:var(--H)">${rp(Math.round(v))}</span>
       </div>
       <div style="height:8px;background:var(--K);border-radius:99px;overflow:hidden">
@@ -1630,10 +1627,12 @@ function renderDashboard(){
   document.getElementById('sb-int').textContent=fmtRb(mpTotal);
   document.getElementById('sb-ext').textContent=fmtRb(peTotal);
   const aktifAkad=aAkad.filter(a=>a.status==='Belum Lunas');
-  const out=aktifAkad.reduce((s,a)=>s+parseFloat(a.total_pembiayaan||0),0);
+  const totalKewAktifDash=aktifAkad.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0)),0);
+  const totalByrAktifDash=aAngsuran.filter(an=>aktifAkad.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
+  const out=Math.max(0,totalKewAktifDash-totalByrAktifDash);
   document.getElementById('lyr-pmb-akad').textContent=aktifAkad.length;
   document.getElementById('lyr-pmb-desc').textContent='akad aktif / '+aAkad.length+' total';
-  document.getElementById('lyr-pmb-out').textContent=fmtRb(out)+' outstanding';
+  document.getElementById('lyr-pmb-out').textContent=rp(out)+' outstanding';
   const wadAktif=aTabungan.filter(t=>t.status==='aktif');
   document.getElementById('lyr-wad-rek').textContent=wadAktif.length;
   document.getElementById('lyr-wad-saldo').textContent=fmtRb(wadAktif.reduce((s,t)=>s+parseFloat(t.saldo||0),0))+' terhimpun';
@@ -1659,7 +1658,11 @@ function renderPmbDash(){
   const aktif=aAkad.filter(a=>a.status==='Belum Lunas');
   document.getElementById('pmb-stat-aktif').textContent=aktif.length;
   document.getElementById('pmb-stat-total').textContent='dari '+aAkad.length+' total';
-  document.getElementById('pmb-stat-out').textContent=fmtRb(aktif.reduce((s,a)=>s+parseFloat(a.total_pembiayaan||0),0));
+  // Outstanding = total kewajiban aktif - total sudah dibayar
+  const totalKewAktif=aktif.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0)),0);
+  const totalBayarAktif=aAngsuran.filter(an=>aktif.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
+  const sisaKewajiban=Math.max(0,totalKewAktif-totalBayarAktif);
+  document.getElementById('pmb-stat-out').textContent=fmtRb(sisaKewajiban);
   const now=new Date();
   const angs=aAngsuran.filter(a=>{const d=new Date(a.tanggal);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
   document.getElementById('pmb-angs-jml').textContent=angs.length;
@@ -1668,7 +1671,7 @@ function renderPmbDash(){
   const tbody=document.getElementById('pmb-tbl-terbaru');
   const latest=aAkad.slice(0,8);
   if(!latest.length){tbody.innerHTML='<tr><td colspan="5" class="empty">Belum ada akad</td></tr>';return;}
-  tbody.innerHTML='<thead><tr><th>No Akad</th><th>Nama</th><th>Akad</th><th>Pokok</th><th>Status</th></tr></thead><tbody>'+
+  tbody.innerHTML='<thead><tr><th>No Akad</th><th>Nama</th><th>Akad</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead><tbody>'+
     latest.map(a=>{
       const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
       const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
