@@ -875,6 +875,14 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="stat-card emas"><div class="stat-lbl">Total Dana</div><div class="stat-val emas" id="pmd-stat-dana">—</div></div>
       <div class="stat-card red"><div class="stat-lbl">BH Pending</div><div class="stat-val red" id="pmd-stat-pending">—</div></div>
     </div>
+    <!-- Proyeksi BH Semua -->
+    <div class="card" style="margin-top:6px">
+      <div class="card-title" style="justify-content:space-between">
+        <span>📈 Proyeksi Keuntungan Bagi Hasil</span>
+        <span style="font-size:11px;color:var(--M);font-weight:400">semua pemodal aktif</span>
+      </div>
+      <div id="pmd-proyeksi-semua" style="font-size:12px;color:var(--M);padding:8px 0">Memuat...</div>
+    </div>
     <div class="filter-chips">
       <span class="chip chip-g" onclick="filterPemodal('semua',this)">Semua</span>
       <span class="chip chip-e" onclick="filterPemodal('penuh',this)">🏛️ Penuh</span>
@@ -891,6 +899,13 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="stat-card blue"><div class="stat-lbl">BH Dibayar</div><div class="stat-val blue" id="pmd-penuh-bh">—</div></div>
     </div>
     <div class="info-box gold">🏛️ Modal dikelola bebas oleh BMT. Bagi Hasil dihitung berdasarkan laba usaha BMT per periode.</div>
+    <div class="card" style="margin-top:6px">
+      <div class="card-title" style="justify-content:space-between">
+        <span>📈 Proyeksi BH Penuh</span>
+        <span style="font-size:11px;color:var(--M);font-weight:400">nisbah × estimasi laba BMT</span>
+      </div>
+      <div id="pmd-proyeksi-penuh" style="font-size:12px;color:var(--M);padding:8px 0">Memuat...</div>
+    </div>
     <div class="filter-chips">
       <span class="chip chip-g" onclick="filterPenuh('semua',this)">Semua</span>
       <span class="chip chip-e" onclick="filterPenuh('internal',this)">👤 Internal</span>
@@ -914,6 +929,13 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="stat-card red"><div class="stat-lbl">BH Pending</div><div class="stat-val red" id="pmd-spesifik-pending">—</div></div>
     </div>
     <div class="info-box teal">🔗 Modal terikat ke akad pembiayaan tertentu. Bagi Hasil dihitung otomatis setiap ada angsuran masuk.</div>
+    <div class="card" style="margin-top:6px">
+      <div class="card-title" style="justify-content:space-between">
+        <span>📈 Proyeksi BH Spesifik</span>
+        <span style="font-size:11px;color:var(--M);font-weight:400">dari sisa margin akad terkait</span>
+      </div>
+      <div id="pmd-proyeksi-spesifik" style="font-size:12px;color:var(--M);padding:8px 0">Memuat...</div>
+    </div>
     <div class="filter-chips">
       <span class="chip chip-g" onclick="filterSpesifik('semua',this)">Semua</span>
       <span class="chip chip-e" onclick="filterSpesifik('internal',this)">👤 Internal</span>
@@ -2733,6 +2755,124 @@ function exportLaporan(){const XLSX=window.XLSX;if(!XLSX){toast('XLSX tidak ters
 
 // PEMODAL
 function fillMitraDropdowns(){const opts='<option value="">Pilih mitra...</option>'+aMitra.map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');['pf-mitra-id','ps-mitra-id'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});}
+// ── PROYEKSI BAGI HASIL PEMODAL ──
+function renderProyeksiBH(){
+  renderProyeksiBHSemua();
+  renderProyeksiBHPenuh();
+  renderProyeksiBHSpesifik();
+}
+
+function _proyeksiBHCard(el, items){
+  if(!el)return;
+  if(!items.length){el.innerHTML='<div style="text-align:center;color:var(--M);padding:8px">Tidak ada data</div>';return;}
+  // Summary total
+  const totalBHSudah=items.reduce((s,x)=>s+x.bhSudah,0);
+  const totalBHProyeksi=items.reduce((s,x)=>s+x.bhProyeksi,0);
+  let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+    <div class="stat-card emas"><div class="stat-lbl">✅ BH Sudah Dibayar</div><div class="stat-val" style="font-size:14px">${rp(Math.round(totalBHSudah))}</div></div>
+    <div class="stat-card hijau"><div class="stat-lbl">⏳ BH Proyeksi Sisa</div><div class="stat-val hijau" style="font-size:14px">${rp(Math.round(totalBHProyeksi))}</div></div>
+  </div>
+  <div style="font-size:10px;font-weight:700;color:var(--M);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Per Pemodal</div>
+  <div style="display:flex;flex-direction:column;gap:6px">`;
+  items.forEach(it=>{
+    const totalHak=it.bhSudah+it.bhProyeksi;
+    const pct=totalHak>0?Math.round(it.bhSudah/totalHak*100):0;
+    html+=`<div style="background:var(--K);border-radius:var(--rs);padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <div>
+          <span style="font-weight:700;font-size:12px">${it.nama}</span>
+          <span style="font-size:10px;color:var(--M);margin-left:6px">${it.jenis} · nisbah ${it.nisbah}%</span>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:var(--H)">${rp(Math.round(it.modal))}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;margin-bottom:6px">
+        <div><span style="color:var(--M)">Sudah BH:</span> <strong style="color:var(--E)">${rp(Math.round(it.bhSudah))}</strong></div>
+        <div><span style="color:var(--M)">Proyeksi:</span> <strong style="color:var(--H3)">${rp(Math.round(it.bhProyeksi))}</strong></div>
+      </div>
+      <div style="height:5px;background:#ddd;border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--E);border-radius:99px"></div>
+      </div>
+      <div style="font-size:9px;color:var(--M);margin-top:2px">${pct}% terealisasi</div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderProyeksiBHSemua(){
+  const el=document.getElementById('pmd-proyeksi-semua');if(!el)return;
+  const items=[];
+  // Internal (penuh + spesifik)
+  aPenyertaanInternal.filter(p=>p.status==='aktif').forEach(p=>{
+    const bhSudah=aBHInternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+    const bhProyeksi=_hitungProyeksiBHInternal(p);
+    items.push({nama:p.ubnb_anggota?.nama||'—',jenis:p.jenis,nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi});
+  });
+  // Eksternal (spesifik)
+  aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
+    const m=aMitra.find(x=>x.id===p.mitra_id);
+    const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
+    const bhProyeksi=_hitungProyeksiBHEksternal(p);
+    items.push({nama:m?.nama||'—',jenis:'spesifik',nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi});
+  });
+  _proyeksiBHCard(el, items);
+}
+
+function renderProyeksiBHPenuh(){
+  const el=document.getElementById('pmd-proyeksi-penuh');if(!el)return;
+  const items=aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh').map(p=>{
+    const bhSudah=aBHInternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+    const bhProyeksi=_hitungProyeksiBHInternal(p);
+    return{nama:p.ubnb_anggota?.nama||'—',jenis:'penuh',nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi};
+  });
+  _proyeksiBHCard(el, items);
+}
+
+function renderProyeksiBHSpesifik(){
+  const el=document.getElementById('pmd-proyeksi-spesifik');if(!el)return;
+  const items=[];
+  aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='spesifik').forEach(p=>{
+    const bhSudah=aBHInternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+    const bhProyeksi=_hitungProyeksiBHEksternal(p); // pakai logika dari akad terkait
+    items.push({nama:p.ubnb_anggota?.nama||'—',jenis:'spesifik',nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi});
+  });
+  aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
+    const m=aMitra.find(x=>x.id===p.mitra_id);
+    const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
+    const bhProyeksi=_hitungProyeksiBHEksternal(p);
+    items.push({nama:m?.nama||'—',jenis:'spesifik',nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi});
+  });
+  _proyeksiBHCard(el, items);
+}
+
+// Proyeksi BH Internal Penuh: dari margin belum terealisasi × nisbah pemodal
+// Asumsi: BH ∝ porsi modal terhadap total modal yang dikelola BMT
+function _hitungProyeksiBHInternal(p){
+  const totalModalPenuh=aPenyertaanInternal.filter(x=>x.status==='aktif'&&x.jenis==='penuh').reduce((s,x)=>s+parseFloat(x.jumlah_modal||0),0);
+  if(totalModalPenuh<=0)return 0;
+  const porsi=parseFloat(p.jumlah_modal||0)/totalModalPenuh;
+  // Total margin belum terealisasi dari akad aktif
+  const marginBelum=aAkad.filter(a=>a.status==='Belum Lunas').reduce((s,a)=>{
+    const marginSudah=aAngsuran.filter(x=>x.akad_id===a.id).reduce((ms,x)=>ms+parseFloat(x.margin||0),0);
+    return s+Math.max(0,parseFloat(a.total_margin||0)-marginSudah);
+  },0);
+  return marginBelum*porsi*(parseFloat(p.nisbah_anggota||40)/100);
+}
+
+// Proyeksi BH Spesifik/Eksternal: dari sisa margin akad yang terikat
+function _hitungProyeksiBHEksternal(p){
+  const akadIds=(p.akad_nos||[]).map(no=>{const a=aAkad.find(x=>x.no_akad===no);return a?.id;}).filter(Boolean);
+  if(p.akad_id)akadIds.push(p.akad_id);
+  if(!akadIds.length)return 0;
+  return akadIds.reduce((s,akadId)=>{
+    const a=aAkad.find(x=>x.id===akadId);if(!a)return s;
+    const marginSudah=aAngsuran.filter(x=>x.akad_id===akadId).reduce((ms,x)=>ms+parseFloat(x.margin||0),0);
+    const marginSisa=Math.max(0,parseFloat(a.total_margin||0)-marginSudah);
+    const nisbah=parseFloat(p.nisbah_mitra_pct||p.nisbah_anggota||40)/100;
+    return s+marginSisa*nisbah;
+  },0);
+}
+
 function renderPmdStats(){
   const totP=aPenyertaanInternal.filter(p=>p.status==='aktif').length+aPenyertaanEksternal.filter(p=>p.status==='aktif').length;
   const totD=aPenyertaanInternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0)+aPenyertaanEksternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
@@ -2760,6 +2900,7 @@ function renderPmdSemua(){
   }
   const el=document.getElementById('pmd-list-semua');
   if(!items.length){el.innerHTML='<div class="empty"><div class="ei">🤝</div><p>Belum ada pemodal aktif</p></div>';return;}
+  renderProyeksiBHSemua();
   el.innerHTML=items.map(it=>`<div class="pm-card"><div class="pm-head"><div class="pm-avatar ${it.type}">${it.type==='internal'?'👤':'🏢'}</div><div><div class="pm-name">${it.nama}</div><div class="pm-meta">${it.meta}</div></div><div class="pm-tags"><span class="badge ${it.jenis==='penuh'?'penuh':'spesifik'}">${it.jenis==='penuh'?'🏛️ Penuh':'🔗 Spesifik'}</span>${it.pendingBH?`<span class="badge red">${it.pendingBH} pending</span>`:''}</div></div><div class="pm-body"><div class="pm-stat"><div class="pm-stat-lbl">Modal</div><div class="pm-stat-val">${fmtRb(it.modal)}</div></div><div class="pm-stat"><div class="pm-stat-lbl">Nisbah</div><div class="pm-stat-val">${it.nisbah}</div></div><div class="pm-stat"><div class="pm-stat-lbl">${it.type==='internal'?'JT':'Akad'}</div><div class="pm-stat-val" style="font-size:11px">${it.extra}</div></div></div></div>`).join('');
 }
 let _filterPenuh='semua',_filterSpesifik='semua';
@@ -2770,6 +2911,7 @@ function renderPmdPenuh(){
   document.getElementById('pmd-penuh-count').textContent=data.length;
   document.getElementById('pmd-penuh-modal').textContent=fmtRb(data.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0));
   document.getElementById('pmd-penuh-bh').textContent=fmtRb(aBHInternal.filter(b=>b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0));
+  renderProyeksiBHPenuh();
   document.getElementById('pmd-tbl-penuh').innerHTML=data.length?data.map(p=>`<tr onclick="bukaDetailPenyertaan('internal-penuh',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${p.ubnb_anggota?.nama||'—'}</strong></td><td><span class="badge internal">Internal</span></td><td>${rp(p.jumlah_modal)}</td><td>${p.nisbah_anggota}:${p.nisbah_ubnb}</td><td style="font-size:11px">${fmtTgl(p.tgl_jatuh_tempo)}</td><td><span class="badge ${p.status==='aktif'?'lunas':'red'}">${p.status}</span></td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada data</td></tr>';
 }
 function renderPmdSpesifik(){
@@ -2780,6 +2922,7 @@ function renderPmdSpesifik(){
   const all=[...aPenyertaanInternal.filter(p=>p.jenis==='spesifik'&&p.status==='aktif'),...aPenyertaanEksternal.filter(p=>p.status==='aktif')];
   document.getElementById('pmd-spesifik-count').textContent=all.length;
   document.getElementById('pmd-spesifik-modal').textContent=fmtRb(all.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0));
+  renderProyeksiBHSpesifik();
   document.getElementById('pmd-spesifik-pending').textContent=aBHEksternal.filter(b=>!b.sudah_dibayar).length;
 }
 function renderPmdBH(){
