@@ -5369,6 +5369,34 @@ function infoPPOBMutasi(){
 
 // lKas — load data kas ke aKas (dipakai PPOB & transaksi, tanpa render UI)
 // Manajemen Kas penuh ada di keuangan.html
+/* ===== FUNGSI KAS (MISSING FIX) ===== */
+async function recalcSaldo(kasId){
+  if(!kasId) return;
+  // Hitung ulang saldo dari semua mutasi
+  const{data:mutasi}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',kasId);
+  if(!mutasi) return;
+  const saldo=mutasi.reduce((s,m)=>s+(m.tipe==='masuk'?m.jumlah:-m.jumlah),0);
+  await sb.from('kas').update({saldo}).eq('id',kasId);
+  // Update cache aKas
+  const idx=aKas.findIndex(k=>k.id===kasId);
+  if(idx>=0) aKas[idx].saldo=saldo;
+}
+
+function renderDashKas(){
+  const el=document.getElementById('dash-kas-list');
+  if(!el) return;
+  if(!aKas.length){el.innerHTML='<div style="color:var(--text-muted);font-size:13px">Belum ada data kas</div>';return;}
+  el.innerHTML=aKas.map(k=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:600">${k.nama}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${k.modul||'umum'}</div>
+      </div>
+      <div style="font-size:14px;font-weight:700;color:${k.saldo>=0?'var(--green-dark)':'var(--red)'}">${fmt(k.saldo)}</div>
+    </div>`).join('');
+}
+/* ===== END FUNGSI KAS FIX ===== */
+
 async function lKas(){
   const{data}=await sb.from('kas').select('*').order('id');
   aKas=data||[];
