@@ -8355,14 +8355,26 @@ function posSearchProduk(q){
   produkList.forEach(p=>{
     const harga=p.harga||0;
     const hasLevels=p.harga_levels&&p.harga_levels.length>0;
-    const lvBadge=hasLevels?'<span style="background:#dbeafe;color:#1e40af;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px">multi-satuan</span>':'';
+    const isMulti=p.multi_satuan||hasLevels;
+    const lvBadge=isMulti?'<span style="background:#dbeafe;color:#1e40af;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:4px">multi-satuan</span>':'';
     const onclickFn=hasLevels?`posOpenLevelPicker(${p.id})`:`posAddProduk(${p.id},${qty})`;
+    // Smart format stok: gr ≥ 1000 → Kg
+    let stokDisplay;
+    if(p.multi_satuan&&p.satuan_stok==='gr'&&(p.stok||0)>=1000){
+      stokDisplay=(p.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' Kg';
+    } else if(p.multi_satuan&&p.satuan_stok==='ml'&&(p.stok||0)>=1000){
+      stokDisplay=(p.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' L';
+    } else {
+      stokDisplay=(p.stok??0)+' '+(p.satuan||'pcs');
+    }
+    // Smart format harga: tambah suffix /Kg untuk multi-satuan
+    const hargaDisplay=p.multi_satuan&&p.satuan_harga?fmt(harga)+'/'+p.satuan_harga:fmt(harga);
     html+=`<div onclick="${onclickFn}" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nama}${lvBadge}</div>
-        <div style="font-size:10px;color:var(--text-muted)">stok: ${p.stok??0} ${p.satuan||'pcs'}${p.barcode?' · '+p.barcode:''}</div>
+        <div style="font-size:10px;color:var(--text-muted)">stok: ${stokDisplay}${p.barcode?' · '+p.barcode:''}</div>
       </div>
-      <div style="font-size:13px;font-weight:700;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;white-space:nowrap;flex-shrink:0">${fmt(harga)}</div>
+      <div style="font-size:13px;font-weight:700;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;white-space:nowrap;flex-shrink:0">${hargaDisplay}</div>
     </div>`;
   });
   dd.innerHTML=html;
@@ -8404,6 +8416,13 @@ function posAddProduk(pid,qty){
   qty=qty||1;
   const p=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===pid);
   if(!p){toast('Produk tidak ditemukan',true);return;}
+  // Multi-satuan / harga_levels: auto-buka Level Picker (kecuali qty>1 dari scan barcode misalnya)
+  if((p.multi_satuan||(p.harga_levels&&p.harga_levels.length>0))&&qty===1){
+    document.getElementById('pos-scan-input').value='';
+    document.getElementById('pos-search-result').style.display='none';
+    posOpenLevelPicker(pid);
+    return;
+  }
   const ex=posCart.find(c=>c.pid===pid&&!c.isPaket);
   if(ex){ex.qty+=qty;}
   else posCart.push({
@@ -8459,7 +8478,7 @@ function posRenderCart(){
         <div style="width:38px;height:38px;border-radius:8px;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${ico}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${c.nama}${lvBadge}</div>
-          <div style="font-size:11px;color:var(--text-muted)">${fmt(c.harga)} × ${c.qty}${gantiSatuan}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${fmt(c.harga)} × ${c.qty}${c._qtyPerUnit&&c._qtyPerUnit>1&&b?(' <span style="color:var(--text-muted);font-size:10px">(= '+(c.qty*c._qtyPerUnit>=1000&&b.satuan_stok==='gr'?(c.qty*c._qtyPerUnit/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' Kg':c.qty*c._qtyPerUnit+' '+(b.satuan_stok||b.satuan||'pcs'))+')</span>'):''}${gantiSatuan}</div>
         </div>
         <div style="font-weight:700;font-size:13px;color:var(--green-dark, #15803d);text-align:right;flex-shrink:0;font-family:'SF Mono',Monaco,monospace">${fmt(subtotal)}</div>
       </div>`;
