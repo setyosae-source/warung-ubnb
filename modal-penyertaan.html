@@ -928,12 +928,12 @@ async function simpanBagiHasil(){
   if(!laba){toast('Laba usaha wajib diisi',true);return;}
   if(!periode){toast('Periode wajib diisi',true);return;}
   const hasil=Math.round(laba*(p.nisbah_anggota/100));
-  const {error}=await sb.from('ubnb_modal_bagi_hasil').insert([{
+  const {data:newBH,error}=await sb.from('ubnb_modal_bagi_hasil').insert([{
     penyertaan_id:id, anggota_id:p.anggota_id,
     periode, laba_usaha:laba, porsi_anggota_pct:p.nisbah_anggota,
     jumlah_bagi_hasil:hasil, tgl_bayar:tglBayar||null,
     sudah_dibayar:!!tglBayar, catatan, operator:CU.username
-  }]);
+  }]).select('id').single();
   if(error){toast('Gagal: '+error.message,true);return;}
   // Update total bagi hasil
   await sb.from('ubnb_modal_penyertaan').update({total_bagi_hasil:parseFloat(p.total_bagi_hasil||0)+hasil}).eq('id',id);
@@ -943,7 +943,8 @@ async function simpanBagiHasil(){
       kas_id:kasId,tipe:'keluar',kategori:'keluar',
       jumlah:hasil,tanggal:tglBayar,
       keterangan:'Bagi Hasil Modal: '+(p.ubnb_anggota?.nama||'')+ ' '+periode,
-      operator:CU.username
+      operator:CU.username,
+      ref_type:'modal_bagi_hasil',ref_id:newBH?.id||null
     }]);
   }
   toast('✅ Bagi hasil berhasil disimpan!');

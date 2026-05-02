@@ -2164,7 +2164,7 @@ async function simpanBaru(){
   if(!tglRutinVal){al('b-alert','Tanggal kesanggupan bayar wajib diisi');return;}
   const{data:res,error}=await sb.from('bmt_akad').insert([{no_akad:noAkad,nama_jamaah:nama,kelompok,anggota_id:anggotaId?parseInt(anggotaId):null,tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,harga_beli:baruD.harga_beli,total_pembiayaan:baruD.total_pembiayaan,total_margin:baruD.total_margin,angsuran_perbulan:baruD.angsuran,jangka:baruD.jangka,tgl_rutin:parseInt(document.getElementById('b-tgl-rutin').value)||null,status:'Belum Lunas',operator:CU.username}]).select().single();
   if(error){al('b-alert','Gagal: '+error.message);return;}
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:baruD.total_pembiayaan,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username}]);
+  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:baruD.total_pembiayaan,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username,ref_type:'bmt_akad',ref_id:res?.id||null}]);
   toast('✅ Akad '+noAkad+' berhasil disimpan!');
   closeModal('modal-akad-baru');
   await loadAll();renderPmbDash();renderDaftar();renderDashboard();
@@ -2340,10 +2340,10 @@ async function simpanAngsuran(){
   const btn=document.getElementById('btn-bayar');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div>';
   // tgl_jatuh_tempo & status diisi otomatis oleh trigger di DB
-  const{error}=await sb.from('bmt_angsuran').insert([{
+  const{data:newAng,error}=await sb.from('bmt_angsuran').insert([{
     akad_id:akadId,tanggal:tgl,jumlah,pokok,margin,
     catatan:ket||null,kas_id:KAS_BMT_ID,operator:CU.username
-  }]);
+  }]).select('id').single();
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   if(error){al('pay-alert','Gagal: '+error.message);return;}
   // Update status lunas jika sisa ≈ 0
@@ -2355,7 +2355,8 @@ async function simpanAngsuran(){
     kas_id:KAS_BMT_ID,tipe:'masuk',kategori:'angsuran',
     jumlah,tanggal:tgl,
     keterangan:'Angsuran: '+a.nama_jamaah+' ('+a.no_akad+')',
-    operator:CU.username
+    operator:CU.username,
+    ref_type:'bmt_angsuran',ref_id:newAng?.id||null
   }]);
   toast('✅ Angsuran berhasil disimpan!');
   // Reset form
@@ -2686,12 +2687,12 @@ async function simpanSetor(){
   if(!tgl||jml<=0){toast('Tanggal dan jumlah wajib diisi',true);return;}
   const tab=aTabungan.find(t=>t.id===tabId);
   const saldoLama=parseFloat(tab?.saldo||0),saldoBaru=saldoLama+jml;
-  const{error}=await sb.from('ubnb_wadiah_mutasi').insert([{tabungan_id:tabId,anggota_id:anggotaId,tipe:'setor',jumlah:jml,saldo_sebelum:saldoLama,saldo_sesudah:saldoBaru,tanggal:tgl,keterangan:ket||'Setoran wadiah',kas_id:kasId,operator:CU.username}]);
+  const{data:newWad,error}=await sb.from('ubnb_wadiah_mutasi').insert([{tabungan_id:tabId,anggota_id:anggotaId,tipe:'setor',jumlah:jml,saldo_sebelum:saldoLama,saldo_sesudah:saldoBaru,tanggal:tgl,keterangan:ket||'Setoran wadiah',kas_id:kasId,operator:CU.username}]).select('id').single();
   if(error){toast('Gagal: '+error.message,true);return;}
   const upd={saldo:saldoBaru};if(tab.status==='generated'){upd.status='aktif';upd.tgl_buka=tgl;}
   await sb.from('ubnb_wadiah_tabungan').update(upd).eq('id',tabId);
   await sb.from('ubnb_wadiah_saldo_harian').upsert([{tabungan_id:tabId,anggota_id:anggotaId,tanggal:tgl,saldo:saldoBaru}],{onConflict:'tabungan_id,tanggal'});
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah:jml,tanggal:tgl,keterangan:'Setoran Wadiah: '+(tab?.ubnb_anggota?.nama||''),operator:CU.username}]);
+  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah:jml,tanggal:tgl,keterangan:'Setoran Wadiah: '+(tab?.ubnb_anggota?.nama||''),operator:CU.username,ref_type:'wadiah_mutasi',ref_id:newWad?.id||null}]);
   if(aKebijakan&&tgl>=aKebijakan.tgl_mulai_berlaku)await sb.from('ubnb_shu_trx_log').insert([{kebijakan_id:aKebijakan.id,anggota_id:anggotaId,periode:aKebijakan.periode,jenis_trx:'wadiah',ref_tabel:'ubnb_wadiah_mutasi',tanggal:tgl,nilai:jml}]);
   toast('✅ Setoran berhasil!');resetSetor();await loadWadiah();renderWadDash();filterRekening();loadSetoranHariIni();
 }
@@ -2708,11 +2709,11 @@ async function simpanTarik(){
   const saldoLama=parseFloat(tab?.saldo||0);
   if(jml>saldoLama){toast('Saldo tidak mencukupi!',true);return;}
   const saldoBaru=saldoLama-jml;
-  const{error}=await sb.from('ubnb_wadiah_mutasi').insert([{tabungan_id:tabId,anggota_id:anggotaId,tipe:'tarik',jumlah:jml,saldo_sebelum:saldoLama,saldo_sesudah:saldoBaru,tanggal:tgl,keterangan:ket||'Penarikan wadiah',kas_id:kasId,operator:CU.username}]);
+  const{data:newWad,error}=await sb.from('ubnb_wadiah_mutasi').insert([{tabungan_id:tabId,anggota_id:anggotaId,tipe:'tarik',jumlah:jml,saldo_sebelum:saldoLama,saldo_sesudah:saldoBaru,tanggal:tgl,keterangan:ket||'Penarikan wadiah',kas_id:kasId,operator:CU.username}]).select('id').single();
   if(error){toast('Gagal: '+error.message,true);return;}
   await sb.from('ubnb_wadiah_tabungan').update({saldo:saldoBaru}).eq('id',tabId);
   await sb.from('ubnb_wadiah_saldo_harian').upsert([{tabungan_id:tabId,anggota_id:anggotaId,tanggal:tgl,saldo:saldoBaru}],{onConflict:'tabungan_id,tanggal'});
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:jml,tanggal:tgl,keterangan:'Penarikan Wadiah: '+(tab?.ubnb_anggota?.nama||''),operator:CU.username}]);
+  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:jml,tanggal:tgl,keterangan:'Penarikan Wadiah: '+(tab?.ubnb_anggota?.nama||''),operator:CU.username,ref_type:'wadiah_mutasi',ref_id:newWad?.id||null}]);
   toast('✅ Penarikan berhasil!');resetTarik();await loadWadiah();renderWadDash();filterRekening();loadTarikHariIni();
 }
 function resetSetor(){['setor-cari','setor-jumlah','setor-ket'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});['setor-anggota-id','setor-tabungan-id'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});document.getElementById('setor-rek-info').style.display='none';document.getElementById('setor-preview').style.display='none';window._saldo_setor=0;}

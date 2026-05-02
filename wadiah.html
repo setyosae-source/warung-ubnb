@@ -791,13 +791,13 @@ async function simpanSetor(){
   const saldoBaru=saldoLama+jml;
 
   // Simpan mutasi
-  const {error:errM}=await sb.from('ubnb_wadiah_mutasi').insert([{
+  const {data:newWad,error:errM}=await sb.from('ubnb_wadiah_mutasi').insert([{
     tabungan_id:tabId, anggota_id:anggotaId,
     tipe:'setor', jumlah:jml,
     saldo_sebelum:saldoLama, saldo_sesudah:saldoBaru,
     tanggal:tgl, keterangan:ket||'Setoran wadiah',
     kas_id:kasId, operator:CU.username
-  }]);
+  }]).select('id').single();
   if(errM){toast('Gagal simpan mutasi: '+errM.message,true);return;}
 
   // Update saldo rekening
@@ -817,7 +817,8 @@ async function simpanSetor(){
       kas_id:kasId, tipe:'masuk', kategori:'masuk',
       jumlah:jml, tanggal:tgl,
       keterangan:'Setoran Wadiah: '+(tab?.ubnb_anggota?.nama||''),
-      operator:CU.username
+      operator:CU.username,
+      ref_type:'wadiah_mutasi',ref_id:newWad?.id||null
     }]);
   }
 
@@ -855,13 +856,13 @@ async function simpanTarik(){
 
   const saldoBaru=saldoLama-jml;
 
-  const {error}=await sb.from('ubnb_wadiah_mutasi').insert([{
+  const {data:newWad,error}=await sb.from('ubnb_wadiah_mutasi').insert([{
     tabungan_id:tabId, anggota_id:anggotaId,
     tipe:'tarik', jumlah:jml,
     saldo_sebelum:saldoLama, saldo_sesudah:saldoBaru,
     tanggal:tgl, keterangan:ket||'Penarikan wadiah',
     kas_id:kasId, operator:CU.username
-  }]);
+  }]).select('id').single();
   if(error){toast('Gagal: '+error.message,true);return;}
 
   await sb.from('ubnb_wadiah_tabungan').update({saldo:saldoBaru}).eq('id',tabId);
@@ -878,7 +879,8 @@ async function simpanTarik(){
       kas_id:kasId, tipe:'keluar', kategori:'keluar',
       jumlah:jml, tanggal:tgl,
       keterangan:'Penarikan Wadiah: '+(tab?.ubnb_anggota?.nama||''),
-      operator:CU.username
+      operator:CU.username,
+      ref_type:'wadiah_mutasi',ref_id:newWad?.id||null
     }]);
   }
 

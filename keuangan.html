@@ -2572,7 +2572,14 @@ function renderKasMutasiUI(){
       return `<tr>
         <td style="font-family:monospace;color:#888;font-size:11px;">#${m.id}</td>
         <td>${tgl}</td>
-        <td>${m.keterangan||'-'}</td>
+        <td>${m.keterangan||'-'}${(()=>{
+          if(!m.ref_type) return '';
+          // Mapping label badge per ref_type
+          const labelMap={ppob:'PPOB',laundry:'Laundry',service:'Service',bmt_akad:'Akad BMT',bmt_angsuran:'Angsuran BMT',wadiah_mutasi:'Wadiah',modal_bagi_hasil:'Bagi Hasil',transfer:'Transfer',kas_koreksi:'Koreksi',kas_saldo_awal:'Saldo Awal',kas_manual:'Manual'};
+          const lbl=labelMap[m.ref_type]||m.ref_type;
+          const idText=m.ref_id?` #${m.ref_id}`:(m.ref_pair_id?` ↔`:'');
+          return ` <span style="display:inline-block;font-size:10px;font-weight:600;color:#475569;background:#e2e8f0;padding:1px 6px;border-radius:8px;margin-left:6px;font-family:monospace;vertical-align:middle;">${lbl}${idText}</span>`;
+        })()}</td>
         <td style="color:var(--hijau);font-family:monospace;text-align:right;">${m._masuk?rp(m._jml):'—'}</td>
         <td style="color:var(--red);font-family:monospace;text-align:right;">${!m._masuk?rp(m._jml):'—'}</td>
         <td style="font-family:monospace;text-align:right;font-weight:700;color:${sR>=0?'var(--hijau)':'var(--red)'};">${rp(sR)}</td>
@@ -2668,7 +2675,8 @@ async function simpanKasKu(){
       await sb.from('kas_mutasi').insert([{
         kas_id:parseInt(id),tipe:diff>0?'masuk':'keluar',kategori:'koreksi',
         jumlah:Math.abs(diff),tanggal:new Date().toISOString().slice(0,10),
-        keterangan:'Koreksi saldo manual',operator:CU.username
+        keterangan:'Koreksi saldo manual',operator:CU.username,
+        ref_type:'kas_koreksi',ref_id:parseInt(id)
       }]);
       await sb.from('kas').update({saldo}).eq('id',parseInt(id));
     }
@@ -2682,7 +2690,8 @@ async function simpanKasKu(){
       await sb.from('kas_mutasi').insert([{
         kas_id:newK.id,tipe:'masuk',kategori:'masuk',jumlah:saldo,
         tanggal:new Date().toISOString().slice(0,10),
-        keterangan:'Saldo Awal',operator:CU.username
+        keterangan:'Saldo Awal',operator:CU.username,
+        ref_type:'kas_saldo_awal',ref_id:newK.id
       }]);
       await sb.from('kas').update({saldo}).eq('id',newK.id);
     }
@@ -2714,7 +2723,8 @@ async function simpanMutasiKas(){
   // Simpan mutasi
   await sb.from('kas_mutasi').insert([{
     kas_id:kasId,tipe,kategori:tipe,jumlah,keterangan:ket,
-    tanggal:tgl,operator:CU.username
+    tanggal:tgl,operator:CU.username,
+    ref_type:'kas_manual'
   }]);
   // Update saldo
   const saldoBaru=tipe==='masuk'?k.saldo+jumlah:k.saldo-jumlah;
@@ -2809,12 +2819,15 @@ async function simpanTransferKas(){
   await sb.from('kas').update({saldo:dariKas.saldo-jumlah}).eq('id',dariId);
   await sb.from('kas').update({saldo:keKas.saldo+jumlah}).eq('id',keId);
 
-  // Catat mutasi kedua kas
+  // Catat mutasi kedua kas (pakai ref_pair_id untuk pasangkan keluar+masuk)
+  const pairId='trf-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
   await sb.from('kas_mutasi').insert([
     {kas_id:dariId,tipe:'keluar',kategori:'transfer',jumlah,
-     keterangan:`Transfer ke ${keKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username},
+     keterangan:`Transfer ke ${keKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username,
+     ref_type:'transfer',ref_pair_id:pairId},
     {kas_id:keId,tipe:'masuk',kategori:'transfer',jumlah,
-     keterangan:`Transfer dari ${dariKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username}
+     keterangan:`Transfer dari ${dariKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username,
+     ref_type:'transfer',ref_pair_id:pairId}
   ]);
 
   // Buat jurnal transfer

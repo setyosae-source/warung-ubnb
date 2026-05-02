@@ -5712,20 +5712,22 @@ async function simpanPPOBTeks(){
   for(const item of items){
     try{
       const tid='ppob-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,5);
-      const{error}=await sb.from('ppob').insert([{
+      const{data:newPpob,error}=await sb.from('ppob').insert([{
         tid,tanggal:tgl,nama:item.nama,produk:item.produk,
         harga_beli:item.hbeli,harga_jual:item.hjual,
         status_bayar:status,kas_id:kasPPOBid,
         operator:CU.username
-      }]);
+      }]).select('id').single();
       if(error)throw error;
+      const ppobId=newPpob?.id||null;
 
       // Mutasi modal keluar dari kas PPOB
       await sb.from('kas_mutasi').insert([{
         kas_id:kasPPOBid,tipe:'keluar',kategori:'keluar',
         jumlah:item.hbeli,tanggal:tgl,
         keterangan:'Modal PPOB: '+item.produk+(item.nama?' - '+item.nama:''),
-        operator:CU.username
+        operator:CU.username,
+        ref_type:'ppob',ref_id:ppobId
       }]);
 
       // Jika lunas, harga jual masuk kas utama
@@ -5734,7 +5736,8 @@ async function simpanPPOBTeks(){
           kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
           jumlah:item.hjual,tanggal:tgl,
           keterangan:'Bayar PPOB: '+item.produk+(item.nama?' - '+item.nama:''),
-          operator:CU.username
+          operator:CU.username,
+          ref_type:'ppob',ref_id:ppobId
         }]);
       }
 
@@ -5805,12 +5808,13 @@ async function simpanPPOB(){
   if(!nama){toast('Isi nama pelanggan',true);return;}
 
   const tid='ppob-'+Date.now().toString(36);
-  const{error}=await sb.from('ppob').insert([{
+  const{data:newPpob,error}=await sb.from('ppob').insert([{
     tid,tanggal:tgl,nama,pelanggan_id:pelId,anggota_id:anggotaIdPpob,produk,
     harga_beli:hb,harga_jual:hj,status_bayar:status,
     kas_id:parseInt(kasId),catatan,operator:CU.username
-  }]);
+  }]).select('id').single();
   if(error){toast('Gagal simpan: '+error.message,true);return;}
+  const ppobId=newPpob?.id||null;
   
   // Harga beli SELALU keluar dari kas PPOB (modal)
   const kasPPOBid=parseInt(kasId);
@@ -5819,7 +5823,8 @@ async function simpanPPOB(){
     kas_id:kasPPOBid,tipe:'keluar',kategori:'keluar',
     jumlah:hb,tanggal:tgl,
     keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
-    operator:CU.username
+    operator:CU.username,
+    ref_type:'ppob',ref_id:ppobId
   }]);
   await recalcSaldo(kasPPOBid);
 
@@ -5834,7 +5839,8 @@ async function simpanPPOB(){
         kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
         jumlah:hj,tanggal:tgl,
         keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
-        operator:CU.username
+        operator:CU.username,
+        ref_type:'ppob',ref_id:ppobId
       }]);
       await recalcSaldo(kasUtama.id);
     }
@@ -6020,7 +6026,8 @@ async function lunasiPPOB(id){
       kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
       jumlah:p.harga_jual,tanggal:p.tanggal,
       keterangan:'Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:''),
-      operator:CU.username
+      operator:CU.username,
+      ref_type:'ppob',ref_id:p.id
     }]);
     await recalcSaldo(kasUtama.id);
   }
@@ -6100,7 +6107,8 @@ async function simpanEditPPOB(){
         kas_id:newKasId,tipe:'keluar',kategori:'keluar',
         jumlah:hbeli,tanggal:tgl,
         keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
-        operator:CU.username
+        operator:CU.username,
+        ref_type:'ppob',ref_id:id
       }]);
     }
   }
@@ -6113,7 +6121,8 @@ async function simpanEditPPOB(){
       kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
       jumlah:hjual,tanggal:tgl,
       keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
-      operator:CU.username
+      operator:CU.username,
+      ref_type:'ppob',ref_id:id
     }]);
   }
 
@@ -6401,7 +6410,8 @@ async function simpanTopUp(){
     jumlah,
     keterangan,
     tanggal:tgl,
-    operator:CU.username
+    operator:CU.username,
+    ref_type:'kas_manual'
   }]);
   await lKas();;_markSaved('modal-topup-kas');closeModal('modal-topup-kas');
   const msg=tipe==='komisi'?'Komisi berhasil dicatat!':isMasuk?'Saldo ditambahkan!':'Saldo dikurangi!';
