@@ -2440,6 +2440,32 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       </label>
     </div>
     <div class="sep"></div>
+    <!-- ===== MULTI-SATUAN SECTION ===== -->
+    <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">PENGATURAN SATUAN</div>
+    <div class="irow" style="align-items:center;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;margin:0">
+        <input type="checkbox" id="b-multi-satuan" onchange="toggleMultiSatuan()" style="width:auto;height:auto;cursor:pointer"/>
+        <span style="font-size:13px"><strong>Produk Multi-Satuan</strong> (Ikat/Karton/Slop dst)</span>
+      </label>
+    </div>
+    <div id="b-multi-section" style="display:none;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;border:1px dashed var(--border)">
+      <div style="font-size:11px;color:#1e40af;background:#dbeafe;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.4">
+        💡 <strong>Skema Hybrid:</strong> Stok disimpan dalam unit terkecil (cth: gram), harga master tetap per Kg/L. Sistem auto-konversi saat kasir input qty.
+      </div>
+      <div class="two-col">
+        <div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Satuan Harga (utama)</div>
+          <input type="text" id="b-satuan-harga" placeholder="Kg / L / Pcs"/>
+          <div style="font-size:10px;color:var(--text-muted);font-style:italic;margin-top:2px">Untuk display harga master</div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Satuan Stok (terkecil)</div>
+          <input type="text" id="b-satuan-stok" placeholder="gr / ml / pcs"/>
+          <div style="font-size:10px;color:var(--text-muted);font-style:italic;margin-top:2px">Untuk presisi stok</div>
+        </div>
+      </div>
+    </div>
+    <div class="sep"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-size:11px;font-weight:700;color:var(--text-muted)">HARGA LEVEL (opsional)</div>
       <button type="button" class="btn sm" onclick="tambahHargaLevel()" style="font-size:11px;padding:3px 10px">＋ Tambah Level</button>
@@ -4761,6 +4787,11 @@ function openModalBarang(id, prefillBarcode=''){
     document.getElementById('b-hb').value=b.harga_beli||0;
     document.getElementById('b-satuan').value=b.satuan||'';
   document.getElementById('b-allow-decimal').checked = b.allow_decimal || false;
+    // Multi-satuan prefill
+    document.getElementById('b-multi-satuan').checked = b.multi_satuan || false;
+    document.getElementById('b-satuan-harga').value = b.satuan_harga || '';
+    document.getElementById('b-satuan-stok').value = b.satuan_stok || '';
+    toggleMultiSatuan();
     document.getElementById('b-dtipe').value=b.diskon_tipe||'';
     document.getElementById('b-dnilai').value=b.diskon_nilai||0;
     document.getElementById('b-barcode').value=b.barcode||'';
@@ -4790,8 +4821,32 @@ function openModalBarang(id, prefillBarcode=''){
     document.getElementById('modal-barang-title').textContent='Tambah Barang';
     document.getElementById('btn-simpan-barang').textContent='Simpan';
     _bLevels=[];_renderBLevels();
+    // Reset multi-satuan
+    document.getElementById('b-multi-satuan').checked = false;
+    document.getElementById('b-satuan-harga').value = '';
+    document.getElementById('b-satuan-stok').value = '';
+    document.getElementById('b-allow-decimal').checked = false;
+    toggleMultiSatuan();
   }
   openModal('modal-barang');
+}
+
+// Toggle visibility section multi-satuan
+function toggleMultiSatuan(){
+  const isMulti = document.getElementById('b-multi-satuan').checked;
+  document.getElementById('b-multi-section').style.display = isMulti ? 'block' : 'none';
+  // Auto-suggest satuan_harga & satuan_stok kalau kosong
+  if(isMulti){
+    const sh = document.getElementById('b-satuan-harga');
+    const ss = document.getElementById('b-satuan-stok');
+    const satuanUtama = (document.getElementById('b-satuan').value||'').toLowerCase().trim();
+    if(!sh.value && !ss.value){
+      // Auto-fill berdasarkan satuan utama existing
+      if(satuanUtama==='gr'||satuanUtama==='gram'){sh.value='Kg';ss.value='gr';}
+      else if(satuanUtama==='ml'){sh.value='L';ss.value='ml';}
+      else {sh.value='Kg';ss.value='gr';} // default umum
+    }
+  }
 }
 async function previewFotoBarang(input){
   if(!input.files||!input.files[0])return;
@@ -4830,6 +4885,15 @@ async function simpanBarang(){
   const kategori=document.getElementById('b-kategori').value||'warung';
   const expired=document.getElementById('b-expired').value||null;
   const id=document.getElementById('b-id').value;
+  // Multi-satuan flags
+  const multiSatuan = document.getElementById('b-multi-satuan').checked;
+  const satuanHarga = document.getElementById('b-satuan-harga').value.trim();
+  const satuanStok = document.getElementById('b-satuan-stok').value.trim();
+  const allowDecimal = document.getElementById('b-allow-decimal').checked;
+  // Validasi multi-satuan
+  if(multiSatuan && (!satuanHarga || !satuanStok)){
+    toast('Multi-Satuan: Satuan Harga & Satuan Stok wajib diisi',true);return;
+  }
   // Upload foto jika ada file baru
   const fotoFile=document.getElementById('b-foto-file').files[0];
   let fotoUrl=document.getElementById('b-foto-url').value||null;
@@ -4850,7 +4914,12 @@ async function simpanBarang(){
     diskon_tipe: dTipe||'',
     diskon_nilai: dNilai||0,
     barcode: barcode||'',
-    kategori
+    kategori,
+    // Multi-satuan
+    multi_satuan: multiSatuan,
+    satuan_harga: multiSatuan ? satuanHarga : null,
+    satuan_stok: multiSatuan ? satuanStok : null,
+    allow_decimal: allowDecimal
   };
   // Kolom tambahan - hanya tambahkan jika ada nilainya
   // (agar tidak error jika kolom belum ada di tabel lama)
