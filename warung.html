@@ -5539,6 +5539,18 @@ async function lKas(){
   aKas=data||[];
 }
 
+async function recalcSaldo(kasId){
+  if(!kasId) return;
+  // Hitung ulang saldo dari semua mutasi kas
+  const{data:mutasi}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',kasId);
+  if(!mutasi) return;
+  const saldo=mutasi.reduce((s,m)=>s+(m.tipe==='masuk'?parseFloat(m.jumlah):-parseFloat(m.jumlah)),0);
+  await sb.from('kas').update({saldo}).eq('id',kasId);
+  // Update cache aKas
+  const idx=aKas.findIndex(k=>k.id===kasId);
+  if(idx>=0) aKas[idx].saldo=saldo;
+}
+
 async function lPPOB(){
   const{data}=await sb.from('ppob').select('*').order('tanggal',{ascending:false});
   aPPOB=data||[];
