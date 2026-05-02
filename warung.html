@@ -6120,38 +6120,53 @@ async function hapusPPOB(id){
   // Konfirmasi dulu — hapus PPOB juga akan menghapus mutasi kas terkait
   const konfirm=confirm(`Hapus transaksi PPOB ini?\n\n#${p.id} - ${p.produk}\nPelanggan: ${p.nama||'-'}\nTanggal: ${p.tanggal}\nHarga: ${fmt(p.harga_jual)}\n\n⚠️ Mutasi kas (modal & bayar) yang terkait juga akan ikut dihapus.\nAksi ini tidak bisa dibatalkan.`);
   if(!konfirm)return;
-  // Buat keterangan spesifik untuk cari mutasi yang tepat
-  const ketModal='Modal PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
-  const ketBayar='Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
-  // Hapus mutasi modal dari kas PPOB (spesifik per tanggal & keterangan)
-  if(p.kas_id){
-    await sb.from('kas_mutasi').delete()
-      .eq('kas_id',p.kas_id)
-      .eq('keterangan',ketModal)
-      .eq('tanggal',p.tanggal);
-  }
-  // Hapus mutasi bayar dari kas utama jika lunas
-  if(p.status_bayar==='lunas'){
-    const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');});
-    if(kasUtama){
+  try{
+    // Buat keterangan spesifik untuk cari mutasi yang tepat
+    const ketModal='Modal PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
+    const ketBayar='Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
+    // Hapus mutasi modal — utamakan match by ref_id (data baru), fallback by keterangan (data lama)
+    await sb.from('kas_mutasi').delete().eq('ref_type','ppob').eq('ref_id',id);
+    // Fallback untuk data lama tanpa ref_id
+    if(p.kas_id){
       await sb.from('kas_mutasi').delete()
-        .eq('kas_id',kasUtama.id)
-        .eq('keterangan',ketBayar)
-        .eq('tanggal',p.tanggal);
+        .eq('kas_id',p.kas_id)
+        .eq('keterangan',ketModal)
+        .eq('tanggal',p.tanggal)
+        .is('ref_id',null);
     }
+    // Hapus mutasi bayar dari kas utama jika lunas (fallback by keterangan)
+    if(p.status_bayar==='lunas'){
+      const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');});
+      if(kasUtama){
+        await sb.from('kas_mutasi').delete()
+          .eq('kas_id',kasUtama.id)
+          .eq('keterangan',ketBayar)
+          .eq('tanggal',p.tanggal)
+          .is('ref_id',null);
+      }
+    }
+    // Hapus hutang/piutang terkait PPOB
+    const ketHutang='PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
+    await sb.from('hutang').delete().eq('ref_type','ppob').eq('ket',ketHutang);
+    // Hapus transaksi
+    const{error:errDel}=await sb.from('ppob').delete().eq('id',id);
+    if(errDel)throw errDel;
+    // Recalc saldo semua kas terdampak
+    const kasIds=[...new Set([p?.kas_id].filter(Boolean))];
+    for(const kid of kasIds) await recalcSaldo(kid);
+    // Reload data
+    await lKas();await lPPOB();await lH();
+    // Bersihkan state expand untuk row yang dihapus
+    if(typeof _rwExpand!=='undefined'&&_rwExpand.ppob)delete _rwExpand.ppob[id];
+    // Re-render tabel
+    renderPPOBRiwayat();
+    renderHutang();
+    if(document.getElementById('page-dashboard')?.classList.contains('active'))renderDashboard();
+    toast(`✅ Transaksi PPOB #${id} dihapus`);
+  }catch(e){
+    console.error('hapusPPOB error:',e);
+    toast('❌ Gagal hapus: '+(e.message||e),true);
   }
-  // Hapus hutang/piutang terkait PPOB
-  const ketHutang='PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
-  await sb.from('hutang').delete().eq('ref_type','ppob').eq('ket',ketHutang);
-  // Hapus transaksi
-  await sb.from('ppob').delete().eq('id',id);
-  // Recalc saldo semua kas terdampak
-  const kasIds=[...new Set([p?.kas_id].filter(Boolean))];
-  for(const kid of kasIds) await recalcSaldo(kid);
-  await lKas();await lPPOB();await lH();
-  renderPPOBRiwayat();;renderHutang();
-  if(document.getElementById('page-dashboard')?.classList.contains('active'))renderDashboard();
-  toast(`✅ Transaksi PPOB #${id} dihapus`);
 }
 
 /* PPOB LAPORAN */
