@@ -2080,6 +2080,33 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   </div>
 </div>
 
+<!-- MODAL DETAIL PRODUK -->
+<div class="modal-overlay" id="modal-produk-detail">
+  <div class="modal" style="background:white;max-width:480px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:0;max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
+    <!-- Header -->
+    <div style="padding:14px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 10px"></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div id="pd-foto" style="flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div id="pd-nama" style="font-size:16px;font-weight:700;line-height:1.2;color:var(--text)">-</div>
+          <div id="pd-sub" style="font-size:11px;color:var(--text-muted);margin-top:2px">-</div>
+        </div>
+        <button onclick="closeModal('modal-produk-detail', true)" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--bg);color:var(--text-muted);font-size:18px;cursor:pointer;flex-shrink:0">✕</button>
+      </div>
+    </div>
+    <!-- Content (scrollable) -->
+    <div style="flex:1;overflow-y:auto;padding:14px 16px">
+      <div id="pd-content"></div>
+    </div>
+    <!-- Footer -->
+    <div style="padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button onclick="pdHapus()" style="height:42px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:#fee2e2;color:#b91c1c">🗑️ Hapus</button>
+      <button onclick="pdEdit()" style="height:42px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white">✏️ Edit</button>
+    </div>
+  </div>
+</div>
+
 <!-- PAGE DAFTAR PRODUK -->
 <div class="page" id="page-daftar-produk">
   <div class="page-title">
@@ -8157,6 +8184,112 @@ function toggleSortProduk(field){
   renderDaftarProduk();
 }
 
+// === MODAL DETAIL PRODUK ===
+let _pdCurrentId = null;
+function openProdukDetail(id){
+  const b = aB.find(x=>x.id===id);
+  if(!b){ toast('Produk tidak ditemukan',true); return; }
+  _pdCurrentId = id;
+  const catIcons = {warung:'🏪',ppob:'⚡',laundry:'🧺',service:'🔧'};
+  // Header foto
+  const fotoEl = document.getElementById('pd-foto');
+  fotoEl.innerHTML = b.foto_url 
+    ? `<img src="${b.foto_url}" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border)" onerror="this.style.display='none'"/>`
+    : `<div style="width:56px;height:56px;background:var(--bg);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--text-muted)">${(b.nama||'').substring(0,2).toUpperCase()}</div>`;
+  document.getElementById('pd-nama').textContent = b.nama;
+  // Sub: kategori + barcode + multi-satuan badge
+  const catTxt = `${catIcons[b.kategori]||''} ${b.kategori||'warung'}`;
+  const bcTxt = b.barcode ? ` · 🔲 ${b.barcode}` : '';
+  const multiTxt = b.multi_satuan ? ' · multi-satuan' : '';
+  document.getElementById('pd-sub').innerHTML = catTxt + bcTxt + multiTxt;
+  // Body content
+  const bat = aBatch.filter(x=>x.barang_id===id&&x.qty_sisa>0);
+  const hppStok = bat.reduce((s,x)=>s+x.qty_sisa*x.harga_beli,0);
+  const margin = b.harga_beli>0 ? Math.round((b.harga-b.harga_beli)/b.harga_beli*100) : 0;
+  const marginColor = margin<0 ? 'var(--red)' : margin<10 ? 'var(--amber)' : 'var(--green-dark)';
+  // Smart format stok
+  let stokDisplay, satuanDisplay;
+  if(b.multi_satuan && b.satuan_stok==='gr' && b.stok>=1000){
+    stokDisplay = (b.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2});
+    satuanDisplay = 'Kg';
+  } else if(b.multi_satuan && b.satuan_stok==='ml' && b.stok>=1000){
+    stokDisplay = (b.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2});
+    satuanDisplay = 'L';
+  } else {
+    stokDisplay = (b.stok||0).toLocaleString('id-ID');
+    satuanDisplay = b.satuan||'pcs';
+  }
+  const stokColor = b.stok===0 ? 'var(--red)' : b.stok<=5 ? 'var(--amber)' : 'var(--green-dark)';
+  // Stat cards 2x2
+  let h = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="background:var(--bg);padding:10px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:600">Stok</div>
+      <div style="font-size:18px;font-weight:800;color:${stokColor};font-family:'SF Mono',Monaco,monospace">${stokDisplay} <span style="font-size:11px;color:var(--text-muted);font-weight:500">${satuanDisplay}</span></div>
+    </div>
+    <div style="background:var(--bg);padding:10px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:600">Margin</div>
+      <div style="font-size:18px;font-weight:800;color:${marginColor}">${margin}%</div>
+    </div>
+    <div style="background:var(--bg);padding:10px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:600">Harga Jual${b.multi_satuan&&b.satuan_harga?' /'+b.satuan_harga:''}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--green-dark);font-family:'SF Mono',Monaco,monospace">${fmt(b.harga||0)}</div>
+    </div>
+    <div style="background:var(--bg);padding:10px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:600">Harga Beli${b.multi_satuan&&b.satuan_harga?' /'+b.satuan_harga:''}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--amber);font-family:'SF Mono',Monaco,monospace">${fmt(b.harga_beli||0)}</div>
+    </div>
+    <div style="background:var(--bg);padding:10px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:600">Nilai Stok (HPP)</div>
+      <div style="font-size:14px;font-weight:700;color:var(--blue);font-family:'SF Mono',Monaco,monospace">${fmt(hppStok)}</div>
+    </div>
+    <div style="background:var(--bg);padding:10px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:600">Batch Aktif</div>
+      <div style="font-size:18px;font-weight:800;color:var(--blue)">${bat.length}</div>
+    </div>
+  </div>`;
+  // Multi-satuan info
+  if(b.multi_satuan && b.harga_levels && b.harga_levels.length){
+    h += `<div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:10px;padding:10px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px">📐 Multi-Satuan: ${b.satuan_stok} ↔ ${b.satuan_harga}</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${b.harga_levels.map(lv=>`<div style="display:flex;justify-content:space-between;font-size:11px"><span><b>${lv.label}</b> (${lv.qty} ${b.satuan_stok})</span><span style="font-family:'SF Mono',Monaco,monospace;color:#1e40af;font-weight:600">${fmt(lv.harga)}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }
+  // Expired info
+  if(b.expired){
+    const today=new Date(); today.setHours(0,0,0,0);
+    const exp=new Date(b.expired); exp.setHours(0,0,0,0);
+    const diffDays=Math.round((exp-today)/(1000*60*60*24));
+    const expStr=exp.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+    let expBadge, expBg;
+    if(diffDays<0){ expBadge=`⚠️ EXPIRED ${expStr}`; expBg='#fee2e2;color:#b91c1c'; }
+    else if(diffDays<=90){ expBadge=`⏰ Exp ${expStr} (${diffDays}h lagi)`; expBg='#fff7ed;color:#c2410c'; }
+    else { expBadge=`📅 Exp ${expStr}`; expBg='#f0fdf4;color:#166534'; }
+    h += `<div style="background:${expBg.split(';')[0]};color:${expBg.split(';')[1].split(':')[1]};padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:12px">${expBadge}</div>`;
+  }
+  // Riwayat container — pakai existing renderRiwayatBarang
+  h += `<div id="riwayat-barang-${id}"></div>`;
+  document.getElementById('pd-content').innerHTML = h;
+  // Render riwayat
+  if(typeof renderRiwayatBarang==='function') renderRiwayatBarang(id);
+  // Open modal
+  openModal('modal-produk-detail');
+}
+
+function pdEdit(){
+  if(!_pdCurrentId) return;
+  closeModal('modal-produk-detail', true);
+  setTimeout(()=>openModalBarang(_pdCurrentId), 200);
+}
+
+function pdHapus(){
+  if(!_pdCurrentId) return;
+  const id = _pdCurrentId;
+  closeModal('modal-produk-detail', true);
+  setTimeout(()=>hapusProduk(id), 200);
+}
+
 function renderDaftarProduk(){
   const search = (document.getElementById('search-produk')?.value || '').toLowerCase();
   
@@ -8237,7 +8370,7 @@ function renderDaftarProduk(){
             const catIcon = catIcons[b.kategori] || '';
             
             return `
-              <tr style="border-bottom:1px solid var(--border)">
+              <tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openProdukDetail(${b.id})">
                 <td style="padding:10px">${fotoThumb}</td>
                 <td style="padding:10px">
                   <div style="font-weight:600;font-size:13px">${b.nama}</div>
@@ -8253,8 +8386,8 @@ function renderDaftarProduk(){
                 <td style="padding:10px;text-align:right;font-weight:600">${fmtHarga(b)}</td>
                 <td style="padding:10px;text-align:right;color:var(--text-muted)">${fmtHarga(b, b.harga_beli||0)}</td>
                 <td style="padding:10px;text-align:center">
-                  <button class="btn sm" onclick="openModalBarang(${b.id})" style="padding:4px 10px;font-size:11px">✏️ Edit</button>
-                  <button class="btn sm sec" onclick="hapusProduk(${b.id})" style="padding:4px 10px;font-size:11px;margin-left:4px">🗑️</button>
+                  <button class="btn sm" onclick="event.stopPropagation();openModalBarang(${b.id})" style="padding:4px 10px;font-size:11px">✏️ Edit</button>
+                  <button class="btn sm sec" onclick="event.stopPropagation();hapusProduk(${b.id})" style="padding:4px 10px;font-size:11px;margin-left:4px">🗑️</button>
                 </td>
               </tr>
             `;
