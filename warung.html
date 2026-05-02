@@ -2087,7 +2087,10 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <button class="btn sm" onclick="openModalBarang()" style="margin-left:auto">＋ Tambah Barang</button>
   </div>
   <div class="content">
-    <!-- Filter & Search -->
+    <!-- Stats (paling atas) -->
+    <div id="produk-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px"></div>
+    
+    <!-- Filter Kategori -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn sm" onclick="filterProduk('all')" id="btn-prod-all">Semua</button>
       <button class="btn sm sec" onclick="filterProduk('warung')" id="btn-prod-warung">🏪 Warung</button>
@@ -2099,21 +2102,12 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       <input type="text" id="search-produk" placeholder="Cari nama, barcode, kategori..." oninput="renderDaftarProduk()"/>
     </div>
     
-    <!-- Toolbar -->
+    <!-- Toolbar (sort dropdown dihapus, pindah ke header tabel) -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <select id="sort-produk" onchange="renderDaftarProduk()" style="flex:1;max-width:200px">
-        <option value="nama">Urutkan: Nama A-Z</option>
-        <option value="stok">Urutkan: Stok Terbanyak</option>
-        <option value="harga">Urutkan: Harga Tertinggi</option>
-        <option value="terbaru">Urutkan: Terbaru</option>
-      </select>
       <button class="btn sm sec" onclick="exportProduk()">📥 Export Excel</button>
       <button class="btn sm sec" onclick="document.getElementById('import-produk-file').click()">📤 Import</button>
       <input type="file" id="import-produk-file" accept=".xlsx,.csv" style="display:none" onchange="importProduk(event)"/>
     </div>
-    
-    <!-- Stats -->
-    <div id="produk-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px"></div>
     
     <!-- Tabel -->
     <div id="daftar-produk-list"></div>
@@ -8149,9 +8143,22 @@ function filterProduk(kat){
   renderDaftarProduk();
 }
 
+// State sort untuk Daftar Produk (independen dari Stok Barang)
+let _produkSortField = 'nama';
+let _produkSortDir = 'asc';
+function toggleSortProduk(field){
+  if(_produkSortField === field){
+    _produkSortDir = _produkSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _produkSortField = field;
+    // Default: nama=asc, numeric=desc (besar di atas)
+    _produkSortDir = field === 'nama' || field === 'kategori' ? 'asc' : 'desc';
+  }
+  renderDaftarProduk();
+}
+
 function renderDaftarProduk(){
   const search = (document.getElementById('search-produk')?.value || '').toLowerCase();
-  const sortBy = document.getElementById('sort-produk')?.value || 'nama';
   
   let filtered = aB.slice();
   
@@ -8169,16 +8176,21 @@ function renderDaftarProduk(){
     );
   }
   
-  // Sort
-  if(sortBy === 'nama'){
-    filtered.sort((a,b) => (a.nama||'').localeCompare(b.nama||''));
-  } else if(sortBy === 'stok'){
-    filtered.sort((a,b) => (b.stok||0) - (a.stok||0));
-  } else if(sortBy === 'harga'){
-    filtered.sort((a,b) => (b.harga||0) - (a.harga||0));
-  } else if(sortBy === 'terbaru'){
-    filtered.sort((a,b) => (b.id||0) - (a.id||0));
-  }
+  // Sort by header (state)
+  filtered.sort((a,b)=>{
+    let va, vb;
+    if(_produkSortField === 'nama'){
+      va = (a.nama||'').toLowerCase(); vb = (b.nama||'').toLowerCase();
+    } else if(_produkSortField === 'kategori'){
+      va = (a.kategori||'').toLowerCase(); vb = (b.kategori||'').toLowerCase();
+    } else if(_produkSortField === 'harga_beli'){
+      va = a.harga_beli||0; vb = b.harga_beli||0;
+    } else {
+      va = a[_produkSortField]||0; vb = b[_produkSortField]||0;
+    }
+    if(_produkSortDir === 'asc') return va > vb ? 1 : -1;
+    return va < vb ? 1 : -1;
+  });
   
   // Stats
   renderProdukStats(filtered);
@@ -8192,17 +8204,26 @@ function renderDaftarProduk(){
   
   const catIcons = {warung:'🏪',ppob:'⚡',laundry:'🧺',service:'🔧'};
   
+  // Arrow indicator helper
+  const arr = (field) => {
+    if(_produkSortField !== field) return '<span style="color:var(--text-muted);opacity:.4;font-size:9px;margin-left:2px">↕</span>';
+    return _produkSortDir === 'asc'
+      ? '<span style="color:var(--green-dark);font-size:10px;margin-left:2px">▲</span>'
+      : '<span style="color:var(--green-dark);font-size:10px;margin-left:2px">▼</span>';
+  };
+  const thStyle = 'padding:10px;font-size:11px;font-weight:700;color:var(--text-muted);cursor:pointer;user-select:none;white-space:nowrap';
+  
   el.innerHTML = `
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;background:white;border-radius:var(--radius)">
         <thead style="background:var(--bg);position:sticky;top:0;z-index:1">
           <tr>
             <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted)">FOTO</th>
-            <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted)">NAMA</th>
-            <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--text-muted)">KATEGORI</th>
-            <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted)">STOK</th>
-            <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted)">HARGA JUAL</th>
-            <th style="padding:10px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted)">HARGA BELI</th>
+            <th style="${thStyle};text-align:left" onclick="toggleSortProduk('nama')">NAMA${arr('nama')}</th>
+            <th style="${thStyle};text-align:left" onclick="toggleSortProduk('kategori')">KATEGORI${arr('kategori')}</th>
+            <th style="${thStyle};text-align:right" onclick="toggleSortProduk('stok')">STOK${arr('stok')}</th>
+            <th style="${thStyle};text-align:right" onclick="toggleSortProduk('harga')">HARGA JUAL${arr('harga')}</th>
+            <th style="${thStyle};text-align:right" onclick="toggleSortProduk('harga_beli')">HARGA BELI${arr('harga_beli')}</th>
             <th style="padding:10px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted)">AKSI</th>
           </tr>
         </thead>
