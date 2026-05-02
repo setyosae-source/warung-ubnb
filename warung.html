@@ -2694,6 +2694,44 @@ let dMode='none',aVoucher_sel=null,dNominal=0,metodeBayar='tunai',beliStatus='lu
 let sdSel={pel:null,prod:null,sup:null,bprod:null};
 const fmt=n=>'Rp '+Math.round(n).toLocaleString('id-ID');
 const fN=n=>Math.round(n).toLocaleString('id-ID');
+
+/**
+ * Smart format stok berdasarkan multi_satuan & satuan_stok.
+ * Untuk gr/ml stok ≥ 1000 → tampil dalam Kg/L dengan 1 desimal kalau ada.
+ * Returns string seperti "30 Kg" / "750 gr" / "120 Pcs".
+ */
+function fmtStok(b){
+  const stok = b.stok || 0;
+  if(b.multi_satuan && b.satuan_stok==='gr'){
+    if(stok >= 1000){
+      const kg = stok / 1000;
+      return (kg % 1 === 0 ? kg.toString() : kg.toLocaleString('id-ID',{maximumFractionDigits:2})) + ' Kg';
+    }
+    return stok + ' gr';
+  }
+  if(b.multi_satuan && b.satuan_stok==='ml'){
+    if(stok >= 1000){
+      const l = stok / 1000;
+      return (l % 1 === 0 ? l.toString() : l.toLocaleString('id-ID',{maximumFractionDigits:2})) + ' L';
+    }
+    return stok + ' ml';
+  }
+  return stok + ' ' + (b.satuan || 'pcs');
+}
+
+/**
+ * Smart format harga: tambah suffix per-Kg / per-L kalau multi_satuan.
+ * Returns string seperti "Rp 28.000/Kg" / "Rp 3.500".
+ */
+function fmtHarga(b, harga){
+  const h = harga !== undefined ? harga : (b.harga || 0);
+  const formatted = fmt(h);
+  if(b.multi_satuan && b.satuan_harga){
+    return formatted + '/' + b.satuan_harga;
+  }
+  return formatted;
+}
+
 const fD=d=>new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
 const fJ=d=>new Date(d).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
 const nowISO=()=>{const n=new Date();n.setMinutes(n.getMinutes()-n.getTimezoneOffset());return n.toISOString().slice(0,16);};
@@ -4710,19 +4748,19 @@ function renderStok(){
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:10px">
           ${b.foto_url?`<img src="${b.foto_url}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1.5px solid var(--border);background:#f8f8f8" onerror="this.style.display='none'">`:'' }
           <div style="text-align:right">
-            <div style="font-size:18px;font-weight:800;color:${stokColor};font-family:\'Courier New\',monospace">${b.stok}</div>
-            <div style="font-size:10px;color:var(--text-muted)">${b.satuan||'pcs'}</div>
+            <div style="font-size:18px;font-weight:800;color:${stokColor};font-family:\'Courier New\',monospace">${b.multi_satuan&&b.satuan_stok==='gr'&&b.stok>=1000?(b.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2}):b.stok}</div>
+            <div style="font-size:10px;color:var(--text-muted)">${b.multi_satuan&&b.satuan_stok==='gr'&&b.stok>=1000?'Kg':b.multi_satuan&&b.satuan_stok==='ml'&&b.stok>=1000?'L':(b.satuan||'pcs')}</div>
           </div>
         </div>
       </div>
       <div class="stok-card-body">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
           <div class="stat-card" style="padding:10px">
-            <div class="stat-label">Harga Jual</div>
+            <div class="stat-label">Harga Jual${b.multi_satuan&&b.satuan_harga?' / '+b.satuan_harga:''}</div>
             <div style="font-size:15px;font-weight:700;color:var(--green)">${fmt(b.harga)}</div>
           </div>
           <div class="stat-card" style="padding:10px">
-            <div class="stat-label">Harga Beli</div>
+            <div class="stat-label">Harga Beli${b.multi_satuan&&b.satuan_harga?' / '+b.satuan_harga:''}</div>
             <div style="font-size:15px;font-weight:700;color:var(--amber)">${fmt(b.harga_beli||0)}</div>
           </div>
           <div class="stat-card" style="padding:10px">
@@ -8056,11 +8094,11 @@ function renderDaftarProduk(){
                   <span style="font-size:11px;background:var(--bg);padding:3px 8px;border-radius:99px">${catIcon} ${b.kategori||'warung'}</span>
                 </td>
                 <td style="padding:10px;text-align:right">
-                  <span style="font-weight:700;color:${stokColor}">${b.stok||0}</span>
-                  <span style="font-size:11px;color:var(--text-muted);margin-left:2px">${b.satuan||'pcs'}</span>
+                  <span style="font-weight:700;color:${stokColor}">${b.multi_satuan&&b.satuan_stok==='gr'&&b.stok>=1000?(b.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2}):b.stok||0}</span>
+                  <span style="font-size:11px;color:var(--text-muted);margin-left:2px">${b.multi_satuan&&b.satuan_stok==='gr'&&b.stok>=1000?'Kg':b.multi_satuan&&b.satuan_stok==='ml'&&b.stok>=1000?'L':(b.satuan||'pcs')}</span>
                 </td>
-                <td style="padding:10px;text-align:right;font-weight:600">${fmt(b.harga||0)}</td>
-                <td style="padding:10px;text-align:right;color:var(--text-muted)">${fmt(b.harga_beli||0)}</td>
+                <td style="padding:10px;text-align:right;font-weight:600">${fmtHarga(b)}</td>
+                <td style="padding:10px;text-align:right;color:var(--text-muted)">${fmtHarga(b, b.harga_beli||0)}</td>
                 <td style="padding:10px;text-align:center">
                   <button class="btn sm" onclick="openModalBarang(${b.id})" style="padding:4px 10px;font-size:11px">✏️ Edit</button>
                   <button class="btn sm sec" onclick="hapusProduk(${b.id})" style="padding:4px 10px;font-size:11px;margin-left:4px">🗑️</button>
