@@ -4052,6 +4052,8 @@ async function hapusTransaksiJual(id){
     // === 7. Hapus laundry/service items ===
     await sb.from('laundry_items').delete().eq('transaksi_id',id);
     await sb.from('service_items').delete().eq('transaksi_id',id);
+    // === 7b. Hapus log SHU yang refer ke transaksi ini (defense in depth — DB trigger juga handle ini) ===
+    await sb.from('ubnb_shu_trx_log').delete().eq('ref_tabel','transaksi').eq('ref_id',id);
     // === 8. Hapus transaksi (TERAKHIR) ===
     const{error}=await sb.from('transaksi').delete().eq('id',id);
     if(error)throw error;
@@ -4085,9 +4087,29 @@ function tampilStruk(tx){
   const d=new Date(tx.tgl_transaksi||tx.waktu||new Date());
   const tgl=d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const jam=fJ(d);const no='TX'+String(tx.id||'').slice(-6).padStart(6,'0');
-  const pel=tx.pelanggan&&tx.pelanggan!=='Umum'?`<p>Pelanggan: <b>${tx.pelanggan}</b></p>`:'';
+  // === Identifikasi tipe pelanggan ===
+  let pelLabel='', pelInfoBawah='', pelInfoBawahCap='';
+  if(tx.anggota_id){
+    // ANGGOTA UBNB ⭐
+    const ang = (typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).find(a=>a.id===tx.anggota_id);
+    const noAng = ang?.no_anggota || tx.no_anggota || '-';
+    const namaAng = ang?.nama || tx.pelanggan || tx.nama_anggota || '-';
+    pelLabel = `<p>Pelanggan: <b>⭐ ${namaAng}</b></p><p style="font-size:11px;color:#15803d">No. Anggota: ${noAng}</p>`;
+    pelInfoBawah = `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Belanja Anggota dihitung untuk SHU tahunan</div>`;
+    pelInfoBawahCap = `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:7px 10px;margin:10px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Belanja Anggota dihitung untuk SHU tahunan</div>`;
+  } else if(tx.jamaah_did){
+    // JAMAAH (belum punya saham) - sugesti beli saham
+    const namaJM = tx.pelanggan || tx.nama_jamaah || '-';
+    pelLabel = `<p>Pelanggan: <b>${namaJM}</b></p>`;
+    pelInfoBawah = `<div style="background:#fff7ed;border:1px dashed #c2410c;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#9a3412;text-align:center;line-height:1.4">💎 Yuk jadi Anggota UBNB!<br>Beli saham → dapat SHU tiap tahun</div>`;
+    pelInfoBawahCap = `<div style="background:#fff7ed;border:1px dashed #c2410c;border-radius:6px;padding:7px 10px;margin:10px 0;font-size:11px;color:#9a3412;text-align:center;line-height:1.4">💎 Yuk jadi Anggota UBNB!<br>Beli saham → dapat SHU tiap tahun</div>`;
+  } else if(tx.pelanggan && tx.pelanggan!=='Umum'){
+    // UMUM (cuma nama, tanpa info tambahan)
+    pelLabel = `<p>Pelanggan: <b>${tx.pelanggan}</b></p>`;
+  }
+  // ====================================
   const sub=tx.items.reduce((a,i)=>a+(i.hE||i.hargaEfektif||i.harga)*i.qty,0);
-  let h=`<div class="sh"><div class="logo">🛒</div><h3>WARUNG UBNB</h3><p>${tgl}</p><p>${jam} | No: ${no}</p><p>Kasir: ${tx.kasir||'-'}</p>${pel}</div><hr class="sdiv">`;
+  let h=`<div class="sh"><div class="logo">🛒</div><h3>WARUNG UBNB</h3><p>${tgl}</p><p>${jam} | No: ${no}</p><p>Kasir: ${tx.kasir||'-'}</p>${pelLabel}</div>${pelInfoBawah}<hr class="sdiv">`;
   tx.items.forEach(i=>{const hE=i.hE||i.hargaEfektif||i.harga;const dT=i.dI>0||i.diskonItem>0?` <span style="color:var(--red);font-size:10px">(-${fN(i.dI||i.diskonItem)}/item)</span>`:'';h+=`<div class="srow" style="font-weight:600">${i.nama}${dT}</div><div class="srow" style="color:#888"><span style="padding-left:10px">${i.qty} × ${fN(hE)}</span><span>${fN(hE*i.qty)}</span></div>`;});
   h+=`<hr class="sdiv">`;
   if(tx.diskon_nominal>0){const dL=tx.voucher_kode?`Disc (${tx.voucher_kode})`:tx.diskon_tipe==='persen'?`Disc ${tx.diskon_nilai}%`:'Disc';h+=`<div class="srow" style="color:#888"><span>Subtotal</span><span>${fN(sub)}</span></div><div class="srow disc"><span>${dL}</span><span>-${fN(tx.diskon_nominal)}</span></div>`;}
@@ -4097,8 +4119,20 @@ function tampilStruk(tx){
   else h+=`<div class="srow"><span>Bayar (${tx.metode_bayar||'tunai'})</span><span>${fN(tx.bayar)}</span></div><div class="srow"><span>Kembali</span><span>${fN(tx.kembali)}</span></div>`;
   h+=`<hr class="sdiv"><div class="sfooter"><div class="thx">Terima kasih! 🙏</div><div>Warung UBNB</div></div>`;
   document.getElementById('struk-preview').innerHTML=h;
-  const pelC=tx.pelanggan&&tx.pelanggan!=='Umum'?`<div class="sc-sub">Pelanggan: <b>${tx.pelanggan}</b></div>`:'';
-  let cap=`<div class="sc-logo">🛒</div><div class="sc-name">WARUNG UBNB</div><div class="sc-sub">${tgl}</div><div class="sc-sub">${jam} | No: ${no} | Kasir: ${tx.kasir||'-'}</div>${pelC}<hr class="sc-divider">`;
+  // === Capture version (untuk simpan gambar) ===
+  let pelLabelCap = '';
+  if(tx.anggota_id){
+    const ang = (typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).find(a=>a.id===tx.anggota_id);
+    const noAng = ang?.no_anggota || tx.no_anggota || '-';
+    const namaAng = ang?.nama || tx.pelanggan || tx.nama_anggota || '-';
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>⭐ ${namaAng}</b></div><div class="sc-sub" style="color:#15803d">No. Anggota: ${noAng}</div>`;
+  } else if(tx.jamaah_did){
+    const namaJM = tx.pelanggan || tx.nama_jamaah || '-';
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>${namaJM}</b></div>`;
+  } else if(tx.pelanggan && tx.pelanggan!=='Umum'){
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>${tx.pelanggan}</b></div>`;
+  }
+  let cap=`<div class="sc-logo">🛒</div><div class="sc-name">WARUNG UBNB</div><div class="sc-sub">${tgl}</div><div class="sc-sub">${jam} | No: ${no} | Kasir: ${tx.kasir||'-'}</div>${pelLabelCap}${pelInfoBawahCap}<hr class="sc-divider">`;
   tx.items.forEach(i=>{const hE=i.hE||i.hargaEfektif||i.harga;cap+=`<div class="sc-row in">${i.nama}</div><div class="sc-row id"><span>${i.qty} × Rp ${fN(hE)}</span><span>Rp ${fN(hE*i.qty)}</span></div>`;});
   cap+=`<hr class="sc-divider">`;
   if(tx.diskon_nominal>0){const dL=tx.voucher_kode?`Disc (${tx.voucher_kode})`:tx.diskon_tipe==='persen'?`Disc ${tx.diskon_nilai}%`:'Disc';cap+=`<div class="sc-row br"><span>Subtotal</span><span>Rp ${fN(sub)}</span></div><div class="sc-row dr"><span>${dL}</span><span>-Rp ${fN(tx.diskon_nominal)}</span></div>`;}
@@ -10881,6 +10915,8 @@ async function _posbDoHapus(p){
     }
     // === 5. Hapus hutang ===
     await sb.from('hutang').delete().eq('ref_type','pembelian').eq('ref_id',id);
+    // === 5b. Hapus log SHU yang refer ke pembelian ini (defense in depth) ===
+    await sb.from('ubnb_shu_trx_log').delete().eq('ref_tabel','pembelian').eq('ref_id',id);
     // === 6. Hapus pembelian (TERAKHIR — kalau gagal, rollback by retry) ===
     const{error}=await sb.from('pembelian').delete().eq('id',id);
     if(error)throw error;
