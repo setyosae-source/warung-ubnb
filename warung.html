@@ -6068,59 +6068,104 @@ async function simpanEditPPOB(){
   if(!produk){toast('Produk wajib diisi',true);return;}
   if(!hbeli||!hjual){toast('Harga beli & jual wajib diisi',true);return;}
 
-  // Update PPOB record
-  await sb.from('ppob').update({
-    tanggal:tgl,kas_id:newKasId,produk,nama,catatan,
-    harga_beli:hbeli,harga_jual:hjual,status_bayar:status
-  }).eq('id',id);
+  try{
+    // Update PPOB record
+    const{error:errUp}=await sb.from('ppob').update({
+      tanggal:tgl,kas_id:newKasId,produk,nama,catatan,
+      harga_beli:hbeli,harga_jual:hjual,status_bayar:status
+    }).eq('id',id);
+    if(errUp)throw errUp;
 
-  // Koreksi mutasi kas - hapus mutasi lama lalu buat yang baru
-  // Hapus mutasi modal lama - spesifik berdasarkan keterangan & tanggal lama
-  const oldP=aPPOB.find(x=>x.id===id);
-  const oldKet='Modal PPOB: '+oldP?.produk+(oldP?.nama?' - '+oldP?.nama:'');
-  if(oldKasId){
+    const oldP=aPPOB.find(x=>x.id===id);
+    const ketKey=p=>'PPOB: '+(p?.produk||'')+(p?.nama?' - '+p.nama:'');
+    const oldKetModal='Modal PPOB: '+(oldP?.produk||'')+(oldP?.nama?' - '+oldP.nama:'');
+    const oldKetBayar='Bayar PPOB: '+(oldP?.produk||'')+(oldP?.nama?' - '+oldP.nama:'');
+    const newKetModal='Modal PPOB: '+produk+(nama?' - '+nama:'');
+    const newKetBayar='Bayar PPOB: '+produk+(nama?' - '+nama:'');
+
+    // ===== MUTASI MODAL (selalu re-create kalau ada kas) =====
+    // Hapus mutasi modal lama — primary by ref_id, fallback by keterangan+kas+tanggal
     await sb.from('kas_mutasi').delete()
-      .eq('kas_id',oldKasId)
-      .eq('keterangan',oldKet)
-      .eq('tipe','keluar');
+      .eq('ref_type','ppob').eq('ref_id',id).eq('tipe','keluar');
+    if(oldKasId){
+      await sb.from('kas_mutasi').delete()
+        .eq('kas_id',oldKasId)
+        .eq('keterangan',oldKetModal)
+        .eq('tipe','keluar')
+        .is('ref_id',null); // data lama tanpa ref_id
+    }
     // Insert mutasi modal baru
     if(newKasId){
       await sb.from('kas_mutasi').insert([{
         kas_id:newKasId,tipe:'keluar',kategori:'keluar',
         jumlah:hbeli,tanggal:tgl,
-        keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
+        keterangan:newKetModal,
         operator:CU.username,
         ref_type:'ppob',ref_id:id
       }]);
     }
-  }
 
-  // Jika status berubah ke lunas, tambah mutasi ke kas utama
-  const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');})||
-    aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
-  if(status==='lunas'&&oldStatus==='belum'&&kasUtama){
-    await sb.from('kas_mutasi').insert([{
-      kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
-      jumlah:hjual,tanggal:tgl,
-      keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
-      operator:CU.username,
-      ref_type:'ppob',ref_id:id
-    }]);
-  }
+    // ===== MUTASI BAYAR (kas Utama) =====
+    const kasUtama=aKas.find(k=>{const m=k.modul||'warung,ppob';return m.includes('warung')&&!m.includes('ppob');})||
+      aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
 
-  // Recalc saldo semua kas yang terdampak
-  const kasIds=[...new Set([oldKasId,newKasId,kasUtama?.id].filter(Boolean))];
-  for(const kid of kasIds) await recalcSaldo(kid);
+    // Hapus mutasi bayar lama (kalau ada) — selalu hapus dulu lalu re-insert kalau status lunas
+    // Primary: by ref_id+tipe masuk. Fallback: by keterangan+kas+tanggal lama.
+    await sb.from('kas_mutasi').delete()
+      .eq('ref_type','ppob').eq('ref_id',id).eq('tipe','masuk');
+    if(kasUtama){
+      // Fallback untuk data lama tanpa ref_id (match keterangan exact + kas utama)
+      await sb.from('kas_mutasi').delete()
+        .eq('kas_id',kasUtama.id)
+        .eq('keterangan',oldKetBayar)
+        .eq('tipe','masuk')
+        .is('ref_id',null);
+    }
+    // Insert mutasi bayar kalau status lunas
+    if(status==='lunas'&&kasUtama){
+      await sb.from('kas_mutasi').insert([{
+        kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
+        jumlah:hjual,tanggal:tgl,
+        keterangan:newKetBayar,
+        operator:CU.username,
+        ref_type:'ppob',ref_id:id
+      }]);
+    }
 
-  // Sync hutang status
-  if(status==='lunas'){
-    await sb.from('hutang').update({lunas:true})
-      .eq('ref_type','ppob').eq('lunas',false);
+    // ===== HUTANG / PIUTANG =====
+    // Hapus hutang lama dulu (cleaner)
+    await sb.from('hutang').delete()
+      .eq('ref_type','ppob').eq('ref_id',id);
+    // Fallback: hapus by keterangan untuk data lama tanpa ref_id
+    const oldKetHutang=ketKey(oldP);
+    await sb.from('hutang').delete()
+      .eq('ref_type','ppob').eq('ket',oldKetHutang).is('ref_id',null);
+    // Insert hutang piutang baru kalau status belum
+    if(status==='belum'){
+      await sb.from('hutang').insert([{
+        nama,jml:hjual,
+        ket:'PPOB: '+produk+(nama?' - '+nama:''),
+        tipe:'piutang',
+        lunas:false,
+        tgl,
+        ref_type:'ppob',ref_id:id
+      }]);
+    }
+
+    // ===== RECALC SALDO =====
+    const kasIds=[...new Set([oldKasId,newKasId,kasUtama?.id].filter(Boolean))];
+    for(const kid of kasIds) await recalcSaldo(kid);
+
+    // Reload data + render
+    await lKas();await lPPOB();await lH();
+    renderPPOBRiwayat();renderHutang();
+    if(typeof _markSaved==='function')_markSaved('modal-edit-ppob');
+    closeModal('modal-edit-ppob');
+    toast('✅ Transaksi PPOB berhasil diperbarui!');
+  }catch(e){
+    console.error('simpanEditPPOB error:',e);
+    toast('❌ Gagal update: '+(e.message||e),true);
   }
-  await lKas();await lPPOB();await lH();
-  renderPPOBRiwayat();;renderHutang();
-  _markSaved('modal-edit-ppob');closeModal('modal-edit-ppob');
-  toast('Transaksi PPOB berhasil diperbarui!');
 }
 
 async function hapusDariEditPPOB(){
