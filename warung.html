@@ -3605,11 +3605,30 @@ function hitungKembali(){
   document.getElementById('jual-kembali').textContent=fmt(Math.max(0,kem));
   document.getElementById('jual-kembali').style.color=kem<0?'var(--red)':'var(--green)';
 }
+/**
+ * Hitung HPP & batch update untuk penjualan barang.
+ * @param barangId - id barang
+ * @param qty - qty dalam satuan_stok (gram untuk multi-satuan, satuan utama untuk single)
+ * Returns hpp dalam Rupiah (sudah di-konversi kalau multi-satuan).
+ *
+ * Catatan multi-satuan:
+ * - barang.harga_beli & batch.harga_beli disimpan per satuan_harga (Kg)
+ * - qty di-pass dalam satuan_stok (gr)
+ * - Faktor konversi: gr→Kg = 1000, ml→L = 1000
+ */
 async function fifoHPP(barangId,qty){
   const batches=aBatch.filter(b=>b.barang_id===barangId&&b.qty_sisa>0).sort((a,b)=>new Date(a.tgl_masuk)-new Date(b.tgl_masuk));
-  let hpp=0,sisa=qty;const upd=[];
-  for(const batch of batches){if(sisa<=0)break;const d=Math.min(batch.qty_sisa,sisa);hpp+=d*batch.harga_beli;sisa-=d;upd.push({id:batch.id,qty_sisa:batch.qty_sisa-d});}
-  if(sisa>0){const b=aB.find(x=>x.id===barangId);hpp+=sisa*(b?.harga_beli||0);}
+  let hppRaw=0,sisa=qty;const upd=[];
+  for(const batch of batches){if(sisa<=0)break;const d=Math.min(batch.qty_sisa,sisa);hppRaw+=d*batch.harga_beli;sisa-=d;upd.push({id:batch.id,qty_sisa:batch.qty_sisa-d});}
+  if(sisa>0){const b=aB.find(x=>x.id===barangId);hppRaw+=sisa*(b?.harga_beli||0);}
+  // Konversi untuk multi-satuan: hpp dibagi faktor (gr→Kg = 1000)
+  const b=aB.find(x=>x.id===barangId);
+  let divisor=1;
+  if(b&&b.multi_satuan){
+    if(b.satuan_stok==='gr'&&b.satuan_harga==='Kg')divisor=1000;
+    else if(b.satuan_stok==='ml'&&b.satuan_harga==='L')divisor=1000;
+  }
+  const hpp=Math.round(hppRaw/divisor);
   return{hpp,upd};
 }
 async function bayar(){
