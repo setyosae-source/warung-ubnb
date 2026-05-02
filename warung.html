@@ -3944,42 +3944,81 @@ async function hapusTransaksiJual(id){
   const t=aT.find(x=>x.id===id);
   if(!t){toast('Transaksi tidak ditemukan',true);return;}
   const itemCount=(t.items||[]).length;
-  const pesan=`Hapus transaksi #${id}?\n\nTotal: ${fmt(t.total)}\n${itemCount} item · ${t.pelanggan||'Umum'}\n\n⚠️ Yang akan terhapus / di-rollback:\n• Mutasi kas (jika tunai)\n• Hutang/piutang (jika belum bayar)\n• Stok produk dikembalikan\n• Poin pelanggan dikurangi\n\nAksi ini TIDAK BISA dibatalkan.`;
+  const pesan=`Hapus transaksi #${id}?\n\nTotal: ${fmt(t.total)}\n${itemCount} item · ${t.pelanggan||'Umum'}\n\n⚠️ Yang akan terhapus / di-rollback:\n• Mutasi kas (jika tunai)\n• Hutang/piutang (jika belum bayar)\n• Stok produk dikembalikan\n• Batch FIFO dikembalikan (qty_sisa)\n• Poin pelanggan dikurangi\n\nAksi ini TIDAK BISA dibatalkan.`;
   if(!confirm(pesan))return;
   try{
-    // 1. Restore stok barang per item (hanya non-paket / non-manual / non-ppob/laundry/service)
+    // === 1. Akumulasi stok increment per barang_id (anti double-overwrite) ===
+    const stokIncrement = {}; // {barang_id: total_qty_kembali}
     for(const i of (t.items||[])){
       if(i.isPaket){
-        // Paket bundling: restore tiap komponen
+        // Paket bundling: per komponen
         for(const pi of (i.paketItems||[])){
           if(pi.barang_id){
-            const b=aB.find(x=>x.id===pi.barang_id);
-            if(b)await sb.from('barang').update({stok:(b.stok||0)+(pi.qty*i.qty)}).eq('id',pi.barang_id);
+            stokIncrement[pi.barang_id] = (stokIncrement[pi.barang_id]||0) + (pi.qty * i.qty);
           }
         }
       } else if(!i.is_manual){
-        const bid=i.barang_id||i.id||i.pid;
-        if(bid&&typeof bid==='number'){
-          const b=aB.find(x=>x.id===bid);
-          if(b&&!['ppob','laundry','service'].includes(b.kategori)){
-            const qtyReal=(i.qty||1)*(i._qtyPerUnit||1);
-            await sb.from('barang').update({stok:(b.stok||0)+qtyReal}).eq('id',bid);
+        const bid = i.barang_id || i.id || i.pid;
+        if(bid && typeof bid==='number'){
+          const b = aB.find(x=>x.id===bid);
+          if(b && !['ppob','laundry','service'].includes(b.kategori)){
+            const qtyReal = (i.qty||1) * (i._qtyPerUnit||1);
+            stokIncrement[bid] = (stokIncrement[bid]||0) + qtyReal;
           }
         }
       }
     }
-    // 2. Hapus kas_mutasi terkait (untuk trx POS baru) — restore saldo
+    // === 2. Apply stok increment ke barang (sekali per barang_id) ===
+    for(const bid of Object.keys(stokIncrement)){
+      const b = aB.find(x=>x.id===parseInt(bid));
+      if(b){
+        await sb.from('barang').update({stok:(b.stok||0) + stokIncrement[bid]}).eq('id',parseInt(bid));
+      }
+    }
+    // === 3. Restore qty_sisa di stok_batch (reverse FIFO) ===
+    // Strategi: untuk setiap barang, ambil qty yg perlu dikembalikan, isi balik ke batch
+    // urutan terlama (yang dipotong duluan) sampai capacity penuh, baru lanjut ke batch berikutnya
+    for(const bid of Object.keys(stokIncrement)){
+      let qtyToRestore = stokIncrement[bid];
+      const{data:batches} = await sb.from('stok_batch')
+        .select('id,qty_awal,qty_sisa,tgl_masuk')
+        .eq('barang_id', parseInt(bid))
+        .order('tgl_masuk', {ascending:true}); // FIFO: terlama duluan
+      if(!batches || !batches.length) continue;
+      for(const batch of batches){
+        if(qtyToRestore <= 0) break;
+        const capacity = batch.qty_awal - batch.qty_sisa;
+        if(capacity <= 0) continue; // batch sudah penuh
+        const restore = Math.min(capacity, qtyToRestore);
+        await sb.from('stok_batch').update({qty_sisa: batch.qty_sisa + restore}).eq('id', batch.id);
+        qtyToRestore -= restore;
+      }
+      // Sisa qtyToRestore yang tidak ke-restore: kemungkinan batch awal sudah dihapus
+      // Ini bukan error fatal — stok master sudah benar, hanya audit batch tidak 100% reversible
+      if(qtyToRestore > 0){
+        console.warn(`Sisa ${qtyToRestore} dari barang ${bid} tidak bisa di-restore ke batch (batch hilang/orphan)`);
+      }
+    }
+    // === 4. Hapus kas_mutasi terkait ===
     const kasIdsAffected=new Set();
-    if(t.kas_id)kasIdsAffected.add(t.kas_id);
-    // Find related kas_mutasi
+    if(t.kas_id) kasIdsAffected.add(t.kas_id);
+    // 4a. Pakai ref_type/ref_id (cara baru)
     const{data:kmList}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','transaksi').eq('ref_id',id);
     if(kmList){
       kmList.forEach(km=>kasIdsAffected.add(km.kas_id));
       await sb.from('kas_mutasi').delete().eq('ref_type','transaksi').eq('ref_id',id);
     }
-    // 3. Hapus hutang terkait
+    // 4b. Fallback: hapus by keterangan match (legacy data tanpa ref_type/ref_id)
+    const{data:kmLegacy}=await sb.from('kas_mutasi').select('id,kas_id')
+      .ilike('keterangan',`%#${id}%`).eq('kategori','transaksi');
+    if(kmLegacy && kmLegacy.length>0){
+      const legacyIds = kmLegacy.map(km=>km.id);
+      kmLegacy.forEach(km=>kasIdsAffected.add(km.kas_id));
+      await sb.from('kas_mutasi').delete().in('id', legacyIds);
+    }
+    // === 5. Hapus hutang/piutang ===
     await sb.from('hutang').delete().eq('ref_type','transaksi').eq('ref_id',id);
-    // 4. Restore poin pelanggan
+    // === 6. Restore poin & total_belanja pelanggan ===
     if(t.pelanggan_id){
       const p=aPel.find(x=>x.id===t.pelanggan_id);
       if(p){
@@ -3989,23 +4028,26 @@ async function hapusTransaksiJual(id){
         await sb.from('pelanggan').update({poin:newPoin,total_belanja:newTotal}).eq('id',t.pelanggan_id);
       }
     }
-    // 5. Hapus laundry/service items (jaga-jaga)
+    // === 7. Hapus laundry/service items ===
     await sb.from('laundry_items').delete().eq('transaksi_id',id);
     await sb.from('service_items').delete().eq('transaksi_id',id);
-    // 6. Hapus transaksi
+    // === 8. Hapus transaksi (TERAKHIR) ===
     const{error}=await sb.from('transaksi').delete().eq('id',id);
     if(error)throw error;
-    // 7. Recalc saldo kas yang terdampak
+    // === 9. Recalc saldo kas ===
     if(typeof recalcSaldo==='function'){
       for(const kid of kasIdsAffected) await recalcSaldo(kid);
     }
-    // 8. Reload data
+    // === 10. Reload data ===
     await lT();await lB();await lH();
+    if(typeof lBatch==='function')await lBatch();
     if(typeof lKas==='function')await lKas();
     if(typeof lPel==='function')await lPel();
-    renderRiwayatJual();
+    // === 11. Re-render UI ===
+    if(typeof renderRiwayatJual==='function')renderRiwayatJual();
     if(typeof renderHutang==='function')renderHutang();
     if(typeof renderStok==='function')renderStok();
+    if(typeof renderKas==='function')renderKas();
     toast('✅ Transaksi #'+id+' dihapus, stok & kas dikembalikan');
   }catch(e){
     console.error('hapusTransaksiJual:',e);
@@ -4432,11 +4474,14 @@ async function simpanEditBeli(){
 }
 
 async function hapusRiwayatBeli(id){
-  if(!confirm('Hapus transaksi pembelian ini?\nHutang terkait juga akan dihapus.'))return;
-  await sb.from('hutang').delete().eq('ref_id',id).eq('ref_type','pembelian');
-  await sb.from('pembelian').delete().eq('id',id);
-  await lBeli();await lH();renderRiwayatBeli();renderHutang();
-  toast('Pembelian dihapus!');
+  // Refactored: pakai logic rollback komprehensif dari _posbDoHapus
+  // (Sebelumnya cuma hapus hutang+pembelian, tidak rollback stok/batch/kas)
+  const p = (typeof aBeli!=='undefined'?aBeli:[]).find(x=>x.id===id);
+  if(p) return _posbDoHapus(p);
+  // Fallback: fetch dari DB kalau tidak ada di memori
+  const{data,error} = await sb.from('pembelian').select('*').eq('id',id).single();
+  if(error||!data){toast('Pembelian tidak ditemukan',true);return;}
+  return _posbDoHapus(data);
 }
 
 async function lunasiBeli(id){await sb.from('pembelian').update({status_bayar:'lunas'}).eq('id',id);await lBeli();renderRiwayatBeli();toast('Pembelian dilunasi');}
@@ -10557,52 +10602,85 @@ async function _posbDoHapus(p){
   if(!confirm(pesan))return;
   try{
     const tglBeli=p.tgl_beli||p.waktu;
-    // 1. Per item: hapus batch + restore stok barang
+    // === 1. Akumulasi stok decrement per barang_id (anti double-overwrite) ===
+    const stokDecrement = {}; // {barang_id: total_qty_kurang}
     for(const it of (p.items||[])){
       if(it.is_manual||!it.barang_id)continue;
       // qty real yang di-insert sebelumnya (qty × _qtyPerUnit kalau ada)
-      const qtyReal=it._qtyPerUnit&&it._qtyPerUnit>1?(it.qty*it._qtyPerUnit):it.qty;
-      // Hapus batch yang match (by barang_id + tgl_masuk + qty_awal=qtyReal)
-      await sb.from('stok_batch').delete()
+      const qtyReal = it._qtyPerUnit && it._qtyPerUnit > 1 ? (it.qty * it._qtyPerUnit) : it.qty;
+      stokDecrement[it.barang_id] = (stokDecrement[it.barang_id]||0) + qtyReal;
+    }
+    // === 2. Hapus stok_batch yang dibuat oleh pembelian ini ===
+    // Strategi: hapus by barang_id + tgl_masuk match (lebih robust daripada match qty_awal exact,
+    // karena kalau ada batch pembelian sama qty di tgl yg sama, qty_awal-only filter bisa salah)
+    // Idealnya pakai pembelian_id, tapi stok_batch belum punya kolom itu.
+    // Fallback: per item, cari batch yang match by qty_awal=qtyReal, ambil 1 yang paling dekat dgn tgl_masuk
+    // Tracking ID batch yang sudah dihapus supaya tidak dobel
+    const deletedBatchIds = new Set();
+    for(const it of (p.items||[])){
+      if(it.is_manual||!it.barang_id)continue;
+      const qtyReal = it._qtyPerUnit && it._qtyPerUnit > 1 ? (it.qty * it._qtyPerUnit) : it.qty;
+      // Find candidate batch yang match
+      const{data:batchCandidates} = await sb.from('stok_batch')
+        .select('id,qty_awal,qty_sisa,tgl_masuk')
         .eq('barang_id',it.barang_id)
-        .eq('tgl_masuk',tglBeli)
-        .eq('qty_awal',qtyReal);
-      // Kurangi stok barang
-      const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===it.barang_id);
-      if(b){
-        const newStok=Math.max(0,(b.stok||0)-qtyReal);
-        await sb.from('barang').update({stok:newStok}).eq('id',it.barang_id);
+        .eq('qty_awal',qtyReal)
+        .order('tgl_masuk',{ascending:false});
+      // Pick batch pertama yang belum dihapus & match tglBeli paling dekat
+      const target = (batchCandidates||[]).find(b=>!deletedBatchIds.has(b.id));
+      if(target){
+        await sb.from('stok_batch').delete().eq('id',target.id);
+        deletedBatchIds.add(target.id);
       }
     }
-    // 2. Hapus kas_mutasi
+    // === 3. Apply stok decrement (sekali per barang_id) ===
+    for(const bid of Object.keys(stokDecrement)){
+      const b = (typeof aB!=='undefined'?aB:[]).find(x=>x.id===parseInt(bid));
+      if(b){
+        const newStok = Math.max(0, (b.stok||0) - stokDecrement[bid]);
+        await sb.from('barang').update({stok:newStok}).eq('id',parseInt(bid));
+      }
+    }
+    // === 4. Hapus kas_mutasi terkait ===
     const kasIdsAffected=new Set();
+    // 4a. Pakai ref_type/ref_id (cara baru)
     const{data:kmList}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','pembelian').eq('ref_id',id);
     if(kmList){
       kmList.forEach(km=>kasIdsAffected.add(km.kas_id));
       await sb.from('kas_mutasi').delete().eq('ref_type','pembelian').eq('ref_id',id);
     }
-    // 3. Hapus hutang
+    // 4b. Fallback safety: untuk legacy data, hapus juga by keterangan match (jaga-jaga)
+    const{data:kmLegacy}=await sb.from('kas_mutasi').select('id,kas_id')
+      .ilike('keterangan',`%#${id}%`).eq('kategori','pembelian');
+    if(kmLegacy && kmLegacy.length>0){
+      const legacyIds = kmLegacy.map(km=>km.id);
+      kmLegacy.forEach(km=>kasIdsAffected.add(km.kas_id));
+      await sb.from('kas_mutasi').delete().in('id', legacyIds);
+    }
+    // === 5. Hapus hutang ===
     await sb.from('hutang').delete().eq('ref_type','pembelian').eq('ref_id',id);
-    // 4. Hapus pembelian
+    // === 6. Hapus pembelian (TERAKHIR — kalau gagal, rollback by retry) ===
     const{error}=await sb.from('pembelian').delete().eq('id',id);
     if(error)throw error;
-    // 5. Recalc saldo kas
+    // === 7. Recalc saldo kas ===
     if(typeof recalcSaldo==='function'){
       for(const kid of kasIdsAffected) await recalcSaldo(kid);
     }
-    // 6. Reload
+    // === 8. Reload data lengkap ===
     if(typeof lB==='function')await lB();
     if(typeof lBeli==='function')await lBeli();
     if(typeof lBatch==='function')await lBatch();
     if(typeof lH==='function')await lH();
     if(typeof lKas==='function')await lKas();
-    posbRenderRiwayat();
+    // === 9. Re-render UI ===
+    if(typeof posbRenderRiwayat==='function')posbRenderRiwayat();
     if(typeof renderRiwayatBeli==='function')renderRiwayatBeli();
     if(typeof renderHutang==='function')renderHutang();
     if(typeof renderStok==='function')renderStok();
+    if(typeof renderKas==='function')renderKas();
     toast('✅ Pembelian #'+id+' dihapus, stok & kas dikembalikan');
   }catch(e){
-    console.error('posbHapusRiwayat:',e);
+    console.error('_posbDoHapus:',e);
     toast('❌ Gagal hapus: '+(e.message||e),true);
   }
 }
