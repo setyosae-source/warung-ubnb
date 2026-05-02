@@ -234,6 +234,7 @@ body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(-
       <div class="nav-item" onclick="showPage('trx-log',this)"><span class="nav-icon">📜</span>Log Transaksi SHU</div>
       <div class="nav-section">Simulasi</div>
       <div class="nav-item" onclick="showPage('simulasi',this)"><span class="nav-icon">🧮</span>Simulasi SHU</div>
+      <div class="nav-item" onclick="showPage('lab',this)"><span class="nav-icon">🧪</span>Lab Skema SHU</div>
       <div class="nav-section">Kebijakan</div>
       <div class="nav-item" onclick="showPage('kebijakan',this)"><span class="nav-icon">⚖️</span>Kebijakan SHU</div>
     </div>
@@ -440,6 +441,125 @@ body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(-
             <tbody id="tbody-simulasi"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- LAB SKEMA SHU - Eksplorasi 6 Skema Distribusi Pool Aktivitas -->
+    <div class="page" id="page-lab">
+      <div class="card">
+        <div class="card-title">
+          <span>🧪 Lab Skema SHU — Eksplorasi Pool Aktivitas</span>
+          <button class="btn gold sm" onclick="initLab()">🔄 Refresh Data</button>
+        </div>
+        <div class="info-box blue">
+          <b>Bukan formula resmi.</b> Halaman ini untuk eksplorasi & bandingkan 6 skema distribusi <b>Pool Aktivitas (40%)</b>.
+          Formula resmi tetap di tab <b>🧮 Simulasi SHU</b> (pakai kebijakan aktif).
+        </div>
+        <div id="lab-info" style="font-size:11px;color:var(--text-muted);margin-bottom:8px"></div>
+      </div>
+
+      <!-- Stats ringkasan -->
+      <div class="two-col" id="lab-stats" style="grid-template-columns:repeat(4,1fr)">
+        <div class="card" style="text-align:center;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700">Anggota Aktif</div>
+          <div style="font-size:20px;font-weight:800;color:var(--gold);margin-top:4px" id="lab-stat-anggota">—</div>
+        </div>
+        <div class="card" style="text-align:center;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700">Total Frekuensi</div>
+          <div style="font-size:20px;font-weight:800;color:#60a5fa;margin-top:4px" id="lab-stat-freq">—</div>
+        </div>
+        <div class="card" style="text-align:center;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700">Total Nilai</div>
+          <div style="font-size:16px;font-weight:800;color:#4ade80;margin-top:4px" id="lab-stat-nilai">—</div>
+        </div>
+        <div class="card" style="text-align:center;padding:12px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;font-weight:700">Avg/Anggota</div>
+          <div style="font-size:16px;font-weight:800;color:#fbbf24;margin-top:4px" id="lab-stat-avg">—</div>
+        </div>
+      </div>
+
+      <!-- Breakdown per jenis -->
+      <div class="card">
+        <div class="card-title"><span>📊 Breakdown per Jenis Transaksi</span></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Jenis</th><th style="text-align:right">Frekuensi</th><th style="text-align:right">Nilai (Rp)</th>
+              <th style="text-align:right">Avg/trx</th><th style="text-align:right">Anggota Unik</th><th style="text-align:right">Bobot Aktif</th>
+            </tr></thead>
+            <tbody id="lab-tbody-jenis"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Parameter Simulasi -->
+      <div class="card">
+        <div class="card-title"><span>⚙️ Parameter Simulasi</span></div>
+        <div class="two-col" style="grid-template-columns:repeat(3,1fr)">
+          <div class="irow"><label>Total SHU</label><input type="number" id="lab-totalShu" value="50000000" step="1000000" oninput="labRefresh()"></div>
+          <div class="irow"><label>Pool Saham %</label><input type="number" id="lab-poolSaham" value="60" min="0" max="100" oninput="labSyncPool('saham')"></div>
+          <div class="irow"><label>Pool Aktivitas %</label><input type="number" id="lab-poolAkt" value="40" min="0" max="100" oninput="labSyncPool('akt')"></div>
+        </div>
+      </div>
+
+      <!-- Pilih Skema -->
+      <div class="card">
+        <div class="card-title"><span>🎯 Pilih Skema Distribusi</span></div>
+        <div id="lab-skema-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+        <div id="lab-formula" style="background:#0a0e1a;border:1px solid var(--border);border-radius:var(--radius-xs);padding:10px;font-family:'SF Mono',Menlo,monospace;font-size:11px;color:#67e8f9;white-space:pre-wrap;overflow-x:auto;margin-bottom:12px"></div>
+
+        <!-- Bobot panel (skema C/D/F) -->
+        <div id="lab-bobot-panel" style="display:none">
+          <div class="info-box gold" style="font-size:11px">Atur bobot relatif tiap jenis. Skema akan menormalisasi proporsi.</div>
+          <div class="two-col">
+            <div>
+              <div class="irow"><label style="min-width:100px">🛒 Warung</label><input type="number" id="lab-b-warung" value="15" min="0" oninput="labRefresh()"></div>
+              <div class="irow"><label style="min-width:100px">⚡ PPOB</label><input type="number" id="lab-b-ppob" value="10" min="0" oninput="labRefresh()"></div>
+              <div class="irow"><label style="min-width:100px">👕 Laundry</label><input type="number" id="lab-b-laundry" value="10" min="0" oninput="labRefresh()"></div>
+              <div class="irow"><label style="min-width:100px">🔧 Service</label><input type="number" id="lab-b-service" value="10" min="0" oninput="labRefresh()"></div>
+            </div>
+            <div>
+              <div class="irow"><label style="min-width:100px">💳 Angsuran</label><input type="number" id="lab-b-angsuran" value="25" min="0" oninput="labRefresh()"></div>
+              <div class="irow"><label style="min-width:100px">⭐ Saham</label><input type="number" id="lab-b-saham" value="20" min="0" oninput="labRefresh()"></div>
+              <div class="irow"><label style="min-width:100px">🏛️ Wadiah</label><input type="number" id="lab-b-wadiah" value="10" min="0" oninput="labRefresh()"></div>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn sm" onclick="labSetBobot('default')">↻ Default</button>
+            <button class="btn sm" onclick="labSetBobot('flat')">Sama Rata</button>
+            <button class="btn sm" onclick="labSetBobot('inverse')">Invers (warung dominan)</button>
+          </div>
+        </div>
+
+        <!-- Hybrid panel (skema E/F) -->
+        <div id="lab-hybrid-panel" style="display:none;margin-top:12px">
+          <div class="info-box gold" style="font-size:11px">Bobot hybrid antara nilai vs frekuensi (total = 100%).</div>
+          <div class="two-col">
+            <div class="irow"><label>Bobot Nilai %</label><input type="number" id="lab-h-nilai" value="70" min="0" max="100" step="5" oninput="labSyncHybrid('nilai')"></div>
+            <div class="irow"><label>Bobot Freq %</label><input type="number" id="lab-h-freq" value="30" min="0" max="100" step="5" oninput="labSyncHybrid('freq')"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hasil Ranking -->
+      <div class="card">
+        <div class="card-title">
+          <span>🏆 Ranking SHU Aktivitas (Skema Aktif)</span>
+          <button class="btn gold sm" onclick="labExportCSV()">⬇️ CSV</button>
+        </div>
+        <div id="lab-ranking" class="tbl-wrap"></div>
+      </div>
+
+      <!-- Compare semua -->
+      <div class="card">
+        <div class="card-title"><span>🔬 Bandingkan Semua 6 Skema (per Anggota)</span></div>
+        <div id="lab-compare" class="tbl-wrap"></div>
+      </div>
+
+      <!-- Data mentah -->
+      <div class="card">
+        <div class="card-title"><span>📋 Data Mentah per Anggota × per Jenis</span></div>
+        <div id="lab-raw" class="tbl-wrap"></div>
       </div>
     </div>
 
@@ -1103,6 +1223,346 @@ async function exportLog(){
 }
 
 // ===== UI HELPERS =====
+// ============ LAB SKEMA SHU — Eksplorasi 6 Skema ============
+let LAB={data:{rekap:[],per_jenis:[]},skema:'A',init:false};
+
+const LAB_SKEMAS=['A','B','C','D','E','F'];
+const LAB_LABELS={
+  A:'A · Pure Nilai',B:'B · Pure Frekuensi',
+  C:'C · Nilai per Jenis × Bobot',D:'D · Frekuensi per Jenis × Bobot',
+  E:'E · Hybrid Nilai 70 + Freq 30',F:'F · Hybrid per Jenis (70:30)'
+};
+const LAB_FORMULAS={
+  A:'SHU_anggota = (nilai_anggota / total_nilai_koperasi) × Pool_Aktivitas',
+  B:'SHU_anggota = (frekuensi_anggota / total_frekuensi_koperasi) × Pool_Aktivitas',
+  C:'Skor = Σ_jenis [ (nilai_anggota_jenis / total_nilai_jenis) × bobot_jenis ]\nSHU = (Skor / Σ Skor) × Pool_Aktivitas',
+  D:'Skor = Σ_jenis [ (freq_anggota_jenis / total_freq_jenis) × bobot_jenis ]\nSHU = (Skor / Σ Skor) × Pool_Aktivitas',
+  E:'SHU = α × A + β × B   (α + β = 100%)',
+  F:'SHU = α × C + β × D   (kombinasi nilai per-jenis dan freq per-jenis)'
+};
+const LAB_JENIS={
+  warung:{label:'🛒 Warung',color:'#f472b6'},ppob:{label:'⚡ PPOB',color:'#f59e0b'},
+  laundry:{label:'👕 Laundry',color:'#22d3ee'},service:{label:'🔧 Service',color:'#a78bfa'},
+  angsuran:{label:'💳 Angsuran',color:'#10b981'},saham:{label:'⭐ Saham',color:'#fbbf24'},
+  wadiah:{label:'🏛️ Wadiah',color:'#3b82f6'}
+};
+
+const _labNum=v=>parseFloat(v)||0;
+
+async function initLab(){
+  const info=document.getElementById('lab-info');
+  info.textContent='⏳ Memuat data...';
+  try{
+    const [{data:rekap,error:e1},{data:perJenis,error:e2}]=await Promise.all([
+      sb.from('v_shu_aktivitas_rekap').select('*'),
+      sb.from('v_shu_aktivitas_total_per_jenis').select('*')
+    ]);
+    if(e1) throw new Error('Rekap: '+e1.message);
+    if(e2) throw new Error('Per jenis: '+e2.message);
+
+    LAB.data.rekap=(rekap||[]).map(r=>{
+      const o={...r,
+        jumlah_lembar:r.jumlah_lembar||0,total_freq:+r.total_freq||0,total_nilai:_labNum(r.total_nilai)
+      };
+      ['warung','ppob','laundry','service','angsuran','saham','wadiah'].forEach(j=>{
+        o[j+'_freq']=+r[j+'_freq']||0;
+        o[j+'_nilai']=_labNum(r[j+'_nilai']);
+      });
+      return o;
+    }).sort((a,b)=>b.total_nilai-a.total_nilai);
+
+    LAB.data.per_jenis=(perJenis||[]).map(j=>({
+      ...j,total_frekuensi:+j.total_frekuensi||0,total_nilai:_labNum(j.total_nilai),
+      bobot_pct:_labNum(j.bobot_pct),jml_anggota_aktif:+j.jml_anggota_aktif||0
+    }));
+
+    // Sync pool dari kebijakan aktif
+    if(aKebijakan){
+      document.getElementById('lab-poolSaham').value=aKebijakan.rasio_saham||60;
+      document.getElementById('lab-poolAkt').value=aKebijakan.rasio_transaksi||40;
+    }
+
+    if(!LAB.init){
+      // Render tabs sekali
+      document.getElementById('lab-skema-tabs').innerHTML=LAB_SKEMAS.map(k=>`
+        <div class="lab-tab" data-skema="${k}" onclick="labPilihSkema('${k}',this)" 
+          style="background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:8px 12px;border-radius:var(--radius-xs);cursor:pointer;font-size:12px;font-weight:700;transition:all .15s;${k==='A'?'background:var(--gold);color:#1a1207;border-color:var(--gold);':''}">
+          ${LAB_LABELS[k]}
+        </div>`).join('');
+      LAB.init=true;
+    }
+
+    info.innerHTML=`Periode <b>${aKebijakan?.periode||'?'}</b> · Cut-off <b>${aKebijakan?.tgl_mulai_berlaku||'?'}</b> · ${LAB.data.rekap.length} anggota aktif · Last refresh: ${new Date().toLocaleTimeString('id-ID')}`;
+    
+    if(LAB.data.rekap.length===0){
+      document.getElementById('lab-ranking').innerHTML='<div class="empty"><div class="ei">📭</div><p>Belum ada data transaksi setelah cut-off</p></div>';
+      labRenderStats();labRenderJenis();
+      return;
+    }
+
+    labRenderStats();
+    labRenderJenis();
+    labRenderRaw();
+    labRefresh();
+    toast('✅ Lab data dimuat: '+LAB.data.rekap.length+' anggota');
+  }catch(e){
+    console.error(e);
+    info.innerHTML='<span style="color:var(--red)">❌ '+e.message+'</span>';
+    toast('❌ '+e.message);
+  }
+}
+
+function labPilihSkema(k,el){
+  LAB.skema=k;
+  document.querySelectorAll('.lab-tab').forEach(t=>{
+    t.style.background='var(--surface2)';t.style.color='var(--text-muted)';t.style.borderColor='var(--border)';
+  });
+  if(el){el.style.background='var(--gold)';el.style.color='#1a1207';el.style.borderColor='var(--gold)';}
+  labRefresh();
+}
+
+function labSyncPool(src){
+  const s=+document.getElementById('lab-poolSaham').value||0;
+  const a=+document.getElementById('lab-poolAkt').value||0;
+  if(src==='saham') document.getElementById('lab-poolAkt').value=Math.max(0,100-s);
+  else document.getElementById('lab-poolSaham').value=Math.max(0,100-a);
+  labRefresh();
+}
+
+function labSyncHybrid(src){
+  const n=+document.getElementById('lab-h-nilai').value||0;
+  const f=+document.getElementById('lab-h-freq').value||0;
+  if(src==='nilai') document.getElementById('lab-h-freq').value=Math.max(0,100-n);
+  else document.getElementById('lab-h-nilai').value=Math.max(0,100-f);
+  labRefresh();
+}
+
+function labSetBobot(preset){
+  const p={
+    'default':{warung:15,ppob:10,laundry:10,service:10,angsuran:25,saham:20,wadiah:10},
+    'flat':{warung:10,ppob:10,laundry:10,service:10,angsuran:10,saham:10,wadiah:10},
+    'inverse':{warung:30,ppob:5,laundry:5,service:5,angsuran:5,saham:25,wadiah:5}
+  }[preset];
+  Object.entries(p).forEach(([k,v])=>{document.getElementById('lab-b-'+k).value=v;});
+  labRefresh();
+}
+
+function labGetBobot(){
+  const b={};
+  Object.keys(LAB_JENIS).forEach(j=>b[j]=+document.getElementById('lab-b-'+j).value||0);
+  return b;
+}
+function labGetHybrid(){
+  return {
+    nilai:(+document.getElementById('lab-h-nilai').value||0)/100,
+    freq:(+document.getElementById('lab-h-freq').value||0)/100
+  };
+}
+function labGetPool(){
+  return (+document.getElementById('lab-totalShu').value||0)*(+document.getElementById('lab-poolAkt').value||0)/100;
+}
+
+// === Hitung 6 skema ===
+function labHitungA(){
+  const pool=labGetPool();
+  const tot=LAB.data.rekap.reduce((s,r)=>s+r.total_nilai,0);
+  return LAB.data.rekap.map(r=>({
+    ...r,skor:r.total_nilai,
+    proporsi:tot>0?r.total_nilai/tot:0,
+    shu:tot>0?(r.total_nilai/tot)*pool:0
+  }));
+}
+function labHitungB(){
+  const pool=labGetPool();
+  const tot=LAB.data.rekap.reduce((s,r)=>s+r.total_freq,0);
+  return LAB.data.rekap.map(r=>({
+    ...r,skor:r.total_freq,
+    proporsi:tot>0?r.total_freq/tot:0,
+    shu:tot>0?(r.total_freq/tot)*pool:0
+  }));
+}
+function labHitungC(){
+  const pool=labGetPool();const bobot=labGetBobot();
+  const totals={};LAB.data.per_jenis.forEach(j=>totals[j.jenis_trx]=j.total_nilai);
+  const ws=LAB.data.rekap.map(r=>{
+    let s=0;Object.keys(LAB_JENIS).forEach(j=>{
+      const t=totals[j]||0,v=r[j+'_nilai']||0;
+      if(t>0) s+=(v/t)*(bobot[j]||0);
+    });
+    return {...r,skor:s};
+  });
+  const ts=ws.reduce((s,r)=>s+r.skor,0);
+  return ws.map(r=>({...r,proporsi:ts>0?r.skor/ts:0,shu:ts>0?(r.skor/ts)*pool:0}));
+}
+function labHitungD(){
+  const pool=labGetPool();const bobot=labGetBobot();
+  const totals={};LAB.data.per_jenis.forEach(j=>totals[j.jenis_trx]=j.total_frekuensi);
+  const ws=LAB.data.rekap.map(r=>{
+    let s=0;Object.keys(LAB_JENIS).forEach(j=>{
+      const t=totals[j]||0,f=r[j+'_freq']||0;
+      if(t>0) s+=(f/t)*(bobot[j]||0);
+    });
+    return {...r,skor:s};
+  });
+  const ts=ws.reduce((s,r)=>s+r.skor,0);
+  return ws.map(r=>({...r,proporsi:ts>0?r.skor/ts:0,shu:ts>0?(r.skor/ts)*pool:0}));
+}
+function labHitungE(){
+  const h=labGetHybrid();const a=labHitungA();const b=labHitungB();
+  return LAB.data.rekap.map((r,i)=>{
+    const shu=a[i].shu*h.nilai+b[i].shu*h.freq;
+    const skor=a[i].proporsi*h.nilai+b[i].proporsi*h.freq;
+    return {...r,skor:skor*100,proporsi:skor,shu};
+  });
+}
+function labHitungF(){
+  const h=labGetHybrid();const c=labHitungC();const d=labHitungD();
+  return LAB.data.rekap.map((r,i)=>{
+    const shu=c[i].shu*h.nilai+d[i].shu*h.freq;
+    const skor=c[i].proporsi*h.nilai+d[i].proporsi*h.freq;
+    return {...r,skor:skor*100,proporsi:skor,shu};
+  });
+}
+const LAB_HITUNG={A:labHitungA,B:labHitungB,C:labHitungC,D:labHitungD,E:labHitungE,F:labHitungF};
+
+// === Render ===
+function labRenderStats(){
+  const a=LAB.data.rekap.length;
+  const f=LAB.data.rekap.reduce((s,r)=>s+r.total_freq,0);
+  const n=LAB.data.rekap.reduce((s,r)=>s+r.total_nilai,0);
+  document.getElementById('lab-stat-anggota').textContent=a;
+  document.getElementById('lab-stat-freq').textContent=f;
+  document.getElementById('lab-stat-nilai').textContent=rp(n);
+  document.getElementById('lab-stat-avg').textContent=rp(a>0?n/a:0);
+}
+
+function labRenderJenis(){
+  const tbody=document.getElementById('lab-tbody-jenis');
+  if(LAB.data.per_jenis.length===0){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px">Belum ada data</td></tr>';
+    return;
+  }
+  tbody.innerHTML=LAB.data.per_jenis.map(j=>{
+    const meta=LAB_JENIS[j.jenis_trx]||{label:j.jenis_trx,color:'#888'};
+    const avg=j.total_frekuensi>0?j.total_nilai/j.total_frekuensi:0;
+    return `<tr>
+      <td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${meta.color}22;color:${meta.color}">${meta.label}</span></td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${j.total_frekuensi}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${rp(j.total_nilai)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${rp(avg)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${j.jml_anggota_aktif}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${j.bobot_pct}%</td>
+    </tr>`;
+  }).join('');
+}
+
+function labRenderRanking(){
+  const hasil=LAB_HITUNG[LAB.skema]().filter(r=>r.skor>0||r.shu>0).sort((a,b)=>b.shu-a.shu);
+  const max=Math.max(...hasil.map(r=>r.shu),1);
+  const totDist=hasil.reduce((s,r)=>s+r.shu,0);
+  if(hasil.length===0){
+    document.getElementById('lab-ranking').innerHTML='<div class="empty"><div class="ei">📊</div><p>Tidak ada anggota dapat SHU dengan parameter ini</p></div>';
+    return;
+  }
+  document.getElementById('lab-ranking').innerHTML=`<table class="tbl">
+    <thead><tr>
+      <th>#</th><th>Anggota</th><th style="text-align:right">Lbr</th>
+      <th style="text-align:right">Freq</th><th style="text-align:right">Nilai</th>
+      <th style="text-align:right">Skor</th><th style="text-align:right">Proporsi</th>
+      <th style="text-align:right;color:var(--gold)">SHU Aktivitas</th>
+    </tr></thead>
+    <tbody>${hasil.map((r,i)=>{
+      const rank=i+1;
+      const rankBg=rank===1?'background:var(--gold);color:#1a1207;':rank===2?'background:#cdd5e0;color:#000;':rank===3?'background:#a16207;color:#fff;':'';
+      return `<tr>
+        <td><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:800;${rankBg||'background:var(--surface2);color:var(--text-muted)'}">${rank}</span></td>
+        <td><div style="font-weight:600">${r.nama_anggota||'-'}</div><div style="font-size:10px;color:var(--text-muted)">${r.kelompok||'-'}</div></td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${r.jumlah_lembar||'-'}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${r.total_freq}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${rp(r.total_nilai)}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${(+r.skor||0).toFixed(2)}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${(r.proporsi*100).toFixed(2)}%</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--gold);font-weight:700">
+          ${rp(r.shu)}
+          <div style="height:5px;background:var(--surface2);border-radius:3px;margin-top:3px;overflow:hidden">
+            <div style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-mid));width:${(r.shu/max*100).toFixed(1)}%"></div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+    <tfoot><tr style="background:var(--surface2);font-weight:700">
+      <td colspan="7" style="padding:10px 6px">TOTAL TERDISTRIBUSI</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--gold);padding:10px 6px">${rp(totDist)}</td>
+    </tr></tfoot>
+  </table>`;
+}
+
+function labRenderCompare(){
+  const all={};LAB_SKEMAS.forEach(k=>all[k]=LAB_HITUNG[k]());
+  document.getElementById('lab-compare').innerHTML=`<table class="tbl">
+    <thead><tr>
+      <th>Anggota</th>${LAB_SKEMAS.map(k=>`<th style="text-align:right">${k}<br><span style="font-weight:400;font-size:9px">${LAB_LABELS[k].split('·')[1]||''}</span></th>`).join('')}
+    </tr></thead>
+    <tbody>${LAB.data.rekap.map((r,i)=>`<tr>
+      <td><div style="font-weight:600">${r.nama_anggota}</div><div style="font-size:10px;color:var(--text-muted)">${r.kelompok}</div></td>
+      ${LAB_SKEMAS.map(k=>`<td style="text-align:right;font-variant-numeric:tabular-nums${k===LAB.skema?';background:rgba(201,168,76,0.1);color:var(--gold);font-weight:700':''}">${rp(all[k][i].shu)}</td>`).join('')}
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function labRenderRaw(){
+  document.getElementById('lab-raw').innerHTML=`<table class="tbl">
+    <thead><tr>
+      <th>Anggota</th><th>Kel</th><th style="text-align:right">Lbr</th>
+      <th style="text-align:right">W frq</th><th style="text-align:right">W Rp</th>
+      <th style="text-align:right">P frq</th><th style="text-align:right">P Rp</th>
+      <th style="text-align:right">A frq</th><th style="text-align:right">A Rp</th>
+      <th style="text-align:right">L frq</th><th style="text-align:right">L Rp</th>
+      <th style="text-align:right">S frq</th><th style="text-align:right">S Rp</th>
+      <th style="text-align:right">Σ frq</th><th style="text-align:right">Σ Rp</th>
+    </tr></thead>
+    <tbody>${LAB.data.rekap.map(r=>`<tr>
+      <td>${r.nama_anggota}</td><td>${r.kelompok||'-'}</td>
+      <td style="text-align:right">${r.jumlah_lembar||'-'}</td>
+      <td style="text-align:right">${r.warung_freq}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${(r.warung_nilai||0).toLocaleString('id-ID')}</td>
+      <td style="text-align:right">${r.ppob_freq}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${(r.ppob_nilai||0).toLocaleString('id-ID')}</td>
+      <td style="text-align:right">${r.angsuran_freq}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${(r.angsuran_nilai||0).toLocaleString('id-ID')}</td>
+      <td style="text-align:right">${r.laundry_freq}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${(r.laundry_nilai||0).toLocaleString('id-ID')}</td>
+      <td style="text-align:right">${r.service_freq}</td><td style="text-align:right;font-variant-numeric:tabular-nums">${(r.service_nilai||0).toLocaleString('id-ID')}</td>
+      <td style="text-align:right;font-weight:700">${r.total_freq}</td>
+      <td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${(r.total_nilai||0).toLocaleString('id-ID')}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function labRefresh(){
+  if(!LAB.init) return;
+  // Toggle panels
+  document.getElementById('lab-bobot-panel').style.display=['C','D','F'].includes(LAB.skema)?'block':'none';
+  document.getElementById('lab-hybrid-panel').style.display=['E','F'].includes(LAB.skema)?'block':'none';
+  document.getElementById('lab-formula').textContent=LAB_FORMULAS[LAB.skema];
+  if(LAB.data.rekap.length>0){
+    labRenderRanking();
+    labRenderCompare();
+  }
+}
+
+function labExportCSV(){
+  const hasil=LAB_HITUNG[LAB.skema]().sort((a,b)=>b.shu-a.shu);
+  const rows=[['Rank','Anggota','Kelompok','Lembar','Frekuensi','Nilai','Skor','Proporsi','SHU_Aktivitas']];
+  hasil.forEach((r,i)=>{
+    rows.push([i+1,r.nama_anggota,r.kelompok||'',r.jumlah_lembar||0,r.total_freq,Math.round(r.total_nilai),(+r.skor||0).toFixed(2),(r.proporsi*100).toFixed(2)+'%',Math.round(r.shu)]);
+  });
+  const csv=rows.map(row=>row.map(c=>`"${c}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`lab-skema-${LAB.skema}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('✅ CSV diunduh');
+}
+// ============ END LAB SKEMA ============
+
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -1110,13 +1570,14 @@ function showPage(id,el){
   if(el) el.classList.add('active');
   const titles={
     dashboard:'SHU Dashboard',rekap:'Rekap per Anggota',ranking:'Ranking Keaktifan',
-    'trx-log':'Log Transaksi SHU',simulasi:'Simulasi SHU',kebijakan:'Kebijakan SHU'
+    'trx-log':'Log Transaksi SHU',simulasi:'Simulasi SHU',lab:'Lab Skema SHU',kebijakan:'Kebijakan SHU'
   };
   document.getElementById('topbar-title').textContent=titles[id]||id;
   if(id==='rekap') filterRekap();
   if(id==='ranking') renderRanking();
   if(id==='trx-log') loadLog();
   if(id==='kebijakan') renderKebijakan();
+  if(id==='lab') initLab();
   if(id==='simulasi'){
     const kb=aKebijakan;
     if(kb){
