@@ -8682,27 +8682,51 @@ function posOpenLevelPicker(barangId){
   if(!b||!b.harga_levels||!b.harga_levels.length){posAddProduk(barangId,1);return;}
   posLvBarangId=barangId;
   document.getElementById('pos-lv-name').textContent=b.nama;
-  // Build list: satuan utama + harga_levels
-  const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
-  const allLevels=[satuanUtama,...b.harga_levels];
+  // Untuk multi-satuan: HANYA tampilkan harga_levels (skip satuan utama yang absurd: cth "1 gr telur")
+  // Untuk produk single dengan harga_levels (legacy): tetap include satuan utama
+  let allLevels;
+  if(b.multi_satuan){
+    allLevels = b.harga_levels.map(lv=>({...lv, isDefault:false}));
+  } else {
+    const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
+    allLevels = [satuanUtama, ...b.harga_levels];
+  }
   const el=document.getElementById('pos-lv-list');
-  el.innerHTML=allLevels.map((lv,i)=>`
+  el.innerHTML=allLevels.map((lv,i)=>{
+    // Helper format konversi: cth "1 Ikat = 15 Kg" untuk multi-hybrid gr/Kg
+    let konversiInfo='';
+    if(lv.qty>1){
+      if(b.multi_satuan&&b.satuan_stok==='gr'&&b.satuan_harga==='Kg'&&lv.qty>=1000){
+        konversiInfo='1 '+lv.label+' = '+(lv.qty/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' Kg';
+      } else if(b.multi_satuan&&b.satuan_stok==='ml'&&b.satuan_harga==='L'&&lv.qty>=1000){
+        konversiInfo='1 '+lv.label+' = '+(lv.qty/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' L';
+      } else {
+        konversiInfo='1 '+lv.label+' = '+lv.qty+' '+(b.satuan_stok||b.satuan||'pcs');
+      }
+    }
+    return `
     <div onclick="posPilihLevel(${i})" style="padding:14px;border:2px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;background:white">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:14px">${lv.label}${lv.isDefault?' <span style="font-size:10px;color:var(--text-muted);font-weight:500">(satuan utama)</span>':''}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${lv.qty>1?'1 '+lv.label+' = '+lv.qty+' '+(b.satuan||'pcs'):''}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${konversiInfo}</div>
       </div>
       <div style="font-size:15px;font-weight:800;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;flex-shrink:0">${fmt(lv.harga)}</div>
     </div>
-  `).join('');
+  `;}).join('');
   openModal('pos-modal-level');
 }
 
 function posPilihLevel(idx){
   const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===posLvBarangId);
   if(!b){closeModal('pos-modal-level', true);return;}
-  const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
-  const allLevels=[satuanUtama,...(b.harga_levels||[])];
+  // Build allLevels SAMA dengan posOpenLevelPicker
+  let allLevels;
+  if(b.multi_satuan){
+    allLevels = (b.harga_levels||[]).map(lv=>({...lv, isDefault:false}));
+  } else {
+    const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
+    allLevels = [satuanUtama, ...(b.harga_levels||[])];
+  }
   const lv=allLevels[idx];
   if(!lv){closeModal('pos-modal-level', true);return;}
   // Find existing entry dengan same level
@@ -9882,30 +9906,53 @@ function posbOpenLevelPicker(barangId){
   if(!b||!b.harga_levels||!b.harga_levels.length){posbAddProduk(barangId,1);return;}
   posbLvBarangId=barangId;
   document.getElementById('posb-lv-name').textContent=b.nama;
-  // Build list: satuan utama + harga_levels
-  const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
-  const allLevels=[satuanUtama,...b.harga_levels];
+  // Untuk multi-satuan: HANYA tampilkan harga_levels (skip satuan utama yang absurd)
+  // Untuk produk single dengan harga_levels (legacy): tetap include satuan utama
+  let allLevels;
+  if(b.multi_satuan){
+    allLevels = b.harga_levels.map(lv=>({...lv, isDefault:false}));
+  } else {
+    const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
+    allLevels = [satuanUtama, ...b.harga_levels];
+  }
   const el=document.getElementById('posb-lv-list');
-  el.innerHTML=allLevels.map((lv,i)=>`
+  el.innerHTML=allLevels.map((lv,i)=>{
+    let konversiInfo='';
+    if(lv.qty>1){
+      if(b.multi_satuan&&b.satuan_stok==='gr'&&b.satuan_harga==='Kg'&&lv.qty>=1000){
+        konversiInfo='1 '+lv.label+' = '+(lv.qty/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' Kg';
+      } else if(b.multi_satuan&&b.satuan_stok==='ml'&&b.satuan_harga==='L'&&lv.qty>=1000){
+        konversiInfo='1 '+lv.label+' = '+(lv.qty/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' L';
+      } else {
+        konversiInfo='1 '+lv.label+' = '+lv.qty+' '+(b.satuan_stok||b.satuan||'pcs');
+      }
+    }
+    return `
     <div onclick="posbPilihLevel(${i})" style="padding:14px;border:2px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;background:white">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:14px">${lv.label}${lv.isDefault?' <span style="font-size:10px;color:var(--text-muted);font-weight:500">(satuan utama)</span>':''}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${lv.qty>1?'1 '+lv.label+' = '+lv.qty+' '+(b.satuan||'pcs'):''}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${konversiInfo}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:10px;color:var(--text-muted)">harga jual:</div>
         <div style="font-size:13px;font-weight:700;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace">${fmt(lv.harga)}</div>
       </div>
     </div>
-  `).join('');
+  `;}).join('');
   openModal('posb-modal-level');
 }
 
 function posbPilihLevel(idx){
   const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===posbLvBarangId);
   if(!b){closeModal('posb-modal-level', true);return;}
-  const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
-  const allLevels=[satuanUtama,...(b.harga_levels||[])];
+  // Build allLevels SAMA dengan posbOpenLevelPicker
+  let allLevels;
+  if(b.multi_satuan){
+    allLevels = (b.harga_levels||[]).map(lv=>({...lv, isDefault:false}));
+  } else {
+    const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
+    allLevels = [satuanUtama, ...(b.harga_levels||[])];
+  }
   const lv=allLevels[idx];
   if(!lv){closeModal('posb-modal-level', true);return;}
   // Auto-fill harga beli cerdas berdasarkan skema:
