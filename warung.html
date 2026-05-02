@@ -1257,7 +1257,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
               <input type="hidden" id="ppob-status" value="lunas"/>
             </div>
 
-            <button onclick="simpanPPOB()" style="width:100%;height:48px;background:linear-gradient(135deg,var(--green),#0d9488);color:white;border:none;border-radius:var(--radius);font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,0.3)">
+            <button id="ppob-btn-simpan" onclick="simpanPPOB()" style="width:100%;height:48px;background:linear-gradient(135deg,var(--green),#0d9488);color:white;border:none;border-radius:var(--radius);font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,0.3);transition:opacity .2s">
               💾 Simpan Transaksi PPOB
             </button>
           </div>
@@ -5754,13 +5754,20 @@ async function simpanPPOB(){
   if(!kasId){toast('Pilih kas PPOB',true);return;}
   if(!hb||!hj){toast('Isi harga beli dan harga jual',true);return;}
 
+  // Loading state — disable tombol + ubah text
+  const btnSimpan=document.getElementById('ppob-btn-simpan');
+  if(btnSimpan){btnSimpan.disabled=true;btnSimpan.style.opacity='0.6';btnSimpan.style.cursor='wait';btnSimpan.innerHTML='⏳ Menyimpan...';}
+
   const tid='ppob-'+Date.now().toString(36);
   const{data:newPpob,error}=await sb.from('ppob').insert([{
     tid,tanggal:tgl,nama,pelanggan_id:pelId,anggota_id:anggotaIdPpob,produk,
     harga_beli:hb,harga_jual:hj,status_bayar:status,
     kas_id:parseInt(kasId),catatan,operator:CU.username
   }]).select('id').single();
-  if(error){toast('Gagal simpan: '+error.message,true);return;}
+  if(error){
+    if(btnSimpan){btnSimpan.disabled=false;btnSimpan.style.opacity='1';btnSimpan.style.cursor='pointer';btnSimpan.innerHTML='💾 Simpan Transaksi PPOB';}
+    toast('Gagal simpan: '+error.message,true);return;
+  }
   const ppobId=newPpob?.id||null;
   
   // Harga beli SELALU keluar dari kas PPOB (modal)
@@ -5814,7 +5821,11 @@ async function simpanPPOB(){
   document.querySelectorAll('.ppob-kat-item').forEach(k=>k.classList.remove('ppob-kat-active'));
   _ppobProdukTerpilih=''; _ppobKatAktif='';
   setStatusPPOB('lunas');
-  toast('Transaksi PPOB berhasil disimpan!');
+  // Restore tombol simpan
+  if(btnSimpan){btnSimpan.disabled=false;btnSimpan.style.opacity='1';btnSimpan.style.cursor='pointer';btnSimpan.innerHTML='💾 Simpan Transaksi PPOB';}
+  // Scroll ke atas (ke grid kategori) supaya user lihat form sudah reset
+  document.getElementById('page-ppob')?.scrollIntoView({behavior:'smooth',block:'start'});
+  toast('✅ Transaksi PPOB berhasil disimpan!');
 }
 
 /* PPOB RIWAYAT */
@@ -6106,6 +6117,9 @@ async function hapusPPOB(id){
   if(arguments.length===0||!id)return;
   const p=aPPOB.find(x=>x.id===id);
   if(!p)return;
+  // Konfirmasi dulu — hapus PPOB juga akan menghapus mutasi kas terkait
+  const konfirm=confirm(`Hapus transaksi PPOB ini?\n\n#${p.id} - ${p.produk}\nPelanggan: ${p.nama||'-'}\nTanggal: ${p.tanggal}\nHarga: ${fmt(p.harga_jual)}\n\n⚠️ Mutasi kas (modal & bayar) yang terkait juga akan ikut dihapus.\nAksi ini tidak bisa dibatalkan.`);
+  if(!konfirm)return;
   // Buat keterangan spesifik untuk cari mutasi yang tepat
   const ketModal='Modal PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
   const ketBayar='Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
@@ -6137,7 +6151,7 @@ async function hapusPPOB(id){
   await lKas();await lPPOB();await lH();
   renderPPOBRiwayat();;renderHutang();
   if(document.getElementById('page-dashboard')?.classList.contains('active'))renderDashboard();
-  toast('Transaksi PPOB dihapus!');
+  toast(`✅ Transaksi PPOB #${id} dihapus`);
 }
 
 /* PPOB LAPORAN */
