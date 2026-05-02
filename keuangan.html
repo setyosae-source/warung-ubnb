@@ -2490,6 +2490,10 @@ function renderKasSummaryKu(){
   '</div>';
 }
 
+// Cache mutasi per kas + state sort per bulan, untuk re-render saat sort tanpa query ulang
+window._kasMutasiCache={kasId:null,rows:[]};
+window._kasMutasiSort={}; // {monthKey: {col:'tanggal'|'keterangan'|'masuk'|'keluar'|'id', dir:'asc'|'desc'}}
+
 async function renderKasMutasi(kasId){
   // Bisa dipanggil dari tombol atau dari dropdown
   const fEl=document.getElementById('kas-filter-id');
@@ -2502,26 +2506,130 @@ async function renderKasMutasi(kasId){
     .eq('kas_id',kasId).order('tanggal',{ascending:true}).order('created_at',{ascending:true});
   if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
 
+  // Hitung saldo running kronologis (sumber kebenaran saldo)
   let saldo=0;
-  const rows=data.map(m=>{
+  const enriched=data.map(m=>{
     const masuk=m.tipe==='masuk';
-    saldo+=masuk?parseFloat(m.jumlah):-parseFloat(m.jumlah);
-    const tgl=m.tanggal?new Date(m.tanggal+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'—';
-    return `<tr>
-      <td>${tgl}</td>
-      <td>${m.keterangan||'-'}</td>
-      <td style="color:var(--hijau);font-family:monospace;text-align:right;">${masuk?rp(m.jumlah):'—'}</td>
-      <td style="color:var(--red);font-family:monospace;text-align:right;">${!masuk?rp(m.jumlah):'—'}</td>
-      <td style="font-family:monospace;text-align:right;font-weight:700;color:${saldo>=0?'var(--hijau)':'var(--red)'};">${rp(saldo)}</td>
-    </tr>`;
-  }).join('');
-  el.innerHTML=`<table class="tbl"><thead><tr>
-    <th>Tanggal</th><th>Keterangan</th>
-    <th class="r" style="color:var(--hijau);">Masuk</th>
-    <th class="r" style="color:var(--red);">Keluar</th>
-    <th class="r">Saldo</th>
-  </tr></thead><tbody>${rows}</tbody></table>`;
+    const jml=parseFloat(m.jumlah)||0;
+    saldo+=masuk?jml:-jml;
+    return {...m, _masuk:masuk, _jml:jml, _saldoRunning:saldo};
+  });
 
+  // Reset state saat ganti kas
+  if(window._kasMutasiCache.kasId!==kasId){
+    window._kasMutasiSort={};
+  }
+  window._kasMutasiCache={kasId, rows:enriched};
+
+  renderKasMutasiUI();
+}
+
+function renderKasMutasiUI(){
+  const el=document.getElementById('kas-mutasi-list');if(!el)return;
+  const enriched=window._kasMutasiCache.rows;
+  if(!enriched||!enriched.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
+
+  // Group by bulan (YYYY-MM dari kolom tanggal)
+  const groups={}; // {YYYY-MM: {label, rows[], totalMasuk, totalKeluar, saldoAkhir}}
+  const NAMA_BULAN=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  enriched.forEach(m=>{
+    const tgl=m.tanggal||'1970-01-01';
+    const ym=tgl.slice(0,7); // YYYY-MM
+    if(!groups[ym]){
+      const[y,mo]=ym.split('-');
+      groups[ym]={key:ym,label:`${NAMA_BULAN[parseInt(mo)-1]} ${y}`,rows:[],totalMasuk:0,totalKeluar:0,saldoAkhir:0};
+    }
+    groups[ym].rows.push(m);
+    if(m._masuk)groups[ym].totalMasuk+=m._jml;
+    else groups[ym].totalKeluar+=m._jml;
+    groups[ym].saldoAkhir=m._saldoRunning; // overwrite, akan jadi nilai terakhir kronologis
+  });
+
+  // Urut grup: bulan terbaru di atas
+  const groupKeys=Object.keys(groups).sort((a,b)=>b.localeCompare(a));
+
+  const html=groupKeys.map(k=>{
+    const g=groups[k];
+    const sort=window._kasMutasiSort[k]||{col:'tanggal',dir:'asc'};
+    // Sort rows per bulan (default kronologis asc)
+    const sortedRows=[...g.rows].sort((a,b)=>{
+      let av,bv;
+      if(sort.col==='tanggal'){av=(a.tanggal||'')+' '+(a.created_at||'');bv=(b.tanggal||'')+' '+(b.created_at||'');}
+      else if(sort.col==='keterangan'){av=(a.keterangan||'').toLowerCase();bv=(b.keterangan||'').toLowerCase();}
+      else if(sort.col==='masuk'){av=a._masuk?a._jml:0;bv=b._masuk?b._jml:0;}
+      else if(sort.col==='keluar'){av=!a._masuk?a._jml:0;bv=!b._masuk?b._jml:0;}
+      else if(sort.col==='id'){av=a.id;bv=b.id;}
+      else{av=0;bv=0;}
+      if(av<bv)return sort.dir==='asc'?-1:1;
+      if(av>bv)return sort.dir==='asc'?1:-1;
+      return 0;
+    });
+
+    const arrow=(col)=>sort.col===col?(sort.dir==='asc'?' ▲':' ▼'):'';
+    const rowsHtml=sortedRows.map(m=>{
+      const tgl=m.tanggal?new Date(m.tanggal+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'—';
+      const sR=m._saldoRunning;
+      return `<tr>
+        <td style="font-family:monospace;color:#888;font-size:11px;">#${m.id}</td>
+        <td>${tgl}</td>
+        <td>${m.keterangan||'-'}</td>
+        <td style="color:var(--hijau);font-family:monospace;text-align:right;">${m._masuk?rp(m._jml):'—'}</td>
+        <td style="color:var(--red);font-family:monospace;text-align:right;">${!m._masuk?rp(m._jml):'—'}</td>
+        <td style="font-family:monospace;text-align:right;font-weight:700;color:${sR>=0?'var(--hijau)':'var(--red)'};">${rp(sR)}</td>
+      </tr>`;
+    }).join('');
+
+    // Header bulan: nama + jumlah trx + masuk + keluar + saldo akhir
+    const headerColor=g.saldoAkhir>=0?'var(--hijau)':'var(--red)';
+    return `<div class="kas-month-grp" data-key="${k}" style="margin-bottom:8px;border:1px solid var(--border,#e5e7eb);border-radius:8px;overflow:hidden;">
+      <div onclick="toggleKasMonth('${k}')" style="cursor:pointer;padding:10px 12px;background:#f8fafc;display:flex;flex-wrap:wrap;align-items:center;gap:12px;user-select:none;">
+        <span class="kas-month-arrow" style="font-size:12px;display:inline-block;width:14px;transition:transform 0.15s;">▶</span>
+        <strong style="flex:0 0 auto;">${g.label}</strong>
+        <span style="font-size:11px;color:#666;background:#e5e7eb;padding:2px 8px;border-radius:10px;">${g.rows.length} trx</span>
+        <span style="margin-left:auto;display:flex;gap:14px;flex-wrap:wrap;font-family:monospace;font-size:12px;">
+          <span>Masuk: <span style="color:var(--hijau);font-weight:700;">${rp(g.totalMasuk)}</span></span>
+          <span>Keluar: <span style="color:var(--red);font-weight:700;">${rp(g.totalKeluar)}</span></span>
+          <span>Saldo akhir: <span style="color:${headerColor};font-weight:700;">${rp(g.saldoAkhir)}</span></span>
+        </span>
+      </div>
+      <div class="kas-month-body" style="display:none;">
+        <table class="tbl"><thead><tr>
+          <th onclick="sortKasMonth('${k}','id')" style="cursor:pointer;user-select:none;">TRX ID${arrow('id')}</th>
+          <th onclick="sortKasMonth('${k}','tanggal')" style="cursor:pointer;user-select:none;">Tanggal${arrow('tanggal')}</th>
+          <th onclick="sortKasMonth('${k}','keterangan')" style="cursor:pointer;user-select:none;">Keterangan${arrow('keterangan')}</th>
+          <th onclick="sortKasMonth('${k}','masuk')" class="r" style="color:var(--hijau);cursor:pointer;user-select:none;">Masuk${arrow('masuk')}</th>
+          <th onclick="sortKasMonth('${k}','keluar')" class="r" style="color:var(--red);cursor:pointer;user-select:none;">Keluar${arrow('keluar')}</th>
+          <th class="r">Saldo</th>
+        </tr></thead><tbody>${rowsHtml}</tbody></table>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=html;
+}
+
+function toggleKasMonth(key){
+  const grp=document.querySelector(`.kas-month-grp[data-key="${key}"]`);if(!grp)return;
+  const body=grp.querySelector('.kas-month-body');
+  const arrow=grp.querySelector('.kas-month-arrow');
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'';
+  if(arrow)arrow.style.transform=open?'rotate(0deg)':'rotate(90deg)';
+}
+
+function sortKasMonth(key,col){
+  const cur=window._kasMutasiSort[key]||{col:'tanggal',dir:'asc'};
+  const dir=(cur.col===col&&cur.dir==='asc')?'desc':'asc';
+  window._kasMutasiSort[key]={col,dir};
+  renderKasMutasiUI();
+  // Re-open grup yg di-sort (karena re-render reset state UI ke collapse semua)
+  setTimeout(()=>{
+    const grp=document.querySelector(`.kas-month-grp[data-key="${key}"]`);if(!grp)return;
+    const body=grp.querySelector('.kas-month-body');
+    const arrow=grp.querySelector('.kas-month-arrow');
+    body.style.display='';
+    if(arrow)arrow.style.transform='rotate(90deg)';
+  },0);
 }
 
 function openModalKas(id){
