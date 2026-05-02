@@ -9165,19 +9165,30 @@ async function posKonfirmasiBayar(){
     const txId=newTx.id;
 
     // Update batch & stok barang
+    // Akumulasi pengurangan stok per barang_id supaya tidak overwrite saat multiple item
+    const stokDecrement = {}; // {barang_id: total_qty_kurang}
     for(const k of posCart){
       if(k.isPaket){
         for(const pi of (k.paketItems||[])){
           if(pi.barang_id){
-            const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===pi.barang_id);
-            if(b)await sb.from('barang').update({stok:Math.max(0,(b.stok||0)-pi.qty*k.qty)}).eq('id',pi.barang_id);
+            stokDecrement[pi.barang_id] = (stokDecrement[pi.barang_id]||0) + pi.qty*k.qty;
           }
         }
       } else if(!k.is_manual){
         const bid=k.barang_id||k.pid;
         const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===bid);
-        const qtyReal=k.qty*(k._qtyPerUnit||1);
-        if(b&&!['ppob','laundry','service'].includes(b.kategori))await sb.from('barang').update({stok:Math.max(0,(b.stok||0)-qtyReal)}).eq('id',bid);
+        if(b&&!['ppob','laundry','service'].includes(b.kategori)){
+          const qtyReal=k.qty*(k._qtyPerUnit||1);
+          stokDecrement[bid] = (stokDecrement[bid]||0) + qtyReal;
+        }
+      }
+    }
+    // Apply update sekali per barang
+    for(const bid of Object.keys(stokDecrement)){
+      const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===parseInt(bid));
+      if(b){
+        const newStok = Math.max(0, (b.stok||0) - stokDecrement[bid]);
+        await sb.from('barang').update({stok: newStok}).eq('id', parseInt(bid));
       }
     }
     for(const u of allUpd)await sb.from('stok_batch').update({qty_sisa:u.qty_sisa}).eq('id',u.id);
