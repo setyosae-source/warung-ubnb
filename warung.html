@@ -9908,10 +9908,26 @@ function posbPilihLevel(idx){
   const allLevels=[satuanUtama,...(b.harga_levels||[])];
   const lv=allLevels[idx];
   if(!lv){closeModal('posb-modal-level', true);return;}
-  // Push ke cart dengan hbeli kosong (user input manual via edit)
-  // hjual = harga di level
-  // qty multiplier disimpan di _qtyPerUnit untuk update stok yang benar
-  const hbeliDefault=idx===0?(b.harga_beli||0):0; // satuan utama auto-fill, level lain kosong
+  // Auto-fill harga beli cerdas berdasarkan skema:
+  // - Single satuan (multi_satuan=false) atau level utama (idx=0): pakai harga_beli langsung
+  // - Multi-satuan + level non-utama: konversi via faktor (qty_stok / 1000 untuk gr→Kg)
+  let hbeliDefault = 0;
+  const hbMaster = b.harga_beli || 0;
+  if(hbMaster > 0){
+    if(idx === 0){
+      // Level utama: pakai harga_beli langsung
+      hbeliDefault = hbMaster;
+    } else if(b.multi_satuan && b.satuan_stok==='gr' && b.satuan_harga==='Kg'){
+      // Multi-satuan gr/Kg: konversi (qty gram / 1000) × harga per Kg
+      hbeliDefault = Math.round((lv.qty / 1000) * hbMaster);
+    } else if(b.multi_satuan && b.satuan_stok==='ml' && b.satuan_harga==='L'){
+      // Multi-satuan ml/L: konversi (qty ml / 1000) × harga per L
+      hbeliDefault = Math.round((lv.qty / 1000) * hbMaster);
+    } else {
+      // Multi-satuan tanpa konversi unit: qty × harga
+      hbeliDefault = Math.round(lv.qty * hbMaster);
+    }
+  }
   posbCart.push({
     pid:b.id,
     nama:b.nama+(idx>0?` (${lv.label})`:''),
@@ -10282,31 +10298,61 @@ async function posbKonfirmasiSimpan(){
     if(errBeli)throw errBeli;
     const beliId=beliData.id;
 
-    // 2. Per item: insert stok_batch & update barang.stok (skip manual)
+    // 2. Per item: insert stok_batch (skip manual)
+    // Akumulasi stok increment per barang_id supaya tidak overwrite saat multiple item
+    const stokIncrement = {}; // {barang_id: total_qty_tambah}
+    const lastHarga = {}; // {barang_id: {hbeli, hjual}} — harga terakhir per produk untuk update master
     for(const c of posbCart){
       if(c.is_manual)continue;
       const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===c.barang_id);
       if(!b)continue;
-      // Hitung qty real: qty × _qtyPerUnit (untuk multi-satuan)
+      // Hitung qty real: qty × _qtyPerUnit (gram/ml untuk multi, atau pcs untuk single)
       const qtyReal=c.qty*(c._qtyPerUnit||1);
-      // Harga beli per unit utama (untuk batch FIFO)
-      const hBeliPerUnit=c._qtyPerUnit&&c._qtyPerUnit>1?Math.round(c.hbeli/c._qtyPerUnit):c.hbeli;
-      // Harga jual per unit utama (untuk batch FIFO)
-      const hJualPerUnit=c._qtyPerUnit&&c._qtyPerUnit>1?Math.round((c.hjual||c.hbeli)/c._qtyPerUnit):(c.hjual||c.hbeli);
-      // Insert batch (semua satuan disimpan dalam unit utama)
+      // Hitung harga per satuan_harga (Kg/L) untuk simpan di batch
+      // - Multi-satuan gr/Kg atau ml/L: konversi (qtyPerUnit / 1000) sebagai pengali
+      // - Single satuan: harga apa adanya
+      let hBeliPerSatuanHarga = c.hbeli;
+      let hJualPerSatuanHarga = c.hjual || c.hbeli;
+      const isMultiHybrid = b.multi_satuan && (
+        (b.satuan_stok==='gr' && b.satuan_harga==='Kg') ||
+        (b.satuan_stok==='ml' && b.satuan_harga==='L')
+      );
+      if(isMultiHybrid && c._qtyPerUnit && c._qtyPerUnit > 1){
+        // Cth: Ikat input Rp 397.500/Ikat, _qtyPerUnit=15000 gr
+        // → harga per Kg = 397.500 / (15000/1000) = 397.500 / 15 = Rp 26.500/Kg
+        const faktorKonversi = c._qtyPerUnit / 1000;
+        hBeliPerSatuanHarga = Math.round(c.hbeli / faktorKonversi);
+        hJualPerSatuanHarga = Math.round((c.hjual||c.hbeli) / faktorKonversi);
+      } else if(b.multi_satuan && c._qtyPerUnit && c._qtyPerUnit > 1){
+        // Multi-satuan tanpa unit konversi (cth: 1 Slop = 10 Pcs, harga total per slop)
+        // → harga per pcs = hbeli / qtyPerUnit
+        hBeliPerSatuanHarga = Math.round(c.hbeli / c._qtyPerUnit);
+        hJualPerSatuanHarga = Math.round((c.hjual||c.hbeli) / c._qtyPerUnit);
+      }
+      // Insert batch (qty dalam satuan_stok, harga per satuan_harga)
       await sb.from('stok_batch').insert([{
         barang_id:c.barang_id,
         qty_awal:qtyReal,
         qty_sisa:qtyReal,
-        harga_beli:hBeliPerUnit,
-        harga_jual:hJualPerUnit,
+        harga_beli:hBeliPerSatuanHarga,
+        harga_jual:hJualPerSatuanHarga,
         tgl_masuk:tglBeli
       }]);
-      // Update stok & harga (harga master tetap pakai harga satuan utama)
-      const updPayload={stok:(b.stok||0)+qtyReal,harga_beli:hBeliPerUnit};
-      if(c.hjual&&!c._levelLabel)updPayload.harga=c.hjual; // hanya update harga master kalau dari satuan utama
-      else if(c.hjual&&c._levelIdx===0)updPayload.harga=c.hjual;
-      await sb.from('barang').update(updPayload).eq('id',c.barang_id);
+      // Akumulasi stok per barang_id
+      stokIncrement[c.barang_id] = (stokIncrement[c.barang_id]||0) + qtyReal;
+      // Simpan harga terakhir (last write wins)
+      lastHarga[c.barang_id] = {hbeli: hBeliPerSatuanHarga, hjual: hJualPerSatuanHarga};
+    }
+    // Apply update barang sekali per produk
+    for(const bid of Object.keys(stokIncrement)){
+      const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===parseInt(bid));
+      if(!b)continue;
+      const updPayload = {
+        stok: (b.stok||0) + stokIncrement[bid],
+        harga_beli: lastHarga[bid].hbeli
+      };
+      if(lastHarga[bid].hjual > 0) updPayload.harga = lastHarga[bid].hjual;
+      await sb.from('barang').update(updPayload).eq('id', parseInt(bid));
     }
 
     // 3. Insert kas_mutasi (KELUAR) jika lunas/sebagian
