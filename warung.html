@@ -395,6 +395,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         <div class="nav-group">
           <div class="nav-group-title nav-collapsible" onclick="toggleNavGroup(this)"><span>🏪 Warung</span><span class="nav-arrow">▾</span></div>
           <div class="nav-group-items open">
+            <button class="nav-item" onclick="showPage('pos',this)" data-menu="warung_pos"><span class="ni">🛒</span>Kasir POS</button>
             <button class="nav-item" onclick="showPage('jual',this)"><span class="ni">🧾</span>Penjualan</button>
             <button class="nav-item" onclick="showPage('riwayat',this)"><span class="ni">📋</span>Riwayat Jual</button>
             <button class="nav-item" onclick="showPage('beli',this)"><span class="ni">📦</span>Pembelian</button>
@@ -545,6 +546,298 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       <!-- EXPIRED WIDGET -->
       <div id="dash-expired" class="card" style="display:none;border-left:4px solid var(--red)">
       </div>
+
+<!-- ============================================================ -->
+<!-- POS HTML - Insert sebelum <!-- PAGE: JUAL --> di warung.html  -->
+<!-- ============================================================ -->
+
+<!-- PAGE: POS (Kasir POS Mobile) -->
+<div id="page-pos" class="page" style="padding:0;max-width:none">
+  <!-- HEADER BAR POS -->
+  <div style="background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+    <div style="font-weight:700;font-size:15px;flex:1">🛒 Kasir POS</div>
+    <div style="font-size:11px;opacity:0.9" id="pos-kasir-label">Setyo</div>
+  </div>
+
+  <!-- POS TAB BAR (Kasir / Pending / Riwayat) -->
+  <div style="display:flex;background:white;border-bottom:1px solid var(--border);position:sticky;top:42px;z-index:49">
+    <button class="pos-tab active" data-postab="kasir" onclick="goPosTab('kasir',this)" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:3px solid var(--green);font-weight:700;color:var(--green-dark,#15803d);font-size:13px;cursor:pointer">🛒 Kasir</button>
+    <button class="pos-tab" data-postab="pending" onclick="goPosTab('pending',this)" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:3px solid transparent;font-weight:600;color:var(--text-muted);font-size:13px;cursor:pointer">⏸ Pending <span id="pos-pending-badge" style="font-size:10px"></span></button>
+    <button class="pos-tab" data-postab="riwayat" onclick="goPosTab('riwayat',this)" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:3px solid transparent;font-weight:600;color:var(--text-muted);font-size:13px;cursor:pointer">📋 Riwayat</button>
+  </div>
+
+  <!-- ==================== POS-TAB KASIR ==================== -->
+  <div id="pos-tab-kasir" class="pos-tab-content" style="display:flex;flex-direction:column;height:calc(100vh - 92px)">
+    <!-- Pelanggan + Scan Bar (sticky) -->
+    <div style="background:white;flex-shrink:0;border-bottom:1px solid var(--border);position:relative">
+      <!-- Pelanggan -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;position:relative">
+        <span style="color:var(--text-muted);font-size:12px;flex-shrink:0">👤</span>
+        <div id="pos-pel-pill" class="pos-pel-pill umum" onclick="openPosPelSearch()" style="flex:1;background:#f8fafc;border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:space-between;min-width:0">
+          <span class="nm" id="pos-pel-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Pelanggan: Umum (tap untuk pilih)</span>
+          <span style="flex-shrink:0">▼</span>
+        </div>
+      </div>
+      <!-- Scan Bar -->
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#fff;border-top:1px solid var(--border);position:relative">
+        <input class="pos-scan-input" id="pos-scan-input" placeholder="Scan / cari produk / 5*8992..." 
+          oninput="posSearchProduk(this.value)" onkeydown="posHandleScanKey(event)" autocomplete="off"
+          style="flex:1;height:42px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px 0 36px;font-size:14px;outline:none;background:#fafafa url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><circle cx=%2211%22 cy=%2211%22 r=%228%22/><path d=%22m21 21-4.35-4.35%22/></svg>') 10px center/16px no-repeat;font-family:inherit;min-width:0"/>
+        <div id="pos-search-result" style="position:absolute;top:100%;left:12px;right:12px;background:white;border:1.5px solid var(--green);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;display:none"></div>
+      </div>
+    </div>
+
+    <!-- Keranjang -->
+    <div id="pos-cart-container" style="flex:1;overflow-y:auto;padding:8px 12px 12px;background:var(--bg);-webkit-overflow-scrolling:touch">
+      <div style="padding:6px 4px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);font-weight:600">
+        <span id="pos-cart-count">0 item</span>
+        <span style="color:var(--green-dark,#15803d)">Tap untuk edit</span>
+      </div>
+      <div id="pos-cart-items"></div>
+      <button onclick="posAddManual()" style="width:100%;padding:10px;border:1.5px dashed var(--green);background:var(--green-light);color:var(--green-dark,#15803d);border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;margin-top:4px">+ Tambah Manual</button>
+    </div>
+
+    <!-- Footer Total -->
+    <div style="flex-shrink:0;background:white;border-top:1px solid var(--border);padding:8px 12px 10px;box-shadow:0 -2px 8px rgba(0,0,0,0.04)">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:2px">
+        <span>Subtotal</span><span id="pos-subtotal">Rp 0</span>
+      </div>
+      <div id="pos-diskon-row" style="display:none;justify-content:space-between;font-size:12px;color:var(--red);margin-bottom:2px">
+        <span id="pos-diskon-lbl">Diskon</span><span id="pos-diskon-val">- 0</span>
+      </div>
+      <div id="pos-ongkir-row" style="display:none;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:2px">
+        <span>Ongkir</span><span id="pos-ongkir-val">+ 0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text);font-weight:600;margin-top:3px;padding-top:5px;border-top:1px solid var(--border)">
+        <span>TOTAL</span>
+        <span style="font-size:20px;font-weight:800;color:var(--green-dark,#15803d);font-family:'SF Mono',Monaco,monospace" id="pos-total">Rp 0</span>
+      </div>
+      <!-- Sub-toolbar (Diskon / Ongkir / Catatan / Tanggal) -->
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button onclick="posOpenDiskon()" class="pos-tool-btn" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🎟 <span id="pos-diskon-btn-lbl">Diskon</span></button>
+        <button onclick="posOpenOngkir()" class="pos-tool-btn" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🚚 <span id="pos-ongkir-btn-lbl">Ongkir</span></button>
+        <button onclick="posOpenCatatan()" class="pos-tool-btn" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 <span id="pos-catatan-btn-lbl">Catatan</span></button>
+        <button onclick="posOpenTgl()" class="pos-tool-btn" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📅 <span id="pos-tgl-btn-lbl">Hari ini</span></button>
+      </div>
+      <!-- Action Row -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;margin-top:8px">
+        <button onclick="posPendingTrx()" style="background:var(--amber,#f59e0b);color:white;border:none;border-radius:8px;padding:0 14px;height:48px;font-size:18px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1">⏸<span style="font-size:9px;font-weight:600;margin-top:2px">Pending</span></button>
+        <button id="pos-btn-bayar" onclick="posOpenBayar()" disabled style="background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white;border:none;border-radius:8px;height:48px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(22,163,74,0.4);display:flex;align-items:center;justify-content:center;gap:8px;opacity:0.5">💰 BAYAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== POS-TAB PENDING ==================== -->
+  <div id="pos-tab-pending" class="pos-tab-content" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 92px)">
+    <div id="pos-pending-list"></div>
+  </div>
+
+  <!-- ==================== POS-TAB RIWAYAT ==================== -->
+  <div id="pos-tab-riwayat" class="pos-tab-content" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 92px)">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-weight:600">Transaksi 7 hari terakhir</div>
+    <div id="pos-riwayat-list"></div>
+  </div>
+</div>
+
+<!-- ==================== MODAL POS ==================== -->
+
+<!-- Modal Edit Item -->
+<div class="modal-overlay" id="pos-modal-edit">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div id="pos-edit-name" style="font-size:17px;font-weight:700;margin-bottom:14px;line-height:1.3">-</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">QTY</label>
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <button onclick="posEditQty(-1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--green);background:var(--green-light);color:var(--green-dark,#15803d);font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">−</button>
+        <input id="pos-edit-qty" type="number" min="1" value="1" onchange="posUpdateEditSubtotal()" style="flex:1;min-width:0;height:48px;border:2px solid var(--border);border-radius:12px;text-align:center;font-size:20px;font-weight:700;outline:none;font-family:inherit;padding:0 4px"/>
+        <button onclick="posEditQty(1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--green);background:var(--green-light);color:var(--green-dark,#15803d);font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">+</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">HARGA SATUAN</label>
+      <input id="pos-edit-harga" type="number" oninput="posUpdateEditSubtotal()" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div style="background:var(--green-light);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--green-dark,#15803d);display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span>Subtotal</span><strong id="pos-edit-subtotal" style="font-size:18px;font-family:'SF Mono',Monaco,monospace">Rp 0</strong>
+    </div>
+    <button onclick="posDeleteEdit()" style="background:var(--red);color:white;height:44px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:none;width:100%;margin-bottom:8px">🗑 Hapus dari Keranjang</button>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('pos-modal-edit')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posSaveEdit()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white;box-shadow:0 4px 12px rgba(22,163,74,0.4)">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah Manual -->
+<div class="modal-overlay" id="pos-modal-manual">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">➕ Tambah Item Manual</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">NAMA BARANG</label>
+      <input id="pos-man-nama" placeholder="cth: Permen Kopiko" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:14px;font-weight:500;outline:none;font-family:inherit"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">QTY</label>
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <button onclick="posManQty(-1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--green);background:var(--green-light);color:var(--green-dark,#15803d);font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">−</button>
+        <input id="pos-man-qty" type="number" min="1" value="1" style="flex:1;min-width:0;height:48px;border:2px solid var(--border);border-radius:12px;text-align:center;font-size:20px;font-weight:700;outline:none;font-family:inherit;padding:0 4px"/>
+        <button onclick="posManQty(1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--green);background:var(--green-light);color:var(--green-dark,#15803d);font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">+</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">HARGA SATUAN</label>
+      <input id="pos-man-harga" type="number" placeholder="0" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('pos-modal-manual')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posSaveManual()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white;box-shadow:0 4px 12px rgba(22,163,74,0.4)">✓ Tambahkan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Pelanggan Search -->
+<div class="modal-overlay" id="pos-modal-pel">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:80vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">👤 Pilih Pelanggan</div>
+    <input id="pos-pel-search" placeholder="Ketik nama pelanggan..." oninput="posPelSearch(this.value)" autocomplete="off" style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:8px;padding:0 14px;font-size:13px;outline:none;font-family:inherit;margin-bottom:10px"/>
+    <div id="pos-pel-result" style="max-height:50vh;overflow-y:auto"></div>
+    <div style="padding-top:10px;border-top:1px solid var(--border);margin-top:10px">
+      <button onclick="posSetPel({id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:'umum'})" style="width:100%;height:42px;border:none;border-radius:8px;font-weight:700;cursor:pointer;background:var(--bg);color:var(--text)">— Pelanggan Umum —</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Diskon -->
+<div class="modal-overlay" id="pos-modal-diskon">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">🎟 Diskon</div>
+    <div style="display:flex;background:var(--bg);border-radius:8px;padding:4px;gap:2px;margin-bottom:12px">
+      <button class="pos-disktab active" data-tipe="none" onclick="posSetDiskonTipe('none',this)" style="flex:1;padding:8px 4px;background:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:var(--green-dark,#15803d);box-shadow:0 1px 3px rgba(0,0,0,0.1)">Tidak Ada</button>
+      <button class="pos-disktab" data-tipe="persen" onclick="posSetDiskonTipe('persen',this)" style="flex:1;padding:8px 4px;background:none;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text-muted)">Persen</button>
+      <button class="pos-disktab" data-tipe="nominal" onclick="posSetDiskonTipe('nominal',this)" style="flex:1;padding:8px 4px;background:none;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text-muted)">Nominal</button>
+      <button class="pos-disktab" data-tipe="voucher" onclick="posSetDiskonTipe('voucher',this)" style="flex:1;padding:8px 4px;background:none;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text-muted)">Voucher</button>
+    </div>
+    <div id="pos-disk-section-persen" style="display:none">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">PERSENTASE (%)</label>
+      <input id="pos-disk-persen" type="number" min="0" max="100" placeholder="0" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div id="pos-disk-section-nominal" style="display:none">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">NOMINAL (RP)</label>
+      <input id="pos-disk-nominal" type="number" min="0" placeholder="0" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div id="pos-disk-section-voucher" style="display:none">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">PILIH VOUCHER</label>
+      <select id="pos-disk-voucher" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 12px;font-size:14px;font-weight:600;outline:none;font-family:inherit;background:white">
+        <option value="">-- Pilih voucher --</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Hanya voucher aktif yang ditampilkan</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-top:14px">
+      <button onclick="closeModal('pos-modal-diskon')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posApplyDiskon()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white">✓ Terapkan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ongkir -->
+<div class="modal-overlay" id="pos-modal-ongkir">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">🚚 Ongkir / Biaya Tambahan</div>
+    <input id="pos-ongkir-input" type="number" min="0" placeholder="0" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit;margin-bottom:14px"/>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('pos-modal-ongkir')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posApplyOngkir()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Catatan -->
+<div class="modal-overlay" id="pos-modal-catatan">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">📝 Catatan Transaksi</div>
+    <textarea id="pos-catatan-input" placeholder="cth: Antar ke alamat A, atau pesanan customer" style="width:100%;min-height:100px;border:2px solid var(--border);border-radius:12px;padding:10px 14px;font-size:14px;outline:none;font-family:inherit;resize:vertical;margin-bottom:14px"></textarea>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('pos-modal-catatan')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posApplyCatatan()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tanggal -->
+<div class="modal-overlay" id="pos-modal-tgl">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">📅 Tanggal Transaksi</div>
+    <input id="pos-tgl-input" type="date" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:14px;outline:none;font-family:inherit;margin-bottom:6px"/>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">Pilih tanggal jika input transaksi backdate</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px">
+      <button onclick="posResetTgl()" style="height:46px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;border:none;background:#fef3c7;color:#92400e">Hari Ini</button>
+      <button onclick="closeModal('pos-modal-tgl')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posApplyTgl()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Bayar -->
+<div class="modal-overlay" id="pos-modal-bayar">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">💰 Pembayaran</div>
+    <div style="background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white;border-radius:14px;padding:14px;text-align:center;margin-bottom:14px">
+      <div style="font-size:11px;opacity:0.9;text-transform:uppercase;letter-spacing:0.5px">Total Belanja</div>
+      <div id="pos-bayar-total" style="font-size:28px;font-weight:800;font-family:'SF Mono',Monaco,monospace;line-height:1.2;margin-top:2px">Rp 0</div>
+    </div>
+    <!-- Metode (Bayar Nanti default + Tunai) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+      <div class="pos-metode-btn active" data-metode="hutang" onclick="posSetMetode(this)" style="padding:14px 8px;border:2px solid var(--amber,#f59e0b);background:var(--amber-light,#fef3c7);color:#92400e;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:700;transition:all 0.15s">
+        <span style="font-size:22px">📒</span>Bayar Nanti
+      </div>
+      <div class="pos-metode-btn" data-metode="tunai" onclick="posSetMetode(this)" style="padding:14px 8px;border:2px solid var(--border);background:white;color:var(--text);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:700;transition:all 0.15s">
+        <span style="font-size:22px">💵</span>Tunai
+      </div>
+    </div>
+    <!-- Section Tunai -->
+    <div id="pos-bayar-section-tunai" style="display:none">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">KAS PENERIMA</label>
+      <select id="pos-bayar-kas" style="width:100%;height:42px;border:2px solid var(--border);border-radius:8px;padding:0 12px;font-size:14px;font-weight:600;outline:none;font-family:inherit;background:white;margin-bottom:12px"></select>
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">BAYAR (RP)</label>
+      <input id="pos-bayar-input" type="number" placeholder="0" oninput="posHitungKembalian()" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+      <div id="pos-chip-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;margin-bottom:14px"></div>
+      <div style="display:flex;justify-content:space-between;background:#dbeafe;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:600">
+        <span>Kembalian</span>
+        <span id="pos-bayar-kembalian" style="color:var(--blue,#2563eb);font-family:'SF Mono',Monaco,monospace">Rp 0</span>
+      </div>
+    </div>
+    <!-- Section Hutang -->
+    <div id="pos-bayar-section-hutang">
+      <div style="background:var(--amber-light,#fef3c7);border:1px solid var(--amber,#f59e0b);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;display:flex;align-items:flex-start;gap:8px">
+        <span>📒</span>
+        <div>Tercatat sebagai <strong>piutang pelanggan</strong>. Pelanggan wajib dipilih (bukan Umum).</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('pos-modal-bayar')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button id="pos-btn-konfirmasi" onclick="posKonfirmasiBayar()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--green),var(--green-dark,#15803d));color:white;box-shadow:0 4px 12px rgba(22,163,74,0.4)">✓ Konfirmasi</button>
+    </div>
+  </div>
+</div>
+
+<!-- STRUK Overlay (full screen) -->
+<div id="pos-struk-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;flex-direction:column;align-items:center;justify-content:flex-start;z-index:1000;padding:20px 12px;overflow-y:auto">
+  <div style="position:sticky;top:0;width:100%;max-width:380px;display:flex;gap:8px;margin-bottom:14px;flex-shrink:0">
+    <button onclick="posDownloadStrukJPG()" style="flex:1;height:42px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:var(--blue,#2563eb);color:white">💾 Simpan JPG</button>
+    <button onclick="posCetakStruk()" style="flex:1;height:42px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#7c3aed;color:white">🖨 Cetak/PDF</button>
+    <button onclick="posCloseStruk()" style="flex:1;height:42px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:white;color:var(--text);border:1px solid var(--border)">✕ Tutup</button>
+  </div>
+  <div id="pos-struk-paper" style="background:white;width:58mm;max-width:90vw;padding:8px 6px;font-family:'Courier New','Lucida Console',monospace;font-size:11px;line-height:1.4;color:#000;box-shadow:0 4px 24px rgba(0,0,0,0.4)"></div>
+</div>
+
 
 <!-- PAGE: JUAL -->
       <div id="page-jual" class="page active" style="padding:0;max-width:none;">
@@ -2471,6 +2764,14 @@ function showPage(id,btn){
     loadSettingToko();
   }
   if(id==='jual'){renderProdukJual();}
+  if(id==='pos'){
+    // Init POS module — load setting & default state
+    if(typeof initPOS==='function')initPOS();
+    setTimeout(()=>{
+      const inp=document.getElementById('pos-scan-input');
+      if(inp)inp.focus();
+    },200);
+  }
   if(id==='ppob'){lKas().then(()=>initPPOBForm());}
   if(id==='ppob-riwayat'){lPPOB().then(()=>renderPPOBRiwayat());}
   if(id==='ppob-laporan'){lPPOB().then(()=>renderPPOBLaporan());}
@@ -5445,6 +5746,7 @@ let aKas=[], aPPOB=[], ppobFilter='semua', ppobLapMode='bulan';
 
 /* ACL - ACCESS CONTROL */
 const MENU_DEF = [
+  {id:'warung_pos',     label:'🛒 Kasir POS',     modul:'🏪 Warung',      page:'pos'},
   {id:'warung_jual',    label:'Penjualan',       modul:'🏪 Warung',      page:'jual'},
   {id:'warung_riwayat_jual', label:'Riwayat Jual', modul:'🏪 Warung',   page:'riwayat'},
   {id:'warung_beli',    label:'Pembelian',        modul:'🏪 Warung',      page:'beli'},
@@ -7470,6 +7772,1096 @@ async function importProduk(event){
   reader.readAsText(file);
   event.target.value = ''; // reset input
 }
+
+
+
+/* ===== POS MOBILE MODULE ===== */
+/* ============================================================ */
+/* POS JAVASCRIPT MODULE                                        */
+/* Loaded inline at end of warung.html                          */
+/* Dependency: aB (barang), aBatch, aPel, aH, sb, CU, fmt, toast,*/
+/*             openSD, fifoHPP, recalcSaldo, lT, lB, lBatch,    */
+/*             lPel, lH, lKas, lPaket, lVoucher, aPaket, aVoucher,*/
+/*             aAnggota, aJamaah, aKas                          */
+/* ============================================================ */
+
+/* === STATE POS === */
+let posCart = []; // {pid,nama,qty,harga,is_manual,barcode,_kategori,_qtyPerUnit,isPaket,paketItems,...}
+let posPel = {id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:'umum'};
+let posMetode = 'hutang'; // default Bayar Nanti
+let posDiskon = {tipe:'none',nilai:0,nominal:0,voucher_kode:''};
+let posOngkir = 0;
+let posCatatan = '';
+let posTglTrx = ''; // empty = today, kalau di-set = backdate ISO date YYYY-MM-DD
+let posEditingIdx = -1;
+
+const POS_TOKO = {
+  nama:'Warung UBNB',
+  alamat:'Desa Perwira',
+  telp:'',
+  footer:'Terima kasih, Alhamdulillah Jazaakumullohu khoiro'
+};
+
+/* === LOAD SETTING TOKO === */
+async function posLoadSetting(){
+  try{
+    const{data}=await sb.from('setting_toko').select('*');
+    if(data){
+      data.forEach(s=>{
+        if(s.key==='toko_nama'&&s.value)POS_TOKO.nama=s.value;
+        if(s.key==='toko_alamat'&&s.value)POS_TOKO.alamat=s.value;
+        if(s.key==='wa_center'&&s.value)POS_TOKO.telp=s.value;
+        if(s.key==='struk_footer'&&s.value)POS_TOKO.footer=s.value;
+      });
+    }
+  }catch(e){console.warn('posLoadSetting:',e)}
+}
+
+/* === TAB NAVIGATION === */
+function goPosTab(name,btn){
+  document.querySelectorAll('.pos-tab-content').forEach(p=>p.style.display='none');
+  document.getElementById('pos-tab-'+name).style.display=name==='kasir'?'flex':'block';
+  document.querySelectorAll('.pos-tab').forEach(b=>{
+    b.style.borderBottomColor='transparent';
+    b.style.color='var(--text-muted)';
+    b.style.fontWeight='600';
+    b.classList.remove('active');
+  });
+  btn.style.borderBottomColor='var(--green)';
+  btn.style.color='var(--green-dark, #15803d)';
+  btn.style.fontWeight='700';
+  btn.classList.add('active');
+  if(name==='pending')posRenderPending();
+  if(name==='riwayat')posRenderRiwayat();
+}
+
+/* === SEARCH PRODUK & PAKET === */
+function posSearchProduk(q){
+  const dd=document.getElementById('pos-search-result');
+  if(!q||q.length<1){dd.style.display='none';return;}
+  // qty*barcode shortcut
+  const m=q.match(/^(\d+)\*(.+)$/);
+  let kw=q,qty=1;
+  if(m){qty=parseInt(m[1]);kw=m[2];}
+  const kwLow=kw.toLowerCase();
+  // Filter barang non-PPOB/laundry/service (untuk POS warung)
+  const produkList=(typeof aB!=='undefined'?aB:[]).filter(p=>{
+    if(['ppob','laundry','service'].includes(p.kategori))return false;
+    return p.nama.toLowerCase().includes(kwLow)||(p.barcode||'').includes(kw);
+  }).slice(0,8);
+  // Paket aktif
+  const paketList=(typeof aPaket!=='undefined'?aPaket:[]).filter(p=>{
+    if(!p.aktif)return false;
+    return p.nama.toLowerCase().includes(kwLow);
+  }).slice(0,4);
+
+  if(!produkList.length&&!paketList.length){
+    dd.innerHTML='<div style="padding:10px 12px;text-align:center;color:var(--text-muted);font-size:12px">Tidak ditemukan</div>';
+    dd.style.display='block';return;
+  }
+  let html='';
+  paketList.forEach(p=>{
+    html+=`<div onclick='posAddPaket(${p.id},${qty})' style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fefce8">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📦 ${p.nama}</div>
+        <div style="font-size:10px;color:var(--text-muted)">PAKET BUNDLING · ${p.items?p.items.length+' item':''}</div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;white-space:nowrap;flex-shrink:0">${fmt(p.harga_paket)}</div>
+    </div>`;
+  });
+  produkList.forEach(p=>{
+    const harga=p.harga||0;
+    html+=`<div onclick="posAddProduk(${p.id},${qty})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nama}</div>
+        <div style="font-size:10px;color:var(--text-muted)">stok: ${p.stok??0}${p.barcode?' · '+p.barcode:''}</div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;white-space:nowrap;flex-shrink:0">${fmt(harga)}</div>
+    </div>`;
+  });
+  dd.innerHTML=html;
+  dd.style.display='block';
+}
+
+function posHandleScanKey(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const v=e.target.value.trim();
+    if(!v)return;
+    const m=v.match(/^(\d+)\*(.+)$/);
+    let kw=v,qty=1;
+    if(m){qty=parseInt(m[1]);kw=m[2];}
+    // Try exact barcode match first
+    const found=(typeof aB!=='undefined'?aB:[]).find(p=>p.barcode===kw&&!['ppob','laundry','service'].includes(p.kategori));
+    if(found){posAddProduk(found.id,qty);return;}
+    // Else: fall back to first search result
+    const list=(typeof aB!=='undefined'?aB:[]).filter(p=>!['ppob','laundry','service'].includes(p.kategori)&&(p.nama.toLowerCase().includes(kw.toLowerCase())||(p.barcode||'').includes(kw)));
+    if(list.length){posAddProduk(list[0].id,qty);}
+    else toast('Barang tidak ditemukan',true);
+  }
+  if(e.key==='Escape'){
+    e.target.value='';
+    document.getElementById('pos-search-result').style.display='none';
+  }
+}
+
+document.addEventListener('click',e=>{
+  const sb_=document.querySelector('#page-pos .pos-scan-input');
+  if(sb_&&!e.target.closest('#pos-scan-input')&&!e.target.closest('#pos-search-result')){
+    const dd=document.getElementById('pos-search-result');
+    if(dd)dd.style.display='none';
+  }
+});
+
+/* === ADD PRODUK / PAKET KE CART === */
+function posAddProduk(pid,qty){
+  qty=qty||1;
+  const p=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===pid);
+  if(!p){toast('Produk tidak ditemukan',true);return;}
+  const ex=posCart.find(c=>c.pid===pid&&!c.isPaket);
+  if(ex){ex.qty+=qty;}
+  else posCart.push({
+    pid,nama:p.nama,qty,harga:p.harga||0,
+    barang_id:p.id,barcode:p.barcode||'',
+    is_manual:false,isPaket:false,
+    _kategori:p.kategori||'umum'
+  });
+  document.getElementById('pos-scan-input').value='';
+  document.getElementById('pos-search-result').style.display='none';
+  document.getElementById('pos-scan-input').focus();
+  posRenderCart();
+  toast('+ '+p.nama+(qty>1?' ×'+qty:''));
+}
+
+function posAddPaket(paketId,qty){
+  qty=qty||1;
+  const p=(typeof aPaket!=='undefined'?aPaket:[]).find(x=>x.id===paketId);
+  if(!p){toast('Paket tidak ditemukan',true);return;}
+  const ex=posCart.find(c=>c.pid==='paket-'+paketId);
+  if(ex){ex.qty+=qty;}
+  else posCart.push({
+    pid:'paket-'+paketId,
+    nama:'📦 '+p.nama,
+    qty,harga:p.harga_paket,
+    is_manual:false,isPaket:true,
+    paketItems:p.items||[],
+    _kategori:'paket'
+  });
+  document.getElementById('pos-scan-input').value='';
+  document.getElementById('pos-search-result').style.display='none';
+  document.getElementById('pos-scan-input').focus();
+  posRenderCart();
+  toast('+ '+p.nama);
+}
+
+/* === RENDER CART === */
+function posRenderCart(){
+  const el=document.getElementById('pos-cart-items');
+  document.getElementById('pos-cart-count').textContent=posCart.length+' item';
+  if(!posCart.length){
+    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text-muted);font-size:13px"><div style="font-size:54px;opacity:0.3;margin-bottom:8px">🛒</div>Keranjang kosong<br><span style="font-size:12px">Scan / cari produk di atas</span></div>';
+  } else {
+    el.innerHTML=posCart.map((c,i)=>{
+      const subtotal=c.qty*c.harga;
+      const ico=c.isPaket?'📦':(c.is_manual?'✏️':'🛒');
+      return `<div class="pos-cart-item" data-idx="${i}" onclick="posOpenEdit(${i})" style="background:white;border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer">
+        <div style="width:38px;height:38px;border-radius:8px;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${ico}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${c.nama}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${fmt(c.harga)} × ${c.qty}</div>
+        </div>
+        <div style="font-weight:700;font-size:13px;color:var(--green-dark, #15803d);text-align:right;flex-shrink:0;font-family:'SF Mono',Monaco,monospace">${fmt(subtotal)}</div>
+      </div>`;
+    }).join('');
+  }
+  posUpdateTotal();
+}
+
+function posUpdateTotal(){
+  const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+  // Hitung diskon
+  let diskonNominal=0;
+  if(posDiskon.tipe==='persen')diskonNominal=Math.round(subtotal*(posDiskon.nilai||0)/100);
+  else if(posDiskon.tipe==='nominal')diskonNominal=posDiskon.nominal||0;
+  else if(posDiskon.tipe==='voucher'&&posDiskon.voucher_kode){
+    const v=(typeof aVoucher!=='undefined'?aVoucher:[]).find(x=>x.kode===posDiskon.voucher_kode);
+    if(v){
+      if(subtotal>=(v.min_belanja||0)){
+        diskonNominal=v.tipe==='persen'?Math.round(subtotal*v.nilai/100):v.nilai;
+      } else {
+        diskonNominal=0; // gugur kalau di bawah min_belanja
+      }
+    }
+  }
+  diskonNominal=Math.min(diskonNominal,subtotal);
+  const total=Math.max(0,subtotal-diskonNominal+posOngkir);
+
+  document.getElementById('pos-subtotal').textContent=fmt(subtotal);
+  // Diskon row
+  const drRow=document.getElementById('pos-diskon-row');
+  if(diskonNominal>0){
+    drRow.style.display='flex';
+    let lbl='Diskon';
+    if(posDiskon.tipe==='persen')lbl=`Diskon (${posDiskon.nilai}%)`;
+    else if(posDiskon.tipe==='voucher')lbl=`Voucher ${posDiskon.voucher_kode}`;
+    document.getElementById('pos-diskon-lbl').textContent=lbl;
+    document.getElementById('pos-diskon-val').textContent='- '+fmt(diskonNominal);
+  } else drRow.style.display='none';
+  // Ongkir row
+  const orRow=document.getElementById('pos-ongkir-row');
+  if(posOngkir>0){
+    orRow.style.display='flex';
+    document.getElementById('pos-ongkir-val').textContent='+ '+fmt(posOngkir);
+  } else orRow.style.display='none';
+  document.getElementById('pos-total').textContent=fmt(total);
+
+  // Update tool button labels
+  document.getElementById('pos-diskon-btn-lbl').textContent=diskonNominal>0?'Diskon ✓':'Diskon';
+  document.getElementById('pos-ongkir-btn-lbl').textContent=posOngkir>0?'Ongkir ✓':'Ongkir';
+  document.getElementById('pos-catatan-btn-lbl').textContent=posCatatan?'Catatan ✓':'Catatan';
+  document.getElementById('pos-tgl-btn-lbl').textContent=posTglTrx?posFmtTglShort(posTglTrx):'Hari ini';
+
+  // Btn Bayar enabled
+  const btn=document.getElementById('pos-btn-bayar');
+  btn.disabled=posCart.length===0;
+  btn.style.opacity=posCart.length===0?'0.5':'1';
+}
+
+function posFmtTglShort(iso){
+  const d=new Date(iso+'T00:00:00');
+  return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+}
+
+/* === EDIT ITEM === */
+function posOpenEdit(idx){
+  posEditingIdx=idx;
+  const c=posCart[idx];
+  document.getElementById('pos-edit-name').textContent=c.nama;
+  document.getElementById('pos-edit-qty').value=c.qty;
+  document.getElementById('pos-edit-harga').value=c.harga;
+  posUpdateEditSubtotal();
+  openModal('pos-modal-edit');
+}
+function posEditQty(d){
+  const inp=document.getElementById('pos-edit-qty');
+  let v=parseInt(inp.value)||1;
+  v=Math.max(1,v+d);
+  inp.value=v;
+  posUpdateEditSubtotal();
+}
+function posUpdateEditSubtotal(){
+  const q=parseInt(document.getElementById('pos-edit-qty').value)||1;
+  const h=parseFloat(document.getElementById('pos-edit-harga').value)||0;
+  document.getElementById('pos-edit-subtotal').textContent=fmt(q*h);
+}
+function posSaveEdit(){
+  if(posEditingIdx<0)return;
+  const q=parseInt(document.getElementById('pos-edit-qty').value)||1;
+  const h=parseFloat(document.getElementById('pos-edit-harga').value)||0;
+  posCart[posEditingIdx].qty=q;
+  posCart[posEditingIdx].harga=h;
+  closeModal('pos-modal-edit');
+  posRenderCart();
+  toast('Item diperbarui');
+}
+function posDeleteEdit(){
+  if(posEditingIdx<0)return;
+  if(!confirm('Hapus item dari keranjang?'))return;
+  posCart.splice(posEditingIdx,1);
+  closeModal('pos-modal-edit');
+  posRenderCart();
+  toast('Item dihapus');
+}
+
+/* === TAMBAH MANUAL === */
+function posAddManual(){
+  document.getElementById('pos-man-nama').value='';
+  document.getElementById('pos-man-qty').value=1;
+  document.getElementById('pos-man-harga').value='';
+  openModal('pos-modal-manual');
+}
+function posManQty(d){
+  const inp=document.getElementById('pos-man-qty');
+  let v=parseInt(inp.value)||1;
+  v=Math.max(1,v+d);
+  inp.value=v;
+}
+function posSaveManual(){
+  const nama=document.getElementById('pos-man-nama').value.trim();
+  const q=parseInt(document.getElementById('pos-man-qty').value)||1;
+  const h=parseFloat(document.getElementById('pos-man-harga').value)||0;
+  if(!nama){toast('Nama barang wajib diisi',true);return;}
+  if(!h){toast('Harga wajib diisi',true);return;}
+  posCart.push({
+    pid:'manual-'+Date.now(),
+    nama,qty:q,harga:h,
+    is_manual:true,isPaket:false,
+    _kategori:'manual'
+  });
+  closeModal('pos-modal-manual');
+  posRenderCart();
+  toast('+ '+nama);
+}
+
+/* === PELANGGAN PREDICTIVE SEARCH === */
+function openPosPelSearch(){
+  document.getElementById('pos-pel-search').value='';
+  posPelSearch('');
+  openModal('pos-modal-pel');
+  setTimeout(()=>document.getElementById('pos-pel-search').focus(),100);
+}
+
+function posPelSearch(q){
+  const el=document.getElementById('pos-pel-result');
+  q=(q||'').trim();
+  if(!q){
+    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">Ketik nama untuk mencari</div>';
+    return;
+  }
+  const qLow=q.toLowerCase();
+  let html='';
+
+  // 1. Anggota match
+  const ang=(typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).filter(a=>(a.nama||'').toLowerCase().includes(qLow)||(a.no_anggota||'').toLowerCase().includes(qLow));
+  if(ang.length){
+    html+='<div style="font-size:10px;color:var(--green-dark, #15803d);text-transform:uppercase;font-weight:700;padding:6px 10px;background:#f0fdf4;border-radius:6px;margin-bottom:6px">⭐ ANGGOTA</div>';
+    ang.slice(0,8).forEach(a=>{
+      const obj={id:null,anggota_id:a.id,jamaah_did:null,label:a.nama,sumber:'anggota'};
+      html+=`<div onclick='posSetPel(${JSON.stringify(obj).replace(/'/g,"&#39;")})' style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:var(--green-light);color:var(--green-dark, #15803d);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">⭐</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.nama}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${a.no_anggota||''} · ${a.kelompok||''}</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  // 2. Jamaah match
+  const jam=(typeof aJamaah!=='undefined'?aJamaah:[]).filter(j=>(j.nama||'').toLowerCase().includes(qLow));
+  if(jam.length){
+    html+='<div style="font-size:10px;color:#4338ca;text-transform:uppercase;font-weight:700;padding:6px 10px;background:#eef2ff;border-radius:6px;margin-bottom:6px;margin-top:8px">👥 JAMAAH</div>';
+    jam.slice(0,8).forEach(j=>{
+      const obj={id:null,anggota_id:null,jamaah_did:j.did||null,label:j.nama,sumber:'jamaah'};
+      html+=`<div onclick='posSetPel(${JSON.stringify(obj).replace(/'/g,"&#39;")})' style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:#e0e7ff;color:#4338ca;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0">${j.kelompok?'PW'+j.kelompok:'👥'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${j.nama}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${j.kelompok?'Kel. '+j.kelompok:''}${j.nama_kk?' · KK: '+j.nama_kk:''}</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  // 3. Tambah Umum dengan ketikan
+  const tambahObj={id:null,anggota_id:null,jamaah_did:null,label:q,sumber:'baru'};
+  html+=`<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+    <div onclick='posSetPel(${JSON.stringify(tambahObj).replace(/'/g,"&#39;")})' style="padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;background:#fef3c7;border-radius:8px">
+      <div style="width:34px;height:34px;border-radius:50%;background:#fde68a;color:#92400e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">✏️</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:#92400e">+ Tambah "${q}" (Umum)</div>
+        <div style="font-size:10px;color:#92400e">Walk-in / tidak terdaftar</div>
+      </div>
+    </div>
+  </div>`;
+
+  el.innerHTML=html;
+}
+
+function posSetPel(p){
+  posPel=p;
+  const pill=document.getElementById('pos-pel-pill');
+  pill.classList.remove('umum','anggota','jamaah','baru');
+  pill.classList.add(p.sumber);
+  // visual change via inline style
+  if(p.sumber==='anggota'){
+    pill.style.background='var(--green-light)';
+    pill.style.borderColor='var(--green)';
+    pill.style.color='var(--green-dark, #15803d)';
+  } else if(p.sumber==='jamaah'){
+    pill.style.background='#e0e7ff';
+    pill.style.borderColor='#4f46e5';
+    pill.style.color='#4338ca';
+  } else if(p.sumber==='baru'){
+    pill.style.background='#fef3c7';
+    pill.style.borderColor='#f59e0b';
+    pill.style.color='#92400e';
+  } else {
+    pill.style.background='#f8fafc';
+    pill.style.borderColor='var(--border)';
+    pill.style.color='var(--text-muted)';
+  }
+  let prefix='';
+  if(p.sumber==='anggota')prefix='⭐ ';
+  else if(p.sumber==='jamaah')prefix='👥 ';
+  else if(p.sumber==='baru')prefix='✏️ ';
+  document.getElementById('pos-pel-name').textContent='Pelanggan: '+prefix+p.label;
+  closeModal('pos-modal-pel');
+  toast('Pelanggan: '+p.label);
+}
+
+/* === DISKON === */
+function posOpenDiskon(){
+  // Set tipe yang sedang aktif
+  const tipe=posDiskon.tipe||'none';
+  document.querySelectorAll('.pos-disktab').forEach(b=>{
+    if(b.dataset.tipe===tipe){b.style.background='white';b.style.color='var(--green-dark, #15803d)';b.style.boxShadow='0 1px 3px rgba(0,0,0,0.1)';b.classList.add('active');}
+    else {b.style.background='none';b.style.color='var(--text-muted)';b.style.boxShadow='none';b.classList.remove('active');}
+  });
+  posSetDiskonTipe(tipe,document.querySelector(`.pos-disktab[data-tipe="${tipe}"]`));
+  // Pre-fill values
+  document.getElementById('pos-disk-persen').value=posDiskon.tipe==='persen'?(posDiskon.nilai||''):'';
+  document.getElementById('pos-disk-nominal').value=posDiskon.tipe==='nominal'?(posDiskon.nominal||''):'';
+  // Voucher dropdown
+  const sel=document.getElementById('pos-disk-voucher');
+  const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+  const today=new Date().toISOString().slice(0,10);
+  const vList=(typeof aVoucher!=='undefined'?aVoucher:[]).filter(v=>v.aktif&&(!v.berlaku_sampai||v.berlaku_sampai>=today));
+  sel.innerHTML='<option value="">-- Pilih voucher --</option>'+vList.map(v=>{
+    const eligible=subtotal>=(v.min_belanja||0);
+    return `<option value="${v.kode}" ${v.kode===posDiskon.voucher_kode?'selected':''} ${eligible?'':'disabled'}>${v.kode} - ${v.nama}${v.min_belanja?' (min '+fmt(v.min_belanja)+')':''}${eligible?'':' [tidak eligible]'}</option>`;
+  }).join('');
+  openModal('pos-modal-diskon');
+}
+function posSetDiskonTipe(tipe,btn){
+  document.querySelectorAll('.pos-disktab').forEach(b=>{
+    b.style.background='none';b.style.color='var(--text-muted)';b.style.boxShadow='none';b.classList.remove('active');
+  });
+  if(btn){btn.style.background='white';btn.style.color='var(--green-dark, #15803d)';btn.style.boxShadow='0 1px 3px rgba(0,0,0,0.1)';btn.classList.add('active');}
+  ['persen','nominal','voucher'].forEach(t=>{
+    document.getElementById('pos-disk-section-'+t).style.display=t===tipe?'block':'none';
+  });
+}
+function posApplyDiskon(){
+  const aktif=document.querySelector('.pos-disktab.active');
+  const tipe=aktif?aktif.dataset.tipe:'none';
+  if(tipe==='none'){posDiskon={tipe:'none',nilai:0,nominal:0,voucher_kode:''};}
+  else if(tipe==='persen'){
+    const v=parseFloat(document.getElementById('pos-disk-persen').value)||0;
+    if(v<=0){toast('Persen harus > 0',true);return;}
+    if(v>100){toast('Persen max 100',true);return;}
+    posDiskon={tipe:'persen',nilai:v,nominal:0,voucher_kode:''};
+  } else if(tipe==='nominal'){
+    const v=parseFloat(document.getElementById('pos-disk-nominal').value)||0;
+    if(v<=0){toast('Nominal harus > 0',true);return;}
+    posDiskon={tipe:'nominal',nilai:0,nominal:v,voucher_kode:''};
+  } else if(tipe==='voucher'){
+    const k=document.getElementById('pos-disk-voucher').value;
+    if(!k){toast('Pilih voucher dulu',true);return;}
+    posDiskon={tipe:'voucher',nilai:0,nominal:0,voucher_kode:k};
+  }
+  closeModal('pos-modal-diskon');
+  posUpdateTotal();
+  toast(tipe==='none'?'Diskon dihapus':'Diskon diterapkan');
+}
+
+/* === ONGKIR / CATATAN / TANGGAL === */
+function posOpenOngkir(){
+  document.getElementById('pos-ongkir-input').value=posOngkir||'';
+  openModal('pos-modal-ongkir');
+}
+function posApplyOngkir(){
+  const v=parseFloat(document.getElementById('pos-ongkir-input').value)||0;
+  posOngkir=Math.max(0,v);
+  closeModal('pos-modal-ongkir');
+  posUpdateTotal();
+  toast(posOngkir?'Ongkir: '+fmt(posOngkir):'Ongkir dihapus');
+}
+
+function posOpenCatatan(){
+  document.getElementById('pos-catatan-input').value=posCatatan||'';
+  openModal('pos-modal-catatan');
+}
+function posApplyCatatan(){
+  posCatatan=document.getElementById('pos-catatan-input').value.trim();
+  closeModal('pos-modal-catatan');
+  posUpdateTotal();
+  toast(posCatatan?'Catatan disimpan':'Catatan dihapus');
+}
+
+function posOpenTgl(){
+  document.getElementById('pos-tgl-input').value=posTglTrx||new Date().toISOString().slice(0,10);
+  openModal('pos-modal-tgl');
+}
+function posResetTgl(){
+  posTglTrx='';
+  closeModal('pos-modal-tgl');
+  posUpdateTotal();
+  toast('Tanggal: hari ini');
+}
+function posApplyTgl(){
+  const v=document.getElementById('pos-tgl-input').value;
+  if(!v){posResetTgl();return;}
+  const today=new Date().toISOString().slice(0,10);
+  if(v===today)posTglTrx='';
+  else posTglTrx=v;
+  closeModal('pos-modal-tgl');
+  posUpdateTotal();
+  toast('Tanggal: '+(posTglTrx?posFmtTglShort(posTglTrx):'hari ini'));
+}
+
+/* === BAYAR === */
+function posOpenBayar(){
+  if(!posCart.length){toast('Keranjang kosong',true);return;}
+  const total=posComputeTotal();
+  document.getElementById('pos-bayar-total').textContent=fmt(total);
+  document.getElementById('pos-bayar-input').value='';
+  // Default = hutang (bayar nanti)
+  posSetMetode(document.querySelector('.pos-metode-btn[data-metode="hutang"]'));
+  // Populate kas
+  const sel=document.getElementById('pos-bayar-kas');
+  // Hanya Kas Utama (id 1) + Kas Kasir Toko PW4 (id 9)
+  const kasFilter=(typeof aKas!=='undefined'?aKas:[]).filter(k=>k.id===1||k.id===9);
+  sel.innerHTML=kasFilter.map(k=>`<option value="${k.id}" ${k.id===1?'selected':''}>${k.nama}</option>`).join('');
+  openModal('pos-modal-bayar');
+}
+
+function posComputeTotal(){
+  const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+  let diskonNominal=0;
+  if(posDiskon.tipe==='persen')diskonNominal=Math.round(subtotal*(posDiskon.nilai||0)/100);
+  else if(posDiskon.tipe==='nominal')diskonNominal=posDiskon.nominal||0;
+  else if(posDiskon.tipe==='voucher'&&posDiskon.voucher_kode){
+    const v=(typeof aVoucher!=='undefined'?aVoucher:[]).find(x=>x.kode===posDiskon.voucher_kode);
+    if(v&&subtotal>=(v.min_belanja||0)){
+      diskonNominal=v.tipe==='persen'?Math.round(subtotal*v.nilai/100):v.nilai;
+    }
+  }
+  diskonNominal=Math.min(diskonNominal,subtotal);
+  return Math.max(0,subtotal-diskonNominal+posOngkir);
+}
+
+function posSetMetode(btn){
+  document.querySelectorAll('.pos-metode-btn').forEach(b=>{
+    b.classList.remove('active');
+    b.style.background='white';
+    b.style.borderColor='var(--border)';
+    b.style.color='var(--text)';
+  });
+  btn.classList.add('active');
+  posMetode=btn.dataset.metode;
+  if(posMetode==='hutang'){
+    btn.style.background='var(--amber-light, #fef3c7)';
+    btn.style.borderColor='var(--amber, #f59e0b)';
+    btn.style.color='#92400e';
+  } else if(posMetode==='tunai'){
+    btn.style.background='var(--green-light)';
+    btn.style.borderColor='var(--green)';
+    btn.style.color='var(--green-dark, #15803d)';
+  }
+  document.getElementById('pos-bayar-section-tunai').style.display=posMetode==='tunai'?'block':'none';
+  document.getElementById('pos-bayar-section-hutang').style.display=posMetode==='hutang'?'block':'none';
+  if(posMetode==='tunai'){
+    posGenerateChips();
+    posHitungKembalian();
+  }
+}
+
+function posGenerateChips(){
+  const total=posComputeTotal();
+  const pecahan=[1000,2000,5000,10000,20000,50000,100000,200000];
+  let html=`<span onclick="posSetBayar(${total})" style="padding:8px 14px;background:var(--green-light);border:1.5px solid var(--green);border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:var(--green-dark, #15803d);user-select:none">Pas (${fmt(total)})</span>`;
+  const valid=pecahan.filter(p=>p>total).slice(0,4);
+  valid.forEach(p=>{
+    const lbl=p>=1000?(p/1000)+'K':p;
+    html+=`<span onclick="posSetBayar(${p})" style="padding:8px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text);user-select:none">${lbl}</span>`;
+  });
+  document.getElementById('pos-chip-row').innerHTML=html;
+}
+function posSetBayar(val){
+  document.getElementById('pos-bayar-input').value=val;
+  posHitungKembalian();
+}
+function posHitungKembalian(){
+  const total=posComputeTotal();
+  const bayar=parseFloat(document.getElementById('pos-bayar-input').value)||0;
+  const kembali=bayar-total;
+  const el=document.getElementById('pos-bayar-kembalian');
+  el.textContent=fmt(Math.max(0,kembali));
+  el.style.color=kembali<0?'var(--red)':'var(--blue, #2563eb)';
+}
+
+/* === KONFIRMASI BAYAR (CORE LOGIC) === */
+async function posKonfirmasiBayar(){
+  const total=posComputeTotal();
+  let bayarVal=0;
+  let kasId=null;
+
+  if(posMetode==='tunai'){
+    bayarVal=parseFloat(document.getElementById('pos-bayar-input').value)||0;
+    if(bayarVal<total){toast('Uang kurang!',true);return;}
+    kasId=parseInt(document.getElementById('pos-bayar-kas').value)||1;
+  } else {
+    // hutang
+    bayarVal=0;
+    if(posPel.sumber==='umum'){
+      toast('Untuk Bayar Nanti, pilih pelanggan dulu',true);
+      return;
+    }
+  }
+
+  const btn=document.getElementById('pos-btn-konfirmasi');
+  btn.disabled=true; btn.innerHTML='⏳ Menyimpan...'; btn.style.opacity='0.6';
+
+  try{
+    // Hitung HPP via FIFO
+    let tHpp=0;const allUpd=[];const items=[];
+    for(const k of posCart){
+      if(k.isPaket){
+        let ph=0;
+        for(const pi of (k.paketItems||[])){
+          if(pi.barang_id){
+            const{hpp,upd}=await fifoHPP(pi.barang_id,pi.qty*k.qty);
+            ph+=hpp;allUpd.push(...upd);
+          }
+        }
+        tHpp+=ph;items.push({...k,hpp:ph});
+      } else if(k.is_manual){
+        // Manual item: HPP=0
+        items.push({...k,hpp:0});
+      } else {
+        const{hpp,upd}=await fifoHPP(k.barang_id||k.pid,k.qty);
+        tHpp+=hpp;allUpd.push(...upd);
+        items.push({...k,hpp});
+      }
+    }
+
+    // Subtotal & diskon detail
+    const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+    let diskonNominal=0;
+    if(posDiskon.tipe==='persen')diskonNominal=Math.round(subtotal*(posDiskon.nilai||0)/100);
+    else if(posDiskon.tipe==='nominal')diskonNominal=posDiskon.nominal||0;
+    else if(posDiskon.tipe==='voucher'&&posDiskon.voucher_kode){
+      const v=(typeof aVoucher!=='undefined'?aVoucher:[]).find(x=>x.kode===posDiskon.voucher_kode);
+      if(v&&subtotal>=(v.min_belanja||0)){
+        diskonNominal=v.tipe==='persen'?Math.round(subtotal*v.nilai/100):v.nilai;
+      }
+    }
+    diskonNominal=Math.min(diskonNominal,subtotal);
+
+    // Tanggal trx
+    const tglTx=posTglTrx?(new Date(posTglTrx+'T'+(new Date().toTimeString().slice(0,8))).toISOString()):new Date().toISOString();
+
+    // Build payload
+    const payload={
+      items,total,bayar:bayarVal,
+      kembali:Math.max(0,bayarVal-total),
+      kasir:CU?CU.username:'unknown',
+      pelanggan:posPel.label||'Umum',
+      pelanggan_id:posPel.id||null,
+      anggota_id:posPel.anggota_id||null,
+      jamaah_did:posPel.jamaah_did||null,
+      hpp:tHpp,
+      diskon_tipe:posDiskon.tipe==='none'?'':posDiskon.tipe,
+      diskon_nilai:posDiskon.nilai||0,
+      diskon_nominal:diskonNominal,
+      voucher_kode:posDiskon.voucher_kode||'',
+      ongkir:posOngkir,
+      catatan:posCatatan||null,
+      metode_bayar:posMetode==='hutang'?'belum':'tunai',
+      status_bayar:posMetode==='hutang'?'belum':'lunas',
+      tgl_transaksi:tglTx,
+      waktu:tglTx,
+      kas_id:kasId
+    };
+
+    const{data:newTx,error:errTx}=await sb.from('transaksi').insert([payload]).select().single();
+    if(errTx)throw errTx;
+    const txId=newTx.id;
+
+    // Update batch & stok barang
+    for(const k of posCart){
+      if(k.isPaket){
+        for(const pi of (k.paketItems||[])){
+          if(pi.barang_id){
+            const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===pi.barang_id);
+            if(b)await sb.from('barang').update({stok:Math.max(0,(b.stok||0)-pi.qty*k.qty)}).eq('id',pi.barang_id);
+          }
+        }
+      } else if(!k.is_manual){
+        const bid=k.barang_id||k.pid;
+        const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===bid);
+        if(b&&!['ppob','laundry','service'].includes(b.kategori))await sb.from('barang').update({stok:Math.max(0,(b.stok||0)-k.qty)}).eq('id',bid);
+      }
+    }
+    for(const u of allUpd)await sb.from('stok_batch').update({qty_sisa:u.qty_sisa}).eq('id',u.id);
+
+    // Update poin pelanggan
+    if(posPel.id){
+      const p=(typeof aPel!=='undefined'?aPel:[]).find(x=>x.id===posPel.id);
+      if(p){
+        const poin=Math.floor(total/1000);
+        await sb.from('pelanggan').update({poin:(p.poin||0)+poin,total_belanja:(p.total_belanja||0)+total}).eq('id',posPel.id);
+      }
+    }
+
+    // Insert hutang kalau Bayar Nanti
+    if(posMetode==='hutang'){
+      const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
+      await sb.from('hutang').insert([{
+        nama:posPel.label,jml:total,
+        ket:'Penjualan POS: '+itemNames,
+        lunas:false,tipe:'piutang',
+        ref_id:txId,ref_type:'transaksi',
+        tgl:tglTx
+      }]);
+    }
+
+    // Insert kas_mutasi kalau Tunai (gap fix dari sistem lama)
+    if(posMetode==='tunai'&&kasId){
+      await sb.from('kas_mutasi').insert([{
+        kas_id:kasId,tipe:'masuk',kategori:'penjualan',
+        jumlah:total,tanggal:tglTx.slice(0,10),
+        keterangan:'Penjualan POS: '+(posPel.label||'Umum'),
+        operator:CU?CU.username:'unknown',
+        ref_type:'transaksi',ref_id:txId
+      }]);
+      if(typeof recalcSaldo==='function')await recalcSaldo(kasId);
+    }
+
+    // Reload data lokal
+    if(typeof lT==='function')await lT();
+    if(typeof lB==='function')await lB();
+    if(typeof lBatch==='function')await lBatch();
+    if(typeof lH==='function')await lH();
+    if(typeof lKas==='function')await lKas();
+
+    // Snapshot untuk struk
+    const trxSnapshot={
+      id:txId,
+      time:new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
+      tanggal:tglTx,
+      items:JSON.parse(JSON.stringify(posCart)),
+      subtotal,
+      diskonNominal,
+      ongkir:posOngkir,
+      total,
+      bayar:bayarVal,
+      kembali:Math.max(0,bayarVal-total),
+      member:JSON.parse(JSON.stringify(posPel)),
+      metode:posMetode,
+      catatan:posCatatan,
+      kasir:payload.kasir,
+      kasNama:posMetode==='tunai'?((typeof aKas!=='undefined'?aKas:[]).find(k=>k.id===kasId)?.nama||'Kas'):''
+    };
+
+    closeModal('pos-modal-bayar');
+    posResetCart();
+    posShowStruk(trxSnapshot);
+    toast('✅ Transaksi #'+txId+(posMetode==='hutang'?' (Bayar Nanti)':' lunas'));
+  } catch(e){
+    console.error('posKonfirmasiBayar:',e);
+    toast('❌ Gagal: '+(e.message||e),true);
+    btn.disabled=false; btn.innerHTML='✓ Konfirmasi'; btn.style.opacity='1';
+  }
+}
+
+function posResetCart(){
+  posCart=[];
+  posPel={id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:'umum'};
+  posMetode='hutang';
+  posDiskon={tipe:'none',nilai:0,nominal:0,voucher_kode:''};
+  posOngkir=0;
+  posCatatan='';
+  posTglTrx='';
+  // Reset pill pelanggan
+  const pill=document.getElementById('pos-pel-pill');
+  if(pill){
+    pill.style.background='#f8fafc';
+    pill.style.borderColor='var(--border)';
+    pill.style.color='var(--text-muted)';
+    pill.classList.remove('anggota','jamaah','baru');
+    pill.classList.add('umum');
+  }
+  const pelName=document.getElementById('pos-pel-name');
+  if(pelName)pelName.textContent='Pelanggan: Umum (tap untuk pilih)';
+  posRenderCart();
+}
+
+/* === STRUK === */
+function posShowStruk(trx){
+  const el=document.getElementById('pos-struk-paper');
+  const tglFmt=new Date(trx.tanggal).toLocaleString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  let html=`<div style="text-align:center">
+    <div style="font-size:13px;font-weight:700">${POS_TOKO.nama}</div>
+    <div style="font-size:10px">${POS_TOKO.alamat||''}</div>
+    ${POS_TOKO.telp?`<div style="font-size:10px">Telp: ${POS_TOKO.telp}</div>`:''}
+  </div>
+  <hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>
+  <div>No: TRX-${trx.id}</div>
+  <div>${tglFmt}</div>
+  <div>Kasir: ${trx.kasir}</div>
+  <div>Pelanggan: <b>${trx.member.label}${trx.member.sumber==='anggota'?' ⭐':''}${trx.member.sumber==='jamaah'?' 👥':''}</b></div>
+  ${trx.catatan?`<div style="font-size:10px;font-style:italic">Note: ${trx.catatan}</div>`:''}
+  <hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>`;
+  trx.items.forEach(it=>{
+    const sub=it.qty*it.harga;
+    html+=`<div style="margin-bottom:3px">
+      <div style="font-size:10.5px">${it.nama}</div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px">
+        <span>${it.qty} × ${(it.harga||0).toLocaleString('id-ID')}</span>
+        <span style="font-weight:700">${sub.toLocaleString('id-ID')}</span>
+      </div>
+    </div>`;
+  });
+  html+=`<hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>
+  <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${trx.subtotal.toLocaleString('id-ID')}</span></div>`;
+  if(trx.diskonNominal>0)html+=`<div style="display:flex;justify-content:space-between"><span>Diskon</span><span>-${trx.diskonNominal.toLocaleString('id-ID')}</span></div>`;
+  if(trx.ongkir>0)html+=`<div style="display:flex;justify-content:space-between"><span>Ongkir</span><span>+${trx.ongkir.toLocaleString('id-ID')}</span></div>`;
+  html+=`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px dashed #000;padding-top:3px;margin-top:3px">
+    <span>TOTAL</span><span>Rp ${trx.total.toLocaleString('id-ID')}</span>
+  </div>`;
+  if(trx.metode==='tunai'){
+    html+=`<div style="display:flex;justify-content:space-between"><span>Bayar (${trx.kasNama})</span><span>${trx.bayar.toLocaleString('id-ID')}</span></div>
+    <div style="display:flex;justify-content:space-between"><span>Kembali</span><span>${trx.kembali.toLocaleString('id-ID')}</span></div>`;
+  } else {
+    html+=`<div style="display:flex;justify-content:space-between"><span><b>BAYAR NANTI</b></span><span>${trx.total.toLocaleString('id-ID')}</span></div>`;
+  }
+  html+=`<div style="text-align:center;margin-top:5px">
+    <span style="display:inline-block;padding:2px 8px;border:1px solid #000;border-radius:3px;font-weight:700;font-size:10px">
+      ${trx.metode==='tunai'?'★ LUNAS':'⏳ BELUM LUNAS'}
+    </span>
+  </div>
+  <div style="text-align:center;font-size:9.5px;margin-top:6px;padding-top:5px;border-top:1px dashed #000">
+    <div style="font-weight:700;font-size:10.5px">${POS_TOKO.footer}</div>
+  </div>`;
+  el.innerHTML=html;
+  document.getElementById('pos-struk-overlay').style.display='flex';
+}
+function posCloseStruk(){
+  document.getElementById('pos-struk-overlay').style.display='none';
+  setTimeout(()=>{
+    const sb=document.getElementById('pos-scan-input');
+    if(sb)sb.focus();
+  },100);
+}
+function posDownloadStrukJPG(){
+  if(typeof html2canvas!=='function'){
+    toast('Library html2canvas belum dimuat',true);
+    return;
+  }
+  const el=document.getElementById('pos-struk-paper');
+  toast('Memproses gambar...');
+  html2canvas(el,{scale:3,backgroundColor:'#ffffff'}).then(canvas=>{
+    const link=document.createElement('a');
+    link.download='struk-pos-'+Date.now()+'.jpg';
+    link.href=canvas.toDataURL('image/jpeg',0.95);
+    link.click();
+    toast('✅ Struk tersimpan');
+  }).catch(e=>{
+    console.error(e);
+    toast('Gagal: '+e.message,true);
+  });
+}
+function posCetakStruk(){window.print();}
+
+/* === PENDING (DB persisted) === */
+async function posPendingTrx(){
+  if(!posCart.length){toast('Keranjang kosong',true);return;}
+  // Cek slot kosong
+  try{
+    const{data:existing}=await sb.from('kasir_pending').select('slot_no').eq('operator',CU?CU.username:'unknown');
+    const usedSlots=new Set((existing||[]).map(r=>r.slot_no));
+    let slot=0;
+    for(let i=1;i<=10;i++){if(!usedSlots.has(i)){slot=i;break;}}
+    if(slot===0){toast('Semua 10 slot terisi! Selesaikan dulu salah satu',true);return;}
+    const total=posComputeTotal();
+    await sb.from('kasir_pending').insert([{
+      slot_no:slot,
+      operator:CU?CU.username:'unknown',
+      cart_data:posCart,
+      member_data:posPel,
+      diskon_data:posDiskon,
+      catatan:posCatatan||null,
+      ongkir:posOngkir||0,
+      total
+    }]);
+    posResetCart();
+    toast('⏸ Tersimpan di slot '+slot);
+    posUpdatePendingBadge();
+  }catch(e){
+    console.error('posPendingTrx:',e);
+    toast('Gagal pending: '+(e.message||e),true);
+  }
+}
+
+async function posRenderPending(){
+  const el=document.getElementById('pos-pending-list');
+  el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text-muted)">Memuat...</div>';
+  try{
+    const{data}=await sb.from('kasir_pending').select('*').eq('operator',CU?CU.username:'unknown').order('slot_no');
+    const map={};
+    (data||[]).forEach(r=>{map[r.slot_no]=r;});
+    let html='';
+    for(let i=1;i<=10;i++){
+      const p=map[i];
+      if(!p){
+        html+=`<div style="background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border-left:4px solid var(--border);opacity:0.5">
+          <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700;font-size:13px;color:var(--text-muted)">Slot ${i}</div><div style="font-size:11px;color:var(--text-muted)">— Kosong —</div></div>
+        </div>`;
+      } else {
+        const time=new Date(p.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+        const cnt=(p.cart_data||[]).length;
+        const memLbl=(p.member_data&&p.member_data.label)||'Umum';
+        html+=`<div style="background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border-left:4px solid var(--amber, #f59e0b)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-weight:700;font-size:13px;color:var(--amber, #f59e0b)">Slot ${i}</div>
+            <div style="font-size:11px;color:var(--text-muted)">⏰ ${time}</div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${cnt} item · ${memLbl}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;margin-bottom:8px">${fmt(p.total||0)}</div>
+          <div style="display:flex;gap:6px">
+            <button onclick="posLanjutkanPending(${p.id})" style="flex:1;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--green);color:white">▶ Lanjutkan</button>
+            <button onclick="posHapusPending(${p.id},${i})" style="flex:1;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:#fee2e2;color:var(--red)">🗑 Hapus</button>
+          </div>
+        </div>`;
+      }
+    }
+    el.innerHTML=html;
+  }catch(e){
+    console.error(e);
+    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--red)">Gagal memuat</div>';
+  }
+}
+
+async function posLanjutkanPending(id){
+  if(posCart.length){
+    if(!confirm('Keranjang aktif akan diganti. Lanjutkan?'))return;
+  }
+  try{
+    const{data:p}=await sb.from('kasir_pending').select('*').eq('id',id).single();
+    if(!p)return;
+    posCart=p.cart_data||[];
+    posPel=p.member_data||{id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:'umum'};
+    posDiskon=p.diskon_data||{tipe:'none',nilai:0,nominal:0,voucher_kode:''};
+    posCatatan=p.catatan||'';
+    posOngkir=p.ongkir||0;
+    posTglTrx='';
+    // Hapus slot
+    await sb.from('kasir_pending').delete().eq('id',id);
+    // Refresh visual pelanggan
+    posSetPel(posPel);
+    posRenderCart();
+    // Pindah ke tab kasir
+    document.querySelector('.pos-tab[data-postab="kasir"]').click();
+    posUpdatePendingBadge();
+    toast('Slot dilanjutkan');
+  }catch(e){
+    console.error(e);
+    toast('Gagal: '+(e.message||e),true);
+  }
+}
+
+async function posHapusPending(id,slot){
+  if(!confirm('Hapus slot '+slot+'?'))return;
+  try{
+    await sb.from('kasir_pending').delete().eq('id',id);
+    posRenderPending();
+    posUpdatePendingBadge();
+    toast('Slot dihapus');
+  }catch(e){
+    console.error(e);
+    toast('Gagal: '+(e.message||e),true);
+  }
+}
+
+async function posUpdatePendingBadge(){
+  try{
+    const{count}=await sb.from('kasir_pending').select('*',{count:'exact',head:true}).eq('operator',CU?CU.username:'unknown');
+    document.getElementById('pos-pending-badge').textContent=count?'('+count+')':'';
+  }catch(e){}
+}
+
+/* === RIWAYAT === */
+async function posRenderRiwayat(){
+  const el=document.getElementById('pos-riwayat-list');
+  el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text-muted)">Memuat...</div>';
+  try{
+    const sevenDays=new Date();sevenDays.setDate(sevenDays.getDate()-7);
+    const{data}=await sb.from('transaksi').select('id,waktu,total,pelanggan,metode_bayar,status_bayar,items,catatan').gte('waktu',sevenDays.toISOString()).order('waktu',{ascending:false}).limit(50);
+    if(!data||!data.length){
+      el.innerHTML='<div style="padding:30px;text-align:center;color:var(--text-muted)">Belum ada transaksi</div>';
+      return;
+    }
+    el.innerHTML=data.map(t=>{
+      const d=new Date(t.waktu);
+      const time=d.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      const cnt=(t.items||[]).length;
+      const lunas=t.status_bayar==='lunas';
+      return `<div onclick="posShowStrukFromHistory(${t.id})" style="background:white;border-radius:12px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.06);display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--text-muted);font-family:'SF Mono',Monaco,monospace">TRX-${t.id}</div>
+          <div style="font-size:12px;font-weight:600;margin:2px 0">⏰ ${time} · ${cnt} item</div>
+          <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.pelanggan||'Umum'} · ${t.metode_bayar||''}</div>
+          <span style="font-size:10px;padding:2px 6px;border-radius:8px;margin-top:2px;display:inline-block;background:${lunas?'var(--green-light)':'var(--amber-light, #fef3c7)'};color:${lunas?'var(--green-dark, #15803d)':'#92400e'}">${lunas?'✓ LUNAS':'⏳ BELUM'}</span>
+        </div>
+        <div style="font-size:14px;font-weight:800;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;text-align:right;flex-shrink:0;margin-left:8px">${fmt(t.total)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    console.error(e);
+    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--red)">Gagal memuat</div>';
+  }
+}
+
+async function posShowStrukFromHistory(txId){
+  try{
+    const{data:t}=await sb.from('transaksi').select('*').eq('id',txId).single();
+    if(!t){toast('Transaksi tidak ditemukan',true);return;}
+    const trxSnapshot={
+      id:t.id,
+      time:new Date(t.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
+      tanggal:t.waktu,
+      items:t.items||[],
+      subtotal:(t.items||[]).reduce((s,i)=>s+(i.qty||0)*(i.harga||0),0),
+      diskonNominal:t.diskon_nominal||0,
+      ongkir:t.ongkir||0,
+      total:t.total||0,
+      bayar:t.bayar||0,
+      kembali:t.kembali||0,
+      member:{label:t.pelanggan||'Umum',sumber:t.anggota_id?'anggota':(t.jamaah_did?'jamaah':'umum')},
+      metode:t.metode_bayar==='belum'?'hutang':'tunai',
+      catatan:t.catatan||'',
+      kasir:t.kasir||'',
+      kasNama:t.kas_id?((typeof aKas!=='undefined'?aKas:[]).find(k=>k.id===t.kas_id)?.nama||'Kas'):''
+    };
+    posShowStruk(trxSnapshot);
+  }catch(e){
+    console.error(e);
+    toast('Gagal: '+(e.message||e),true);
+  }
+}
+
+/* === INIT === */
+async function initPOS(){
+  await posLoadSetting();
+  // Pastikan aPaket & aVoucher loaded (kalau belum)
+  if(typeof aPaket==='undefined'||!aPaket){
+    if(typeof lPaket==='function')await lPaket();
+  }
+  if(typeof aVoucher==='undefined'||!aVoucher){
+    if(typeof lVoucher==='function')await lVoucher();
+  }
+  posRenderCart();
+  posUpdatePendingBadge();
+}
+
+// Auto-init ketika page-pos diaktifkan
+const _origGoto=window.goto;
+if(typeof _origGoto==='function'){
+  window.goto=function(id,...rest){
+    const r=_origGoto.apply(this,[id,...rest]);
+    if(id==='pos'){
+      initPOS();
+      setTimeout(()=>{
+        const inp=document.getElementById('pos-scan-input');
+        if(inp)inp.focus();
+      },200);
+    }
+    return r;
+  };
+}
+
 
 </script>
 
