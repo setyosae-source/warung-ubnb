@@ -396,7 +396,6 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div class="nav-group-title nav-collapsible" onclick="toggleNavGroup(this)"><span>🏪 Warung</span><span class="nav-arrow">▾</span></div>
           <div class="nav-group-items open">
             <button class="nav-item" onclick="showPage('pos',this)" data-menu="warung_pos"><span class="ni">🛒</span>Kasir POS</button>
-            <button class="nav-item" onclick="showPage('jual',this)"><span class="ni">🧾</span>Penjualan</button>
             <button class="nav-item" onclick="showPage('riwayat',this)"><span class="ni">📋</span>Riwayat Jual</button>
             <button class="nav-item" onclick="showPage('beli',this)"><span class="ni">📦</span>Pembelian</button>
             <button class="nav-item" onclick="showPage('riwayat-beli',this)"><span class="ni">📑</span>Riwayat Beli</button>
@@ -524,7 +523,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         <div class="card">
           <div class="card-title">⚡ Menu Cepat</div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-            <button class="dash-shortcut" onclick="goToPage('jual')"><div class="ds-icon">🧾</div><div>Jual</div></button>
+            <button class="dash-shortcut" onclick="goToPage('pos')"><div class="ds-icon">🛒</div><div>Kasir POS</div></button>
             <button class="dash-shortcut" onclick="goToPage('ppob')"><div class="ds-icon">⚡</div><div>PPOB</div></button>
             <button class="dash-shortcut" onclick="goToPage('pesanan')"><div class="ds-icon">📬</div><div>Pesanan</div></button>
             <button class="dash-shortcut" onclick="goToPage('stok')"><div class="ds-icon">🗃️</div><div>Stok</div></button>
@@ -1737,7 +1736,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 <!-- PAGE TRACKING LAUNDRY -->
 <div class="page" id="page-tracking-laundry">
   <div class="page-title">
-    <button class="back-btn" onclick="showPage('jual',document.querySelector('.nav-item.active'))">‹</button>
+    <button class="back-btn" onclick="showPage('pos',document.querySelector('.nav-item.active'))">‹</button>
     🧺 Tracking Laundry
   </div>
   <div class="content">
@@ -1758,7 +1757,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 <!-- PAGE TRACKING SERVICE -->
 <div class="page" id="page-tracking-service">
   <div class="page-title">
-    <button class="back-btn" onclick="showPage('jual',document.querySelector('.nav-item.active'))">‹</button>
+    <button class="back-btn" onclick="showPage('pos',document.querySelector('.nav-item.active'))">‹</button>
     🔧 Tracking Service
   </div>
   <div class="content">
@@ -2527,7 +2526,7 @@ async function loginOK(data){
   applyAkses();
   restoreNavGroups();
   // Set initial history state
-  const initPage = localStorage.getItem('wu_page') || 'jual';
+  const initPage = localStorage.getItem('wu_page') || 'pos';
   history.replaceState({page: initPage}, '', '#'+initPage);
   document.getElementById('jual-tgl').value=nowISO();
   document.getElementById('beli-tgl').value=nowISO();
@@ -2676,7 +2675,7 @@ window.addEventListener('popstate', e=>{
     }
   } else {
     // Sudah di awal history, push initial state supaya tidak keluar
-    const currentPage = localStorage.getItem('wu_page') || 'jual';
+    const currentPage = localStorage.getItem('wu_page') || 'pos';
     history.pushState({page: currentPage}, '', '#'+currentPage);
   }
 });
@@ -2786,7 +2785,7 @@ function showPage(id,btn){
 }
 function restorePage(){
   const lastPage=localStorage.getItem('wu_page');
-  if(!lastPage||lastPage==='jual')return;
+  if(!lastPage||lastPage==='pos'||lastPage==='jual')return;
   const btn=Array.from(document.querySelectorAll(".nav-item")).find(b=>b.onclick&&String(b.onclick).includes("'"+lastPage+"'"));
   if(btn)showPage(lastPage,btn);
 }
@@ -3547,12 +3546,76 @@ async function simpanEditJual(){
 }
 
 async function hapusTransaksiJual(id){
-  if(!confirm('Hapus transaksi penjualan ini?\nHutang/piutang terkait juga akan dihapus.'))return;
-  // Hapus hutang terkait
-  await sb.from('hutang').delete().eq('ref_id',id).eq('ref_type','transaksi');
-  await sb.from('transaksi').delete().eq('id',id);
-  await lT();await lH();renderRiwayatJual();renderHutang();
-  toast('Transaksi dihapus!');
+  const t=aT.find(x=>x.id===id);
+  if(!t){toast('Transaksi tidak ditemukan',true);return;}
+  const itemCount=(t.items||[]).length;
+  const pesan=`Hapus transaksi #${id}?\n\nTotal: ${fmt(t.total)}\n${itemCount} item · ${t.pelanggan||'Umum'}\n\n⚠️ Yang akan terhapus / di-rollback:\n• Mutasi kas (jika tunai)\n• Hutang/piutang (jika belum bayar)\n• Stok produk dikembalikan\n• Poin pelanggan dikurangi\n\nAksi ini TIDAK BISA dibatalkan.`;
+  if(!confirm(pesan))return;
+  try{
+    // 1. Restore stok barang per item (hanya non-paket / non-manual / non-ppob/laundry/service)
+    for(const i of (t.items||[])){
+      if(i.isPaket){
+        // Paket bundling: restore tiap komponen
+        for(const pi of (i.paketItems||[])){
+          if(pi.barang_id){
+            const b=aB.find(x=>x.id===pi.barang_id);
+            if(b)await sb.from('barang').update({stok:(b.stok||0)+(pi.qty*i.qty)}).eq('id',pi.barang_id);
+          }
+        }
+      } else if(!i.is_manual){
+        const bid=i.barang_id||i.id||i.pid;
+        if(bid&&typeof bid==='number'){
+          const b=aB.find(x=>x.id===bid);
+          if(b&&!['ppob','laundry','service'].includes(b.kategori)){
+            const qtyReal=(i.qty||1)*(i._qtyPerUnit||1);
+            await sb.from('barang').update({stok:(b.stok||0)+qtyReal}).eq('id',bid);
+          }
+        }
+      }
+    }
+    // 2. Hapus kas_mutasi terkait (untuk trx POS baru) — restore saldo
+    const kasIdsAffected=new Set();
+    if(t.kas_id)kasIdsAffected.add(t.kas_id);
+    // Find related kas_mutasi
+    const{data:kmList}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','transaksi').eq('ref_id',id);
+    if(kmList){
+      kmList.forEach(km=>kasIdsAffected.add(km.kas_id));
+      await sb.from('kas_mutasi').delete().eq('ref_type','transaksi').eq('ref_id',id);
+    }
+    // 3. Hapus hutang terkait
+    await sb.from('hutang').delete().eq('ref_type','transaksi').eq('ref_id',id);
+    // 4. Restore poin pelanggan
+    if(t.pelanggan_id){
+      const p=aPel.find(x=>x.id===t.pelanggan_id);
+      if(p){
+        const poin=Math.floor((t.total||0)/1000);
+        const newPoin=Math.max(0,(p.poin||0)-poin);
+        const newTotal=Math.max(0,(p.total_belanja||0)-(t.total||0));
+        await sb.from('pelanggan').update({poin:newPoin,total_belanja:newTotal}).eq('id',t.pelanggan_id);
+      }
+    }
+    // 5. Hapus laundry/service items (jaga-jaga)
+    await sb.from('laundry_items').delete().eq('transaksi_id',id);
+    await sb.from('service_items').delete().eq('transaksi_id',id);
+    // 6. Hapus transaksi
+    const{error}=await sb.from('transaksi').delete().eq('id',id);
+    if(error)throw error;
+    // 7. Recalc saldo kas yang terdampak
+    if(typeof recalcSaldo==='function'){
+      for(const kid of kasIdsAffected) await recalcSaldo(kid);
+    }
+    // 8. Reload data
+    await lT();await lB();await lH();
+    if(typeof lKas==='function')await lKas();
+    if(typeof lPel==='function')await lPel();
+    renderRiwayatJual();
+    if(typeof renderHutang==='function')renderHutang();
+    if(typeof renderStok==='function')renderStok();
+    toast('✅ Transaksi #'+id+' dihapus, stok & kas dikembalikan');
+  }catch(e){
+    console.error('hapusTransaksiJual:',e);
+    toast('❌ Gagal hapus: '+(e.message||e),true);
+  }
 }
 
 async function lunasTransaksi(id){await sb.from('transaksi').update({status_bayar:'lunas'}).eq('id',id);await lT();renderRiwayatJual();toast('Dilunasi!');}
@@ -5747,7 +5810,6 @@ let aKas=[], aPPOB=[], ppobFilter='semua', ppobLapMode='bulan';
 /* ACL - ACCESS CONTROL */
 const MENU_DEF = [
   {id:'warung_pos',     label:'🛒 Kasir POS',     modul:'🏪 Warung',      page:'pos'},
-  {id:'warung_jual',    label:'Penjualan',       modul:'🏪 Warung',      page:'jual'},
   {id:'warung_riwayat_jual', label:'Riwayat Jual', modul:'🏪 Warung',   page:'riwayat'},
   {id:'warung_beli',    label:'Pembelian',        modul:'🏪 Warung',      page:'beli'},
   {id:'warung_riwayat_beli', label:'Riwayat Beli', modul:'🏪 Warung',   page:'riwayat-beli'},
