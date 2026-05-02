@@ -4144,6 +4144,86 @@ function tampilStruk(tx){
   document.getElementById('struk-capture').innerHTML=cap;
   openModal('modal-struk');
 }
+function tampilStrukPPOB(id){
+  const p = aPPOB.find(x=>x.id===id);
+  if(!p){toast('Transaksi PPOB tidak ditemukan',true);return;}
+  // Reset modal struk
+  document.getElementById('img-result').style.display='none';
+  document.getElementById('btn-simpan-gambar').style.display='';
+  
+  // Format tanggal & nomor
+  const d = new Date(p.tanggal||new Date());
+  const tgl = d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const jam = p.created_at ? fJ(new Date(p.created_at)) : '';
+  const no = p.tid || ('PPOB-' + String(p.id||'').slice(-6).padStart(6,'0'));
+  
+  // === Identifikasi tipe pelanggan (mirror dari struk warung) ===
+  let pelLabel='', pelInfoBawah='', pelLabelCap='', pelInfoBawahCap='';
+  if(p.anggota_id){
+    // ⭐ ANGGOTA UBNB
+    const ang = (typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).find(a=>a.id===p.anggota_id);
+    const noAng = ang?.no_anggota || '-';
+    const namaAng = ang?.nama || p.nama || p.nama_display || '-';
+    pelLabel = `<p>Pelanggan: <b>⭐ ${namaAng}</b></p><p style="font-size:11px;color:#15803d">No. Anggota: ${noAng}</p>`;
+    pelInfoBawah = `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>`;
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>⭐ ${namaAng}</b></div><div class="sc-sub" style="color:#15803d">No. Anggota: ${noAng}</div>`;
+    pelInfoBawahCap = `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:7px 10px;margin:10px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>`;
+  } else if(p.jamaah_did){
+    // 👥 JAMAAH (sugesti beli saham)
+    const namaJM = p.nama || p.nama_display || '-';
+    pelLabel = `<p>Pelanggan: <b>${namaJM}</b></p>`;
+    pelInfoBawah = `<div style="background:#fff7ed;border:1px dashed #c2410c;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#9a3412;text-align:center;line-height:1.4">💎 Yuk jadi Anggota UBNB!<br>Beli saham → dapat SHU tiap tahun</div>`;
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>${namaJM}</b></div>`;
+    pelInfoBawahCap = `<div style="background:#fff7ed;border:1px dashed #c2410c;border-radius:6px;padding:7px 10px;margin:10px 0;font-size:11px;color:#9a3412;text-align:center;line-height:1.4">💎 Yuk jadi Anggota UBNB!<br>Beli saham → dapat SHU tiap tahun</div>`;
+  } else if(p.nama && p.nama !== 'Umum'){
+    // 🧍 UMUM (cuma nama)
+    pelLabel = `<p>Pelanggan: <b>${p.nama}</b></p>`;
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>${p.nama}</b></div>`;
+  }
+  
+  // === Preview HTML (modal) ===
+  let h = `<div class="sh"><div class="logo">⚡</div><h3>PPOB UBNB</h3>`+
+    `<p>${tgl}</p><p>${jam ? jam+' | ' : ''}No: ${no}</p>`+
+    `<p>Operator: ${p.operator || CU?.username || '-'}</p>${pelLabel}</div>${pelInfoBawah}<hr class="sdiv">`;
+  // Detail produk
+  h += `<div class="srow" style="font-weight:600">${p.produk||'-'}</div>`;
+  if(p.catatan) h += `<div class="srow" style="color:#888;font-size:11px;padding-left:10px">${p.catatan}</div>`;
+  h += `<hr class="sdiv">`;
+  // Total
+  h += `<div class="srow bold"><span>TOTAL</span><span>${fN(p.harga_jual)}</span></div>`;
+  // Status
+  if(p.status_bayar === 'lunas'){
+    h += `<div class="srow"><span>Status</span><span style="color:#15803d;font-weight:600">✓ LUNAS</span></div>`;
+  } else {
+    h += `<div class="srow disc"><span>Status</span><span>⏳ BELUM BAYAR</span></div>`;
+  }
+  h += `<hr class="sdiv"><div class="sfooter">`+
+    `<div class="thx">Terima kasih! 🙏</div>`+
+    `<div>PPOB UBNB · ubnb.pw</div></div>`;
+  document.getElementById('struk-preview').innerHTML = h;
+  
+  // === Capture version (untuk simpan gambar / share WA) ===
+  let cap = `<div class="sc-logo">⚡</div><div class="sc-name">PPOB UBNB</div>`+
+    `<div class="sc-sub">${tgl}</div>`+
+    `<div class="sc-sub">${jam ? jam+' | ' : ''}No: ${no} | Op: ${p.operator || CU?.username || '-'}</div>`+
+    `${pelLabelCap}${pelInfoBawahCap}<hr class="sc-divider">`;
+  cap += `<div class="sc-row in">${p.produk||'-'}</div>`;
+  if(p.catatan) cap += `<div class="sc-row id">${p.catatan}</div>`;
+  cap += `<hr class="sc-divider"><div class="sc-row tot"><span>TOTAL</span><span>Rp ${fN(p.harga_jual)}</span></div>`;
+  if(p.status_bayar === 'lunas'){
+    cap += `<div class="sc-row br"><span>Status</span><span style="color:#15803d;font-weight:600">✓ LUNAS</span></div>`;
+  } else {
+    cap += `<div class="sc-row dr"><span>Status</span><span>⏳ BELUM BAYAR</span></div>`;
+  }
+  cap += `<hr class="sc-divider"><div class="sc-footer">`+
+    `<div class="sc-thx">Terima kasih! 🙏</div>`+
+    `<div class="sc-note">PPOB UBNB · ubnb.pw</div>`+
+    `<span class="sc-badge">${tgl}</span></div>`;
+  document.getElementById('struk-capture').innerHTML = cap;
+  
+  openModal('modal-struk');
+}
+
 async function simpanGambar(){
   const btn=document.getElementById('btn-simpan-gambar');btn.textContent='⏳ Memproses...';btn.disabled=true;
   try{const c=await html2canvas(document.getElementById('struk-capture'),{scale:3,backgroundColor:'#ffffff',useCORS:true,logging:false});const u=c.toDataURL('image/png');document.getElementById('struk-img').src=u;document.getElementById('struk-dl').href=u;document.getElementById('img-result').style.display='block';btn.style.display='none';toast('Gambar siap!');}
@@ -6959,6 +7039,7 @@ function bukaPPOBDetail(id){
       <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Status</span><span class="badge ${p.status_bayar==='lunas'?'lunas':'belum'}">${p.status_bayar==='lunas'?'✓ Lunas':'⏳ Belum Bayar'}</span></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn primary" style="width:100%" onclick="closeModal('modal-ppob-detail');tampilStrukPPOB(${p.id})">🧾 Cetak Struk</button>
       ${p.status_bayar==='belum'?`<button class="btn primary" style="width:100%" onclick="lunasiPPOB(${p.id});closeModal('modal-ppob-detail')">✓ Tandai Lunas</button>`:''}
       <button class="btn danger" style="width:100%" onclick="hapusPPOB(${p.id});closeModal('modal-ppob-detail')">🗑️ Hapus</button>
     </div>`;
