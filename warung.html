@@ -8591,6 +8591,64 @@ function posCartItemGantiSatuan(idx){
 }
 
 /* === PELANGGAN PREDICTIVE SEARCH === */
+// State top 5 pelanggan tersering (90 hari)
+let posTopPelanggan = [];
+
+async function posLoadTopPelanggan(){
+  try{
+    // Query top 5 pelanggan tersering 90 hari, exclude Umum
+    const cutoff = new Date(Date.now() - 90*24*60*60*1000).toISOString();
+    const{data,error}=await sb.from('transaksi')
+      .select('pelanggan,pelanggan_id,anggota_id,jamaah_did')
+      .gte('waktu',cutoff)
+      .neq('pelanggan','Umum')
+      .not('pelanggan','is',null);
+    if(error)throw error;
+    // Group & count manual (Supabase JS tidak bisa GROUP BY langsung)
+    const counts = {};
+    (data||[]).forEach(t=>{
+      // Build key dari id (prioritas: anggota > jamaah > pelanggan_id > nama)
+      let key, sumber, label = t.pelanggan;
+      if(t.anggota_id){key='ang-'+t.anggota_id;sumber='anggota';}
+      else if(t.jamaah_did){key='jam-'+t.jamaah_did;sumber='jamaah';}
+      else if(t.pelanggan_id){key='pel-'+t.pelanggan_id;sumber='pelanggan';}
+      else {key='nama-'+(t.pelanggan||'').toLowerCase();sumber='baru';}
+      if(!counts[key])counts[key]={key,label,sumber,
+        anggota_id:t.anggota_id,jamaah_did:t.jamaah_did,pelanggan_id:t.pelanggan_id,
+        count:0};
+      counts[key].count++;
+    });
+    posTopPelanggan = Object.values(counts).sort((a,b)=>b.count-a.count).slice(0,5);
+  }catch(e){
+    console.warn('posLoadTopPelanggan:',e);
+    posTopPelanggan = [];
+  }
+}
+
+function posRenderTopPelanggan(){
+  if(!posTopPelanggan.length){
+    return '<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">Ketik nama untuk mencari pelanggan</div>';
+  }
+  let html='<div style="font-size:10px;color:#92400e;text-transform:uppercase;font-weight:700;padding:6px 10px;background:#fef3c7;border-radius:6px;margin-bottom:6px;display:flex;align-items:center;gap:4px">🔥 PELANGGAN TERSERING (90 hari)</div>';
+  posTopPelanggan.forEach(t=>{
+    let icon='✏️',bg='#fde68a',color='#92400e',sumberLabel='Umum';
+    if(t.sumber==='anggota'){icon='⭐';bg='var(--green-light)';color='var(--green-dark, #15803d)';sumberLabel='Anggota';}
+    else if(t.sumber==='jamaah'){icon='👥';bg='#e0e7ff';color='#4338ca';sumberLabel='Jamaah';}
+    else if(t.sumber==='pelanggan'){icon='✏️';bg='#fde68a';color='#92400e';sumberLabel='Umum';}
+    const obj={id:t.pelanggan_id||null,anggota_id:t.anggota_id||null,jamaah_did:t.jamaah_did||null,label:t.label,sumber:t.sumber==='pelanggan'?'baru':t.sumber};
+    html+=`<div onclick='posSetPel(${JSON.stringify(obj).replace(/'/g,"&#39;")})' style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px">
+      <div style="width:34px;height:34px;border-radius:50%;background:${bg};color:${color};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.label}</div>
+        <div style="font-size:10px;color:${color};font-weight:600">${sumberLabel}</div>
+      </div>
+      <div style="background:${bg};color:${color};font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;flex-shrink:0">${t.count}×</div>
+    </div>`;
+  });
+  html+='<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:10px 0 4px;font-style:italic">Atau ketik nama untuk cari pelanggan lain</div>';
+  return html;
+}
+
 function openPosPelSearch(){
   document.getElementById('pos-pel-search').value='';
   posPelSearch('');
@@ -8602,7 +8660,8 @@ function posPelSearch(q){
   const el=document.getElementById('pos-pel-result');
   q=(q||'').trim();
   if(!q){
-    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">Ketik nama untuk mencari</div>';
+    // Tampilkan top 5 tersering
+    el.innerHTML=posRenderTopPelanggan();
     return;
   }
   const qLow=q.toLowerCase();
@@ -9041,6 +9100,8 @@ async function posKonfirmasiBayar(){
     posResetCart();
     posShowStruk(trxSnapshot);
     toast('✅ Transaksi #'+txId+(posMetode==='hutang'?' (Bayar Nanti)':' lunas'));
+    // Refresh top 5 pelanggan async
+    posLoadTopPelanggan();
   } catch(e){
     console.error('posKonfirmasiBayar:',e);
     toast('❌ Gagal: '+(e.message||e),true);
@@ -9334,6 +9395,8 @@ async function initPOS(){
   if(typeof aVoucher==='undefined'||!aVoucher){
     if(typeof lVoucher==='function')await lVoucher();
   }
+  // Load top 5 pelanggan tersering (background, non-blocking)
+  posLoadTopPelanggan();
   posRenderCart();
   posUpdatePendingBadge();
 }
