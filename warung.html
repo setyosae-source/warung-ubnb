@@ -396,8 +396,8 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <div class="nav-group-title nav-collapsible" onclick="toggleNavGroup(this)"><span>🏪 Warung</span><span class="nav-arrow">▾</span></div>
           <div class="nav-group-items open">
             <button class="nav-item" onclick="showPage('pos',this)" data-menu="warung_pos"><span class="ni">🛒</span>Kasir POS</button>
+            <button class="nav-item" onclick="showPage('pos-beli',this)" data-menu="warung_pos_beli"><span class="ni">📦</span>Pembelian POS</button>
             <button class="nav-item" onclick="showPage('riwayat',this)"><span class="ni">📋</span>Riwayat Jual</button>
-            <button class="nav-item" onclick="showPage('beli',this)"><span class="ni">📦</span>Pembelian</button>
             <button class="nav-item" onclick="showPage('riwayat-beli',this)"><span class="ni">📑</span>Riwayat Beli</button>
             <button class="nav-item" onclick="showPage('stok',this)"><span class="ni">🗃️</span>Stok Barang</button>
             <button class="nav-item" onclick="showPage('daftar-produk',this)"><span class="ni">📦</span>Daftar Produk</button>
@@ -1028,6 +1028,260 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
         </div>
       </div>
+
+<!-- PAGE: POS BELI (injected) -->
+<!-- PAGE: POS BELI (Pembelian POS Mobile) -->
+<div id="page-pos-beli" class="page" style="padding:0;max-width:none">
+  <div style="background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+    <div style="font-weight:700;font-size:15px;flex:1">📦 Pembelian POS</div>
+    <div style="font-size:11px;opacity:0.9" id="posb-kasir-label">Setyo</div>
+  </div>
+
+  <div style="display:flex;background:white;border-bottom:1px solid var(--border);position:sticky;top:42px;z-index:49">
+    <button class="posb-tab active" data-postab="beli" onclick="goPosBeliTab('beli',this)" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:3px solid var(--amber, #f59e0b);font-weight:700;color:#92400e;font-size:13px;cursor:pointer">📦 Beli</button>
+    <button class="posb-tab" data-postab="riwayat" onclick="goPosBeliTab('riwayat',this)" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:3px solid transparent;font-weight:600;color:var(--text-muted);font-size:13px;cursor:pointer">📋 Riwayat</button>
+  </div>
+
+  <!-- ========= TAB BELI ========= -->
+  <div id="posb-tab-beli" class="posb-tab-content" style="display:flex;flex-direction:column;height:calc(100vh - 92px)">
+    <!-- Sticky top: Supplier + Scan -->
+    <div style="background:white;flex-shrink:0;border-bottom:1px solid var(--border);position:relative">
+      <!-- Supplier -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px">
+        <span style="color:var(--text-muted);font-size:12px;flex-shrink:0">🏢</span>
+        <div id="posb-sup-pill" class="posb-sup-pill empty" onclick="openPosbSupSearch()" style="flex:1;background:#f8fafc;border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:space-between;min-width:0">
+          <span class="nm" id="posb-sup-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Supplier: Tanpa supplier (tap untuk pilih)</span>
+          <span style="flex-shrink:0">▼</span>
+        </div>
+      </div>
+      <!-- Scan -->
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#fff;border-top:1px solid var(--border);position:relative">
+        <input class="posb-scan-input" id="posb-scan-input" placeholder="Scan / cari barang / 5*8992..." 
+          oninput="posbSearchProduk(this.value)" onkeydown="posbHandleScanKey(event)" autocomplete="off"
+          style="flex:1;height:42px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px 0 36px;font-size:14px;outline:none;background:#fafafa url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%222%22><circle cx=%2211%22 cy=%2211%22 r=%228%22/><path d=%22m21 21-4.35-4.35%22/></svg>') 10px center/16px no-repeat;font-family:inherit;min-width:0"/>
+        <div id="posb-search-result" style="position:absolute;top:100%;left:12px;right:12px;background:white;border:1.5px solid var(--amber, #f59e0b);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:50;display:none"></div>
+      </div>
+    </div>
+
+    <!-- Keranjang -->
+    <div id="posb-cart-container" style="flex:1;overflow-y:auto;padding:8px 12px 12px;background:var(--bg);-webkit-overflow-scrolling:touch">
+      <div style="padding:6px 4px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);font-weight:600">
+        <span id="posb-cart-count">0 item</span>
+        <span style="color:#92400e">Tap untuk edit</span>
+      </div>
+      <div id="posb-cart-items"></div>
+      <button onclick="posbAddManual()" style="width:100%;padding:10px;border:1.5px dashed var(--amber, #f59e0b);background:#fef3c7;color:#92400e;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;margin-top:4px">+ Tambah Manual</button>
+    </div>
+
+    <!-- Footer Total -->
+    <div style="flex-shrink:0;background:white;border-top:1px solid var(--border);padding:8px 12px 10px;box-shadow:0 -2px 8px rgba(0,0,0,0.04)">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text);font-weight:600;margin-top:3px">
+        <span>TOTAL BELI</span>
+        <span style="font-size:20px;font-weight:800;color:#92400e;font-family:'SF Mono',Monaco,monospace" id="posb-total">Rp 0</span>
+      </div>
+      <!-- Tools -->
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button onclick="posbOpenCatatan()" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 <span id="posb-catatan-btn-lbl">Catatan</span></button>
+        <button onclick="posbOpenTgl()" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📅 <span id="posb-tgl-btn-lbl">Hari ini</span></button>
+        <button onclick="posbOpenStruk()" style="flex:1;min-width:0;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 <span id="posb-struk-btn-lbl">Foto Struk</span></button>
+      </div>
+      <!-- Action Row -->
+      <div style="margin-top:8px">
+        <button id="posb-btn-simpan" onclick="posbOpenSimpan()" disabled style="width:100%;background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white;border:none;border-radius:8px;height:48px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;gap:8px;opacity:0.5">📦 LANJUT SIMPAN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= TAB RIWAYAT ========= -->
+  <div id="posb-tab-riwayat" class="posb-tab-content" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 92px)">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-weight:600">Pembelian 7 hari terakhir</div>
+    <div id="posb-riwayat-list"></div>
+  </div>
+</div>
+
+<!-- MODAL POS BELI -->
+
+<!-- Modal Edit Item Beli (Qty + HBeli + HJual + Margin) -->
+<div class="modal-overlay" id="posb-modal-edit">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div id="posb-edit-name" style="font-size:17px;font-weight:700;margin-bottom:14px;line-height:1.3">-</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">QTY BELI</label>
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <button onclick="posbEditQty(-1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--amber, #f59e0b);background:#fef3c7;color:#92400e;font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">−</button>
+        <input id="posb-edit-qty" type="number" min="1" value="1" onchange="posbUpdateEditMargin()" style="flex:1;min-width:0;height:48px;border:2px solid var(--border);border-radius:12px;text-align:center;font-size:20px;font-weight:700;outline:none;font-family:inherit;padding:0 4px"/>
+        <button onclick="posbEditQty(1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--amber, #f59e0b);background:#fef3c7;color:#92400e;font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">+</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">HARGA BELI / SATUAN</label>
+      <input id="posb-edit-hbeli" type="number" oninput="posbUpdateEditMargin()" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">HARGA JUAL / SATUAN</label>
+      <input id="posb-edit-hjual" type="number" oninput="posbUpdateEditMargin()" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div id="posb-edit-margin" style="background:var(--green-light);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--green-dark, #15803d);margin-bottom:14px;display:none"></div>
+    <div style="background:#fef3c7;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span>Subtotal</span><strong id="posb-edit-subtotal" style="font-size:18px;font-family:'SF Mono',Monaco,monospace">Rp 0</strong>
+    </div>
+    <button onclick="posbDeleteEdit()" style="background:var(--red);color:white;height:44px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:none;width:100%;margin-bottom:8px">🗑 Hapus dari Keranjang</button>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('posb-modal-edit')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posbSaveEdit()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white;box-shadow:0 4px 12px rgba(245,158,11,0.4)">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah Manual Beli -->
+<div class="modal-overlay" id="posb-modal-manual">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">➕ Tambah Item Manual</div>
+    <div style="background:#fef3c7;border-radius:8px;padding:10px;font-size:11px;color:#92400e;margin-bottom:12px">⚠️ Item manual tidak akan menambah stok atau batch FIFO. Untuk item baru sebagai stok, daftarkan dulu di Daftar Produk.</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">NAMA ITEM</label>
+      <input id="posb-man-nama" placeholder="cth: Ongkir, Bonus, dll" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:14px;font-weight:500;outline:none;font-family:inherit"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">QTY</label>
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <button onclick="posbManQty(-1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--amber, #f59e0b);background:#fef3c7;color:#92400e;font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">−</button>
+        <input id="posb-man-qty" type="number" min="1" value="1" style="flex:1;min-width:0;height:48px;border:2px solid var(--border);border-radius:12px;text-align:center;font-size:20px;font-weight:700;outline:none;font-family:inherit;padding:0 4px"/>
+        <button onclick="posbManQty(1)" style="width:48px;height:48px;border-radius:12px;border:2px solid var(--amber, #f59e0b);background:#fef3c7;color:#92400e;font-size:24px;font-weight:700;cursor:pointer;flex-shrink:0;padding:0">+</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">HARGA / SATUAN</label>
+      <input id="posb-man-harga" type="number" placeholder="0" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('posb-modal-manual')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posbSaveManual()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white">✓ Tambahkan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Supplier Search -->
+<div class="modal-overlay" id="posb-modal-sup">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:80vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">🏢 Pilih Supplier</div>
+    <input id="posb-sup-search" placeholder="Ketik nama supplier..." oninput="posbSupSearch(this.value)" autocomplete="off" style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:8px;padding:0 14px;font-size:13px;outline:none;font-family:inherit;margin-bottom:10px"/>
+    <div id="posb-sup-result" style="max-height:50vh;overflow-y:auto"></div>
+    <div style="padding-top:10px;border-top:1px solid var(--border);margin-top:10px">
+      <button onclick="posbSetSup({id:null,label:'',sumber:'kosong'})" style="width:100%;height:42px;border:none;border-radius:8px;font-weight:700;cursor:pointer;background:var(--bg);color:var(--text)">— Tanpa Supplier —</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Catatan Beli -->
+<div class="modal-overlay" id="posb-modal-catatan">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">📝 Catatan / No. Faktur</div>
+    <textarea id="posb-catatan-input" placeholder="cth: No. faktur INV-001, atau catatan lainnya" style="width:100%;min-height:100px;border:2px solid var(--border);border-radius:12px;padding:10px 14px;font-size:14px;outline:none;font-family:inherit;resize:vertical;margin-bottom:14px"></textarea>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('posb-modal-catatan')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posbApplyCatatan()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tanggal Beli -->
+<div class="modal-overlay" id="posb-modal-tgl">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">📅 Tanggal Pembelian</div>
+    <input id="posb-tgl-input" type="datetime-local" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:14px;outline:none;font-family:inherit;margin-bottom:6px"/>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">Pilih tanggal jika input pembelian backdate</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px">
+      <button onclick="posbResetTgl()" style="height:46px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;border:none;background:#fef3c7;color:#92400e">Hari Ini</button>
+      <button onclick="closeModal('posb-modal-tgl')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button onclick="posbApplyTgl()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Foto Struk Beli -->
+<div class="modal-overlay" id="posb-modal-struk">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">📎 Foto Struk Supplier</div>
+    <div id="posb-struk-preview" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:var(--bg);border-radius:8px;border:1.5px dashed var(--border);cursor:pointer;font-size:13px;color:var(--text-muted)">
+        📷 Ambil Foto
+        <input type="file" id="posb-struk-camera" accept="image/*" capture="environment" style="display:none" onchange="posbPreviewStruk(this)"/>
+      </label>
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:var(--bg);border-radius:8px;border:1.5px dashed var(--border);cursor:pointer;font-size:13px;color:var(--text-muted)">
+        🖼️ Galeri
+        <input type="file" id="posb-struk-gallery" accept="image/*" style="display:none" onchange="posbPreviewStruk(this)"/>
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('posb-modal-struk')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Tutup</button>
+      <button onclick="posbHapusStruk()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--red-light);color:var(--red)">🗑 Hapus Foto</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Simpan / Status Bayar -->
+<div class="modal-overlay" id="posb-modal-simpan">
+  <div class="modal-content" style="max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:92vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px">💰 Status Pembayaran</div>
+    <div style="background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white;border-radius:14px;padding:14px;text-align:center;margin-bottom:14px">
+      <div style="font-size:11px;opacity:0.9;text-transform:uppercase;letter-spacing:0.5px">Total Pembelian</div>
+      <div id="posb-simpan-total" style="font-size:28px;font-weight:800;font-family:'SF Mono',Monaco,monospace;line-height:1.2;margin-top:2px">Rp 0</div>
+    </div>
+    <!-- 3 Metode -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+      <div class="posb-metode-btn active" data-metode="lunas" onclick="posbSetMetode(this)" style="padding:12px 4px;border:2px solid var(--green);background:var(--green-light);color:var(--green-dark, #15803d);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;transition:all 0.15s">
+        <span style="font-size:20px">✅</span>Lunas
+      </div>
+      <div class="posb-metode-btn" data-metode="sebagian" onclick="posbSetMetode(this)" style="padding:12px 4px;border:2px solid var(--border);background:white;color:var(--text);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;transition:all 0.15s">
+        <span style="font-size:20px">⚡</span>Sebagian
+      </div>
+      <div class="posb-metode-btn" data-metode="belum" onclick="posbSetMetode(this)" style="padding:12px 4px;border:2px solid var(--border);background:white;color:var(--text);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;transition:all 0.15s">
+        <span style="font-size:20px">⏳</span>Belum
+      </div>
+    </div>
+    <!-- Section Lunas (kas dropdown) -->
+    <div id="posb-simpan-section-lunas">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">KAS PEMBAYARAN</label>
+      <select id="posb-simpan-kas" style="width:100%;height:42px;border:2px solid var(--border);border-radius:8px;padding:0 12px;font-size:14px;font-weight:600;outline:none;font-family:inherit;background:white;margin-bottom:12px"></select>
+      <div style="background:var(--green-light);border:1px solid var(--green);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--green-dark, #15803d);display:flex;align-items:flex-start;gap:8px">
+        <span>✅</span>
+        <div>Pembelian <strong>lunas</strong>. Saldo kas akan berkurang sesuai total beli.</div>
+      </div>
+    </div>
+    <!-- Section Sebagian (DP + kas) -->
+    <div id="posb-simpan-section-sebagian" style="display:none">
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">DP / SUDAH DIBAYAR (RP)</label>
+      <input id="posb-simpan-dp" type="number" placeholder="0" oninput="posbHitungSisa()" style="width:100%;height:46px;border:2px solid var(--border);border-radius:12px;padding:0 14px;font-size:16px;font-weight:600;outline:none;font-family:inherit;margin-bottom:12px"/>
+      <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px">KAS PEMBAYARAN DP</label>
+      <select id="posb-simpan-kas-dp" style="width:100%;height:42px;border:2px solid var(--border);border-radius:8px;padding:0 12px;font-size:14px;font-weight:600;outline:none;font-family:inherit;background:white;margin-bottom:12px"></select>
+      <div style="background:#fef3c7;border:1px solid var(--amber, #f59e0b);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;display:flex;justify-content:space-between;align-items:center">
+        <span>Sisa hutang ke supplier</span>
+        <strong id="posb-simpan-sisa" style="font-family:'SF Mono',Monaco,monospace">Rp 0</strong>
+      </div>
+    </div>
+    <!-- Section Belum -->
+    <div id="posb-simpan-section-belum" style="display:none">
+      <div style="background:#fee2e2;border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--red);display:flex;align-items:flex-start;gap:8px">
+        <span>⏳</span>
+        <div>Pembelian <strong>belum dibayar</strong>. Tercatat sebagai hutang ke supplier (wajib pilih supplier).</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px">
+      <button onclick="closeModal('posb-modal-simpan')" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:var(--bg);color:var(--text)">Batal</button>
+      <button id="posb-btn-konfirmasi" onclick="posbKonfirmasiSimpan()" style="height:46px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,var(--amber, #f59e0b),#b45309);color:white;box-shadow:0 4px 12px rgba(245,158,11,0.4)">✓ Konfirmasi Simpan</button>
+    </div>
+  </div>
+</div>
+
 
       <!-- PAGE: BELI -->
       <div id="page-beli" class="page">
@@ -2768,6 +3022,14 @@ function showPage(id,btn){
     if(typeof initPOS==='function')initPOS();
     setTimeout(()=>{
       const inp=document.getElementById('pos-scan-input');
+      if(inp)inp.focus();
+    },200);
+  }
+  if(id==='pos-beli'){
+    // Init POS Pembelian module
+    if(typeof initPOSBeli==='function')initPOSBeli();
+    setTimeout(()=>{
+      const inp=document.getElementById('posb-scan-input');
       if(inp)inp.focus();
     },200);
   }
@@ -5810,8 +6072,8 @@ let aKas=[], aPPOB=[], ppobFilter='semua', ppobLapMode='bulan';
 /* ACL - ACCESS CONTROL */
 const MENU_DEF = [
   {id:'warung_pos',     label:'🛒 Kasir POS',     modul:'🏪 Warung',      page:'pos'},
+  {id:'warung_pos_beli',label:'📦 Pembelian POS', modul:'🏪 Warung',      page:'pos-beli'},
   {id:'warung_riwayat_jual', label:'Riwayat Jual', modul:'🏪 Warung',   page:'riwayat'},
-  {id:'warung_beli',    label:'Pembelian',        modul:'🏪 Warung',      page:'beli'},
   {id:'warung_riwayat_beli', label:'Riwayat Beli', modul:'🏪 Warung',   page:'riwayat-beli'},
   {id:'warung_stok',    label:'Stok Barang',      modul:'🏪 Warung',      page:'stok'},
   {id:'warung_daftar_produk', label:'Daftar Produk', modul:'🏪 Warung', page:'daftar-produk'},
@@ -8922,6 +9184,699 @@ if(typeof _origGoto==='function'){
     }
     return r;
   };
+}
+
+
+
+
+/* ===== POS PEMBELIAN MODULE ===== */
+/* ============================================================ */
+/* POS PEMBELIAN MODULE                                          */
+/* Loaded inline at end of warung.html                          */
+/* Dependency: aB, aBatch, aSup, aH, aKas, sb, CU, fmt, toast,  */
+/*             openModal, closeModal, recalcSaldo, lB, lBeli,   */
+/*             lBatch, lH, lKas, lSup                           */
+/* ============================================================ */
+
+/* === STATE === */
+let posbCart = []; // {pid,nama,qty,hbeli,hjual,is_manual,barang_id,barcode,_kategori,...}
+let posbSup = {id:null,label:'',sumber:'kosong'};
+let posbCatatan = '';
+let posbTglBeli = ''; // empty = now, kalau di-set = backdate ISO datetime
+let posbStrukFile = null;
+let posbStatusBayar = 'lunas'; // default
+let posbEditingIdx = -1;
+
+/* === TAB NAVIGATION === */
+function goPosBeliTab(name,btn){
+  document.querySelectorAll('.posb-tab-content').forEach(p=>p.style.display='none');
+  document.getElementById('posb-tab-'+name).style.display=name==='beli'?'flex':'block';
+  document.querySelectorAll('.posb-tab').forEach(b=>{
+    b.style.borderBottomColor='transparent';
+    b.style.color='var(--text-muted)';
+    b.style.fontWeight='600';
+    b.classList.remove('active');
+  });
+  btn.style.borderBottomColor='var(--amber, #f59e0b)';
+  btn.style.color='#92400e';
+  btn.style.fontWeight='700';
+  btn.classList.add('active');
+  if(name==='riwayat')posbRenderRiwayat();
+}
+
+/* === SEARCH PRODUK === */
+function posbSearchProduk(q){
+  const dd=document.getElementById('posb-search-result');
+  if(!q||q.length<1){dd.style.display='none';return;}
+  const m=q.match(/^(\d+)\*(.+)$/);
+  let kw=q,qty=1;
+  if(m){qty=parseInt(m[1]);kw=m[2];}
+  const kwLow=kw.toLowerCase();
+  // SEMUA kategori (termasuk PPOB modal, laundry, service jika ada di stok)
+  const list=(typeof aB!=='undefined'?aB:[]).filter(p=>{
+    return p.nama.toLowerCase().includes(kwLow)||(p.barcode||'').includes(kw);
+  }).slice(0,10);
+
+  if(!list.length){
+    dd.innerHTML='<div style="padding:10px 12px;text-align:center;color:var(--text-muted);font-size:12px">Tidak ditemukan</div>';
+    dd.style.display='block';return;
+  }
+  let html='';
+  list.forEach(p=>{
+    const hb=p.harga_beli||0;
+    const hj=p.harga||0;
+    const cat=p.kategori?`[${p.kategori}]`:'';
+    html+=`<div onclick="posbAddProduk(${p.id},${qty})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nama}</div>
+        <div style="font-size:10px;color:var(--text-muted)">stok: ${p.stok??0} · ${cat}${p.barcode?' · '+p.barcode:''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:11px;color:var(--text-muted);font-family:'SF Mono',Monaco,monospace">B: ${fmt(hb)}</div>
+        <div style="font-size:12px;font-weight:700;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace">J: ${fmt(hj)}</div>
+      </div>
+    </div>`;
+  });
+  dd.innerHTML=html;
+  dd.style.display='block';
+}
+
+function posbHandleScanKey(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const v=e.target.value.trim();
+    if(!v)return;
+    const m=v.match(/^(\d+)\*(.+)$/);
+    let kw=v,qty=1;
+    if(m){qty=parseInt(m[1]);kw=m[2];}
+    const found=(typeof aB!=='undefined'?aB:[]).find(p=>p.barcode===kw);
+    if(found){posbAddProduk(found.id,qty);return;}
+    const list=(typeof aB!=='undefined'?aB:[]).filter(p=>p.nama.toLowerCase().includes(kw.toLowerCase())||(p.barcode||'').includes(kw));
+    if(list.length){posbAddProduk(list[0].id,qty);}
+    else toast('Barang tidak ditemukan',true);
+  }
+  if(e.key==='Escape'){
+    e.target.value='';
+    document.getElementById('posb-search-result').style.display='none';
+  }
+}
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#posb-scan-input')&&!e.target.closest('#posb-search-result')){
+    const dd=document.getElementById('posb-search-result');
+    if(dd)dd.style.display='none';
+  }
+});
+
+/* === ADD PRODUK === */
+function posbAddProduk(pid,qty){
+  qty=qty||1;
+  const p=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===pid);
+  if(!p){toast('Produk tidak ditemukan',true);return;}
+  const ex=posbCart.find(c=>c.pid===pid&&!c.is_manual);
+  if(ex){ex.qty+=qty;}
+  else posbCart.push({
+    pid,nama:p.nama,qty,
+    hbeli:p.harga_beli||0,
+    hjual:p.harga||0,
+    barang_id:p.id,barcode:p.barcode||'',
+    is_manual:false,
+    _kategori:p.kategori||'umum'
+  });
+  document.getElementById('posb-scan-input').value='';
+  document.getElementById('posb-search-result').style.display='none';
+  document.getElementById('posb-scan-input').focus();
+  posbRenderCart();
+  toast('+ '+p.nama+(qty>1?' ×'+qty:''));
+}
+
+/* === RENDER CART === */
+function posbRenderCart(){
+  const el=document.getElementById('posb-cart-items');
+  document.getElementById('posb-cart-count').textContent=posbCart.length+' item';
+  if(!posbCart.length){
+    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text-muted);font-size:13px"><div style="font-size:54px;opacity:0.3;margin-bottom:8px">📦</div>Keranjang kosong<br><span style="font-size:12px">Scan / cari barang di atas</span></div>';
+  } else {
+    el.innerHTML=posbCart.map((c,i)=>{
+      const subtotal=c.qty*c.hbeli;
+      const ico=c.is_manual?'✏️':'📦';
+      const margin=c.hbeli>0?Math.round(((c.hjual-c.hbeli)/c.hbeli)*100):0;
+      const marginColor=margin>=20?'var(--green-dark, #15803d)':margin>=10?'var(--amber, #f59e0b)':'var(--red)';
+      return `<div class="posb-cart-item" data-idx="${i}" onclick="posbOpenEdit(${i})" style="background:white;border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer">
+        <div style="width:38px;height:38px;border-radius:8px;background:#fef3c7;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${ico}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${c.nama}</div>
+          <div style="font-size:11px;color:var(--text-muted)">B: ${fmt(c.hbeli)} × ${c.qty} ${c.hjual&&!c.is_manual?`<span style="color:${marginColor};font-weight:700">· margin ${margin}%</span>`:''}</div>
+        </div>
+        <div style="font-weight:700;font-size:13px;color:#92400e;text-align:right;flex-shrink:0;font-family:'SF Mono',Monaco,monospace">${fmt(subtotal)}</div>
+      </div>`;
+    }).join('');
+  }
+  posbUpdateTotal();
+}
+
+function posbUpdateTotal(){
+  const total=posbCart.reduce((s,c)=>s+c.qty*c.hbeli,0);
+  document.getElementById('posb-total').textContent=fmt(total);
+  document.getElementById('posb-catatan-btn-lbl').textContent=posbCatatan?'Catatan ✓':'Catatan';
+  document.getElementById('posb-tgl-btn-lbl').textContent=posbTglBeli?posbFmtTglShort(posbTglBeli):'Hari ini';
+  document.getElementById('posb-struk-btn-lbl').textContent=posbStrukFile?'Foto ✓':'Foto Struk';
+  // Btn Simpan
+  const btn=document.getElementById('posb-btn-simpan');
+  btn.disabled=posbCart.length===0;
+  btn.style.opacity=posbCart.length===0?'0.5':'1';
+}
+
+function posbFmtTglShort(iso){
+  const d=new Date(iso);
+  return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+}
+
+/* === EDIT ITEM === */
+function posbOpenEdit(idx){
+  posbEditingIdx=idx;
+  const c=posbCart[idx];
+  document.getElementById('posb-edit-name').textContent=c.nama;
+  document.getElementById('posb-edit-qty').value=c.qty;
+  document.getElementById('posb-edit-hbeli').value=c.hbeli;
+  document.getElementById('posb-edit-hjual').value=c.hjual;
+  // Manual item: hide harga jual & margin
+  const isManual=c.is_manual;
+  document.getElementById('posb-edit-hjual').parentElement.style.display=isManual?'none':'block';
+  posbUpdateEditMargin();
+  openModal('posb-modal-edit');
+}
+function posbEditQty(d){
+  const inp=document.getElementById('posb-edit-qty');
+  let v=parseInt(inp.value)||1;
+  v=Math.max(1,v+d);
+  inp.value=v;
+  posbUpdateEditMargin();
+}
+function posbUpdateEditMargin(){
+  const q=parseInt(document.getElementById('posb-edit-qty').value)||1;
+  const hb=parseFloat(document.getElementById('posb-edit-hbeli').value)||0;
+  const hj=parseFloat(document.getElementById('posb-edit-hjual').value)||0;
+  document.getElementById('posb-edit-subtotal').textContent=fmt(q*hb);
+  const marginEl=document.getElementById('posb-edit-margin');
+  if(hb>0&&hj>0){
+    const margin=Math.round(((hj-hb)/hb)*100);
+    const profit=hj-hb;
+    const color=margin>=20?'var(--green-dark, #15803d)':margin>=10?'#92400e':'var(--red)';
+    const bg=margin>=20?'var(--green-light)':margin>=10?'#fef3c7':'#fee2e2';
+    marginEl.style.background=bg;
+    marginEl.style.color=color;
+    marginEl.innerHTML=`<div style="display:flex;justify-content:space-between"><span>Margin / item</span><strong>${fmt(profit)} (${margin}%)</strong></div>`;
+    marginEl.style.display='block';
+  } else marginEl.style.display='none';
+}
+function posbSaveEdit(){
+  if(posbEditingIdx<0)return;
+  const q=parseInt(document.getElementById('posb-edit-qty').value)||1;
+  const hb=parseFloat(document.getElementById('posb-edit-hbeli').value)||0;
+  const hj=parseFloat(document.getElementById('posb-edit-hjual').value)||0;
+  if(!hb&&!posbCart[posbEditingIdx].is_manual){toast('Harga beli wajib diisi',true);return;}
+  posbCart[posbEditingIdx].qty=q;
+  posbCart[posbEditingIdx].hbeli=hb;
+  if(!posbCart[posbEditingIdx].is_manual)posbCart[posbEditingIdx].hjual=hj;
+  closeModal('posb-modal-edit');
+  posbRenderCart();
+  toast('Item diperbarui');
+}
+function posbDeleteEdit(){
+  if(posbEditingIdx<0)return;
+  if(!confirm('Hapus item dari keranjang?'))return;
+  posbCart.splice(posbEditingIdx,1);
+  closeModal('posb-modal-edit');
+  posbRenderCart();
+  toast('Item dihapus');
+}
+
+/* === TAMBAH MANUAL === */
+function posbAddManual(){
+  document.getElementById('posb-man-nama').value='';
+  document.getElementById('posb-man-qty').value=1;
+  document.getElementById('posb-man-harga').value='';
+  openModal('posb-modal-manual');
+}
+function posbManQty(d){
+  const inp=document.getElementById('posb-man-qty');
+  let v=parseInt(inp.value)||1;
+  v=Math.max(1,v+d);
+  inp.value=v;
+}
+function posbSaveManual(){
+  const nama=document.getElementById('posb-man-nama').value.trim();
+  const q=parseInt(document.getElementById('posb-man-qty').value)||1;
+  const h=parseFloat(document.getElementById('posb-man-harga').value)||0;
+  if(!nama){toast('Nama item wajib diisi',true);return;}
+  if(!h){toast('Harga wajib diisi',true);return;}
+  posbCart.push({
+    pid:'manual-'+Date.now(),
+    nama,qty:q,hbeli:h,hjual:0,
+    is_manual:true,
+    _kategori:'manual'
+  });
+  closeModal('posb-modal-manual');
+  posbRenderCart();
+  toast('+ '+nama);
+}
+
+/* === SUPPLIER PREDICTIVE SEARCH === */
+function openPosbSupSearch(){
+  document.getElementById('posb-sup-search').value='';
+  posbSupSearch('');
+  openModal('posb-modal-sup');
+  setTimeout(()=>document.getElementById('posb-sup-search').focus(),100);
+}
+
+function posbSupSearch(q){
+  const el=document.getElementById('posb-sup-result');
+  q=(q||'').trim();
+  let html='';
+  const supList=(typeof aSup!=='undefined'?aSup:[]);
+  let filtered=supList;
+  if(q){
+    const qLow=q.toLowerCase();
+    filtered=supList.filter(s=>(s.nama||'').toLowerCase().includes(qLow));
+  }
+  if(filtered.length){
+    html+='<div style="font-size:10px;color:#92400e;text-transform:uppercase;font-weight:700;padding:6px 10px;background:#fef3c7;border-radius:6px;margin-bottom:6px">🏢 SUPPLIER</div>';
+    filtered.slice(0,15).forEach(s=>{
+      const obj={id:s.id,label:s.nama,sumber:'supplier'};
+      html+=`<div onclick='posbSetSup(${JSON.stringify(obj).replace(/'/g,"&#39;")})' style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:#fef3c7;color:#92400e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">🏢</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.nama}</div>
+          ${s.telp?`<div style="font-size:11px;color:var(--text-muted)">${s.telp}</div>`:''}
+        </div>
+      </div>`;
+    });
+  } else {
+    html+=`<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">${q?'Supplier tidak ditemukan':'Belum ada supplier terdaftar'}</div>`;
+  }
+  el.innerHTML=html;
+}
+
+function posbSetSup(s){
+  posbSup=s;
+  const pill=document.getElementById('posb-sup-pill');
+  if(s.sumber==='supplier'){
+    pill.style.background='#fef3c7';
+    pill.style.borderColor='var(--amber, #f59e0b)';
+    pill.style.color='#92400e';
+  } else {
+    pill.style.background='#f8fafc';
+    pill.style.borderColor='var(--border)';
+    pill.style.color='var(--text-muted)';
+  }
+  document.getElementById('posb-sup-name').textContent='Supplier: '+(s.label||'Tanpa supplier');
+  closeModal('posb-modal-sup');
+  toast('Supplier: '+(s.label||'Tanpa supplier'));
+}
+
+/* === CATATAN / TANGGAL === */
+function posbOpenCatatan(){
+  document.getElementById('posb-catatan-input').value=posbCatatan||'';
+  openModal('posb-modal-catatan');
+}
+function posbApplyCatatan(){
+  posbCatatan=document.getElementById('posb-catatan-input').value.trim();
+  closeModal('posb-modal-catatan');
+  posbUpdateTotal();
+  toast(posbCatatan?'Catatan disimpan':'Catatan dihapus');
+}
+
+function posbOpenTgl(){
+  const now=new Date();
+  const localISO=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById('posb-tgl-input').value=posbTglBeli?new Date(new Date(posbTglBeli).getTime()-new Date(posbTglBeli).getTimezoneOffset()*60000).toISOString().slice(0,16):localISO;
+  openModal('posb-modal-tgl');
+}
+function posbResetTgl(){
+  posbTglBeli='';
+  closeModal('posb-modal-tgl');
+  posbUpdateTotal();
+  toast('Tanggal: hari ini');
+}
+function posbApplyTgl(){
+  const v=document.getElementById('posb-tgl-input').value;
+  if(!v){posbResetTgl();return;}
+  posbTglBeli=new Date(v).toISOString();
+  closeModal('posb-modal-tgl');
+  posbUpdateTotal();
+  toast('Tanggal: '+posbFmtTglShort(posbTglBeli));
+}
+
+/* === FOTO STRUK === */
+function posbOpenStruk(){
+  posbRenderStrukPreview();
+  openModal('posb-modal-struk');
+}
+function posbPreviewStruk(input){
+  const file=input.files[0];
+  if(!file)return;
+  if(file.size>5*1024*1024){toast('Ukuran maksimal 5MB',true);return;}
+  posbStrukFile=file;
+  posbRenderStrukPreview();
+  posbUpdateTotal();
+}
+function posbRenderStrukPreview(){
+  const el=document.getElementById('posb-struk-preview');
+  if(!posbStrukFile){
+    el.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px">Belum ada foto</div>';
+    return;
+  }
+  const url=URL.createObjectURL(posbStrukFile);
+  el.innerHTML=`<img src="${url}" style="width:100%;max-height:240px;object-fit:contain;border-radius:8px;border:1px solid var(--border)"/>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:center">${posbStrukFile.name} · ${(posbStrukFile.size/1024).toFixed(0)} KB</div>`;
+}
+function posbHapusStruk(){
+  posbStrukFile=null;
+  document.getElementById('posb-struk-camera').value='';
+  document.getElementById('posb-struk-gallery').value='';
+  posbRenderStrukPreview();
+  posbUpdateTotal();
+  toast('Foto dihapus');
+}
+
+/* === SIMPAN (modal status bayar) === */
+function posbOpenSimpan(){
+  if(!posbCart.length){toast('Keranjang kosong',true);return;}
+  const total=posbCart.reduce((s,c)=>s+c.qty*c.hbeli,0);
+  document.getElementById('posb-simpan-total').textContent=fmt(total);
+  // Default lunas
+  posbSetMetode(document.querySelector('.posb-metode-btn[data-metode="lunas"]'));
+  // Populate kas dropdown - hanya Kas Utama (1) + Kas Kasir Toko PW4 (9)
+  const kasFilter=(typeof aKas!=='undefined'?aKas:[]).filter(k=>k.id===1||k.id===9);
+  const kasOpts=kasFilter.map(k=>`<option value="${k.id}" ${k.id===1?'selected':''}>${k.nama}</option>`).join('');
+  document.getElementById('posb-simpan-kas').innerHTML=kasOpts;
+  document.getElementById('posb-simpan-kas-dp').innerHTML=kasOpts;
+  document.getElementById('posb-simpan-dp').value='';
+  posbHitungSisa();
+  openModal('posb-modal-simpan');
+}
+
+function posbSetMetode(btn){
+  document.querySelectorAll('.posb-metode-btn').forEach(b=>{
+    b.classList.remove('active');
+    b.style.background='white';
+    b.style.borderColor='var(--border)';
+    b.style.color='var(--text)';
+  });
+  btn.classList.add('active');
+  posbStatusBayar=btn.dataset.metode;
+  if(posbStatusBayar==='lunas'){
+    btn.style.background='var(--green-light)';
+    btn.style.borderColor='var(--green)';
+    btn.style.color='var(--green-dark, #15803d)';
+  } else if(posbStatusBayar==='sebagian'){
+    btn.style.background='#fef3c7';
+    btn.style.borderColor='var(--amber, #f59e0b)';
+    btn.style.color='#92400e';
+  } else if(posbStatusBayar==='belum'){
+    btn.style.background='#fee2e2';
+    btn.style.borderColor='var(--red)';
+    btn.style.color='var(--red)';
+  }
+  document.getElementById('posb-simpan-section-lunas').style.display=posbStatusBayar==='lunas'?'block':'none';
+  document.getElementById('posb-simpan-section-sebagian').style.display=posbStatusBayar==='sebagian'?'block':'none';
+  document.getElementById('posb-simpan-section-belum').style.display=posbStatusBayar==='belum'?'block':'none';
+}
+
+function posbHitungSisa(){
+  const total=posbCart.reduce((s,c)=>s+c.qty*c.hbeli,0);
+  const dp=parseFloat(document.getElementById('posb-simpan-dp').value)||0;
+  const sisa=Math.max(0,total-dp);
+  document.getElementById('posb-simpan-sisa').textContent=fmt(sisa);
+}
+
+/* === KONFIRMASI SIMPAN === */
+async function posbKonfirmasiSimpan(){
+  const total=posbCart.reduce((s,c)=>s+c.qty*c.hbeli,0);
+  let dp=0,kasId=null;
+
+  if(posbStatusBayar==='lunas'){
+    dp=total;
+    kasId=parseInt(document.getElementById('posb-simpan-kas').value)||1;
+  } else if(posbStatusBayar==='sebagian'){
+    dp=parseFloat(document.getElementById('posb-simpan-dp').value)||0;
+    if(dp<=0){toast('DP harus > 0',true);return;}
+    if(dp>=total){toast('DP >= total, pilih Lunas saja',true);return;}
+    kasId=parseInt(document.getElementById('posb-simpan-kas-dp').value)||1;
+  } else {
+    // belum
+    if(posbSup.sumber!=='supplier'){
+      toast('Untuk Belum Bayar, pilih supplier dulu',true);
+      return;
+    }
+  }
+
+  const btn=document.getElementById('posb-btn-konfirmasi');
+  btn.disabled=true; btn.innerHTML='⏳ Menyimpan...'; btn.style.opacity='0.6';
+
+  try{
+    const tglBeli=posbTglBeli||new Date().toISOString();
+    // Build items array (filter out manual untuk DB pembelian.items - tapi kita tetap simpan untuk record)
+    const items=posbCart.map(c=>({
+      barang_id:c.is_manual?null:c.barang_id,
+      nama:c.nama,
+      qty:c.qty,
+      harga_beli:c.hbeli,
+      harga_jual:c.hjual,
+      subtotal:c.qty*c.hbeli,
+      is_manual:c.is_manual||false
+    }));
+
+    // 1. Insert pembelian
+    const{data:beliData,error:errBeli}=await sb.from('pembelian').insert([{
+      items,total,
+      operator:CU?CU.username:'unknown',
+      supplier_id:posbSup.id||null,
+      supplier_nama:posbSup.label||'',
+      status_bayar:posbStatusBayar,
+      catatan:posbCatatan||null,
+      tgl_beli:tglBeli,
+      waktu:tglBeli
+    }]).select().single();
+    if(errBeli)throw errBeli;
+    const beliId=beliData.id;
+
+    // 2. Per item: insert stok_batch & update barang.stok (skip manual)
+    for(const c of posbCart){
+      if(c.is_manual)continue;
+      const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===c.barang_id);
+      if(!b)continue;
+      // Insert batch
+      await sb.from('stok_batch').insert([{
+        barang_id:c.barang_id,
+        qty_awal:c.qty,
+        qty_sisa:c.qty,
+        harga_beli:c.hbeli,
+        harga_jual:c.hjual||c.hbeli,
+        tgl_masuk:tglBeli
+      }]);
+      // Update stok & harga
+      const updPayload={stok:(b.stok||0)+c.qty,harga_beli:c.hbeli};
+      if(c.hjual)updPayload.harga=c.hjual;
+      await sb.from('barang').update(updPayload).eq('id',c.barang_id);
+    }
+
+    // 3. Insert kas_mutasi (KELUAR) jika lunas/sebagian
+    if(kasId&&dp>0){
+      const ket='Pembelian POS: '+(posbSup.label||'Supplier')+' #'+beliId;
+      await sb.from('kas_mutasi').insert([{
+        kas_id:kasId,tipe:'keluar',kategori:'pembelian',
+        jumlah:dp,tanggal:tglBeli.slice(0,10),
+        keterangan:ket,
+        operator:CU?CU.username:'unknown',
+        ref_type:'pembelian',ref_id:beliId
+      }]);
+      if(typeof recalcSaldo==='function')await recalcSaldo(kasId);
+    }
+
+    // 4. Insert hutang jika status bukan lunas
+    if(posbStatusBayar!=='lunas'){
+      const sisa=total-dp;
+      const supNama=posbSup.label||'Supplier';
+      const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
+      await sb.from('hutang').insert([{
+        nama:supNama,jml:sisa,
+        ket:'Pembelian POS: '+itemNames,
+        lunas:false,tipe:'hutang',
+        ref_id:beliId,ref_type:'pembelian',
+        tgl:tglBeli
+      }]);
+    }
+
+    // 5. Upload struk jika ada
+    if(posbStrukFile){
+      try{
+        const ext=posbStrukFile.name.split('.').pop()||'jpg';
+        const fileName=`struk-pos-${beliId}-${Date.now()}.${ext}`;
+        const{data:upData,error:upErr}=await sb.storage.from('struk-pembelian').upload(fileName,posbStrukFile,{cacheControl:'3600',upsert:true,contentType:posbStrukFile.type});
+        if(!upErr){
+          const{data:urlData}=sb.storage.from('struk-pembelian').getPublicUrl(fileName);
+          if(urlData?.publicUrl){
+            await sb.from('pembelian').update({struk_url:urlData.publicUrl}).eq('id',beliId);
+          }
+        } else console.warn('Upload struk gagal:',upErr.message);
+      }catch(eUp){console.warn('Upload struk error:',eUp);}
+    }
+
+    // 6. Reload data lokal
+    if(typeof lB==='function')await lB();
+    if(typeof lBeli==='function')await lBeli();
+    if(typeof lBatch==='function')await lBatch();
+    if(typeof lH==='function')await lH();
+    if(typeof lKas==='function')await lKas();
+
+    closeModal('posb-modal-simpan');
+    posbResetCart();
+    const statusLbl=posbStatusBayar==='lunas'?'lunas':posbStatusBayar==='sebagian'?'sebagian dibayar':'belum dibayar';
+    toast('✅ Pembelian #'+beliId+' tersimpan ('+statusLbl+')');
+  } catch(e){
+    console.error('posbKonfirmasiSimpan:',e);
+    toast('❌ Gagal: '+(e.message||e),true);
+    btn.disabled=false; btn.innerHTML='✓ Konfirmasi Simpan'; btn.style.opacity='1';
+  }
+}
+
+function posbResetCart(){
+  posbCart=[];
+  posbSup={id:null,label:'',sumber:'kosong'};
+  posbStatusBayar='lunas';
+  posbCatatan='';
+  posbTglBeli='';
+  posbStrukFile=null;
+  // Reset pill supplier
+  const pill=document.getElementById('posb-sup-pill');
+  if(pill){
+    pill.style.background='#f8fafc';
+    pill.style.borderColor='var(--border)';
+    pill.style.color='var(--text-muted)';
+  }
+  const supName=document.getElementById('posb-sup-name');
+  if(supName)supName.textContent='Supplier: Tanpa supplier (tap untuk pilih)';
+  // Reset file inputs
+  const cam=document.getElementById('posb-struk-camera');if(cam)cam.value='';
+  const gal=document.getElementById('posb-struk-gallery');if(gal)gal.value='';
+  posbRenderCart();
+}
+
+/* === RIWAYAT === */
+async function posbRenderRiwayat(){
+  const el=document.getElementById('posb-riwayat-list');
+  el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text-muted)">Memuat...</div>';
+  try{
+    const sevenDays=new Date();sevenDays.setDate(sevenDays.getDate()-7);
+    const{data}=await sb.from('pembelian').select('id,waktu,total,supplier_nama,status_bayar,items,catatan,struk_url').gte('waktu',sevenDays.toISOString()).order('waktu',{ascending:false}).limit(50);
+    if(!data||!data.length){
+      el.innerHTML='<div style="padding:30px;text-align:center;color:var(--text-muted)">Belum ada pembelian</div>';
+      return;
+    }
+    el.innerHTML=data.map(p=>{
+      const d=new Date(p.waktu);
+      const time=d.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      const cnt=(p.items||[]).length;
+      const lunas=p.status_bayar==='lunas';
+      const sebagian=p.status_bayar==='sebagian';
+      const bgStatus=lunas?'var(--green-light)':sebagian?'#fef3c7':'#fee2e2';
+      const colorStatus=lunas?'var(--green-dark, #15803d)':sebagian?'#92400e':'var(--red)';
+      const lblStatus=lunas?'✓ LUNAS':sebagian?'⚡ SEBAGIAN':'⏳ BELUM';
+      return `<div style="background:white;border-radius:12px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.06);display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--text-muted);font-family:'SF Mono',Monaco,monospace">PB-${p.id}${p.struk_url?' 📎':''}</div>
+          <div style="font-size:12px;font-weight:600;margin:2px 0">⏰ ${time} · ${cnt} item</div>
+          <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.supplier_nama||'Tanpa supplier'}</div>
+          <span style="font-size:10px;padding:2px 6px;border-radius:8px;margin-top:2px;display:inline-block;background:${bgStatus};color:${colorStatus}">${lblStatus}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          <div style="font-size:14px;font-weight:800;color:#92400e;font-family:'SF Mono',Monaco,monospace">${fmt(p.total)}</div>
+          <button onclick="posbHapusRiwayat(${p.id})" style="font-size:10px;padding:3px 8px;border:none;border-radius:6px;background:#fee2e2;color:var(--red);cursor:pointer;font-weight:600">🗑 Hapus</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    console.error(e);
+    el.innerHTML='<div style="padding:14px;text-align:center;color:var(--red)">Gagal memuat</div>';
+  }
+}
+
+/* === HAPUS RIWAYAT (rollback lengkap) === */
+async function posbHapusRiwayat(id){
+  const p=(typeof aBeli!=='undefined'?aBeli:[]).find(x=>x.id===id);
+  if(!p){
+    // Fetch langsung
+    const{data}=await sb.from('pembelian').select('*').eq('id',id).single();
+    if(!data){toast('Pembelian tidak ditemukan',true);return;}
+    return _posbDoHapus(data);
+  }
+  return _posbDoHapus(p);
+}
+
+async function _posbDoHapus(p){
+  const id=p.id;
+  const itemCount=(p.items||[]).length;
+  const pesan=`Hapus pembelian #${id}?\n\nTotal: ${fmt(p.total)}\n${itemCount} item · ${p.supplier_nama||'Tanpa supplier'}\n\n⚠️ Yang akan ter-rollback:\n• Stok barang dikurangi (sesuai qty pembelian)\n• Batch FIFO dihapus\n• Mutasi kas dihapus (jika ada)\n• Hutang ke supplier dihapus\n\nAksi ini TIDAK BISA dibatalkan.`;
+  if(!confirm(pesan))return;
+  try{
+    const tglBeli=p.tgl_beli||p.waktu;
+    // 1. Per item: hapus batch + restore stok barang
+    for(const it of (p.items||[])){
+      if(it.is_manual||!it.barang_id)continue;
+      // Hapus batch yang match (by barang_id + tgl_masuk + harga_beli + harga_jual + qty_awal)
+      await sb.from('stok_batch').delete()
+        .eq('barang_id',it.barang_id)
+        .eq('tgl_masuk',tglBeli)
+        .eq('qty_awal',it.qty)
+        .eq('harga_beli',it.harga_beli||0);
+      // Kurangi stok barang
+      const b=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===it.barang_id);
+      if(b){
+        const newStok=Math.max(0,(b.stok||0)-it.qty);
+        await sb.from('barang').update({stok:newStok}).eq('id',it.barang_id);
+      }
+    }
+    // 2. Hapus kas_mutasi
+    const kasIdsAffected=new Set();
+    const{data:kmList}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','pembelian').eq('ref_id',id);
+    if(kmList){
+      kmList.forEach(km=>kasIdsAffected.add(km.kas_id));
+      await sb.from('kas_mutasi').delete().eq('ref_type','pembelian').eq('ref_id',id);
+    }
+    // 3. Hapus hutang
+    await sb.from('hutang').delete().eq('ref_type','pembelian').eq('ref_id',id);
+    // 4. Hapus pembelian
+    const{error}=await sb.from('pembelian').delete().eq('id',id);
+    if(error)throw error;
+    // 5. Recalc saldo kas
+    if(typeof recalcSaldo==='function'){
+      for(const kid of kasIdsAffected) await recalcSaldo(kid);
+    }
+    // 6. Reload
+    if(typeof lB==='function')await lB();
+    if(typeof lBeli==='function')await lBeli();
+    if(typeof lBatch==='function')await lBatch();
+    if(typeof lH==='function')await lH();
+    if(typeof lKas==='function')await lKas();
+    posbRenderRiwayat();
+    if(typeof renderRiwayatBeli==='function')renderRiwayatBeli();
+    if(typeof renderHutang==='function')renderHutang();
+    if(typeof renderStok==='function')renderStok();
+    toast('✅ Pembelian #'+id+' dihapus, stok & kas dikembalikan');
+  }catch(e){
+    console.error('posbHapusRiwayat:',e);
+    toast('❌ Gagal hapus: '+(e.message||e),true);
+  }
+}
+
+/* === INIT === */
+async function initPOSBeli(){
+  if(typeof aSup==='undefined'||!aSup||!aSup.length){
+    if(typeof lSup==='function')await lSup();
+  }
+  posbRenderCart();
 }
 
 
