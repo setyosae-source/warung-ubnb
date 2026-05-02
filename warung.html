@@ -8721,20 +8721,25 @@ function posPilihLevel(idx){
   if(!b){closeModal('pos-modal-level', true);return;}
   // Build allLevels SAMA dengan posOpenLevelPicker
   let allLevels;
+  let hasUtama;
   if(b.multi_satuan){
     allLevels = (b.harga_levels||[]).map(lv=>({...lv, isDefault:false}));
+    hasUtama = false;
   } else {
     const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
     allLevels = [satuanUtama, ...(b.harga_levels||[])];
+    hasUtama = true;
   }
   const lv=allLevels[idx];
   if(!lv){closeModal('pos-modal-level', true);return;}
+  // Apakah ini "level utama" (Pcs/Kg)? Hanya true kalau hasUtama && idx===0
+  const isLevelUtama = hasUtama && idx === 0;
   // Find existing entry dengan same level
   const ex=posCart.find(c=>c.pid===b.id&&!c.isPaket&&c._levelIdx===idx);
   if(ex){ex.qty++;}
   else posCart.push({
     pid:b.id,
-    nama:b.nama+(idx>0?` (${lv.label})`:''),  // selalu show label utk non-satuan utama
+    nama:b.nama+(isLevelUtama?'':` (${lv.label})`),
     qty:1,harga:lv.harga,
     barang_id:b.id,barcode:b.barcode||'',
     is_manual:false,isPaket:false,
@@ -9954,22 +9959,25 @@ function posbPilihLevel(idx){
   if(!b){closeModal('posb-modal-level', true);return;}
   // Build allLevels SAMA dengan posbOpenLevelPicker
   let allLevels;
+  let hasUtama;  // flag: apakah satuan utama include atau tidak
   if(b.multi_satuan){
     allLevels = (b.harga_levels||[]).map(lv=>({...lv, isDefault:false}));
+    hasUtama = false;
   } else {
     const satuanUtama={label:b.satuan||'Pcs',qty:1,harga:b.harga||0,isDefault:true};
     allLevels = [satuanUtama, ...(b.harga_levels||[])];
+    hasUtama = true;
   }
   const lv=allLevels[idx];
   if(!lv){closeModal('posb-modal-level', true);return;}
+  // Apakah ini "level utama" (Pcs/Kg)? Hanya true kalau hasUtama && idx===0
+  const isLevelUtama = hasUtama && idx === 0;
   // Auto-fill harga beli cerdas berdasarkan skema:
-  // - Single satuan (multi_satuan=false) atau level utama (idx=0): pakai harga_beli langsung
-  // - Multi-satuan + level non-utama: konversi via faktor (qty_stok / 1000 untuk gr→Kg)
   let hbeliDefault = 0;
   const hbMaster = b.harga_beli || 0;
   if(hbMaster > 0){
-    if(idx === 0){
-      // Level utama: pakai harga_beli langsung
+    if(isLevelUtama){
+      // Level utama (single satuan): pakai harga_beli langsung
       hbeliDefault = hbMaster;
     } else if(b.multi_satuan && b.satuan_stok==='gr' && b.satuan_harga==='Kg'){
       // Multi-satuan gr/Kg: konversi (qty gram / 1000) × harga per Kg
@@ -9984,7 +9992,7 @@ function posbPilihLevel(idx){
   }
   posbCart.push({
     pid:b.id,
-    nama:b.nama+(idx>0?` (${lv.label})`:''),
+    nama:b.nama+(isLevelUtama?'':` (${lv.label})`),
     qty:1,
     hbeli:hbeliDefault,
     hjual:lv.harga,
