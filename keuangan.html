@@ -1221,11 +1221,29 @@ function getPPOB(tahun){
 function getBMT(tahun){
   const angs=D.bmt_angsuran.filter(a=>a.created_at&&new Date(a.created_at).getFullYear()===tahun);
   const tot=angs.reduce((s,a)=>s+parseFloat(a.jumlah||0),0);
+
+  // Prioritas 1: baca margin riil dari jurnal COA 4-301 (akurat per angsuran)
+  const jIds=D.jurnal_umum
+    .filter(j=>j.status==='posted'&&j.tanggal&&new Date(j.tanggal).getFullYear()===tahun)
+    .map(j=>j.id);
+  const coa4301=D.coa.find(c=>c.kode==='4-301');
+  const marginJurnal=coa4301
+    ? D.jurnal_detail
+        .filter(jd=>jIds.includes(jd.jurnal_id)&&jd.coa_id===coa4301.id)
+        .reduce((s,jd)=>s+parseFloat(jd.kredit||0),0)
+    : 0;
+
+  if(marginJurnal>0){
+    // Data jurnal tersedia → pakai margin riil
+    return{total_angs:tot,margin:marginJurnal,sumber:'jurnal'};
+  }
+
+  // Fallback: estimasi rate margin dari total akad (untuk tahun tanpa jurnal per-angsuran)
   const akad=D.bmt_akad;
   const totPmb=akad.reduce((s,a)=>s+parseFloat(a.total_pembiayaan||0),0);
   const totMrg=akad.reduce((s,a)=>s+parseFloat(a.total_margin||0),0);
   const rate=totPmb>0?totMrg/totPmb:0;
-  return{total_angs:tot,margin:Math.round(tot*rate)};
+  return{total_angs:tot,margin:Math.round(tot*rate),sumber:'estimasi'};
 }
 function getBiaya(tahun){
   const jIds=D.jurnal_umum.filter(j=>j.status==='posted'&&j.tanggal&&new Date(j.tanggal).getFullYear()===tahun).map(j=>j.id);
@@ -1591,7 +1609,10 @@ function renderLabaRugi(){
     rSemRows=`<tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjSem)}</td></tr>`+
              `<tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
     pjBMT=bmt.margin; hppBMT=0; lkBMT=bmt.margin;
-    rBMTRows=`<tr class="row-indent"><td>Pendapatan Margin (est.)</td><td class="rp">${rp(pjBMT)}</td></tr>`;
+    const bmtLabel=bmt.sumber==='jurnal'
+      ? 'Pendapatan Margin <span class="s-auto">jurnal</span>'
+      : 'Pendapatan Margin <span class="s-manual">estimasi</span>';
+    rBMTRows=`<tr class="row-indent"><td>${bmtLabel}</td><td class="rp">${rp(pjBMT)}</td></tr>`;
     pjPPOB=ppobAuto.penjualan; hppPPOB=ppobAuto.hpp; lkPPOB=ppobAuto.laba;
     rPPOBRows=`<tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjPPOB)}</td></tr>`+
               `<tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppPPOB)}</td></tr>`;
