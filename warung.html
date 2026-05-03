@@ -2636,8 +2636,12 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 // ===== HELPER FUNCTIONS =====
 function fmtQty(q) {
   if (!q) return '0';
-  return q % 1 === 0 ? q.toString() : q.toFixed(1);
+  if (q % 1 === 0) return q.toString();
+  return parseFloat(parseFloat(q).toFixed(3)).toString();
 }
+
+
+
 
 
 const _txMap={};function _showStruk(id){if(_txMap[id])tampilStruk(_txMap[id]);}
@@ -3317,8 +3321,14 @@ function tambahPaket(pid){
 function ubahQty(id,d){
   const idx=KR.findIndex(x=>String(x.id)===String(id));if(idx<0)return;
   const k=KR[idx];
-  if(!k.isPaket){const b=aB.find(x=>x.id===k.id);if(d>0&&k.qty>=(b?.stok||99)&&!['ppob','laundry','service'].includes(b?.kategori)){toast('Stok tidak cukup',true);return;}}
-  KR[idx].qty+=d;if(KR[idx].qty<=0)KR.splice(idx,1);
+  const b=aB.find(x=>x.id===(k.barang_id||k.id));
+  if(!k.isPaket){
+    const qtyReal=(k.qty+d)*(k._qtyPerUnit||1);
+    if(d>0&&qtyReal>=(b?.stok||99)&&!['ppob','laundry','service'].includes(b?.kategori)){toast('Stok tidak cukup',true);return;}
+  }
+  const newQty=k.qty+d;
+  if(newQty<=0)KR.splice(idx,1);
+  else KR[idx].qty=newQty;
   renderKeranjang();hitungDiskon();
 }
 function renderKeranjang(){
@@ -5091,7 +5101,7 @@ function openModalBarang(id, prefillBarcode=''){
     document.getElementById('b-stok').value=b.stok;
     document.getElementById('b-hb').value=b.harga_beli||0;
     document.getElementById('b-satuan').value=b.satuan||'';
-  document.getElementById('b-allow-decimal').checked = b.allow_decimal || false;
+  // allow_decimal removed
     // Multi-satuan prefill
     document.getElementById('b-multi-satuan').checked = b.multi_satuan || false;
     document.getElementById('b-satuan-harga').value = b.satuan_harga || '';
@@ -5224,7 +5234,7 @@ async function simpanBarang(){
     multi_satuan: multiSatuan,
     satuan_harga: multiSatuan ? satuanHarga : null,
     satuan_stok: multiSatuan ? satuanStok : null,
-    allow_decimal: allowDecimal
+    // allow_decimal removed
   };
   // Kolom tambahan - hanya tambahkan jika ada nilainya
   // (agar tidak error jika kolom belum ada di tabel lama)
@@ -8948,27 +8958,30 @@ function posFmtTglShort(iso){
 function posOpenEdit(idx){
   posEditingIdx=idx;
   const c=posCart[idx];
+  const inp=document.getElementById('pos-edit-qty');
+  inp.step='0.001';
+  inp.min='0.001';
   document.getElementById('pos-edit-name').textContent=c.nama;
-  document.getElementById('pos-edit-qty').value=c.qty;
+  inp.value=c.qty;
   document.getElementById('pos-edit-harga').value=c.harga;
   posUpdateEditSubtotal();
   openModal('pos-modal-edit');
 }
 function posEditQty(d){
   const inp=document.getElementById('pos-edit-qty');
-  let v=parseInt(inp.value)||1;
-  v=Math.max(1,v+d);
-  inp.value=v;
+  let v=parseFloat(inp.value)||1;
+  v=Math.max(0.001,v+d);
+  inp.value=parseFloat(v.toFixed(3));
   posUpdateEditSubtotal();
 }
 function posUpdateEditSubtotal(){
-  const q=parseInt(document.getElementById('pos-edit-qty').value)||1;
+  const q=parseFloat(document.getElementById('pos-edit-qty').value)||0.1;
   const h=parseFloat(document.getElementById('pos-edit-harga').value)||0;
   document.getElementById('pos-edit-subtotal').textContent=fmt(q*h);
 }
 function posSaveEdit(){
   if(posEditingIdx<0)return;
-  const q=parseInt(document.getElementById('pos-edit-qty').value)||1;
+  const q=parseFloat(document.getElementById('pos-edit-qty').value)||0.1;
   const h=parseFloat(document.getElementById('pos-edit-harga').value)||0;
   posCart[posEditingIdx].qty=q;
   posCart[posEditingIdx].harga=h;
@@ -10181,11 +10194,13 @@ function posbFmtTglShort(iso){
 function posbOpenEdit(idx){
   posbEditingIdx=idx;
   const c=posbCart[idx];
+  const inp=document.getElementById('posb-edit-qty');
+  inp.step='0.001';
+  inp.min='0.001';
+  inp.value=c.qty;
   document.getElementById('posb-edit-name').textContent=c.nama;
-  document.getElementById('posb-edit-qty').value=c.qty;
   document.getElementById('posb-edit-hbeli').value=c.hbeli;
   document.getElementById('posb-edit-hjual').value=c.hjual;
-  // Manual item: hide harga jual & margin
   const isManual=c.is_manual;
   document.getElementById('posb-edit-hjual').parentElement.style.display=isManual?'none':'block';
   posbUpdateEditMargin();
@@ -10193,13 +10208,13 @@ function posbOpenEdit(idx){
 }
 function posbEditQty(d){
   const inp=document.getElementById('posb-edit-qty');
-  let v=parseInt(inp.value)||1;
-  v=Math.max(1,v+d);
-  inp.value=v;
+  let v=parseFloat(inp.value)||1;
+  v=Math.max(0.001,v+d);
+  inp.value=parseFloat(v.toFixed(3));
   posbUpdateEditMargin();
 }
 function posbUpdateEditMargin(){
-  const q=parseInt(document.getElementById('posb-edit-qty').value)||1;
+  const q=parseFloat(document.getElementById('posb-edit-qty').value)||0.1;
   const hb=parseFloat(document.getElementById('posb-edit-hbeli').value)||0;
   const hj=parseFloat(document.getElementById('posb-edit-hjual').value)||0;
   document.getElementById('posb-edit-subtotal').textContent=fmt(q*hb);
@@ -10217,7 +10232,7 @@ function posbUpdateEditMargin(){
 }
 function posbSaveEdit(){
   if(posbEditingIdx<0)return;
-  const q=parseInt(document.getElementById('posb-edit-qty').value)||1;
+  const q=parseFloat(document.getElementById('posb-edit-qty').value)||0.1;
   const hb=parseFloat(document.getElementById('posb-edit-hbeli').value)||0;
   const hj=parseFloat(document.getElementById('posb-edit-hjual').value)||0;
   if(!hb&&!posbCart[posbEditingIdx].is_manual){toast('Harga beli wajib diisi',true);return;}
