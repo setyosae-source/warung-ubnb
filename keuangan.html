@@ -1427,13 +1427,21 @@ function renderNeraca(){
         return R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
       }).join('');
     }
-    // Kalau tidak ada pos manual → pakai data live dari transaksi
-    let r = R('Kas Utama (Bendahara)', data.kas.warung, dataB?.kas?.warung)
-          + R('Kas BMT',               data.kas.bmt,    dataB?.kas?.bmt)
-          + R('Kas PPOB',              data.kas.ppob,   dataB?.kas?.ppob)
-          + R('Piutang Pokok Pembiayaan', data.piutang.pokok, dataB?.piutang?.pokok)
-          + R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
-    return r;
+    // Kalau tidak ada pos manual → baca semua COA aktiva_lancar dari jurnal
+    const jrAL = getSaldoKelompok('aktiva_lancar', tahun);
+    const jrALB = dataB ? getSaldoKelompok('aktiva_lancar', bandingTahun) : [];
+    if(jrAL.length){
+      return jrAL.map(a=>{
+        const b = jrALB.find(x=>x.kode===a.kode);
+        return R(a.uraian, a.nominal, b?.nominal);
+      }).join('');
+    }
+    // Fallback hardcode jika jurnal kosong
+    return R('Kas Utama (Bendahara)', data.kas.warung, dataB?.kas?.warung)
+         + R('Kas BMT',               data.kas.bmt,    dataB?.kas?.bmt)
+         + R('Kas PPOB',              data.kas.ppob,   dataB?.kas?.ppob)
+         + R('Piutang Pokok Pembiayaan', data.piutang.pokok, dataB?.piutang?.pokok)
+         + R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
   }
   function rowsAT(data, dataB){
     if(data.hasPM){
