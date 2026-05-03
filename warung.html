@@ -5243,6 +5243,21 @@ async function simpanBarang(){
   try{if(fotoUrl)payload.foto_url=fotoUrl;}catch(e){}
 
   if(id){
+    // Proteksi: jika nama berubah, cek riwayat transaksi
+    const barangLama = aB.find(x=>x.id===parseInt(id));
+    if(barangLama && barangLama.nama !== nama){
+      // Cek apakah ada riwayat pembelian atau penjualan
+      const[{count:cBeli},{count:cJual}] = await Promise.all([
+        sb.from('pembelian').select('id',{count:'exact',head:true})
+          .contains('items', JSON.stringify([{barang_id:parseInt(id)}])),
+        sb.from('transaksi').select('id',{count:'exact',head:true})
+          .contains('items', JSON.stringify([{barang_id:parseInt(id)}]))
+      ]);
+      if((cBeli||0)>0||(cJual||0)>0){
+        toast('❌ Nama tidak bisa diubah — barang ini sudah punya riwayat transaksi. Tambah barang baru jika ingin produk berbeda.',true);
+        return;
+      }
+    }
     const{error:eUpd}=await sb.from('barang').update(payload).eq('id',parseInt(id));
     if(eUpd){toast('Gagal update: '+eUpd.message,true);console.error('Update error:',eUpd);return;}
     toast('Barang diperbarui');
