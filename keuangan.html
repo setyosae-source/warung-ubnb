@@ -1263,6 +1263,27 @@ function getBMT(tahun){
   const rate=totPmb>0?totMrg/totPmb:0;
   return{total_angs:tot,margin:Math.round(tot*rate),sumber:'estimasi'};
 }
+function getBMTAkad(tahun){
+  // Accrual: dari akad baru berdasarkan tanggal_akad, breakdown per jenis_akad
+  const akadTahun = D.bmt_akad.filter(a=>a.tanggal_akad&&new Date(a.tanggal_akad).getFullYear()===tahun);
+  const byJenis = {};
+  akadTahun.forEach(a=>{
+    const j = a.jenis_akad||'Lainnya';
+    if(!byJenis[j]) byJenis[j]={jumlah:0,danaTersalur:0,marginAkad:0,nilaiPembiayaan:0};
+    byJenis[j].jumlah++;
+    byJenis[j].danaTersalur   += parseFloat(a.total_pembiayaan||0);
+    byJenis[j].marginAkad     += parseFloat(a.total_margin||0);
+    byJenis[j].nilaiPembiayaan+= parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0);
+  });
+  const total = {jumlah:0,danaTersalur:0,marginAkad:0,nilaiPembiayaan:0};
+  Object.values(byJenis).forEach(v=>{
+    total.jumlah         += v.jumlah;
+    total.danaTersalur   += v.danaTersalur;
+    total.marginAkad     += v.marginAkad;
+    total.nilaiPembiayaan+= v.nilaiPembiayaan;
+  });
+  return {byJenis, total};
+}
 function getBiaya(tahun){
   const jIds=D.jurnal_umum.filter(j=>j.status==='posted'&&j.tanggal&&new Date(j.tanggal).getFullYear()===tahun).map(j=>j.id);
   const byName={};
@@ -1305,7 +1326,8 @@ function hitungLabaBersih(tahun){
   const pmPL=getPosManual(tahun,'labarugi','pendapatan_lain').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
   const pmBiaya=getPosManual(tahun,'labarugi','biaya').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
   const pmZakat=getPosManual(tahun,'labarugi','zakat').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const lk=(trx.laba+pmSembako)+(bmt.margin+pmBMT)+(ppobD.laba+pmPPOB);
+  const bmtAkadLaba = getBMTAkad(tahun).total.marginAkad;
+  const lk=(trx.laba+pmSembako)+(bmtAkadLaba+pmBMT)+(ppobD.laba+pmPPOB);
   return lk+(getPendLain(tahun).total+pmPL)-(biaya.total+pmBiaya)-(zakat+pmZakat);
 }
 
@@ -1638,12 +1660,48 @@ function renderLabaRugi(){
       <tr class="row-indent" style="color:var(--gray);font-size:11px"><td>&nbsp;&nbsp;− Persediaan Akhir</td><td class="rp">(${rp(semPersAkhir)})</td></tr>
       <tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
 
-    // PEMBIAYAAN — pendapatan margin dari jurnal, HPP = 0 (margin sudah neto)
-    pjBMT=bmt.margin; hppBMT=0; lkBMT=bmt.margin;
-    const bmtLabel=bmt.sumber==='jurnal'
-      ? 'Pendapatan Margin <span class="s-auto">jurnal</span>'
-      : 'Pendapatan Margin <span class="s-manual">estimasi</span>';
-    rBMTRows=`<tr class="row-indent"><td>${bmtLabel}</td><td class="rp">${rp(pjBMT)}</td></tr>`;
+    // PEMBIAYAAN — accrual dari akad baru tahun ini, breakdown per jenis_akad
+    const bmtAkad = getBMTAkad(tahun);
+    const marginTerealisasi = bmt.margin;
+    const bmtSumber = bmt.sumber==='jurnal'
+      ? '<span class="s-auto">jurnal</span>'
+      : '<span class="s-manual">estimasi</span>';
+    pjBMT  = bmtAkad.total.nilaiPembiayaan;
+    hppBMT = bmtAkad.total.danaTersalur;
+    lkBMT  = bmtAkad.total.marginAkad;
+
+    // Render per jenis akad
+    const bmtJenisRows = Object.entries(bmtAkad.byJenis).map(([jenis,v])=>`
+      <tr class="row-indent" style="font-weight:500;color:var(--ink-light);font-size:11px">
+        <td colspan="2">&nbsp;&nbsp;${jenis} (${v.jumlah} akad)</td>
+      </tr>
+      <tr class="row-indent" style="font-size:11px">
+        <td>&nbsp;&nbsp;&nbsp;&nbsp;Nilai Pembiayaan</td>
+        <td class="rp">${rp(v.nilaiPembiayaan)}</td>
+      </tr>
+      <tr class="row-indent" style="font-size:11px">
+        <td>&nbsp;&nbsp;&nbsp;&nbsp;Dana Tersalur (Pokok)</td>
+        <td class="rp">${rp(v.danaTersalur)}</td>
+      </tr>
+      <tr class="row-indent" style="font-size:11px;color:var(--green-dark)">
+        <td>&nbsp;&nbsp;&nbsp;&nbsp;Keuntungan ${jenis}</td>
+        <td class="rp">${rp(v.marginAkad)}</td>
+      </tr>`).join('');
+
+    rBMTRows=`
+      ${bmtJenisRows}
+      <tr class="row-indent" style="border-top:0.5px solid var(--border);font-size:11px">
+        <td>Total Nilai Pembiayaan</td>
+        <td class="rp"><strong>${rp(pjBMT)}</strong></td>
+      </tr>
+      <tr class="row-indent" style="font-size:11px">
+        <td>Total Dana Tersalur</td>
+        <td class="rp">${rp(hppBMT)}</td>
+      </tr>
+      <tr class="row-indent" style="font-size:11px;color:var(--gray)">
+        <td>&nbsp;&nbsp;Margin Terealisasi ${bmtSumber}</td>
+        <td class="rp">${rp(marginTerealisasi)}</td>
+      </tr>`;
 
     // PPOB
     pjPPOB=ppobAuto.penjualan; hppPPOB=ppobAuto.hpp; lkPPOB=ppobAuto.laba;
