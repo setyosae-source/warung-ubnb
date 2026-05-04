@@ -1016,12 +1016,12 @@ async function refreshAll(){
     ]=await Promise.all([
       load('kas',          sb.from('kas').select('*').order('id')),
       load('harga_saham',  sb.from('ubnb_harga_saham').select('harga_baru,berlaku_mulai').order('berlaku_mulai',{ascending:false}).limit(1)),
-      load('barang',       sb.from('barang').select('id,stok,harga_beli').gt('stok',0)),
+      load('barang',       sb.from('barang').select('id,stok,harga_beli,kategori').gt('stok',0)),
       load('bmt_akad',     sb.from('bmt_akad').select('*')),
       load('bmt_angsuran', sb.from('bmt_angsuran').select('jumlah,created_at,akad_id')),
       load('transaksi',    sb.from('transaksi').select('total,hpp,waktu,status_bayar')),
       load('ppob',         sb.from('ppob').select('harga_jual,harga_beli,created_at,status_bayar')),
-      load('pembelian',    sb.from('pembelian').select('total,tgl_beli,status_bayar')),
+      load('pembelian',    sb.from('pembelian').select('total,tgl_beli,status_bayar,items')),
       load('ubnb_saham',   sb.from('ubnb_saham').select('jumlah_lembar')),
       load('aset_tetap',   sb.from('aset_tetap').select('*').order('tanggal_beli',{ascending:false})),
       load('aset_penyus',  sb.from('aset_penyusutan').select('*').order('tahun')),
@@ -1206,6 +1206,24 @@ function getModal(){
 }
 function getLD(tahun){return D.laba_ditahan.find(l=>l.tahun===tahun)||null;}
 
+function getPembelianTahun(tahun){
+  // Total pembelian barang warung untuk tahun tertentu (dari jsonb items)
+  return D.pembelian
+    .filter(p=>p.tgl_beli&&new Date(p.tgl_beli).getFullYear()===tahun)
+    .reduce((s,p)=>s+parseFloat(p.total||0),0);
+}
+function getPersediaanAwal(tahun){
+  // Persediaan awal = psdk tahun sebelumnya dari pos manual
+  const pmPrev=getPosManual(tahun-1,'labarugi','sembako');
+  const psdk=pmPrev.find(p=>p.kode==='psdk');
+  return psdk?Math.abs(parseFloat(psdk.nominal||0)):0;
+}
+function getPersediaanAkhir(){
+  // Persediaan akhir = nilai stok aktual dari tabel barang (kategori warung)
+  return D.barang
+    .filter(b=>b.kategori==='warung'||!b.kategori)
+    .reduce((s,b)=>s+parseFloat(b.stok||0)*parseFloat(b.harga_beli||0),0);
+}
 function getTrx(tahun){
   const rows=D.transaksi.filter(t=>t.status_bayar==='lunas'&&t.waktu&&new Date(t.waktu).getFullYear()===tahun);
   const pj=rows.reduce((s,t)=>s+parseFloat(t.total||0),0);
@@ -1605,17 +1623,33 @@ function renderLabaRugi(){
   } else {
     const trx=getTrx(tahun), bmt=getBMT(tahun);
     const biaya=getBiaya(tahun), pendLain=getPendLain(tahun), zakatA=getZakat(tahun);
-    pjSem=trx.penjualan; hppSem=trx.hpp; lkSem=trx.laba;
-    rSemRows=`<tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjSem)}</td></tr>`+
-             `<tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
+
+    // SEMBAKO — format detail HPP (persediaan awal + pembelian - persediaan akhir)
+    const semPersAwal = getPersediaanAwal(tahun);
+    const semBeli     = getPembelianTahun(tahun);
+    const semPersAkhir= getPersediaanAkhir();
+    hppSem  = semPersAwal + semBeli - semPersAkhir;
+    pjSem   = trx.penjualan;
+    lkSem   = pjSem - hppSem;
+    rSemRows=`
+      <tr class="row-indent"><td>Penjualan</td><td class="rp"><strong>${rp(pjSem)}</strong></td></tr>
+      <tr class="row-indent" style="color:var(--gray);font-size:11px"><td>&nbsp;&nbsp;Persediaan Barang Awal</td><td class="rp">${rp(semPersAwal)}</td></tr>
+      <tr class="row-indent" style="color:var(--gray);font-size:11px"><td>&nbsp;&nbsp;+ Pembelian</td><td class="rp">${rp(semBeli)}</td></tr>
+      <tr class="row-indent" style="color:var(--gray);font-size:11px"><td>&nbsp;&nbsp;− Persediaan Akhir</td><td class="rp">(${rp(semPersAkhir)})</td></tr>
+      <tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppSem)}</td></tr>`;
+
+    // PEMBIAYAAN — pendapatan margin dari jurnal, HPP = 0 (margin sudah neto)
     pjBMT=bmt.margin; hppBMT=0; lkBMT=bmt.margin;
     const bmtLabel=bmt.sumber==='jurnal'
       ? 'Pendapatan Margin <span class="s-auto">jurnal</span>'
       : 'Pendapatan Margin <span class="s-manual">estimasi</span>';
     rBMTRows=`<tr class="row-indent"><td>${bmtLabel}</td><td class="rp">${rp(pjBMT)}</td></tr>`;
+
+    // PPOB
     pjPPOB=ppobAuto.penjualan; hppPPOB=ppobAuto.hpp; lkPPOB=ppobAuto.laba;
     rPPOBRows=`<tr class="row-indent"><td>Penjualan</td><td class="rp">${rp(pjPPOB)}</td></tr>`+
               `<tr class="row-indent"><td>HPP</td><td class="rp">${rp(hppPPOB)}</td></tr>`;
+
     totalPL=pendLain.total; totalBiaya=biaya.total; totalZakat=zakatA;
     biayaJurnal=biaya.list;
   }
