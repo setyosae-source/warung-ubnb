@@ -3206,6 +3206,8 @@ function bukaDetailPenyertaan(tipe, id){
   let aksiHtml='';
   if(tipe.startsWith('internal')){
     aksiHtml=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');openModal('modal-bh-internal')">💰 Input BH</button>`;
+    aksiHtml+=`<button class="btn primary" onclick="editPenyertaan(${p.id})">✏️ Edit</button>`;
+    aksiHtml+=`<button class="btn" style="background:#1b5e20;color:white" onclick="cetakAkadMudharabah(${p.id})">📄 Cetak Akad</button>`;
     if(pendingBH.length)aksiHtml+=`<button class="btn primary" onclick="closeModal('modal-detail-penyertaan');bayarBHInternal(${pendingBH[0].id})">✅ Bayar BH Pending</button>`;
   }else{
     if(pendingBH.length)aksiHtml=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');bukaBayarBH(${pendingBH[0].id})">✅ Bayar BH Pending (${pendingBH.length})</button>`;
@@ -3328,5 +3330,232 @@ function bukaDetailBH(tipe, id){
 }
 
 // BHI dropdown diinit di dalam loadPemodal
+</script>
+</html>
+
+<!-- Modal Edit Penyertaan -->
+<div class="modal-overlay" id="modal-edit-penyertaan">
+  <div class="modal-box">
+    <div class="modal-title">✏️ Edit Penyertaan<button class="modal-close" onclick="closeModal('modal-edit-penyertaan')">✕</button></div>
+    <input type="hidden" id="edit-p-id">
+    <div class="fg"><label>Jumlah Modal (Rp)</label>
+      <input type="number" id="edit-p-modal" class="inp" placeholder="0"></div>
+    <div class="fg"><label>Nisbah Anggota (%)</label>
+      <input type="number" id="edit-p-nisbah-anggota" class="inp" placeholder="40" oninput="document.getElementById('edit-p-nisbah-ubnb').value=100-parseFloat(this.value||0)"></div>
+    <div class="fg"><label>Nisbah UBNB (%)</label>
+      <input type="number" id="edit-p-nisbah-ubnb" class="inp" placeholder="60" readonly style="background:#f5f5f5"></div>
+    <div class="fg"><label>Tanggal Mulai</label>
+      <input type="date" id="edit-p-tgl-mulai" class="inp"></div>
+    <div class="fg"><label>Jatuh Tempo</label>
+      <input type="date" id="edit-p-tgl-jt" class="inp"></div>
+    <div class="fg"><label>Catatan</label>
+      <textarea id="edit-p-catatan" class="inp" rows="2"></textarea></div>
+    <div id="edit-p-alert" class="alert red" style="display:none"></div>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="closeModal('modal-edit-penyertaan')">Batal</button>
+      <button class="btn primary" onclick="simpanEditPenyertaan()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function editPenyertaan(id){
+  const p=aPenyertaanInternal.find(x=>x.id===id);
+  if(!p){toast('Data tidak ditemukan',true);return;}
+  document.getElementById('edit-p-id').value=id;
+  document.getElementById('edit-p-modal').value=p.jumlah_modal;
+  document.getElementById('edit-p-nisbah-anggota').value=p.nisbah_anggota;
+  document.getElementById('edit-p-nisbah-ubnb').value=p.nisbah_ubnb;
+  document.getElementById('edit-p-tgl-mulai').value=p.tgl_mulai||'';
+  document.getElementById('edit-p-tgl-jt').value=p.tgl_jatuh_tempo||'';
+  document.getElementById('edit-p-catatan').value=p.catatan||'';
+  closeModal('modal-detail-penyertaan');
+  openModal('modal-edit-penyertaan');
+}
+async function simpanEditPenyertaan(){
+  const id=parseInt(document.getElementById('edit-p-id').value);
+  const modal=parseFloat(document.getElementById('edit-p-modal').value)||0;
+  const nA=parseFloat(document.getElementById('edit-p-nisbah-anggota').value)||0;
+  const nU=100-nA;
+  const tglMulai=document.getElementById('edit-p-tgl-mulai').value;
+  const tglJT=document.getElementById('edit-p-tgl-jt').value;
+  const catatan=document.getElementById('edit-p-catatan').value.trim();
+  const alertEl=document.getElementById('edit-p-alert');
+  if(!modal||!tglMulai||!tglJT){
+    alertEl.textContent='Modal, tanggal mulai, dan jatuh tempo wajib diisi';
+    alertEl.style.display='block';return;
+  }
+  alertEl.style.display='none';
+  const{error}=await sb.from('ubnb_modal_penyertaan').update({
+    jumlah_modal:modal,nisbah_anggota:nA,nisbah_ubnb:nU,
+    tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT,catatan
+  }).eq('id',id);
+  if(error){alertEl.textContent='Gagal: '+error.message;alertEl.style.display='block';return;}
+  toast('✅ Data penyertaan diperbarui');
+  closeModal('modal-edit-penyertaan');
+  await loadPemodal();renderPmdStats();renderPmdSemua();renderPmdPenuh();
+}
+
+function cetakAkadMudharabah(id){
+  const p=aPenyertaanInternal.find(x=>x.id===id);
+  if(!p){toast('Data tidak ditemukan',true);return;}
+  const nama=p.ubnb_anggota?.nama||'—';
+  const noAnggota=p.ubnb_anggota?.no_anggota||'—';
+  const noAkad=p.no_penyertaan||'—';
+  const modal=parseFloat(p.jumlah_modal||0);
+  const nisbahA=p.nisbah_anggota||0;
+  const nisbahU=p.nisbah_ubnb||0;
+  const fmt=n=>new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);
+  const fmtTglLong=s=>s?new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}):'—';
+  const tglMulai=fmtTglLong(p.tgl_mulai);
+  const tglJT=fmtTglLong(p.tgl_jatuh_tempo);
+  const tglHari=fmtTglLong(new Date().toISOString().slice(0,10));
+
+  // Terbilang sederhana
+  const tb=n=>{
+    const s=['','satu','dua','tiga','empat','lima','enam','tujuh','delapan','sembilan',
+      'sepuluh','sebelas','dua belas','tiga belas','empat belas','lima belas','enam belas',
+      'tujuh belas','delapan belas','sembilan belas'];
+    const r=n=>{
+      if(n<20)return s[n];
+      if(n<100)return ['','','dua puluh','tiga puluh','empat puluh','lima puluh','enam puluh','tujuh puluh','delapan puluh','sembilan puluh'][Math.floor(n/10)]+(n%10?' '+s[n%10]:'');
+      if(n<200)return 'seratus'+(n>100?' '+r(n-100):'');
+      if(n<1000)return s[Math.floor(n/100)]+' ratus'+(n%100?' '+r(n%100):'');
+      if(n<2000)return 'seribu'+(n>1000?' '+r(n-1000):'');
+      if(n<1e6)return r(Math.floor(n/1000))+' ribu'+(n%1000?' '+r(n%1000):'');
+      if(n<1e9)return r(Math.floor(n/1e6))+' juta'+(n%1e6?' '+r(n%1e6):'');
+      return r(Math.floor(n/1e9))+' miliar'+(n%1e9?' '+r(n%1e9):'');
+    };
+    return(n===0?'nol':r(n))+' rupiah';
+  };
+
+  const win=window.open('','_blank','width=850,height=1100');
+  win.document.write(`<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<title>Akad Mudharabah — ${noAkad}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Times New Roman',serif;font-size:12pt;color:#000;padding:2.5cm 3cm}
+.kop{text-align:center;border-bottom:3px double #000;padding-bottom:14px;margin-bottom:22px}
+.kop h1{font-size:15pt;font-weight:bold;letter-spacing:.5px}
+.kop h2{font-size:11.5pt;font-weight:normal;margin-top:3px}
+.kop p{font-size:10pt;margin-top:3px}
+.judul{text-align:center;margin:18px 0 20px}
+.judul h3{font-size:13pt;font-weight:bold;text-decoration:underline;letter-spacing:1px}
+.judul p{font-size:11pt;margin-top:5px}
+p.teks{margin:10px 0;text-align:justify;line-height:1.8}
+.pihak{margin:8px 0 8px 16px;line-height:1.8}
+.pihak td:first-child{width:190px;font-weight:bold;vertical-align:top}
+.pihak td{vertical-align:top}
+h4{margin:14px 0 4px;font-size:12pt;text-decoration:underline}
+ol{margin:4px 0 4px 24px;line-height:1.9}
+ol li{text-align:justify}
+.ttd{display:flex;justify-content:space-between;margin-top:56px}
+.ttd-col{text-align:center;width:220px}
+.ttd-col .garis{margin-top:60px;border-top:1px solid #000;padding-top:5px;font-weight:bold}
+.ttd-col .sub{font-size:10.5pt}
+.footer{margin-top:36px;border-top:1px solid #bbb;padding-top:8px;text-align:center;font-size:9pt;color:#555}
+@media print{body{padding:1.8cm 2.2cm}button{display:none!important}}
+</style></head><body>
+
+<div class="kop">
+  <h1>KOPERASI UBNB PERWIRA</h1>
+  <h2>Unit Baitul Maal wat Tamwil (BMT)</h2>
+  <p>Desa Perwira, Kecamatan Pebayuran, Kabupaten Bekasi</p>
+</div>
+
+<div class="judul">
+  <h3>AKAD MUDHARABAH MUTHLAQOH</h3>
+  <p>Nomor: <b>${noAkad}</b></p>
+</div>
+
+<p class="teks">Bismillahirrahmanirrahim</p>
+<p class="teks">Akad ini dibuat dan ditandatangani pada hari ini, <b>${tglHari}</b>, oleh dan antara pihak-pihak berikut:</p>
+
+<h4>PIHAK PERTAMA (Mudharib) — Pengelola Dana</h4>
+<div class="pihak"><table>
+  <tr><td>Nama Lembaga</td><td>: Koperasi UBNB Perwira — Unit BMT</td></tr>
+  <tr><td>Diwakili oleh</td><td>: R. Dwi Setyo Nugroho</td></tr>
+  <tr><td>Jabatan</td><td>: Ketua</td></tr>
+  <tr><td>Alamat</td><td>: Desa Perwira, Kec. Pebayuran, Kab. Bekasi</td></tr>
+</table></div>
+
+<h4>PIHAK KEDUA (Shahibul Maal) — Pemilik Modal</h4>
+<div class="pihak"><table>
+  <tr><td>Nama</td><td>: <b>${nama}</b></td></tr>
+  <tr><td>No. Anggota</td><td>: ${noAnggota}</td></tr>
+</table></div>
+
+<p class="teks">Para Pihak sepakat mengadakan Akad Mudharabah Muthlaqoh dengan ketentuan:</p>
+
+<h4>Pasal 1 — Dasar Akad</h4>
+<ol>
+  <li>Mudharabah Muthlaqoh adalah akad kerja sama usaha antara Shahibul Maal dan Mudharib dengan pembagian keuntungan sesuai nisbah yang disepakati, tanpa pembatasan jenis usaha bagi Mudharib.</li>
+  <li>Akad ini didasarkan pada prinsip syariah Islam dan fatwa DSN-MUI.</li>
+</ol>
+
+<h4>Pasal 2 — Modal</h4>
+<ol>
+  <li>Pihak Kedua menyerahkan modal sebesar <b>${fmt(modal)}</b> (<i>${tb(modal)}</i>) kepada Pihak Pertama untuk dikelola sebagai dana pembiayaan anggota koperasi.</li>
+  <li>Modal diserahkan secara tunai dan tercatat dalam pembukuan Koperasi UBNB Perwira dengan nomor penyertaan <b>${noAkad}</b>.</li>
+</ol>
+
+<h4>Pasal 3 — Jangka Waktu</h4>
+<ol>
+  <li>Akad berlaku sejak <b>${tglMulai}</b> sampai dengan <b>${tglJT}</b>.</li>
+  <li>Akad dapat diperpanjang atas kesepakatan Para Pihak sebelum jatuh tempo.</li>
+</ol>
+
+<h4>Pasal 4 — Nisbah Bagi Hasil</h4>
+<ol>
+  <li>Keuntungan dibagi dengan nisbah: Pihak Kedua <b>${nisbahA}%</b> — Pihak Pertama <b>${nisbahU}%</b>.</li>
+  <li>Bagi hasil dihitung dari keuntungan riil pengelolaan dana dan dibayarkan secara periodik.</li>
+  <li>Kerugian bukan karena kelalaian Mudharib ditanggung Shahibul Maal sesuai prinsip mudharabah.</li>
+</ol>
+
+<h4>Pasal 5 — Hak dan Kewajiban</h4>
+<ol>
+  <li>Pihak Pertama wajib mengelola dana secara amanah, transparan, dan sesuai syariah.</li>
+  <li>Pihak Pertama berhak mengelola dana secara muthlaqoh sepanjang tidak bertentangan dengan syariah.</li>
+  <li>Pihak Kedua berhak mendapatkan laporan berkala atas pengelolaan dana.</li>
+  <li>Pihak Kedua tidak diperkenankan mencampuri pengelolaan usaha selama akad berlangsung.</li>
+</ol>
+
+<h4>Pasal 6 — Pengembalian Modal</h4>
+<ol>
+  <li>Pihak Pertama wajib mengembalikan modal pokok kepada Pihak Kedua pada saat akad berakhir.</li>
+</ol>
+
+<h4>Pasal 7 — Penyelesaian Perselisihan</h4>
+<ol>
+  <li>Perselisihan diselesaikan secara musyawarah. Apabila tidak tercapai mufakat, diselesaikan sesuai ketentuan perundang-undangan yang berlaku.</li>
+</ol>
+
+<h4>Pasal 8 — Penutup</h4>
+<ol>
+  <li>Akad ini dibuat rangkap 2 (dua), masing-masing bermeterai cukup dan mempunyai kekuatan hukum yang sama.</li>
+</ol>
+
+<div class="ttd">
+  <div class="ttd-col">
+    <div>Pihak Kedua</div>
+    <div><b>Shahibul Maal</b></div>
+    <div class="garis">${nama}</div>
+    <div class="sub">Pemilik Modal</div>
+  </div>
+  <div class="ttd-col">
+    <div>Pihak Pertama</div>
+    <div><b>Mudharib</b></div>
+    <div class="garis">R. Dwi Setyo Nugroho</div>
+    <div class="sub">Ketua UBNB Perwira</div>
+  </div>
+</div>
+
+<div class="footer">Dicetak melalui Sistem BMT UBNB Perwira &bull; ${tglHari}</div>
+
+</body></html>`);
+  win.document.close();
+  setTimeout(()=>win.print(),800);
+}
 </script>
 </html>
