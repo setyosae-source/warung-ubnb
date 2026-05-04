@@ -1236,6 +1236,37 @@ function getPPOB(tahun){
   const hp=rows.reduce((s,p)=>s+parseFloat(p.harga_beli||0),0);
   return{penjualan:pj,hpp:hp,laba:pj-hp};
 }
+function getPiutangBMTBreakdown(){
+  // Breakdown piutang pembiayaan: akad lama vs baru, per jenis_akad
+  const aktif = D.bmt_akad.filter(a=>a.status==='Belum Lunas');
+  const result = {lama:{}, baru:{}, totalPokok:0, totalMarginPiutang:0, totalMarginTerealisasi:0};
+  aktif.forEach(a=>{
+    const kelompok = new Date(a.tanggal_akad).getFullYear() < 2026 ? 'lama' : 'baru';
+    const jenis = a.jenis_akad || 'Lainnya';
+    if(!result[kelompok][jenis]) result[kelompok][jenis]={
+      jumlah:0, danaTersalur:0, pokokTerealisasi:0, pokokPiutang:0,
+      marginTotal:0, marginTerealisasi:0, marginPiutang:0
+    };
+    const r = result[kelompok][jenis];
+    const pokok = parseFloat(a.total_pembiayaan||0);
+    const sisa  = parseFloat(a.sisa_angsuran||0);
+    const margin= parseFloat(a.total_margin||0);
+    const pokokBayar = pokok - sisa;
+    const margTer = pokok > 0 ? (pokokBayar / pokok) * margin : 0;
+    const margPiu = margin - margTer;
+    r.jumlah++;
+    r.danaTersalur    += pokok;
+    r.pokokTerealisasi+= pokokBayar;
+    r.pokokPiutang    += sisa;
+    r.marginTotal     += margin;
+    r.marginTerealisasi += margTer;
+    r.marginPiutang   += margPiu;
+    result.totalPokok           += sisa;
+    result.totalMarginPiutang   += margPiu;
+    result.totalMarginTerealisasi += margTer;
+  });
+  return result;
+}
 function getBMT(tahun){
   const angs=D.bmt_angsuran.filter(a=>a.tanggal&&new Date(a.tanggal).getFullYear()===tahun);
   const tot=angs.reduce((s,a)=>s+parseFloat(a.jumlah||0),0);
@@ -1497,10 +1528,47 @@ function renderNeraca(){
       }).join('');
     }
     // Fallback hardcode jika jurnal kosong
+    const bmt = getPiutangBMTBreakdown();
+    let piutangRows = '';
+
+    // Akad Lama
+    const lamaEntries = Object.entries(bmt.lama);
+    if(lamaEntries.length){
+      piutangRows += `<tr class="row-subseksi"><td colspan="${cols}" style="font-size:10px;padding-left:20px;color:var(--gray)">Akad Lama (s.d. 2025)</td></tr>`;
+      lamaEntries.forEach(([jenis,v])=>{
+        piutangRows += R(`&nbsp;&nbsp;Piutang Pokok — ${jenis} (${v.jumlah} akad)`, v.pokokPiutang);
+        piutangRows += R(`&nbsp;&nbsp;Margin Terealisasi — ${jenis}`, Math.round(v.marginTerealisasi));
+        piutangRows += R(`&nbsp;&nbsp;Margin Piutang — ${jenis}`, Math.round(v.marginPiutang));
+      });
+    }
+
+    // Akad Baru 2026
+    const baruEntries = Object.entries(bmt.baru);
+    if(baruEntries.length){
+      piutangRows += `<tr class="row-subseksi"><td colspan="${cols}" style="font-size:10px;padding-left:20px;color:var(--gray)">Akad Baru 2026</td></tr>`;
+      baruEntries.forEach(([jenis,v])=>{
+        piutangRows += R(`&nbsp;&nbsp;Piutang Pokok — ${jenis} (${v.jumlah} akad)`, v.pokokPiutang);
+        piutangRows += R(`&nbsp;&nbsp;Margin Terealisasi — ${jenis}`, Math.round(v.marginTerealisasi));
+        piutangRows += R(`&nbsp;&nbsp;Margin Piutang — ${jenis}`, Math.round(v.marginPiutang));
+      });
+    }
+
+    // Rekap total piutang
+    const totalPokokPiutang    = bmt.totalPokok;
+    const totalMarginTer       = Math.round(bmt.totalMarginTerealisasi);
+    const totalMarginPiu       = Math.round(bmt.totalMarginPiutang);
+    const totalPiutangKeseluruhan = totalPokokPiutang + totalMarginPiu;
+    const rekapRows =
+      RS('Total Pokok Piutang', totalPokokPiutang)
+    + RS('Total Margin Terealisasi', totalMarginTer)
+    + RS('Total Margin Piutang', totalMarginPiu)
+    + `<tr class="row-total"><td>TOTAL PIUTANG PEMBIAYAAN</td><td class="rp">${rp(totalPiutangKeseluruhan)}</td></tr>`;
+
     return R('Kas Utama (Bendahara)', data.kas.warung, dataB?.kas?.warung)
          + R('Kas BMT',               data.kas.bmt,    dataB?.kas?.bmt)
          + R('Kas PPOB',              data.kas.ppob,   dataB?.kas?.ppob)
-         + R('Piutang Pokok Pembiayaan', data.piutang.pokok, dataB?.piutang?.pokok)
+         + piutangRows
+         + rekapRows
          + R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
   }
   function rowsAT(data, dataB){
