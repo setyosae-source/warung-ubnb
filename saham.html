@@ -2650,8 +2650,8 @@ let aPengajuanSaham = [];
 async function loadPengajuanSaham(){
   const{data}=await sb.from('pengajuan_saham').select('*').order('created_at',{ascending:false});
   aPengajuanSaham=data||[];
-  // Update badge
-  const pending=aPengajuanSaham.filter(p=>p.status==='pending').length;
+  // Update badge — terima 'baru' / 'pending' / null sebagai pending (selaras inbox-admin)
+  const pending=aPengajuanSaham.filter(p=>!p.status||p.status==='pending'||p.status==='baru').length;
   const badge=document.getElementById('badge-pengajuan');
   if(badge){badge.textContent=pending;badge.style.display=pending>0?'inline':'none';}
 }
@@ -2661,7 +2661,7 @@ function renderPengajuanSaham(){
   const statsEl=document.getElementById('pjy-saham-stats');
   if(!el)return;
 
-  const pending=aPengajuanSaham.filter(p=>p.status==='pending').length;
+  const pending=aPengajuanSaham.filter(p=>!p.status||p.status==='pending'||p.status==='baru').length;
   const approved=aPengajuanSaham.filter(p=>p.status==='approved').length;
   const rejected=aPengajuanSaham.filter(p=>p.status==='rejected').length;
   if(statsEl) statsEl.innerHTML=
@@ -2670,12 +2670,17 @@ function renderPengajuanSaham(){
     '<div style="background:#fee2e2;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#991b1b;">'+rejected+'</div><div style="font-size:11px;color:#991b1b;">❌ Ditolak</div></div>';
 
   const flt=document.getElementById('flt-pjy-saham-status')?.value||'';
-  let data=flt?aPengajuanSaham.filter(p=>p.status===flt):aPengajuanSaham;
+  let data=flt
+    ? (flt==='pending'
+        ? aPengajuanSaham.filter(p=>!p.status||p.status==='pending'||p.status==='baru')
+        : aPengajuanSaham.filter(p=>p.status===flt))
+    : aPengajuanSaham;
 
   if(!data.length){el.innerHTML='<div class="empty"><div class="ei">📥</div>Belum ada pengajuan</div>';return;}
 
   const statusBadge={
     pending:'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">⏳ Pending</span>',
+    baru:'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">⏳ Baru</span>',
     approved:'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">✅ Disetujui</span>',
     rejected:'<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;">❌ Ditolak</span>',
   };
@@ -2696,7 +2701,7 @@ function renderPengajuanSaham(){
           ${p.direview_oleh?'<div style="font-size:10px;color:var(--text-muted);">by '+p.direview_oleh+'</div>':''}
         </div>
       </div>
-      ${p.status==='pending'?`
+      ${(!p.status||p.status==='pending'||p.status==='baru')?`
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn gold sm" style="flex:1;" onclick="approvePengajuanSaham(${p.id},'${p.nama_anggota}',${p.jumlah_lembar},'${p.nama_keluarga||''}','${p.no_wa||''}')">✅ Approve & Buat Anggota</button>
         <button class="btn danger sm" onclick="rejectPengajuanSaham(${p.id})">❌ Tolak</button>
