@@ -1351,17 +1351,45 @@ function getPosManual(tahun,jenis,seksi){
   return D.pos_manual.filter(p=>p.tahun===tahun&&p.jenis===jenis&&p.seksi===seksi);
 }
 function hitungLabaBersih(tahun){
-  const trx=getTrx(tahun),ppobD=getPPOB(tahun),bmt=getBMT(tahun);
+  const hasPM=!!(
+    getPosManual(tahun,'labarugi','sembako').length||
+    getPosManual(tahun,'labarugi','pembiayaan').length||
+    getPosManual(tahun,'labarugi','biaya').length
+  );
   const biaya=getBiaya(tahun),zakat=getZakat(tahun);
-  const pmSembako=getPosManual(tahun,'labarugi','sembako').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmBMT=getPosManual(tahun,'labarugi','pembiayaan').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmPPOB=getPosManual(tahun,'labarugi','ppob').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
   const pmPL=getPosManual(tahun,'labarugi','pendapatan_lain').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmBiaya=getPosManual(tahun,'labarugi','biaya').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const pmZakat=getPosManual(tahun,'labarugi','zakat').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
-  const bmtAkadLaba = getBMTAkad(tahun).total.marginAkad;
-  const lk=(trx.laba+pmSembako)+(bmtAkadLaba+pmBMT)+(ppobD.laba+pmPPOB);
-  return lk+(getPendLain(tahun).total+pmPL)-(biaya.total+pmBiaya)-(zakat+pmZakat);
+
+  if(hasPM){
+    // Mode historis: pakai pos manual
+    const pmSembako=getPosManual(tahun,'labarugi','sembako').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const pmBMT=getPosManual(tahun,'labarugi','pembiayaan').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const pmPPOB=getPosManual(tahun,'labarugi','ppob').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const pmBiaya=getPosManual(tahun,'labarugi','biaya').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const pmZakat=getPosManual(tahun,'labarugi','zakat').reduce((s,p)=>s+parseFloat(p.nominal||0),0);
+    const bmtAkadLaba=getBMTAkad(tahun).total.marginAkad;
+    const trx=getTrx(tahun),ppobD=getPPOB(tahun);
+    const lk=(trx.laba+pmSembako)+(bmtAkadLaba+pmBMT)+(ppobD.laba+pmPPOB);
+    return lk+(getPendLain(tahun).total+pmPL)-(biaya.total+pmBiaya)-(zakat+pmZakat);
+  }
+
+  // Mode live: semua dari jurnal/tabel aktual
+  // Sembako: penjualan - HPP (persediaan awal + pembelian - persediaan akhir)
+  const trx=getTrx(tahun),ppobD=getPPOB(tahun);
+  const semPersAwal=getPersediaanAwal(tahun);
+  const semBeli=getPembelianTahun(tahun);
+  const semPersAkhir=getPersediaanAkhir();
+  const hppSem=semPersAwal+semBeli-semPersAkhir;
+  const lkSem=trx.penjualan-hppSem;
+
+  // BMT: margin terealisasi dari jurnal 1-112 kredit angsuran (cash basis)
+  const bmt=getBMT(tahun);
+  const lkBMT=bmt.margin;
+
+  // PPOB
+  const lkPPOB=ppobD.laba;
+
+  const totalLK=lkSem+lkBMT+lkPPOB;
+  return totalLK+(getPendLain(tahun).total+pmPL)-biaya.total-zakat;
 }
 
 // ===== DASHBOARD =====
@@ -1447,7 +1475,19 @@ function renderNeraca(){
       const jrAT=getSaldoKelompok('aktiva_tetap',thn);
       const jrKW=getSaldoKelompok('kewajiban',thn);
       const jrMD=getSaldoKelompok('modal',thn);
-      totalAL=jrAL.reduce((s,a)=>s+a.nominal,0);
+
+      // Hitung totalAL dengan koreksi:
+      // - Kecualikan 1-111 & 1-112 & 1-121 dari jurnal (nilainya tidak akurat)
+      // - Ganti dengan nilai aktual dari bmt_akad dan barang
+      const bmtBD = getPiutangBMTBreakdown();
+      const totalPokokPiutang = bmtBD.totalPokok;
+      const totalMarginPiutang = Math.round(bmtBD.totalMarginPiutang);
+      const totalPersediaan = getPersediaanAkhir();
+      const totalKasJurnal = jrAL
+        .filter(a=>!['1-111','1-112','1-121'].includes(a.kode))
+        .reduce((s,a)=>s+a.nominal,0);
+      totalAL = totalKasJurnal + totalPokokPiutang + totalMarginPiutang + totalPersediaan;
+
       totalAT=jrAT.reduce((s,a)=>s+a.nominal,0);
       totalKW=jrKW.reduce((s,a)=>s+a.nominal,0);
       totalMD=jrMD.reduce((s,a)=>s+a.nominal,0)+(ldAkhir||0)+labaBersih;
@@ -1582,7 +1622,13 @@ function renderNeraca(){
         return R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
       }).join('');
     }
-    return R('Aset Tetap (Nilai Buku)', data.aset.buku, dataB?.aset?.buku);
+    // Mode live: baca dari jurnal per COA aktiva_tetap
+    const jrAT = getSaldoKelompok('aktiva_tetap', tahun);
+    const jrATB = dataB ? getSaldoKelompok('aktiva_tetap', bandingTahun) : [];
+    return jrAT.map(a=>{
+      const b = jrATB.find(x=>x.kode===a.kode);
+      return R(a.uraian, a.nominal, b?.nominal);
+    }).join('');
   }
   function rowsKW(data, dataB){
     if(data.hasPM){
