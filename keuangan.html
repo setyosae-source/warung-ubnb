@@ -1518,23 +1518,24 @@ function renderNeraca(){
         return R(p.uraian, parseFloat(p.nominal), nb?parseFloat(nb.nominal):undefined);
       }).join('');
     }
-    // Kalau tidak ada pos manual → baca semua COA aktiva_lancar dari jurnal
+    // Kalau tidak ada pos manual → baca COA aktiva_lancar dari jurnal
+    // tapi untuk piutang BMT gunakan breakdown dari bmt_akad
     const jrAL = getSaldoKelompok('aktiva_lancar', tahun);
     const jrALB = dataB ? getSaldoKelompok('aktiva_lancar', bandingTahun) : [];
-    if(jrAL.length){
-      return jrAL.map(a=>{
-        const b = jrALB.find(x=>x.kode===a.kode);
-        return R(a.uraian, a.nominal, b?.nominal);
-      }).join('');
-    }
-    // Fallback hardcode jika jurnal kosong
+
+    // Pisahkan COA kas & lainnya dari COA piutang (1-111, 1-112) dan persediaan (1-121)
+    // 1-121 diganti dengan nilai stok aktual dari tabel barang
+    const jrKas = jrAL.filter(a=>!['1-111','1-112','1-121'].includes(a.kode));
+    const jrKasB = jrALB.filter(a=>!['1-111','1-112','1-121'].includes(a.kode));
+
+    // Breakdown piutang BMT dari bmt_akad (lebih detail & akurat)
     const bmt = getPiutangBMTBreakdown();
     let piutangRows = '';
 
     // Akad Lama
     const lamaEntries = Object.entries(bmt.lama);
     if(lamaEntries.length){
-      piutangRows += `<tr class="row-subseksi"><td colspan="${cols}" style="font-size:10px;padding-left:20px;color:var(--gray)">Akad Lama (s.d. 2025)</td></tr>`;
+      piutangRows += `<tr class="row-subseksi"><td colspan="${cols}" style="font-size:10px;padding-left:20px;color:var(--gray)">── Akad Lama (s.d. 2025)</td></tr>`;
       lamaEntries.forEach(([jenis,v])=>{
         piutangRows += R(`&nbsp;&nbsp;Piutang Pokok — ${jenis} (${v.jumlah} akad)`, v.pokokPiutang);
         piutangRows += R(`&nbsp;&nbsp;Margin Terealisasi — ${jenis}`, Math.round(v.marginTerealisasi));
@@ -1542,10 +1543,10 @@ function renderNeraca(){
       });
     }
 
-    // Akad Baru 2026
+    // Akad Baru (tahun ini)
     const baruEntries = Object.entries(bmt.baru);
     if(baruEntries.length){
-      piutangRows += `<tr class="row-subseksi"><td colspan="${cols}" style="font-size:10px;padding-left:20px;color:var(--gray)">Akad Baru 2026</td></tr>`;
+      piutangRows += `<tr class="row-subseksi"><td colspan="${cols}" style="font-size:10px;padding-left:20px;color:var(--gray)">── Akad Baru ${tahun}</td></tr>`;
       baruEntries.forEach(([jenis,v])=>{
         piutangRows += R(`&nbsp;&nbsp;Piutang Pokok — ${jenis} (${v.jumlah} akad)`, v.pokokPiutang);
         piutangRows += R(`&nbsp;&nbsp;Margin Terealisasi — ${jenis}`, Math.round(v.marginTerealisasi));
@@ -1554,22 +1555,25 @@ function renderNeraca(){
     }
 
     // Rekap total piutang
-    const totalPokokPiutang    = bmt.totalPokok;
-    const totalMarginTer       = Math.round(bmt.totalMarginTerealisasi);
-    const totalMarginPiu       = Math.round(bmt.totalMarginPiutang);
+    const totalPokokPiutang       = bmt.totalPokok;
+    const totalMarginTer          = Math.round(bmt.totalMarginTerealisasi);
+    const totalMarginPiu          = Math.round(bmt.totalMarginPiutang);
     const totalPiutangKeseluruhan = totalPokokPiutang + totalMarginPiu;
     const rekapRows =
       RS('Total Pokok Piutang', totalPokokPiutang)
     + RS('Total Margin Terealisasi', totalMarginTer)
     + RS('Total Margin Piutang', totalMarginPiu)
-    + `<tr class="row-total"><td>TOTAL PIUTANG PEMBIAYAAN</td><td class="rp">${rp(totalPiutangKeseluruhan)}</td></tr>`;
+    + `<tr class="row-total"><td colspan="${cols}">TOTAL PIUTANG PEMBIAYAAN&nbsp;&nbsp;<strong>${rp(totalPiutangKeseluruhan)}</strong></td></tr>`;
 
-    return R('Kas Utama (Bendahara)', data.kas.warung, dataB?.kas?.warung)
-         + R('Kas BMT',               data.kas.bmt,    dataB?.kas?.bmt)
-         + R('Kas PPOB',              data.kas.ppob,   dataB?.kas?.ppob)
-         + piutangRows
-         + rekapRows
-         + R('Persediaan Barang Sembako', data.persediaan, dataB?.persediaan);
+    // Semua baris kas dari jurnal (kecuali 1-111 & 1-112)
+    const kasRows = jrKas.map(a=>{
+      const b = jrKasB.find(x=>x.kode===a.kode);
+      return R(a.uraian, a.nominal, b?.nominal);
+    }).join('');
+
+    // Persediaan dari bmt_akad & barang
+    return kasRows + piutangRows + rekapRows
+         + R('Persediaan Barang Sembako', getPersediaanAkhir(), dataB ? getPersediaanAkhir() : undefined);
   }
   function rowsAT(data, dataB){
     if(data.hasPM){
