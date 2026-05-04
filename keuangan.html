@@ -1237,31 +1237,33 @@ function getPPOB(tahun){
   return{penjualan:pj,hpp:hp,laba:pj-hp};
 }
 function getBMT(tahun){
-  const angs=D.bmt_angsuran.filter(a=>a.created_at&&new Date(a.created_at).getFullYear()===tahun);
+  const angs=D.bmt_angsuran.filter(a=>a.tanggal&&new Date(a.tanggal).getFullYear()===tahun);
   const tot=angs.reduce((s,a)=>s+parseFloat(a.jumlah||0),0);
 
-  // Prioritas 1: baca margin riil dari jurnal COA 4-301 (akurat per angsuran)
-  const jIds=D.jurnal_umum
-    .filter(j=>j.status==='posted'&&j.tanggal&&new Date(j.tanggal).getFullYear()===tahun)
+  // Prioritas 1: baca margin terealisasi dari kredit COA 1-112 jurnal ANGSURAN
+  // Filter: jurnal keterangan 'Angsuran BMT' — bukan jurnal akad (yg juga debit 1-112)
+  const jAngsuran=D.jurnal_umum
+    .filter(j=>j.status==='posted'
+      && j.tanggal&&new Date(j.tanggal).getFullYear()===tahun
+      && j.keterangan&&j.keterangan.toLowerCase().startsWith('angsuran bmt'))
     .map(j=>j.id);
-  const coa4301=D.coa.find(c=>c.kode==='4-301');
-  const marginJurnal=coa4301
+  const coa1112=D.coa.find(c=>c.kode==='1-112');
+  const marginTerealisasi=coa1112&&jAngsuran.length>0
     ? D.jurnal_detail
-        .filter(jd=>jIds.includes(jd.jurnal_id)&&jd.coa_id===coa4301.id)
+        .filter(jd=>jAngsuran.includes(jd.jurnal_id)&&jd.coa_id===coa1112.id)
         .reduce((s,jd)=>s+parseFloat(jd.kredit||0),0)
     : 0;
 
-  if(marginJurnal>0){
-    // Data jurnal tersedia → pakai margin riil
-    return{total_angs:tot,margin:marginJurnal,sumber:'jurnal'};
+  if(marginTerealisasi>0){
+    return{total_angs:tot, margin:marginTerealisasi, sumber:'jurnal'};
   }
 
-  // Fallback: estimasi rate margin dari total akad (untuk tahun tanpa jurnal per-angsuran)
+  // Fallback: estimasi rate margin dari total akad (tahun tanpa jurnal angsuran)
   const akad=D.bmt_akad;
   const totPmb=akad.reduce((s,a)=>s+parseFloat(a.total_pembiayaan||0),0);
   const totMrg=akad.reduce((s,a)=>s+parseFloat(a.total_margin||0),0);
   const rate=totPmb>0?totMrg/totPmb:0;
-  return{total_angs:tot,margin:Math.round(tot*rate),sumber:'estimasi'};
+  return{total_angs:tot, margin:Math.round(tot*rate), sumber:'estimasi'};
 }
 function getBMTAkad(tahun){
   // Accrual: dari akad baru berdasarkan tanggal_akad, breakdown per jenis_akad
