@@ -31,13 +31,16 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:linear-gradie
 .btn{width:100%;padding:13px;background:var(--green);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}
 .btn:hover{background:var(--green-dark);}
 .btn:disabled{opacity:0.6;cursor:not-allowed;}
+.btn.outline{background:white;color:var(--green);border:1.5px solid var(--green);}
 .msg{padding:10px;border-radius:6px;font-size:12px;margin-bottom:12px;text-align:center;}
 .msg.err{background:var(--red-light);color:var(--red);}
+.msg.warn{background:#fef3c7;color:#78350f;}
 .msg.ok{background:#dcfce7;color:#166534;}
+.msg.info{background:var(--blue-light);color:#1e40af;}
 .dropdown-list{background:white;border:1.5px solid var(--green);border-radius:8px;max-height:240px;overflow-y:auto;margin-top:4px;display:none;}
 .dropdown-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;}
 .dropdown-item:hover{background:var(--green-light);}
-.dropdown-item.disabled{color:#9ca3af;cursor:not-allowed;}
+.dropdown-item.disabled{color:#9ca3af;cursor:not-allowed;background:#f9fafb;}
 .dropdown-item .sub{font-size:11px;color:var(--text-muted);}
 .success-box{background:linear-gradient(135deg,#10b981,#059669);color:white;border-radius:14px;padding:24px;text-align:center;}
 .success-box .ico{font-size:60px;margin-bottom:8px;}
@@ -45,6 +48,9 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:linear-gradie
 .success-box .nm{font-size:16px;font-weight:700;background:rgba(255,255,255,0.2);padding:8px;border-radius:8px;margin:10px 0;}
 .success-box .tm{font-size:12px;opacity:0.9;}
 .foot{text-align:center;font-size:11px;color:var(--text-muted);padding:12px 16px;border-top:1px solid #f3f4f6;}
+.gps-banner{background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:8px 12px;font-size:11px;color:#78350f;margin-bottom:12px;text-align:center;line-height:1.5;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -55,7 +61,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:linear-gradie
     <div class="sub">UBNB Desa Perwira</div>
   </div>
   <div class="body" id="body">
-    <div class="msg" style="background:var(--bg);">Memuat data kegiatan...</div>
+    <div class="msg info">Memuat data kegiatan...</div>
   </div>
   <div class="foot">© 2026 UBNB Desa Perwira</div>
 </div>
@@ -70,6 +76,7 @@ const params=new URLSearchParams(location.search);
 const token=params.get('token');
 
 let kegiatan=null,daftar=[];
+let currentGps=null;
 
 async function init(){
   if(!token){show('<div class="msg err">Link tidak valid (token kosong)</div>');return;}
@@ -79,23 +86,30 @@ async function init(){
     kegiatan=k;
     if(k.status!=='aktif'){show('<div class="msg err">Kegiatan sudah '+k.status+'. Absen ditutup.</div>');return;}
     if(!Array.isArray(k.mode)||!k.mode.includes('online')){show('<div class="msg err">Mode online tidak aktif untuk kegiatan ini</div>');return;}
-    const{data:hd}=await sb.from('ubnb_kegiatan_hadir').select('id,jamaah_did,jamaah_nama,jamaah_kk,status_hadir').eq('kegiatan_id',k.id).order('jamaah_nama');
-    daftar=hd||[];
+    await refreshDaftar();
     renderForm();
   }catch(err){
     show('<div class="msg err">Error: '+err.message+'</div>');
   }
 }
 
+async function refreshDaftar(){
+  const{data:hd}=await sb.from('ubnb_kegiatan_hadir').select('id,jamaah_did,jamaah_nama,jamaah_kk,status_hadir').eq('kegiatan_id',kegiatan.id).order('jamaah_nama');
+  daftar=hd||[];
+}
+
 function show(html){document.getElementById('body').innerHTML=html;}
 
 function renderForm(){
   const tgl=new Date(kegiatan.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const sudahHadir=daftar.filter(d=>d.status_hadir==='hadir').length;
   const html=`
     <div class="kgt-info">
       <div class="nm">${kegiatan.acara_nama}</div>
       <div class="meta">${tgl}${kegiatan.waktu?' · '+kegiatan.waktu.substring(0,5):''}${kegiatan.lokasi?' · '+kegiatan.lokasi:''}</div>
+      <div class="meta" style="margin-top:4px;">📊 Hadir: <b>${sudahHadir}</b> / ${daftar.length}</div>
     </div>
+    <div class="gps-banner">📍 <b>Wajib aktifkan GPS</b> — kehadiran akan dicatat dengan koordinat lokasi untuk audit</div>
     <div id="msg-area"></div>
     <div class="field">
       <label>Cari nama Anda</label>
@@ -131,29 +145,93 @@ function pilihNama(id,nama,kk){
   document.getElementById('btn-submit').textContent='✅ Konfirmasi Hadir: '+nama;
 }
 
+// ===== GPS WAJIB =====
+function getCurrentPosition(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation){
+      reject(new Error('Browser Anda tidak mendukung GPS'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        resolve({
+          lat:pos.coords.latitude,
+          lng:pos.coords.longitude,
+          accuracy:pos.coords.accuracy,
+          maps_url:'https://maps.google.com/?q='+pos.coords.latitude+','+pos.coords.longitude,
+          captured_at:new Date().toISOString(),
+        });
+      },
+      err=>{
+        let msg='Gagal mendapatkan lokasi GPS';
+        if(err.code===1) msg='Akses GPS ditolak. Mohon izinkan akses lokasi di browser Anda lalu coba lagi.';
+        else if(err.code===2) msg='Lokasi GPS tidak tersedia. Pastikan GPS aktif di perangkat.';
+        else if(err.code===3) msg='Timeout mendapatkan GPS. Coba lagi.';
+        reject(new Error(msg));
+      },
+      {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+    );
+  });
+}
+
 async function submitHadir(){
   if(!_selectedHadirId)return;
   const btn=document.getElementById('btn-submit');
-  btn.disabled=true;btn.textContent='⏳ Mendaftarkan...';
+  const msgArea=document.getElementById('msg-area');
+  btn.disabled=true;
+  msgArea.innerHTML='';
+  
+  // Step 1: GPS WAJIB
+  btn.innerHTML='<span class="spinner"></span>Meminta izin GPS...';
+  try{
+    currentGps=await getCurrentPosition();
+  }catch(err){
+    msgArea.innerHTML='<div class="msg err">⚠️ '+err.message+'<br><b>Absen tidak bisa dilanjutkan tanpa GPS.</b></div>';
+    btn.disabled=false;
+    btn.textContent='🔄 Coba Lagi';
+    return;
+  }
+  
+  // Step 2: Submit
+  btn.innerHTML='<span class="spinner"></span>Mendaftarkan kehadiran...';
   const{error}=await sb.from('ubnb_kegiatan_hadir').update({
     status_hadir:'hadir',
     hadir_at:new Date().toISOString(),
     input_via:'self',
+    lokasi_gps:currentGps,
     updated_at:new Date().toISOString(),
   }).eq('id',_selectedHadirId);
   if(error){
-    document.getElementById('msg-area').innerHTML='<div class="msg err">Gagal: '+error.message+'</div>';
-    btn.disabled=false;btn.textContent='Coba Lagi';
+    msgArea.innerHTML='<div class="msg err">Gagal: '+error.message+'</div>';
+    btn.disabled=false;btn.textContent='🔄 Coba Lagi';
     return;
   }
   const d=daftar.find(x=>x.id===_selectedHadirId);
+  showSuccess(d);
+}
+
+function showSuccess(d){
+  const tgl=new Date().toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
   show(`<div class="success-box">
     <div class="ico">🎉</div>
     <h2>Alhamdulillah!</h2>
     <p>Kehadiran Anda telah tercatat</p>
     <div class="nm">${d?d.jamaah_nama:''}</div>
-    <div class="tm">${new Date().toLocaleString('id-ID',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+    <div class="tm">📅 ${tgl}</div>
+    <div class="tm" style="margin-top:6px;">📍 Lokasi tercatat ✓</div>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:8px;flex-direction:column;">
+    <button class="btn outline" onclick="absenkanLagi()">➕ Absenkan Orang Lain</button>
   </div>`);
+}
+
+async function absenkanLagi(){
+  // Reset state, refresh data, render form
+  _selectedHadirId=null;
+  currentGps=null;
+  show('<div class="msg info">⏳ Memuat ulang daftar...</div>');
+  await refreshDaftar();
+  renderForm();
 }
 
 init();
