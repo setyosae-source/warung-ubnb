@@ -131,6 +131,43 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
 .empty{text-align:center;padding:40px 20px;color:var(--text-muted);}
 .empty .ei{font-size:36px;margin-bottom:8px;}
 .loading{text-align:center;padding:40px;color:var(--text-muted);}
+
+/* ===== LAPORAN SENSUS ===== */
+.sensus-card{background:white;border-radius:var(--radius-sm);padding:12px;border:1px solid var(--border);margin-bottom:10px;}
+.sensus-card-head{display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;}
+.sensus-card-title{font-size:14px;font-weight:800;color:var(--green);}
+.sensus-card-meta{font-size:11px;color:var(--text-muted);}
+.sensus-card-stat{display:flex;gap:14px;font-size:11px;color:var(--text);margin-bottom:8px;}
+.sensus-card-stat strong{color:var(--green);font-weight:700;}
+.sensus-card-actions{display:flex;gap:6px;}
+.btn-sensus{padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:inherit;}
+.btn-sensus.primary{background:#3b82f6;color:white;}
+.btn-sensus.success{background:#10b981;color:white;}
+.btn-sensus.danger{background:#ef4444;color:white;}
+
+/* Laporan format */
+.lap-sensus{font-family:'Calibri','Arial',sans-serif;color:#000;background:white;padding:18px;font-size:11px;}
+.lap-sensus h1{font-size:14px;text-align:center;margin:0;font-weight:bold;}
+.lap-sensus .lap-sub{text-align:center;font-size:11px;margin:2px 0;}
+.lap-sensus .lap-period{text-align:center;font-size:11px;margin:2px 0 10px;font-style:italic;}
+.lap-sensus table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9.5px;}
+.lap-sensus th,.lap-sensus td{border:1px solid #000;padding:3px 4px;text-align:center;}
+.lap-sensus th{background:#fef3c7;font-weight:bold;font-size:9px;}
+.lap-sensus .ts-total{background:#fde68a;font-weight:bold;}
+.lap-sensus .ts-percent{background:#fef9c3;font-style:italic;}
+.lap-sensus .ts-label{text-align:left;font-weight:bold;}
+.lap-sensus .lap-foot{display:flex;justify-content:space-between;margin-top:14px;font-size:10px;}
+.lap-sensus .lap-keterangan{font-size:9px;line-height:1.5;}
+.lap-sensus .lap-keterangan b{display:inline-block;min-width:160px;}
+.lap-sensus .lap-signer{text-align:center;}
+.lap-sensus .lap-signer .signer-name{margin-top:50px;font-weight:bold;text-decoration:underline;}
+.lap-sensus .warn-incomplete{background:#fef3c7;border-left:3px solid #f59e0b;padding:6px 10px;font-size:10px;margin:8px 0;color:#78350f;}
+@media print {
+  body * { visibility: hidden; }
+  #sensus-print-area, #sensus-print-area * { visibility: visible; }
+  #sensus-print-area { position:absolute; left:0; top:0; width:100%; }
+  .lap-sensus { padding:6mm; }
+}
 </style>
 </head>
 <body>
@@ -171,6 +208,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <button class="page-tab active" onclick="showTab('jamaah',this)">👥 Jamaah</button>
     <button class="page-tab" onclick="showTab('anggota',this)">📊 Anggota Saham</button>
     <button class="page-tab" onclick="showTab('mapping',this)">🔗 Mapping</button>
+    <button class="page-tab" onclick="showTab('sensus',this)">📋 Laporan Sensus</button>
   </div>
 
   <!-- PAGE JAMAAH -->
@@ -217,7 +255,42 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-a
     <div style="font-weight:700;margin-bottom:8px;font-size:13px;">❌ Anggota Saham Belum Terhubung ke Data Jamaah</div>
     <div id="mapping-unlinked"></div>
   </div>
+
+  <!-- PAGE LAPORAN SENSUS -->
+  <div class="page" id="page-sensus">
+    <!-- Generate Card -->
+    <div style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;">
+      <div style="font-size:12px;opacity:0.9;margin-bottom:4px;">📋 LAPORAN SENSUS CACAH JIWA</div>
+      <div id="sensus-period-label" style="font-size:20px;font-weight:800;margin-bottom:10px;">Periode: —</div>
+      <div id="sensus-preview-stats" style="font-size:11px;opacity:0.9;margin-bottom:12px;">Memuat data jamaah...</div>
+      <button onclick="generateLaporanSensus()" id="btn-generate-sensus" style="background:white;color:#1e40af;border:none;padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;width:100%;">
+        ⚡ Generate Laporan Bulan Ini
+      </button>
+    </div>
+
+    <!-- Daftar Laporan Tersimpan -->
+    <div style="font-weight:700;margin-bottom:8px;font-size:13px;">📚 Riwayat Laporan</div>
+    <div id="sensus-list"><div class="loading">Memuat data...</div></div>
+  </div>
 </div>
+
+<!-- MODAL LIHAT LAPORAN SENSUS -->
+<div class="modal-overlay" id="modal-sensus">
+  <div class="modal" style="max-width:96vw;max-height:96vh;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);background:#f8fafc;">
+      <strong id="modal-sensus-title" style="font-size:13px;">Laporan Sensus</strong>
+      <div style="display:flex;gap:6px;">
+        <button onclick="cetakModalSensus()" style="background:#10b981;color:white;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖨️ Cetak</button>
+        <button onclick="closeMod('modal-sensus')" style="background:#e5e7eb;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕ Tutup</button>
+      </div>
+    </div>
+    <div id="modal-sensus-content" style="overflow:auto;max-height:calc(96vh - 50px);padding:0;background:white;"></div>
+  </div>
+</div>
+
+<!-- HIDDEN PRINT AREA -->
+<div id="sensus-print-area" style="display:none;"></div>
 
 <!-- MODAL DETAIL JAMAAH -->
 <div class="modal-overlay" id="modal-jamaah">
@@ -262,6 +335,8 @@ const sb=createClient(SURL,SKEY);
 
 let CU=null;
 let aJamaah=[], aSaham=[];
+let aSensus=[];
+let aKelompokMaster=[];
 let jamaahFilter='', anggotaFilter='';
 let _linkAnggotaId=null;
 
@@ -309,16 +384,21 @@ async function init(){
 }
 
 async function loadAll(){
-  const [j, s] = await Promise.all([
+  const [j, s, sn, k] = await Promise.all([
     sb.from('jamaah_desa').select('*').order('nama'),
-    sb.from('ubnb_saham').select('*').order('nama')
+    sb.from('ubnb_saham').select('*').order('nama'),
+    sb.from('ubnb_sensus_bulanan').select('id,periode,periode_label,tanggal_generate,generated_by,total_jiwa,total_kk,created_at').order('periode',{ascending:false}),
+    sb.from('ubnb_kelompok').select('*').order('urutan')
   ]);
   aJamaah = j.data || [];
   aSaham = s.data || [];
+  aSensus = sn.data || [];
+  aKelompokMaster = k.data || [];
   renderStats();
   renderJamaah();
   renderAnggota();
   renderMapping();
+  renderSensus();
 }
 
 // ===== TAB =====
@@ -579,6 +659,468 @@ async function doUnlink(sahamId){
   toast('Link dibatalkan');
   renderStats();renderAnggota();renderMapping();
 }
+// ===== LAPORAN SENSUS BULANAN =====
+const SENSUS_SIGNER = 'H Suwartono';
+const NAMA_BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const KELOMPOK_LIST = [
+  {kode:'1', singkat:'PW1', lengkap:'Perwirasari'},
+  {kode:'2', singkat:'PW2', lengkap:'Alinda'},
+  {kode:'3', singkat:'PW3', lengkap:'Bulak Perwira'},
+  {kode:'4', singkat:'PW4', lengkap:'Vila Indah Permai'},
+];
+
+// Hitung umur dalam tahun (berdasarkan tanggal patokan, default = sekarang)
+function hitungUmur(tglLahir, refDate){
+  if(!tglLahir) return null;
+  const lahir = new Date(tglLahir);
+  if(isNaN(lahir.getTime())) return null;
+  const ref = refDate || new Date();
+  let umur = ref.getFullYear() - lahir.getFullYear();
+  const m = ref.getMonth() - lahir.getMonth();
+  if(m<0 || (m===0 && ref.getDate()<lahir.getDate())) umur--;
+  return umur;
+}
+
+// Klasifikasi: balita / cb_rw_a / cb_rw_b / pra_remaja / remaja / dewasa / menikah / duda_janda
+// Return null kalau data tidak lengkap
+function klasifikasiSensus(j, refDate){
+  const sn = (j.status_nikah||'').trim();
+  if(sn === 'Janda / Duda') return 'duda_janda';
+  if(sn === 'Menikah') return 'menikah';
+  // Belum Menikah atau NULL → klasifikasi by umur
+  const umur = hitungUmur(j.tgl_lahir, refDate);
+  if(umur === null) return null; // tgl_lahir kosong
+  if(umur < 5) return 'balita';
+  if(umur <= 7) return 'cb_rw_a';
+  if(umur <= 12) return 'cb_rw_b';
+  if(umur <= 15) return 'pra_remaja';
+  if(umur <= 20) return 'remaja';
+  return 'dewasa';
+}
+
+// Normalisasi gender → 'L' / 'P' / null
+function normGender(g){
+  if(!g) return null;
+  const s = String(g).trim().toLowerCase();
+  if(s === 'l' || s === 'laki-laki' || s === 'laki' || s === 'pria') return 'L';
+  if(s === 'p' || s === 'perempuan' || s === 'wanita') return 'P';
+  return null;
+}
+
+// Hitung statistik sensus dari aJamaah → return objek lengkap
+function hitungSensus(refDate){
+  const kategori = ['balita','cb_rw_a','cb_rw_b','pra_remaja','remaja','dewasa','menikah','duda_janda'];
+  // Init struktur per kelompok
+  const klas = {};
+  KELOMPOK_LIST.forEach(k=>{
+    klas[k.singkat] = {};
+    kategori.forEach(c=>{ klas[k.singkat][c] = {L:0,P:0}; });
+    klas[k.singkat]._kk = new Set();
+    klas[k.singkat]._info = {agnia:{L:0,P:0}, haji:{L:0,P:0}, sarjana:{L:0,P:0}};
+    klas[k.singkat]._tidak_lengkap = 0;
+  });
+
+  let totalTidakLengkap = 0;
+  let totalGenderKosong = 0;
+
+  aJamaah.forEach(j=>{
+    const kelKode = j.kelompok_nama || '';
+    const slot = klas[kelKode];
+    if(!slot) return; // skip kalau tidak ada kelompok valid
+
+    // KK
+    if(j.nama_kk) slot._kk.add(j.nama_kk);
+
+    // Klasifikasi
+    const cat = klasifikasiSensus(j, refDate);
+    const g = normGender(j.jenis_kelamin);
+
+    if(!cat){
+      slot._tidak_lengkap++;
+      totalTidakLengkap++;
+      return;
+    }
+    if(!g){
+      // Khusus duda_janda: kalau status Janda/Duda tapi gender kosong, perlu special handling
+      // Untuk sekarang skip, hitung sebagai data tidak lengkap
+      slot._tidak_lengkap++;
+      totalGenderKosong++;
+      return;
+    }
+
+    slot[cat][g]++;
+
+    // Info atribut
+    if(j.is_aghnia === true) slot._info.agnia[g]++;
+    if(j.is_haji === true) slot._info.haji[g]++;
+    if(j.is_sarjana === true) slot._info.sarjana[g]++;
+  });
+
+  // Convert _kk Set → count
+  KELOMPOK_LIST.forEach(k=>{
+    klas[k.singkat]._kk_count = klas[k.singkat]._kk.size;
+    delete klas[k.singkat]._kk;
+  });
+
+  return {
+    klasifikasi: klas,
+    total_jiwa: aJamaah.length,
+    total_kk: new Set(aJamaah.map(j=>j.nama_kk).filter(Boolean)).size,
+    tidak_lengkap: totalTidakLengkap,
+    gender_kosong: totalGenderKosong,
+  };
+}
+
+// Render preview sebelum generate (di card biru)
+function renderSensusPreview(){
+  const now = new Date();
+  const periodeLabel = NAMA_BULAN[now.getMonth()] + ' ' + now.getFullYear();
+  const lbl = document.getElementById('sensus-period-label');
+  if(lbl) lbl.textContent = 'Periode: ' + periodeLabel;
+
+  const stats = hitungSensus(now);
+  const el = document.getElementById('sensus-preview-stats');
+  if(el){
+    let warn = '';
+    if(stats.tidak_lengkap > 0){
+      warn = ` · ⚠️ ${stats.tidak_lengkap} data tidak lengkap`;
+    }
+    el.innerHTML = `📊 Total: <b>${stats.total_jiwa} jiwa</b> · <b>${stats.total_kk} KK</b>${warn}`;
+  }
+}
+
+// Render daftar laporan tersimpan
+function renderSensus(){
+  renderSensusPreview();
+  const el = document.getElementById('sensus-list');
+  if(!el) return;
+  if(!aSensus.length){
+    el.innerHTML = '<div class="empty"><div class="ei">📋</div>Belum ada laporan tersimpan</div>';
+    return;
+  }
+  el.innerHTML = aSensus.map(l=>{
+    const tgl = new Date(l.tanggal_generate || l.created_at).toLocaleString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    return `<div class="sensus-card">
+      <div class="sensus-card-head">
+        <div>
+          <div class="sensus-card-title">${l.periode_label}</div>
+          <div class="sensus-card-meta">${tgl} · oleh ${l.generated_by||'-'}</div>
+        </div>
+      </div>
+      <div class="sensus-card-stat">
+        <span>👥 <strong>${l.total_jiwa}</strong> jiwa</span>
+        <span>🏠 <strong>${l.total_kk}</strong> KK</span>
+      </div>
+      <div class="sensus-card-actions">
+        <button class="btn-sensus primary" onclick="lihatLaporanSensus(${l.id})">👁️ Lihat</button>
+        <button class="btn-sensus success" onclick="cetakLaporanSensus(${l.id})">🖨️ Cetak</button>
+        <button class="btn-sensus danger" onclick="hapusLaporanSensus(${l.id},'${l.periode_label}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Build HTML laporan sensus (format mengikuti PDF asli)
+function buildHtmlLaporanSensus(stats, periode_label){
+  const k = stats.klasifikasi;
+  // Helper untuk total per kategori (semua kelompok)
+  function tot(cat, g){
+    return KELOMPOK_LIST.reduce((s,kl)=>s + (k[kl.singkat][cat][g]||0), 0);
+  }
+  function totRow(cat){ return tot(cat,'L') + tot(cat,'P'); }
+  const grandTotal = ['balita','cb_rw_a','cb_rw_b','pra_remaja','remaja','dewasa','menikah','duda_janda']
+    .reduce((s,c)=>s+totRow(c),0);
+  const totL = ['balita','cb_rw_a','cb_rw_b','pra_remaja','remaja','dewasa','menikah'].reduce((s,c)=>s+tot(c,'L'),0) + tot('duda_janda','L');
+  const totP = ['balita','cb_rw_a','cb_rw_b','pra_remaja','remaja','dewasa','menikah'].reduce((s,c)=>s+tot(c,'P'),0) + tot('duda_janda','P');
+  function pct(n){ return grandTotal>0 ? ((n/grandTotal)*100).toFixed(2)+'%' : '0%'; }
+
+  // Total per kelompok (baris)
+  function totKl(kode){
+    return ['balita','cb_rw_a','cb_rw_b','pra_remaja','remaja','dewasa','menikah','duda_janda']
+      .reduce((s,c)=>s + k[kode][c].L + k[kode][c].P, 0);
+  }
+  function totKlGender(kode, g){
+    return ['balita','cb_rw_a','cb_rw_b','pra_remaja','remaja','dewasa','menikah'].reduce((s,c)=>s+k[kode][c][g],0) + k[kode]['duda_janda'][g];
+  }
+
+  // Tabel 1: Klasifikasi usia
+  let tbl1 = `<table>
+    <thead>
+      <tr>
+        <th rowspan="2" style="width:30px;">NO</th>
+        <th rowspan="2" style="width:120px;">KELOMPOK</th>
+        <th colspan="12">BELUM MENIKAH</th>
+        <th colspan="2" rowspan="2">MENIKAH</th>
+        <th colspan="2" rowspan="2">DUDA / JANDA</th>
+        <th colspan="2" rowspan="2">JUMLAH</th>
+        <th rowspan="2" style="width:50px;">TOTAL</th>
+      </tr>
+      <tr>
+        <th colspan="2">BALITA</th>
+        <th colspan="2">CB-RW A</th>
+        <th colspan="2">CB-RW B</th>
+        <th colspan="2">PRA REMAJA</th>
+        <th colspan="2">REMAJA</th>
+        <th colspan="2">DEWASA</th>
+      </tr>
+      <tr>
+        <th></th><th></th>
+        <th>L</th><th>P</th><th>L</th><th>P</th><th>L</th><th>P</th>
+        <th>L</th><th>P</th><th>L</th><th>P</th><th>L</th><th>P</th>
+        <th>L</th><th>P</th>
+        <th>DUDA</th><th>JANDA</th>
+        <th>L</th><th>P</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>`;
+  KELOMPOK_LIST.forEach((kl,idx)=>{
+    const s = k[kl.singkat];
+    const totalKl = totKl(kl.singkat);
+    const totL = totKlGender(kl.singkat,'L');
+    const totP = totKlGender(kl.singkat,'P');
+    tbl1 += `<tr>
+      <td>${idx+1}</td>
+      <td class="ts-label">${kl.lengkap}</td>
+      <td>${s.balita.L}</td><td>${s.balita.P}</td>
+      <td>${s.cb_rw_a.L}</td><td>${s.cb_rw_a.P}</td>
+      <td>${s.cb_rw_b.L}</td><td>${s.cb_rw_b.P}</td>
+      <td>${s.pra_remaja.L}</td><td>${s.pra_remaja.P}</td>
+      <td>${s.remaja.L}</td><td>${s.remaja.P}</td>
+      <td>${s.dewasa.L}</td><td>${s.dewasa.P}</td>
+      <td>${s.menikah.L}</td><td>${s.menikah.P}</td>
+      <td>${s.duda_janda.L}</td><td>${s.duda_janda.P}</td>
+      <td><b>${totL}</b></td><td><b>${totP}</b></td>
+      <td class="ts-total">${totalKl}</td>
+    </tr>`;
+  });
+  // Baris JUMLAH per gender
+  tbl1 += `<tr class="ts-total">
+    <td colspan="2">JUMLAH</td>
+    <td>${tot('balita','L')}</td><td>${tot('balita','P')}</td>
+    <td>${tot('cb_rw_a','L')}</td><td>${tot('cb_rw_a','P')}</td>
+    <td>${tot('cb_rw_b','L')}</td><td>${tot('cb_rw_b','P')}</td>
+    <td>${tot('pra_remaja','L')}</td><td>${tot('pra_remaja','P')}</td>
+    <td>${tot('remaja','L')}</td><td>${tot('remaja','P')}</td>
+    <td>${tot('dewasa','L')}</td><td>${tot('dewasa','P')}</td>
+    <td>${tot('menikah','L')}</td><td>${tot('menikah','P')}</td>
+    <td>${tot('duda_janda','L')}</td><td>${tot('duda_janda','P')}</td>
+    <td>${totL}</td><td>${totP}</td>
+    <td>${grandTotal}</td>
+  </tr>`;
+  // Baris total per kategori (gabungan L+P)
+  tbl1 += `<tr class="ts-total">
+    <td colspan="2"></td>
+    <td colspan="2">${totRow('balita')}</td>
+    <td colspan="2">${totRow('cb_rw_a')}</td>
+    <td colspan="2">${totRow('cb_rw_b')}</td>
+    <td colspan="2">${totRow('pra_remaja')}</td>
+    <td colspan="2">${totRow('remaja')}</td>
+    <td colspan="2">${totRow('dewasa')}</td>
+    <td colspan="2">${totRow('menikah')}</td>
+    <td colspan="2">${totRow('duda_janda')}</td>
+    <td colspan="2"></td>
+    <td></td>
+  </tr>`;
+  // Baris persentase
+  tbl1 += `<tr class="ts-percent">
+    <td colspan="2">%</td>
+    <td colspan="2">${pct(totRow('balita'))}</td>
+    <td colspan="2">${pct(totRow('cb_rw_a'))}</td>
+    <td colspan="2">${pct(totRow('cb_rw_b'))}</td>
+    <td colspan="2">${pct(totRow('pra_remaja'))}</td>
+    <td colspan="2">${pct(totRow('remaja'))}</td>
+    <td colspan="2">${pct(totRow('dewasa'))}</td>
+    <td colspan="2">${pct(totRow('menikah'))}</td>
+    <td colspan="2">${pct(totRow('duda_janda'))}</td>
+    <td>${pct(totL)}</td><td>${pct(totP)}</td>
+    <td>100%</td>
+  </tr>`;
+  tbl1 += `</tbody></table>`;
+
+  // Tabel 2: Info data (KK, Aghnia, Haji, Sarjana)
+  let totKK=0, totAgL=0,totAgP=0, totHjL=0,totHjP=0, totSjL=0,totSjP=0;
+  let tbl2 = `<table>
+    <thead>
+      <tr>
+        <th rowspan="2" style="width:30px;">NO</th>
+        <th rowspan="2" style="width:160px;">KELOMPOK</th>
+        <th colspan="7">INFORMASI DATA</th>
+      </tr>
+      <tr>
+        <th>JML KK</th>
+        <th colspan="2">AGHNIA</th>
+        <th colspan="2">HAJI</th>
+        <th colspan="2">SARJANA</th>
+      </tr>
+      <tr>
+        <th></th><th></th><th></th>
+        <th>L</th><th>P</th>
+        <th>L</th><th>P</th>
+        <th>L</th><th>P</th>
+      </tr>
+    </thead>
+    <tbody>`;
+  KELOMPOK_LIST.forEach((kl,idx)=>{
+    const s = k[kl.singkat];
+    totKK += s._kk_count;
+    totAgL += s._info.agnia.L; totAgP += s._info.agnia.P;
+    totHjL += s._info.haji.L;  totHjP += s._info.haji.P;
+    totSjL += s._info.sarjana.L; totSjP += s._info.sarjana.P;
+    tbl2 += `<tr>
+      <td>${idx+1}</td>
+      <td class="ts-label">${kl.lengkap}</td>
+      <td><b>${s._kk_count}</b></td>
+      <td>${s._info.agnia.L}</td><td>${s._info.agnia.P}</td>
+      <td>${s._info.haji.L}</td><td>${s._info.haji.P}</td>
+      <td>${s._info.sarjana.L}</td><td>${s._info.sarjana.P}</td>
+    </tr>`;
+  });
+  tbl2 += `<tr class="ts-total">
+    <td colspan="2">JUMLAH</td>
+    <td>${totKK}</td>
+    <td>${totAgL}</td><td>${totAgP}</td>
+    <td>${totHjL}</td><td>${totHjP}</td>
+    <td>${totSjL}</td><td>${totSjP}</td>
+  </tr>`;
+  tbl2 += `</tbody></table>`;
+
+  // Warning kalau ada data tidak lengkap
+  let warning = '';
+  if(stats.tidak_lengkap > 0){
+    warning = `<div class="warn-incomplete">⚠️ <b>${stats.tidak_lengkap} data tidak lengkap</b> (tanggal lahir / jenis kelamin kosong) — tidak masuk klasifikasi usia. Mohon lengkapi data untuk akurasi laporan.</div>`;
+  }
+
+  // Final HTML
+  return `<div class="lap-sensus" id="lap-sensus-print">
+  <h1>LAPORAN SENSUS CACAH JIWA</h1>
+  <div class="lap-sub">DESA PERWIRA | DAERAH BEKASI TIMUR</div>
+  <div class="lap-period">Bulan: <b>${periode_label}</b></div>
+  ${warning}
+  ${tbl1}
+  ${tbl2}
+  <div class="lap-foot">
+    <div class="lap-keterangan">
+      <b>Keterangan:</b><br>
+      <b>1 Balita</b> : Usia 0 &lt; 5 tahun<br>
+      <b>2 Cabe Rawit Tahap A</b> : Usia 5 - 7 tahun<br>
+      <b>3 Cabe Rawit Tahap B</b> : Usia 8 - 12 tahun<br>
+      <b>4 Pra Remaja</b> : Usia 13 - 15 tahun<br>
+      <b>5 Remaja</b> : Usia 16 - 20 tahun<br>
+      <b>6 Dewasa</b> : Usia 21 tahun - belum menikah<br>
+      <b>7 Aghnia</b> : Kekayaan melebihi 2X ONH
+    </div>
+    <div class="lap-signer">
+      Bekasi, ${periode_label}<br>
+      KI DESA PERWIRA<br>
+      <div class="signer-name">${SENSUS_SIGNER}</div>
+    </div>
+  </div>
+</div>`;
+}
+
+// Generate laporan: snapshot + simpan ke DB
+async function generateLaporanSensus(){
+  const btn = document.getElementById('btn-generate-sensus');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Memproses...'; }
+
+  try{
+    const now = new Date();
+    const periode = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+    const periode_label = NAMA_BULAN[now.getMonth()] + ' ' + now.getFullYear();
+
+    // Cek apakah periode ini sudah ada
+    const existing = aSensus.find(s=>s.periode === periode);
+    if(existing){
+      const ok = confirm('Laporan periode ' + periode_label + ' sudah ada.\n\nGenerate ulang akan MENIMPA laporan lama. Lanjutkan?');
+      if(!ok){
+        if(btn){ btn.disabled = false; btn.textContent = '⚡ Generate Laporan Bulan Ini'; }
+        return;
+      }
+    }
+
+    // Hitung sensus
+    const stats = hitungSensus(now);
+    const html_content = buildHtmlLaporanSensus(stats, periode_label);
+
+    const payload = {
+      periode, periode_label,
+      tanggal_generate: now.toISOString(),
+      generated_by: CU?.username || 'unknown',
+      total_jiwa: stats.total_jiwa,
+      total_kk: stats.total_kk,
+      data_klasifikasi: stats.klasifikasi,
+      data_info: { tidak_lengkap: stats.tidak_lengkap, gender_kosong: stats.gender_kosong },
+      html_content,
+    };
+
+    let res;
+    if(existing){
+      res = await sb.from('ubnb_sensus_bulanan').update(payload).eq('id', existing.id);
+    } else {
+      res = await sb.from('ubnb_sensus_bulanan').insert([payload]);
+    }
+    if(res.error){ throw new Error(res.error.message); }
+
+    toast('✅ Laporan ' + periode_label + ' berhasil ' + (existing?'diperbarui':'disimpan'));
+    await loadAll();
+
+    // Auto-buka modal preview
+    const fresh = aSensus.find(s=>s.periode === periode);
+    if(fresh) lihatLaporanSensus(fresh.id);
+  } catch(e){
+    toast('Gagal generate: ' + e.message, true);
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '⚡ Generate Laporan Bulan Ini'; }
+  }
+}
+
+// Lihat laporan (modal)
+async function lihatLaporanSensus(id){
+  const lap = aSensus.find(l=>l.id===id);
+  if(!lap){ toast('Laporan tidak ditemukan', true); return; }
+  const { data, error } = await sb.from('ubnb_sensus_bulanan').select('html_content').eq('id', id).single();
+  if(error || !data?.html_content){ toast('Konten tidak ditemukan', true); return; }
+  document.getElementById('modal-sensus-title').textContent = 'Sensus ' + lap.periode_label;
+  document.getElementById('modal-sensus-content').innerHTML = data.html_content;
+  openMod('modal-sensus');
+}
+
+// Cetak modal yang sedang terbuka
+function cetakModalSensus(){
+  const html = document.getElementById('modal-sensus-content').innerHTML;
+  if(!html) return;
+  const printArea = document.getElementById('sensus-print-area');
+  printArea.innerHTML = html;
+  printArea.style.display = 'block';
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{ printArea.style.display='none'; printArea.innerHTML=''; }, 1000);
+  }, 200);
+}
+
+// Cetak langsung dari list
+async function cetakLaporanSensus(id){
+  const { data, error } = await sb.from('ubnb_sensus_bulanan').select('html_content').eq('id', id).single();
+  if(error || !data?.html_content){ toast('Konten tidak ditemukan', true); return; }
+  const printArea = document.getElementById('sensus-print-area');
+  printArea.innerHTML = data.html_content;
+  printArea.style.display = 'block';
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{ printArea.style.display='none'; printArea.innerHTML=''; }, 1000);
+  }, 200);
+}
+
+// Hapus laporan
+async function hapusLaporanSensus(id, label){
+  if(!confirm('Hapus laporan ' + label + '?\n\nLaporan akan dihapus permanen dari database.')) return;
+  const { error } = await sb.from('ubnb_sensus_bulanan').delete().eq('id', id);
+  if(error){ toast('Gagal hapus: ' + error.message, true); return; }
+  toast('Laporan ' + label + ' dihapus');
+  await loadAll();
+}
+
 </script>
 </body>
 </html>
