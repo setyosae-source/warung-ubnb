@@ -180,19 +180,50 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <h1>Dashboard Kelompok</h1>
       <p>UBNB Desa Perwira - Bekasi Timur</p>
     </div>
-    <div class="login-err" id="login-err"></div>
-    <div class="field">
-      <label>Username</label>
-      <input type="text" id="inp-user" placeholder="pengurus_pw1 / pengurus_desa" autocomplete="username"/>
+
+    <!-- Tab Mode -->
+    <div style="display:flex;background:var(--bg);border-radius:8px;padding:3px;margin-bottom:18px;">
+      <button id="login-tab-pengurus" onclick="switchLoginMode('pengurus')" style="flex:1;padding:8px;border:none;background:white;color:var(--green);font-weight:700;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;box-shadow:0 1px 4px rgba(0,0,0,0.08);">👤 Pengurus</button>
+      <button id="login-tab-umum" onclick="switchLoginMode('umum')" style="flex:1;padding:8px;border:none;background:transparent;color:var(--text-muted);font-weight:700;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;">👁️ Umum</button>
     </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="inp-pass" placeholder="Password" autocomplete="current-password"/>
+
+    <!-- FORM PENGURUS -->
+    <div id="login-form-pengurus">
+      <div class="login-err" id="login-err"></div>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="inp-user" placeholder="pengurus_pw1 / pengurus_desa" autocomplete="username"/>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="inp-pass" placeholder="Password" autocomplete="current-password"/>
+      </div>
+      <button class="btn-login" onclick="doLogin()">Masuk →</button>
+      <div class="login-info">
+        Login khusus untuk pengurus desa & kelompok PW1-PW4.<br>
+        Hubungi admin jika lupa password.
+      </div>
     </div>
-    <button class="btn-login" onclick="doLogin()">Masuk →</button>
-    <div class="login-info">
-      Login khusus untuk pengurus desa & kelompok PW1-PW4.<br>
-      Hubungi admin jika lupa password.
+
+    <!-- FORM UMUM -->
+    <div id="login-form-umum" style="display:none;">
+      <div style="background:var(--blue-light);border-left:3px solid var(--blue);padding:9px 12px;border-radius:5px;margin-bottom:14px;font-size:11px;color:#1e40af;line-height:1.5;">
+        ℹ️ <b>Masuk sebagai Umum</b> — Data Anda akan disesuaikan dengan database. <b>Masukkan nama jamaah dan kelompok dengan benar.</b>
+      </div>
+      <div class="login-err" id="login-err-umum"></div>
+      <div class="field">
+        <label>Nama Lengkap Jamaah</label>
+        <input type="text" id="inp-umum-nama" placeholder="Contoh: Ahmad Suparman" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>Kelompok</label>
+        <input type="text" id="inp-umum-kelompok" placeholder="Kelompok Anda..." autocomplete="off"/>
+      </div>
+      <button class="btn-login" onclick="doLoginUmum()" id="btn-login-umum">Masuk sebagai Umum →</button>
+      <div class="login-info">
+        Akses View Only — bisa lihat data tapi tidak bisa edit.<br>
+        Hanya untuk jamaah aktif di database.
+      </div>
     </div>
   </div>
 </div>
@@ -220,24 +251,68 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
     <div id="scope-notice"></div>
     <div class="stats-pill" id="jamaah-stats"></div>
 
-    <!-- Selector kelompok khusus pengurus_desa -->
-    <div id="kelompok-selector" style="display:none;margin-bottom:10px;">
-      <div class="filter-bar">
-        <button class="filter-btn active" onclick="filterKelompok('',this)">Semua Kelompok</button>
-        <button class="filter-btn" onclick="filterKelompok('PW1',this)">🟢 PW1 Perwirasari</button>
-        <button class="filter-btn" onclick="filterKelompok('PW2',this)">🔵 PW2 Alinda</button>
-        <button class="filter-btn" onclick="filterKelompok('PW3',this)">🟠 PW3 Bulak Perwira</button>
-        <button class="filter-btn" onclick="filterKelompok('PW4',this)">🟣 PW4 VIP</button>
+    <!-- MULTI-FILTER PANEL -->
+    <div id="filter-panel-wrap" style="margin-bottom:10px;">
+      <button id="btn-toggle-filter" onclick="toggleFilterPanel()" style="background:white;border:1.5px solid var(--border);padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;">
+        🔽 Filter <span id="filter-count-badge" style="display:none;background:var(--green);color:white;padding:1px 8px;border-radius:99px;font-size:10px;">0</span>
+      </button>
+      <button onclick="resetSemuaFilter()" style="background:#fef3c7;border:1.5px solid var(--amber);color:var(--amber);padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:6px;">↺ Reset</button>
+      <button onclick="bukaModalExport()" id="btn-export" style="background:#10b981;border:none;color:white;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:6px;">⬇️ Export</button>
+      
+      <div id="filter-panel" style="display:none;background:white;border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-top:6px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;font-size:12px;">
+          <!-- GENDER -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">GENDER</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="gender_l" onchange="onFilterChange()"/> ♂ Laki-laki</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="gender_p" onchange="onFilterChange()"/> ♀ Perempuan</label>
+          </div>
+          <!-- STATUS NIKAH -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">STATUS NIKAH</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="nikah_menikah" onchange="onFilterChange()"/> Menikah</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="nikah_belum" onchange="onFilterChange()"/> Belum</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="nikah_janda" onchange="onFilterChange()"/> Janda/Duda</label>
+          </div>
+          <!-- STATUS SAMBUNG -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">STATUS SAMBUNG</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_tetap" onchange="onFilterChange()"/> Tetap</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_pindahsambung" onchange="onFilterChange()"/> Pindah Sambung</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_pindahsementara" onchange="onFilterChange()"/> Pindah Sementara</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_meninggal" onchange="onFilterChange()"/> Meninggal</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_belum" onchange="onFilterChange()"/> Belum Diset</label>
+          </div>
+          <!-- USIA -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">USIA (TAHUN)</div>
+            <input type="number" id="ff-usia-min" min="0" placeholder="Min" oninput="onFilterChange()" style="width:80px;padding:5px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;"/>
+            <span style="color:var(--text-muted);">-</span>
+            <input type="number" id="ff-usia-max" min="0" placeholder="Max" oninput="onFilterChange()" style="width:80px;padding:5px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;"/>
+          </div>
+          <!-- POSISI KELUARGA -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">POSISI KELUARGA</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kk_yes" onchange="onFilterChange()"/> 👑 Hanya KK</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kk_no" onchange="onFilterChange()"/> Bukan KK</label>
+          </div>
+          <!-- ATRIBUT -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">ATRIBUT (CHECKLIST = YA)</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="aghnia" onchange="onFilterChange()"/> 💎 Aghnia</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="haji" onchange="onFilterChange()"/> 🕋 Haji</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sarjana" onchange="onFilterChange()"/> 🎓 Sarjana</label>
+          </div>
+          <!-- KELOMPOK (hanya untuk pengurus_desa) -->
+          <div id="filter-kelompok-section" style="display:none;">
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">KELOMPOK</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw1" onchange="onFilterChange()"/> 🟢 PW1</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw2" onchange="onFilterChange()"/> 🔵 PW2</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw3" onchange="onFilterChange()"/> 🟠 PW3</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw4" onchange="onFilterChange()"/> 🟣 PW4</label>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <div class="filter-bar" id="status-filter">
-      <button class="filter-btn active" onclick="filterStatus('',this)">Semua</button>
-      <button class="filter-btn" onclick="filterStatus('Tetap',this)">✅ Tetap</button>
-      <button class="filter-btn" onclick="filterStatus('Pindah Sambung',this)">↔️ Pindah Sambung</button>
-      <button class="filter-btn" onclick="filterStatus('Pindah Sementara',this)">⏸️ Pindah Sementara</button>
-      <button class="filter-btn" onclick="filterStatus('Meninggal Dunia',this)">🕊️ Meninggal</button>
-      <button class="filter-btn" onclick="filterStatus('null',this)">❓ Belum Diset</button>
     </div>
 
     <div class="search-box">
@@ -547,10 +622,39 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   </div>
 </div>
 
+<!-- MODAL EXPORT JAMAAH -->
+<div class="modal-overlay" id="modal-export">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">⬇️ Export Data Jamaah</strong>
+      <div id="export-info" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+    </div>
+    <div style="padding:14px 16px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">📋 Pilih kolom yang di-export:</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button onclick="exportPilihSemua()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✓ Pilih Semua</button>
+        <button onclick="exportPilihRingkas()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;background:#dbeafe;color:#1e40af;">📊 Hanya Tabel</button>
+        <button onclick="exportPilihNone()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✗ Kosongkan</button>
+      </div>
+      <div id="export-columns" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;font-size:12px;max-height:40vh;overflow-y:auto;background:#f9fafb;padding:10px;border-radius:6px;"></div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">📁 Format file:</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="doExport('xlsx')" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
+        <button onclick="doExport('csv')" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#3b82f6;">📄 CSV</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-export')" style="width:100%;">Tutup</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="ubnb-auth.js"></script>
 <script>
 const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
@@ -604,9 +708,277 @@ async function doLogin(){
   }catch(e){setLE(e.message||'Username atau password salah');}
 }
 function setLE(m){const e=document.getElementById('login-err');e.textContent=m;e.style.display='block';}
-function keluar(){UBNBAuth.clearAllSessions();location.reload();}
+function setLEUmum(m){const e=document.getElementById('login-err-umum');e.textContent=m;e.style.display='block';}
+function keluar(){UBNBAuth.clearAllSessions();sessionStorage.removeItem('ubnb_umum_jamaah');location.reload();}
+
+// ===== SWITCH LOGIN MODE =====
+function switchLoginMode(mode){
+  const tabP=document.getElementById('login-tab-pengurus');
+  const tabU=document.getElementById('login-tab-umum');
+  const formP=document.getElementById('login-form-pengurus');
+  const formU=document.getElementById('login-form-umum');
+  if(mode==='pengurus'){
+    tabP.style.background='white';tabP.style.color='var(--green)';tabP.style.boxShadow='0 1px 4px rgba(0,0,0,0.08)';
+    tabU.style.background='transparent';tabU.style.color='var(--text-muted)';tabU.style.boxShadow='none';
+    formP.style.display='block';formU.style.display='none';
+  } else {
+    tabU.style.background='white';tabU.style.color='var(--green)';tabU.style.boxShadow='0 1px 4px rgba(0,0,0,0.08)';
+    tabP.style.background='transparent';tabP.style.color='var(--text-muted)';tabP.style.boxShadow='none';
+    formU.style.display='block';formP.style.display='none';
+    // Hapus error
+    document.getElementById('login-err-umum').style.display='none';
+  }
+}
+
+// ===== ALGORITMA KEMIRIPAN HYBRID =====
+function _norm(s){return String(s||'').trim().toLowerCase().replace(/\s+/g,' ');}
+
+// Levenshtein distance
+function _levenshtein(a,b){
+  if(a===b) return 0;
+  if(!a.length) return b.length;
+  if(!b.length) return a.length;
+  const m=[];
+  for(let i=0;i<=b.length;i++) m[i]=[i];
+  for(let j=0;j<=a.length;j++) m[0][j]=j;
+  for(let i=1;i<=b.length;i++){
+    for(let j=1;j<=a.length;j++){
+      if(b[i-1]===a[j-1]) m[i][j]=m[i-1][j-1];
+      else m[i][j]=Math.min(m[i-1][j-1]+1,Math.min(m[i][j-1]+1,m[i-1][j]+1));
+    }
+  }
+  return m[b.length][a.length];
+}
+
+// Score Levenshtein (0-100)
+function _scoreLeven(a,b){
+  a=_norm(a);b=_norm(b);
+  if(!a||!b) return 0;
+  const maxLen=Math.max(a.length,b.length);
+  if(maxLen===0) return 100;
+  const dist=_levenshtein(a,b);
+  return Math.max(0,Math.round((1-dist/maxLen)*100));
+}
+
+// Score Substring (0-100)
+function _scoreSubstr(a,b){
+  a=_norm(a);b=_norm(b);
+  if(!a||!b) return 0;
+  if(b.includes(a)||a.includes(b)) return 100;
+  // Cek substring partial: sebagian besar a ada di b
+  // Coba cari kata-kata a yang muncul di b
+  const aTokens=a.split(' ').filter(x=>x.length>=2);
+  if(!aTokens.length) return 0;
+  let hit=0;
+  aTokens.forEach(t=>{if(b.includes(t)) hit++;});
+  return Math.round((hit/aTokens.length)*100);
+}
+
+// Score Token-based (0-100)
+function _scoreToken(a,b){
+  a=_norm(a);b=_norm(b);
+  if(!a||!b) return 0;
+  const aTok=new Set(a.split(' ').filter(x=>x.length>=2));
+  const bTok=new Set(b.split(' ').filter(x=>x.length>=2));
+  if(!aTok.size||!bTok.size) return 0;
+  let hit=0;
+  aTok.forEach(t=>{if(bTok.has(t)) hit++;});
+  // Pakai max(intersection/aTok, intersection/bTok) untuk handle case parsial
+  const sa=hit/aTok.size,sb=hit/bTok.size;
+  return Math.round(Math.max(sa,sb)*100);
+}
+
+// Hybrid: ambil yang tertinggi dari 3 metode
+function similarityScore(a,b){
+  const sLev=_scoreLeven(a,b);
+  const sSub=_scoreSubstr(a,b);
+  const sTok=_scoreToken(a,b);
+  return Math.max(sLev,sSub,sTok);
+}
+
+// Daftar alias kelompok (semua input lowercase + tanpa karakter khusus akan dicocokan)
+// Setiap kelompok punya banyak variasi yg diterima
+const KELOMPOK_ALIAS={
+  'PW1':[
+    '1','01','pw1','pw 1','p1','klp1','klp 1','kelompok 1','kelompok1',
+    'perwirasari','perwira sari','perwira','sari','prwirasari','prwsari'
+  ],
+  'PW2':[
+    '2','02','pw2','pw 2','p2','klp2','klp 2','kelompok 2','kelompok2',
+    'alinda','alindah','alenda','linda','alnda'
+  ],
+  'PW3':[
+    '3','03','pw3','pw 3','p3','klp3','klp 3','kelompok 3','kelompok3',
+    'bulak perwira','bulakperwira','bulak prwira','bulak','blk perwira',
+    'bulak prw','perwira bulak'
+  ],
+  'PW4':[
+    '4','04','pw4','pw 4','p4','klp4','klp 4','kelompok 4','kelompok4',
+    'vila indah permai','vila indah','vilaindahpermai','vila','vip',
+    'v.i.p','vila indh permai','vila ip','permai','vil indah','vila prmai'
+  ],
+};
+
+// Normalize untuk alias matching: lowercase, hilangkan karakter selain alfanum & spasi, collapse spasi
+function _normAlias(s){
+  return String(s||'').trim().toLowerCase()
+    .replace(/[^\w\s]/g,' ')   // hapus tanda baca jadi spasi
+    .replace(/\s+/g,' ').trim();
+}
+
+// Cocokan input ke kelompok via daftar alias
+// Return: { kelompok: 'PW1'|null, score: 0-100 }
+// Strategy: prioritaskan exact match dulu, baru substring (alias terpanjang menang),
+// terakhir baru fuzzy (Levenshtein/Token)
+function matchKelompokAlias(input){
+  const inp=_normAlias(input);
+  if(!inp) return {kelompok:null,score:0};
+  
+  // PASS 1: Exact match — siapapun lolos langsung 100
+  for(const kel of Object.keys(KELOMPOK_ALIAS)){
+    for(const alias of KELOMPOK_ALIAS[kel]){
+      if(inp===_normAlias(alias)) return {kelompok:kel,score:100};
+    }
+  }
+  
+  // PASS 2: Substring match dengan bobot panjang alias
+  // Cari alias terpanjang yg cocok sebagai substring di kedua arah
+  let bestKelompok=null,bestScore=0,bestAliasLen=0;
+  for(const kel of Object.keys(KELOMPOK_ALIAS)){
+    for(const alias of KELOMPOK_ALIAS[kel]){
+      const aliasN=_normAlias(alias);
+      if(aliasN.length<2) continue;
+      // Input contains alias (input lebih panjang dari alias)
+      if(inp.includes(aliasN)){
+        // Score = panjang_alias / panjang_input * 100
+        const score=Math.round((aliasN.length/inp.length)*100);
+        // Pilih alias terpanjang (lebih spesifik)
+        if(aliasN.length>bestAliasLen||(aliasN.length===bestAliasLen&&score>bestScore)){
+          bestAliasLen=aliasN.length;
+          bestScore=Math.max(score,80);  // minimal 80 untuk substring match yang valid
+          bestKelompok=kel;
+        }
+      }
+      // Alias contains input (input lebih pendek dari alias)
+      else if(inp.length>=2&&aliasN.includes(inp)){
+        // Score = panjang_input / panjang_alias * 100
+        const score=Math.round((inp.length/aliasN.length)*100);
+        if(score>=50&&(aliasN.length>bestAliasLen||(aliasN.length===bestAliasLen&&score>bestScore))){
+          bestAliasLen=aliasN.length;
+          bestScore=score;
+          bestKelompok=kel;
+        }
+      }
+    }
+  }
+  if(bestKelompok) return {kelompok:bestKelompok,score:bestScore};
+  
+  // PASS 3: Fuzzy fallback — Levenshtein + Token-based untuk handle typo
+  let fuzzyKel=null,fuzzyScore=0;
+  Object.keys(KELOMPOK_ALIAS).forEach(kel=>{
+    KELOMPOK_ALIAS[kel].forEach(alias=>{
+      const aliasN=_normAlias(alias);
+      const sLev=_scoreLeven(inp,aliasN);
+      if(sLev>fuzzyScore){fuzzyScore=sLev;fuzzyKel=kel;}
+      const sTok=_scoreToken(inp,aliasN);
+      if(sTok>fuzzyScore){fuzzyScore=sTok;fuzzyKel=kel;}
+    });
+  });
+  return {kelompok:fuzzyKel,score:fuzzyScore};
+}
+
+// Wrapper lama untuk backward compat: cocokan input dengan jamaah.kelompok_nama
+function matchKelompok(input,jKelompokNama){
+  if(!input||!jKelompokNama) return 0;
+  const res=matchKelompokAlias(input);
+  // Cocok kalau alias matching menghasilkan kelompok yang sama dengan jamaah
+  if(res.kelompok===jKelompokNama) return res.score;
+  // Tidak cocok → pakai score similarity langsung sebagai fallback
+  return Math.max(0,_scoreLeven(input,jKelompokNama));
+}
+
+// ===== LOGIN UMUM =====
+async function doLoginUmum(){
+  const namaInput=document.getElementById('inp-umum-nama').value.trim();
+  const kelInput=document.getElementById('inp-umum-kelompok').value.trim();
+  if(!namaInput||!kelInput){setLEUmum('Isi nama dan kelompok');return;}
+  if(namaInput.length<3){setLEUmum('Nama terlalu pendek');return;}
+  
+  const btn=document.getElementById('btn-login-umum');
+  btn.disabled=true;btn.textContent='⏳ Mencari di database...';
+  
+  try{
+    // Fetch jamaah_desa untuk match
+    const{data,error}=await sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok_nama,status_sambung').limit(2000);
+    if(error) throw new Error(error.message);
+    if(!data||!data.length) throw new Error('Database kosong');
+    
+    // Score setiap jamaah
+    let best=null;
+    let bestScore=0;
+    data.forEach(j=>{
+      const sNama=similarityScore(namaInput,j.nama);
+      const sKel=matchKelompok(kelInput,j.kelompok_nama);
+      // Average score (kedua-duanya harus minimal 50%)
+      if(sNama>=50&&sKel>=50){
+        // Pakai score nama sebagai prioritas (kelompok lebih kasar matching-nya)
+        const avgScore=(sNama+sKel)/2;
+        if(avgScore>bestScore){
+          bestScore=avgScore;
+          best={...j,score_nama:sNama,score_kelompok:sKel,score_avg:avgScore};
+        }
+      }
+    });
+    
+    if(!best){
+      setLEUmum('Data tidak ditemukan di database. Pastikan nama dan kelompok benar (kemiripan minimal 50%).');
+      btn.disabled=false;btn.textContent='Masuk sebagai Umum →';
+      return;
+    }
+    
+    // Build virtual user (sama strukturnya seperti akun 'umum' viewer)
+    CU={
+      id:'umum-'+best.did,
+      username:'umum_'+best.nama.replace(/\s+/g,'_').toLowerCase(),
+      nama:best.nama,
+      role:'viewer',
+      permissions:{jamaah:'view',sensus:'view'},
+      kelompok_scope:null,
+      // Info match untuk audit
+      _umum_match:{
+        matched_nama:best.nama,
+        matched_kelompok:best.kelompok_nama,
+        matched_did:best.did,
+        score_nama:best.score_nama,
+        score_kelompok:best.score_kelompok,
+        input_nama:namaInput,
+        input_kelompok:kelInput,
+        login_at:new Date().toISOString(),
+      }
+    };
+    // Save ke session (TIDAK ke localStorage SSO supaya tidak bocor antar tab)
+    sessionStorage.setItem('ubnb_umum_jamaah',JSON.stringify(CU));
+    toast('✅ Selamat datang, '+best.nama+'!');
+    init();
+  }catch(e){
+    setLEUmum('Error: '+e.message);
+    btn.disabled=false;btn.textContent='Masuk sebagai Umum →';
+  }
+}
 
 window.addEventListener('DOMContentLoaded',async()=>{
+  // Cek session umum dulu (sessionStorage, bukan SSO localStorage)
+  const umumRaw=sessionStorage.getItem('ubnb_umum_jamaah');
+  if(umumRaw){
+    try{
+      CU=JSON.parse(umumRaw);
+      init();
+      return;
+    }catch(e){
+      sessionStorage.removeItem('ubnb_umum_jamaah');
+    }
+  }
+  // Lalu cek SSO normal
   const saved=UBNBAuth.loadSession('wu_dashboard_kelompok');
   if(saved){
     const cu=await UBNBAuth.verifySession(sb,'wu_dashboard_kelompok');
@@ -621,23 +993,57 @@ window.addEventListener('DOMContentLoaded',async()=>{
     }
   }
   document.getElementById('inp-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  // Enter untuk login umum
+  document.getElementById('inp-umum-kelompok').addEventListener('keydown',e=>{if(e.key==='Enter')doLoginUmum();});
 });
 
 async function init(){
   document.getElementById('login-wrap').style.display='none';
   document.getElementById('app').style.display='flex';
-  document.getElementById('user-badge').textContent=CU.username;
+  // Bedakan antara akun umum 'umum' (viewer di DB) vs login umum (jamaah match)
+  const isUmumJamaah=CU?._umum_match?true:false;
+  document.getElementById('user-badge').textContent=isUmumJamaah?CU.nama:CU.username;
   // Scope badge
   const scope=CU.kelompok_scope;
   const sb_el=document.getElementById('scope-badge');
-  if(scope){
+  if(isUmumJamaah){
+    sb_el.textContent='👁️ '+(CU._umum_match.matched_kelompok||'Jamaah');
+    sb_el.style.background='var(--blue)';
+    sb_el.style.color='white';
+  } else if(CU.role==='viewer'){
+    sb_el.textContent='👁️ VIEW ONLY';
+    sb_el.style.background='#94a3b8';
+    sb_el.style.color='white';
+  } else if(scope){
     const k=KELOMPOK_LIST.find(x=>x.singkat===scope);
     sb_el.textContent='📍 '+(k?k.singkat+' · '+k.lengkap:scope);
   } else {
     sb_el.textContent='🏛️ DESA (semua kelompok)';
   }
+  // Apply role-based UI restrictions
+  applyRoleRestrictions();
   await loadAll();
-  UBNBAuth.startIdleTimer(sb,()=>{UBNBAuth.clearAllSessions();location.reload();});
+  // Idle timer hanya untuk pengurus (yang login via UBNBAuth)
+  if(!isUmumJamaah){
+    UBNBAuth.startIdleTimer(sb,()=>{UBNBAuth.clearAllSessions();sessionStorage.removeItem('ubnb_umum_jamaah');location.reload();});
+  }
+}
+
+// ===== ROLE HELPERS =====
+function isViewer(){return CU?.role==='viewer';}
+function canEdit(){return !isViewer();}
+
+function applyRoleRestrictions(){
+  // Untuk viewer: sembunyikan tab Absen & ISRUN
+  if(isViewer()){
+    const tabs=document.querySelectorAll('.page-tabs > .page-tab');
+    // Index: 0=Jamaah, 1=Sensus, 2=Absen, 3=ISRUN
+    if(tabs[2]) tabs[2].style.display='none';
+    if(tabs[3]) tabs[3].style.display='none';
+    // Sembunyikan tombol "Tambah Jamaah Baru"
+    const btnTambah=document.querySelector('button[onclick="bukaModalTambah()"]');
+    if(btnTambah) btnTambah.style.display='none';
+  }
 }
 
 // ===== LOAD DATA =====
@@ -697,12 +1103,19 @@ function renderScopeNotice(){
   const k=scope?KELOMPOK_LIST.find(x=>x.singkat===scope):null;
   // Tab jamaah
   const sn=document.getElementById('scope-notice');
-  if(scope){
+  if(isViewer()){
+    sn.innerHTML=`<div class="scope-notice" style="background:#dbeafe;border-left-color:#3b82f6;color:#1e40af;">👁️ Anda <b>akun View Only</b>. Bisa lihat data semua kelompok, tapi tidak bisa edit/tambah/hapus.</div>`;
+    // Tampilkan filter kelompok
+    const fks=document.getElementById('filter-kelompok-section');
+    if(fks) fks.style.display='block';
+  } else if(scope){
     sn.innerHTML=`<div class="scope-notice">📍 Anda mengakses data <b>${k?k.lengkap+' ('+scope+')':scope}</b>. Hanya jamaah kelompok ini yang ditampilkan & bisa diedit.</div>`;
-    document.getElementById('kelompok-selector').style.display='none';
+    const fks=document.getElementById('filter-kelompok-section');
+    if(fks) fks.style.display='none';
   } else {
-    sn.innerHTML=`<div class="scope-notice">🏛️ Anda <b>Pengurus Desa</b>. Mengakses data semua kelompok (PW1-PW4). Gunakan filter kelompok di bawah untuk melihat per kelompok.</div>`;
-    document.getElementById('kelompok-selector').style.display='block';
+    sn.innerHTML=`<div class="scope-notice">🏛️ Anda <b>Pengurus Desa</b>. Mengakses data semua kelompok (PW1-PW4). Gunakan filter kelompok untuk melihat per kelompok.</div>`;
+    const fks=document.getElementById('filter-kelompok-section');
+    if(fks) fks.style.display='block';
   }
   // Tab sensus
   const sns=document.getElementById('sensus-scope-notice');
@@ -726,13 +1139,130 @@ function showTab(tab,btn){
   }
 }
 
+// ===== MULTI-FILTER STATE =====
+const FILTER_STATE={};
+
+function onFilterChange(){
+  // Sync state dari semua input .ff
+  document.querySelectorAll('.ff').forEach(el=>{
+    const key=el.dataset.f;
+    FILTER_STATE[key]=el.checked;
+  });
+  FILTER_STATE.usia_min=document.getElementById('ff-usia-min')?.value||'';
+  FILTER_STATE.usia_max=document.getElementById('ff-usia-max')?.value||'';
+  updateFilterCountBadge();
+  renderStats();
+  renderJamaah();
+}
+
+function updateFilterCountBadge(){
+  let count=0;
+  Object.keys(FILTER_STATE).forEach(k=>{
+    if(FILTER_STATE[k]===true) count++;
+    if(k==='usia_min'||k==='usia_max'){if(FILTER_STATE[k]) count++;}
+  });
+  const badge=document.getElementById('filter-count-badge');
+  if(!badge) return;
+  if(count>0){
+    badge.textContent=count;
+    badge.style.display='inline-block';
+  } else {
+    badge.style.display='none';
+  }
+}
+
+function toggleFilterPanel(){
+  const p=document.getElementById('filter-panel');
+  if(!p) return;
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+
+function resetSemuaFilter(){
+  document.querySelectorAll('.ff').forEach(el=>el.checked=false);
+  const fmin=document.getElementById('ff-usia-min');
+  const fmax=document.getElementById('ff-usia-max');
+  if(fmin) fmin.value='';
+  if(fmax) fmax.value='';
+  Object.keys(FILTER_STATE).forEach(k=>delete FILTER_STATE[k]);
+  // Search field juga
+  const sj=document.getElementById('search-jamaah');
+  if(sj) sj.value='';
+  updateFilterCountBadge();
+  renderStats();
+  renderJamaah();
+  toast('Filter direset');
+}
+
 // ===== STATS (pill, ikut filter) =====
 function getFilteredJamaah(){
   const q=(document.getElementById('search-jamaah')?.value||'').toLowerCase();
   let list=aJamaah.slice();
-  if(curKelompokFilter) list=list.filter(j=>j.kelompok_nama===curKelompokFilter);
-  if(curStatusFilter==='null') list=list.filter(j=>!j.status_sambung);
-  else if(curStatusFilter) list=list.filter(j=>j.status_sambung===curStatusFilter);
+  
+  // Multi-filter dari FILTER_STATE
+  // Gender (multi: L atau P)
+  const genderSel=[];
+  if(FILTER_STATE.gender_l) genderSel.push('L');
+  if(FILTER_STATE.gender_p) genderSel.push('P');
+  if(genderSel.length>0){
+    list=list.filter(j=>{
+      const g=(j.jenis_kelamin||'').charAt(0).toUpperCase();
+      return genderSel.includes(g);
+    });
+  }
+  // Status nikah (multi)
+  const nikahSel=[];
+  if(FILTER_STATE.nikah_menikah) nikahSel.push('Menikah');
+  if(FILTER_STATE.nikah_belum) nikahSel.push('Belum Menikah');
+  if(FILTER_STATE.nikah_janda) nikahSel.push('Janda / Duda');
+  if(nikahSel.length>0){
+    list=list.filter(j=>nikahSel.includes(j.status_nikah));
+  }
+  // Status sambung (multi)
+  const sbSel=[];
+  if(FILTER_STATE.sb_tetap) sbSel.push('Tetap');
+  if(FILTER_STATE.sb_pindahsambung) sbSel.push('Pindah Sambung');
+  if(FILTER_STATE.sb_pindahsementara) sbSel.push('Pindah Sementara');
+  if(FILTER_STATE.sb_meninggal) sbSel.push('Meninggal Dunia');
+  const sbBelum=FILTER_STATE.sb_belum;
+  if(sbSel.length>0||sbBelum){
+    list=list.filter(j=>{
+      if(sbSel.includes(j.status_sambung)) return true;
+      if(sbBelum&&!j.status_sambung) return true;
+      return false;
+    });
+  }
+  // Usia
+  const umin=parseInt(FILTER_STATE.usia_min);
+  const umax=parseInt(FILTER_STATE.usia_max);
+  if(!isNaN(umin)||!isNaN(umax)){
+    list=list.filter(j=>{
+      const u=umurFromTgl(j.tgl_lahir);
+      if(u===null) return false;
+      if(!isNaN(umin)&&u<umin) return false;
+      if(!isNaN(umax)&&u>umax) return false;
+      return true;
+    });
+  }
+  // Posisi keluarga (KK)
+  if(FILTER_STATE.kk_yes&&!FILTER_STATE.kk_no){
+    list=list.filter(j=>j.nama===j.nama_kk);
+  } else if(FILTER_STATE.kk_no&&!FILTER_STATE.kk_yes){
+    list=list.filter(j=>j.nama!==j.nama_kk);
+  }
+  // Atribut (TRUE only)
+  if(FILTER_STATE.aghnia) list=list.filter(j=>j.is_aghnia===true);
+  if(FILTER_STATE.haji) list=list.filter(j=>j.is_haji===true);
+  if(FILTER_STATE.sarjana) list=list.filter(j=>j.is_sarjana===true);
+  // Kelompok (multi, untuk pengurus desa & viewer)
+  const kelSel=[];
+  if(FILTER_STATE.kel_pw1) kelSel.push('PW1');
+  if(FILTER_STATE.kel_pw2) kelSel.push('PW2');
+  if(FILTER_STATE.kel_pw3) kelSel.push('PW3');
+  if(FILTER_STATE.kel_pw4) kelSel.push('PW4');
+  if(kelSel.length>0){
+    list=list.filter(j=>kelSel.includes(j.kelompok_nama));
+  }
+  // Search free-text
   if(q) list=list.filter(j=>
     (j.nama||'').toLowerCase().includes(q)||
     (j.nama_kk||'').toLowerCase().includes(q)||
@@ -740,13 +1270,20 @@ function getFilteredJamaah(){
   );
   return list;
 }
+
 function renderStats(){
   const list=getFilteredJamaah();
   const totalJamaah=list.length;
   const kkUnik=new Set(list.map(j=>j.nama_kk).filter(Boolean)).size;
   const tetap=list.filter(j=>j.status_sambung==='Tetap').length;
   const blmStatus=list.filter(j=>!j.status_sambung).length;
-  const isFiltered=curKelompokFilter||curStatusFilter||(document.getElementById('search-jamaah')?.value||'').trim();
+  let activeCount=0;
+  Object.keys(FILTER_STATE).forEach(k=>{
+    if(FILTER_STATE[k]===true) activeCount++;
+    if((k==='usia_min'||k==='usia_max')&&FILTER_STATE[k]) activeCount++;
+  });
+  const searchVal=(document.getElementById('search-jamaah')?.value||'').trim();
+  const isFiltered=activeCount>0||searchVal;
   const flag=isFiltered?`<span class="filter-flag">🔍 filtered (dari ${aJamaah.length})</span>`:'';
   document.getElementById('jamaah-stats').innerHTML=`
     <span class="stat-pill"><span class="pl">👥</span><span class="pv">${totalJamaah}</span><span class="pl">jiwa</span></span>
@@ -758,21 +1295,6 @@ function renderStats(){
 }
 
 // ===== JAMAAH LIST =====
-function filterKelompok(k,btn){
-  curKelompokFilter=k;
-  document.querySelectorAll('#kelompok-selector .filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderStats();
-  renderJamaah();
-}
-function filterStatus(s,btn){
-  curStatusFilter=s;
-  document.querySelectorAll('#status-filter .filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderStats();
-  renderJamaah();
-}
-
 // ===== TABEL JAMAAH (sortable) =====
 let _sortBy='nama';
 let _sortDir=1; // 1=asc, -1=desc
@@ -886,7 +1408,7 @@ function bukaModalEdit(did){
   const j=aJamaah.find(x=>x.did===did);
   if(!j) return;
   _editDid=did;
-  document.getElementById('modal-jamaah-title').textContent='✏️ Edit: '+j.nama;
+  document.getElementById('modal-jamaah-title').textContent=(isViewer()?'👁️ Lihat: ':'✏️ Edit: ')+j.nama;
   const tgl=j.tgl_lahir?j.tgl_lahir.substring(0,10):'';
   // Pilih kelompok options - kalau pengurus_kelompok, lock ke scope-nya
   const lockKelompok=!!CU.kelompok_scope;
@@ -953,9 +1475,23 @@ function bukaModalEdit(did){
     <div style="padding:8px 16px;font-size:11px;color:var(--text-muted);background:var(--bg);">DID: ${j.did}</div>
   `;
   openMod('modal-jamaah');
+  // Kalau viewer, set semua input readonly + sembunyi tombol simpan
+  if(isViewer()){
+    setTimeout(()=>{
+      document.querySelectorAll('#modal-jamaah-body input, #modal-jamaah-body select').forEach(el=>{
+        el.disabled=true;
+        el.style.background='#f9fafb';
+      });
+      const btnSave=document.querySelector('#modal-jamaah .btn-save');
+      if(btnSave) btnSave.style.display='none';
+      const btnCancel=document.querySelector('#modal-jamaah .btn-cancel');
+      if(btnCancel) btnCancel.textContent='Tutup';
+    },50);
+  }
 }
 
 async function simpanJamaah(){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
   if(!_editDid) return;
   const j=aJamaah.find(x=>x.did===_editDid);
   if(!j) return;
@@ -1040,6 +1576,7 @@ function bukaModalTambah(){
 }
 
 async function simpanJamaahBaru(){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
   const nama=document.getElementById('nj-nama').value.trim();
   if(!nama){toast('Nama wajib diisi',true);return;}
   // Generate DID baru: format JD<timestamp>
@@ -1588,8 +2125,147 @@ async function hapusLaporanSensus(id,label){
   await loadAll();
 }
 // ============================================
-// ============= MODUL ABSEN KEGIATAN =========
+// =============== MODUL EXPORT ===============
 // ============================================
+const EXPORT_COLUMNS=[
+  {key:'no',          label:'No',           desc:'Nomor urut',           tabel:true,  picker:j=>null}, // diisi runtime
+  {key:'did',         label:'DID',          desc:'ID jamaah',            tabel:false, picker:j=>j.did||''},
+  {key:'nama',        label:'Nama',         desc:'Nama lengkap',         tabel:true,  picker:j=>j.nama||''},
+  {key:'nama_kk',     label:'Nama KK',      desc:'Kepala keluarga',      tabel:true,  picker:j=>j.nama_kk||''},
+  {key:'kelompok',    label:'Kelompok',     desc:'PW1/PW2/PW3/PW4',      tabel:false, picker:j=>j.kelompok_nama||''},
+  {key:'jenis_kelamin',label:'L/P',         desc:'Jenis kelamin',        tabel:true,  picker:j=>j.jenis_kelamin||''},
+  {key:'tgl_lahir',   label:'Tgl Lahir',    desc:'Tanggal lahir',        tabel:false, picker:j=>j.tgl_lahir||''},
+  {key:'umur',        label:'Umur',         desc:'Usia (tahun)',         tabel:true,  picker:j=>{const u=umurFromTgl(j.tgl_lahir);return u===null?'':u;}},
+  {key:'status_nikah',label:'Status Nikah', desc:'Menikah/Belum/Janda',  tabel:true,  picker:j=>j.status_nikah||''},
+  {key:'status_sambung',label:'Status Sambung',desc:'Tetap/Pindah/dst',  tabel:true,  picker:j=>j.status_sambung||''},
+  {key:'alamat',      label:'Alamat',       desc:'Alamat tempat tinggal', tabel:false, picker:j=>j.alamat||''},
+  {key:'nomor_wa',    label:'No. WA',       desc:'Nomor WhatsApp',       tabel:false, picker:j=>j.nomor_wa||''},
+  {key:'is_aghnia',   label:'Aghnia',       desc:'Status aghnia',        tabel:false, picker:j=>j.is_aghnia===true?'Ya':(j.is_aghnia===false?'Tidak':'')},
+  {key:'is_haji',     label:'Haji',         desc:'Status haji',          tabel:false, picker:j=>j.is_haji===true?'Ya':(j.is_haji===false?'Tidak':'')},
+  {key:'is_sarjana',  label:'Sarjana',      desc:'Status sarjana',       tabel:false, picker:j=>j.is_sarjana===true?'Ya':(j.is_sarjana===false?'Tidak':'')},
+];
+
+function bukaModalExport(){
+  // Update info teks
+  const list=getFilteredJamaah();
+  const totalAll=aJamaah.length;
+  const filtered=list.length;
+  document.getElementById('export-info').textContent=
+    filtered<totalAll
+      ?`Akan export ${filtered} jamaah (dari total ${totalAll}, sesuai filter aktif)`
+      :`Akan export semua ${filtered} jamaah`;
+  // Render checkbox kolom
+  const wrap=document.getElementById('export-columns');
+  // Default: pilih kolom yang `tabel:true`
+  wrap.innerHTML=EXPORT_COLUMNS.map(c=>`
+    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:white;padding:6px 10px;border-radius:5px;border:1px solid var(--border-light);">
+      <input type="checkbox" class="exp-col" data-key="${c.key}" ${c.tabel?'checked':''}/>
+      <span style="font-weight:700;">${c.label}</span>
+      <span style="color:var(--text-muted);font-size:10px;">${c.desc}</span>
+    </label>
+  `).join('');
+  openMod('modal-export');
+}
+
+function exportPilihSemua(){
+  document.querySelectorAll('.exp-col').forEach(cb=>cb.checked=true);
+}
+function exportPilihRingkas(){
+  document.querySelectorAll('.exp-col').forEach(cb=>{
+    const key=cb.dataset.key;
+    const def=EXPORT_COLUMNS.find(c=>c.key===key);
+    cb.checked=def&&def.tabel?true:false;
+  });
+}
+function exportPilihNone(){
+  document.querySelectorAll('.exp-col').forEach(cb=>cb.checked=false);
+}
+
+function getSelectedExportCols(){
+  const selectedKeys=[];
+  document.querySelectorAll('.exp-col:checked').forEach(cb=>selectedKeys.push(cb.dataset.key));
+  return EXPORT_COLUMNS.filter(c=>selectedKeys.includes(c.key));
+}
+
+function buildExportRows(cols){
+  const list=getFilteredJamaah();
+  // Sort sesuai sort tabel sekarang
+  const cmp=(a,b)=>{
+    let va,vb;
+    switch(_sortBy){
+      case 'nama_kk': va=(a.nama_kk||'').toLowerCase(); vb=(b.nama_kk||'').toLowerCase(); break;
+      case 'nama':    va=(a.nama||'').toLowerCase(); vb=(b.nama||'').toLowerCase(); break;
+      case 'jk':      va=(a.jenis_kelamin||'').charAt(0).toUpperCase(); vb=(b.jenis_kelamin||'').charAt(0).toUpperCase(); break;
+      case 'umur':    va=umurFromTgl(a.tgl_lahir); vb=umurFromTgl(b.tgl_lahir);
+                      if(va===null) va=_sortDir===1?9999:-1;
+                      if(vb===null) vb=_sortDir===1?9999:-1;
+                      break;
+      case 'nikah':   va=a.status_nikah||'~'; vb=b.status_nikah||'~'; break;
+      case 'sambung': va=a.status_sambung||'~'; vb=b.status_sambung||'~'; break;
+      default:        va=(a.nama||'').toLowerCase(); vb=(b.nama||'').toLowerCase();
+    }
+    if(va<vb) return -1*_sortDir;
+    if(va>vb) return 1*_sortDir;
+    return 0;
+  };
+  list.sort(cmp);
+  // Build rows
+  const rows=[cols.map(c=>c.label)];
+  list.forEach((j,idx)=>{
+    rows.push(cols.map(c=>{
+      if(c.key==='no') return idx+1;
+      return c.picker(j);
+    }));
+  });
+  return rows;
+}
+
+function doExport(format){
+  const cols=getSelectedExportCols();
+  if(!cols.length){toast('Pilih minimal 1 kolom',true);return;}
+  const rows=buildExportRows(cols);
+  if(rows.length<=1){toast('Tidak ada data untuk di-export',true);return;}
+  const ts=new Date().toISOString().split('T')[0];
+  const scope=CU.kelompok_scope||(isViewer()?'umum':'desa');
+  const filename='Jamaah_'+scope+'_'+ts;
+  
+  if(format==='csv'){
+    // Build CSV
+    const csv=rows.map(r=>r.map(cell=>{
+      let s=String(cell??'');
+      if(s.includes(',')||s.includes('"')||s.includes('\n')){
+        s='"'+s.replace(/"/g,'""')+'"';
+      }
+      return s;
+    }).join(',')).join('\n');
+    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=filename+'.csv';a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ File CSV diunduh ('+(rows.length-1)+' baris)');
+  } else if(format==='xlsx'){
+    if(typeof XLSX==='undefined'){toast('Library XLSX belum siap, refresh halaman',true);return;}
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    // Auto-width: hitung lebar max tiap kolom
+    const colWidths=cols.map((c,i)=>{
+      let max=String(c.label).length;
+      for(let r=1;r<rows.length;r++){
+        const v=String(rows[r][i]??'');
+        if(v.length>max) max=v.length;
+      }
+      return {wch:Math.min(max+2,40)};
+    });
+    ws['!cols']=colWidths;
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Jamaah');
+    XLSX.writeFile(wb,filename+'.xlsx');
+    toast('✅ File Excel diunduh ('+(rows.length-1)+' baris)');
+  }
+  closeMod('modal-export');
+}
+
+
 let curKegiatanFilter='all';
 let curKegiatanId=null;
 
