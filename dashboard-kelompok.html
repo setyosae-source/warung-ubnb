@@ -1672,12 +1672,17 @@ function editKegiatan(id){
       </select>
     </div>
     <div class="modal-row"><label>Status Nikah</label>
-      <select id="kg-flt-nikah">
-        <option value="">— Semua —</option>
-        <option value="Menikah" ${k&&k.filter_peserta&&k.filter_peserta.status_nikah==='Menikah'?'selected':''}>Menikah</option>
-        <option value="Belum Menikah" ${k&&k.filter_peserta&&k.filter_peserta.status_nikah==='Belum Menikah'?'selected':''}>Belum Menikah</option>
-        <option value="Janda / Duda" ${k&&k.filter_peserta&&k.filter_peserta.status_nikah==='Janda / Duda'?'selected':''}>Janda/Duda</option>
-      </select>
+      <div style="flex:1;display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="kg-flt-nikah-menikah" ${k&&k.filter_peserta&&Array.isArray(k.filter_peserta.status_nikah)&&k.filter_peserta.status_nikah.includes('Menikah')?'checked':(k&&k.filter_peserta&&k.filter_peserta.status_nikah==='Menikah'?'checked':'')}/> Menikah
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="kg-flt-nikah-belum" ${k&&k.filter_peserta&&Array.isArray(k.filter_peserta.status_nikah)&&k.filter_peserta.status_nikah.includes('Belum Menikah')?'checked':(k&&k.filter_peserta&&k.filter_peserta.status_nikah==='Belum Menikah'?'checked':'')}/> Belum Menikah
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="kg-flt-nikah-janda" ${k&&k.filter_peserta&&Array.isArray(k.filter_peserta.status_nikah)&&k.filter_peserta.status_nikah.includes('Janda / Duda')?'checked':(k&&k.filter_peserta&&k.filter_peserta.status_nikah==='Janda / Duda'?'checked':'')}/> Janda/Duda
+        </label>
+      </div>
     </div>
     <div class="modal-row"><label>Usia Minimum</label><input type="number" id="kg-flt-umur-min" min="0" value="${k&&k.filter_peserta&&k.filter_peserta.usia_min?k.filter_peserta.usia_min:''}" placeholder="Kosongkan = tidak filter"/></div>
     <div class="modal-row"><label>Usia Maximum</label><input type="number" id="kg-flt-umur-max" min="0" value="${k&&k.filter_peserta&&k.filter_peserta.usia_max?k.filter_peserta.usia_max:''}" placeholder="Kosongkan = tidak filter"/></div>
@@ -1692,9 +1697,12 @@ function editKegiatan(id){
     <div id="kg-preview" style="padding:10px 16px;background:var(--gold-light);font-size:12px;color:var(--gold-dark);">⏳ Preview peserta akan muncul setelah filter dipilih</div>
   `;
   // Auto-preview
-  ['kg-flt-gender','kg-flt-nikah','kg-flt-umur-min','kg-flt-umur-max'].forEach(id=>{
-    document.getElementById(id).addEventListener('change',previewPeserta);
-    document.getElementById(id).addEventListener('input',previewPeserta);
+  ['kg-flt-gender','kg-flt-umur-min','kg-flt-umur-max','kg-flt-nikah-menikah','kg-flt-nikah-belum','kg-flt-nikah-janda'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.addEventListener('change',previewPeserta);
+      el.addEventListener('input',previewPeserta);
+    }
   });
   setTimeout(previewPeserta,100);
   openMod('modal-kegiatan');
@@ -1708,7 +1716,12 @@ function onAcaraChange(){
 function buildFilterPeserta(){
   const f={};
   const g=document.getElementById('kg-flt-gender').value; if(g) f.gender=g;
-  const n=document.getElementById('kg-flt-nikah').value; if(n) f.status_nikah=n;
+  // Status nikah: collect checkbox yang dicentang
+  const sn=[];
+  if(document.getElementById('kg-flt-nikah-menikah')?.checked) sn.push('Menikah');
+  if(document.getElementById('kg-flt-nikah-belum')?.checked) sn.push('Belum Menikah');
+  if(document.getElementById('kg-flt-nikah-janda')?.checked) sn.push('Janda / Duda');
+  if(sn.length) f.status_nikah=sn;
   const umin=document.getElementById('kg-flt-umur-min').value; if(umin) f.usia_min=parseInt(umin);
   const umax=document.getElementById('kg-flt-umur-max').value; if(umax) f.usia_max=parseInt(umax);
   return f;
@@ -1723,7 +1736,13 @@ function getPesertaWajib(filter,kelompok){
       return g===filter.gender;
     });
   }
-  if(filter.status_nikah) list=list.filter(j=>j.status_nikah===filter.status_nikah);
+  // Status nikah: support array (multi) & string (legacy backward compat)
+  if(filter.status_nikah){
+    const allowed=Array.isArray(filter.status_nikah)?filter.status_nikah:[filter.status_nikah];
+    if(allowed.length>0){
+      list=list.filter(j=>allowed.includes(j.status_nikah));
+    }
+  }
   if(filter.usia_min||filter.usia_max){
     list=list.filter(j=>{
       const u=umurFromTgl(j.tgl_lahir);
@@ -1996,6 +2015,9 @@ function _bukaCetakKegiatan(html,title){
       td.no{text-align:center;width:30px;}
       td.tt{height:30px;width:120px;}
       td.st{width:160px;text-align:center;}
+      .info-pisah{background:#fef3c7;border-left:3px solid #f59e0b;padding:7px 11px;font-size:11px;color:#78350f;margin:10px 0 4px;border-radius:4px;}
+      .break{page-break-before:always;height:0;}
+      h2{font-size:14px !important;}
       .tt-foot{display:flex;justify-content:space-between;margin-top:24px;font-size:11px;}
       .tt-foot div{width:160px;text-align:center;}
       .tt-foot .area{height:50px;border-bottom:1px solid #000;margin:30px 0 4px;}
@@ -2024,34 +2046,76 @@ function cetakDaftarHadir(){
   if(!k){toast('Kegiatan tidak ditemukan',true);return;}
   const list=aHadir.filter(h=>h.kegiatan_id===curKegiatanId).sort((a,b)=>(a.jamaah_nama||'').localeCompare(b.jamaah_nama||''));
   const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  let html=`<h1>DAFTAR HADIR ${(k.acara_nama||'').toUpperCase()}</h1>
-    <div class="sub">${tgl}${k.waktu?' · '+k.waktu.substring(0,5):''}${k.lokasi?' · '+k.lokasi:''}<br>Kelompok: ${k.kelompok||'Desa Perwira'}</div>
-    <table><thead><tr>
+
+  // Helper: lookup gender per jamaah_did
+  const genderMap={};
+  aJamaah.forEach(j=>{
+    const g=(j.jenis_kelamin||'').charAt(0).toUpperCase();
+    if(g==='L'||g==='P') genderMap[j.did]=g;
+  });
+  // Pisah ke 3 grup: laki, perempuan, tidak diset
+  const grpL=[],grpP=[],grpX=[];
+  list.forEach(h=>{
+    const g=genderMap[h.jamaah_did];
+    if(g==='L') grpL.push(h);
+    else if(g==='P') grpP.push(h);
+    else grpX.push(h);
+  });
+
+  // Tentukan apakah perlu dipisah: ada L DAN ada P
+  const perlu_pisah = (grpL.length>0 && grpP.length>0);
+
+  // Builder satu tabel section
+  function buildTabel(title,rows,startNo){
+    let h='';
+    if(title) h+=`<h2 style="font-size:14px;margin:14px 0 6px;color:#1a6640;border-bottom:2px solid #1a6640;padding-bottom:3px;">${title}</h2>`;
+    h+=`<table><thead><tr>
       <th style="width:30px;">No</th>
       <th>Nama</th>
       <th>KK</th>
       <th style="width:120px;">Tanda Tangan</th>
       <th style="width:160px;">Status (H/I/S/T)</th>
     </tr></thead><tbody>`;
-  list.forEach((h,i)=>{
-    html+=`<tr>
-      <td class="no">${i+1}</td>
-      <td>${h.jamaah_nama}</td>
-      <td>${h.jamaah_kk||''}</td>
-      <td class="tt"></td>
-      <td class="st">H &nbsp; I &nbsp; S &nbsp; T</td>
-    </tr>`;
-  });
-  // Pad up to multiple of 5 for cleaner print
-  for(let i=list.length;i<Math.max(20,Math.ceil(list.length/5)*5);i++){
-    html+=`<tr><td class="no">${i+1}</td><td></td><td></td><td class="tt"></td><td class="st">H &nbsp; I &nbsp; S &nbsp; T</td></tr>`;
+    rows.forEach((row,i)=>{
+      h+=`<tr>
+        <td class="no">${(startNo||1)+i}</td>
+        <td>${row.jamaah_nama||''}</td>
+        <td>${row.jamaah_kk||''}</td>
+        <td class="tt"></td>
+        <td class="st">H &nbsp; I &nbsp; S &nbsp; T</td>
+      </tr>`;
+    });
+    // Pad: minimal 10 baris kosong untuk jaga tampilan rapi
+    const padTo=Math.max(rows.length+5, Math.ceil(rows.length/5)*5+5);
+    for(let i=rows.length;i<padTo;i++){
+      h+=`<tr><td class="no">${(startNo||1)+i}</td><td></td><td></td><td class="tt"></td><td class="st">H &nbsp; I &nbsp; S &nbsp; T</td></tr>`;
+    }
+    h+=`</tbody></table>`;
+    return h;
   }
-  html+=`</tbody></table>
-    <div class="tt-foot">
-      <div><div class="area"></div>Pencatat</div>
-      <div><div class="area"></div>Pengurus</div>
-    </div>`;
-  _bukaCetakKegiatan(html,'Daftar Hadir - '+(k.acara_nama||''));
+
+  let body=`<h1>DAFTAR HADIR ${(k.acara_nama||'').toUpperCase()}</h1>
+    <div class="sub">${tgl}${k.waktu?' · '+k.waktu.substring(0,5):''}${k.lokasi?' · '+k.lokasi:''}<br>Kelompok: ${k.kelompok||'Desa Perwira'} · Total: ${list.length} peserta wajib</div>`;
+
+  if(perlu_pisah){
+    // Pisah L dan P, masing-masing di section sendiri
+    body+=`<div class="info-pisah">📋 Daftar dipisah berdasarkan jenis kelamin (Laki-laki: ${grpL.length} · Perempuan: ${grpP.length}${grpX.length?' · Lainnya: '+grpX.length:''})</div>`;
+    body+=buildTabel('👨 LAKI-LAKI ('+grpL.length+' orang)', grpL, 1);
+    body+=`<div class="break"></div>`;
+    body+=buildTabel('👩 PEREMPUAN ('+grpP.length+' orang)', grpP, 1);
+    if(grpX.length){
+      body+=`<div class="break"></div>`;
+      body+=buildTabel('❓ JENIS KELAMIN BELUM DISET ('+grpX.length+' orang)', grpX, 1);
+    }
+  } else {
+    // Gabung 1 tabel
+    body+=buildTabel('', list, 1);
+  }
+  body+=`<div class="tt-foot">
+    <div><div class="area"></div>Pencatat</div>
+    <div><div class="area"></div>Pengurus</div>
+  </div>`;
+  _bukaCetakKegiatan(body,'Daftar Hadir - '+(k.acara_nama||''));
 }
 
 // ============================================
