@@ -344,7 +344,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
     </div>
 
     <!-- Generate Card -->
-    <div style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;">
+    <div id="sensus-generate-card" style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;">
       <div style="font-size:12px;opacity:0.9;margin-bottom:4px;">📋 LAPORAN SENSUS CACAH JIWA</div>
       <div id="sensus-period-label" style="font-size:20px;font-weight:800;margin-bottom:6px;">Periode: —</div>
       <div id="sensus-scope-label" style="font-size:11px;opacity:0.9;margin-bottom:8px;"></div>
@@ -1043,6 +1043,18 @@ function applyRoleRestrictions(){
     // Sembunyikan tombol "Tambah Jamaah Baru"
     const btnTambah=document.querySelector('button[onclick="bukaModalTambah()"]');
     if(btnTambah) btnTambah.style.display='none';
+    // Sembunyikan generate sensus card (whole card with button)
+    const cardGen=document.getElementById('sensus-generate-card');
+    if(cardGen) cardGen.style.display='none';
+    // Sembunyikan dropdown selector kelompok untuk generate (tetap bisa pilih scope rekap?)
+    // Note: selector kelompok di sensus untuk pilih scope generate, tidak relevan untuk viewer
+    const sensusKelSel=document.getElementById('sensus-kelompok-selector');
+    if(sensusKelSel) sensusKelSel.style.display='none';
+    // Tampilkan notice di tab sensus
+    const sensusNotice=document.getElementById('sensus-scope-notice');
+    if(sensusNotice){
+      sensusNotice.innerHTML=`<div class="scope-notice" style="background:var(--blue-light);border-left-color:var(--blue);color:#1e40af;">👁️ <b>Akses View Only</b> — Anda hanya bisa <b>melihat & mencetak laporan</b> yang sudah dibuat pengurus. Generate laporan sensus baru dilakukan oleh pengurus kelompok / desa.</div>`;
+    }
   }
 }
 
@@ -1747,7 +1759,7 @@ function renderSensus(){
       <div class="sensus-card-actions">
         <button class="btn-sensus primary" onclick="lihatLaporanSensus(${l.id})">👁️ Lihat</button>
         <button class="btn-sensus success" onclick="cetakLaporanSensus(${l.id})">🖨️ Cetak</button>
-        <button class="btn-sensus danger" onclick="hapusLaporanSensus(${l.id},'${(l.periode_label+' '+scopeLabel).replace(/'/g,'')}')">🗑️</button>
+        ${canEdit()?`<button class="btn-sensus danger" onclick="hapusLaporanSensus(${l.id},'${(l.periode_label+' '+scopeLabel).replace(/'/g,'')}')">🗑️</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1934,6 +1946,7 @@ function buildHtmlLaporanSensus(stats,periode_label,kelompokFilter){
 
 // ===== GENERATE LAPORAN =====
 async function generateLaporanSensus(){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
   const btn=document.getElementById('btn-generate-sensus');
   if(btn){btn.disabled=true;btn.textContent='⏳ Memproses...';}
   try{
@@ -2118,6 +2131,7 @@ async function cetakLaporanSensus(id){
 }
 
 async function hapusLaporanSensus(id,label){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
   if(!confirm('Hapus laporan '+label+'?\n\nLaporan akan dihapus permanen dari database.')) return;
   const {error}=await sb.from('ubnb_sensus_bulanan').delete().eq('id',id);
   if(error){toast('Gagal hapus: '+error.message,true);return;}
