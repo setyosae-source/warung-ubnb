@@ -1351,22 +1351,12 @@ function toast(m,e){const t=document.getElementById('toast-el')||document.getEle
 function toggleSidebar(){const s=document.getElementById('sidebar');const o=document.getElementById('sidebar-overlay');if(s)s.classList.toggle('open');if(o)o.classList.toggle('open');}
 function closeSidebar(){const s=document.getElementById('sidebar');const o=document.getElementById('sidebar-overlay');if(s)s.classList.remove('open');if(o)o.classList.remove('open');}
 function openModal(id){
-  document.getElementById(id).classList.add('open');
-  // Push ke history HP agar back button menutup modal
-  if(history.state?.modal !== id){
-    history.pushState({modal:id, page:history.state?.page}, '', location.href);
-  }
-  // Track modal terbuka
+  const el=document.getElementById(id);
+  if(!el){console.warn('openModal: elemen tidak ditemukan:',id);return;}
+  el.classList.add('open');
   if(!_openModals.includes(id)) _openModals.push(id);
-  // Ambil snapshot nilai field — dilakukan setelah modal benar-benar terisi
-  // (pakai requestAnimationFrame agar form sudah diisi oleh openModalXxx())
   requestAnimationFrame(()=>{
     _modalSnapshots[id] = _snapModal(id);
-    // Untuk edit jual/beli, snapshot items juga
-    if(id==='modal-edit-jual')
-      _modalSnapshots[id]._items = JSON.stringify((_editJualItems||[]).map(i=>({id:i.id,qty:i.qty})));
-    if(id==='modal-edit-beli')
-      _modalSnapshots[id]._items = JSON.stringify((_editBeliItems||[]).map(i=>({id:i.id,qty:i.qty})));
   });
 }
 function closeModal(id, force=false){
@@ -1381,7 +1371,7 @@ function closeModal(id, force=false){
     html5Scanner.stop().catch(()=>{}).finally(()=>{html5Scanner=null;scannerActive=false;document.getElementById('scanner-reader').innerHTML='';});
   }
   // Pop history jika state ini adalah modal yang baru ditutup
-  if(history.state?.modal===id) history.back();
+  // history.back removed
 }
 
 /* SEARCHABLE DROPDOWN */
@@ -1582,66 +1572,10 @@ document.addEventListener('click', e=>{
 });
 
 // Tombol Back HP
-window.addEventListener('popstate', e=>{
-  if(!CU) return; // Belum login, biarkan browser handle
-  // Jika ada modal terbuka, tutup modal dulu (bukan navigasi halaman)
-  if(_openModals.length > 0){
-    const topModal = _openModals[_openModals.length - 1];
-    const el = document.getElementById(topModal);
-    if(el && el.classList.contains('open')){
-      // Cek dirty
-      if(_isDirty(topModal)){
-        if(!confirm('Ada perubahan yang belum disimpan.\nTutup dan buang perubahan?')){
-          // Batalkan back - push state lagi
-          history.pushState({modal:topModal, page:history.state?.page}, '', location.href);
-          return;
-        }
-      }
-      el.classList.remove('open');
-      _openModals = _openModals.filter(m => m !== topModal);
-      if(topModal === 'modal-scanner' && scannerActive && html5Scanner){
-        html5Scanner.stop().catch(()=>{}).finally(()=>{html5Scanner=null;scannerActive=false;document.getElementById('scanner-reader').innerHTML='';});
-      }
-      return;
-    }
-  }
-  const page = e.state?.page;
-  if(page){
-    const btn=Array.from(document.querySelectorAll(".nav-item")).find(b=>b.onclick&&String(b.onclick).includes("'"+page+"'"));
-    if(btn){
-      // Navigate tanpa push history lagi
-      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-      document.getElementById('page-'+page).classList.add('active');
-      btn.classList.add('active');
-      localStorage.setItem('kasir_page', page);
-      closeSidebar();
-      if(page==='laporan')renderLaporan();
-      if(page==='riwayat'){setDefaultDates('rj');renderRiwayatJual();}
-      if(page==='riwayat-beli'){setDefaultDates('rb');renderRiwayatBeli();}
-      if(page==='opname')renderOpnameRiwayat();
-    }
-  } else {
-    // Sudah di awal history, push initial state supaya tidak keluar
-    const currentPage = localStorage.getItem('kasir_page') || 'pos';
-    history.pushState({page: currentPage}, '', '#'+currentPage);
-  }
-});
-window.addEventListener('load',async()=>{
-  const saved=UBNBAuth.loadSession('wu_kasir'); // otomatis cek expiry 8 jam
-  if(!saved)return;
-  // Verifikasi role dari server
-  const cu=await UBNBAuth.verifySession(sb,'wu_kasir');
-  if(!cu){UBNBAuth.clearAllSessions();return;}
-  loginOK(cu);
-  UBNBAuth.startExpiryTimer('wu_kasir',()=>{
-    CU=null;KR=[];
-    document.body.classList.remove('pemilik');
-    UBNBAuth.clearAllSessions();
-    document.getElementById('app').style.display='none';
-    document.getElementById('login-wrap').style.display='flex';
-  });
-});
+// popstate handler removed (kasir tidak pakai history navigation)
+
+// window load handler removed (handled by kasir DOMContentLoaded)
+
 
 async function loadAll(){
   // Kasir: load hanya data yang dibutuhkan 3 modul
