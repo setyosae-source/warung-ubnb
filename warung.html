@@ -4097,6 +4097,7 @@ function tampilStruk(tx){
   const d=new Date(tx.tgl_transaksi||tx.waktu||new Date());
   const tgl=d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const jam=fJ(d);const no='TX'+String(tx.id||'').slice(-6).padStart(6,'0');
+  window._strukNo = 'struk-trx-' + (tx.id||Date.now()) + '.png';
   // === Identifikasi tipe pelanggan ===
   let pelLabel='', pelInfoBawah='', pelInfoBawahCap='';
   if(tx.anggota_id){
@@ -4166,6 +4167,7 @@ function tampilStrukPPOB(id){
   const tgl = d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const jam = p.created_at ? fJ(new Date(p.created_at)) : '';
   const no = p.tid || ('PPOB-' + String(p.id||'').slice(-6).padStart(6,'0'));
+  window._strukNo = 'struk-ppob-' + (p.id||no) + '.png';
   
   // === Identifikasi tipe pelanggan (mirror dari struk warung) ===
   let pelLabel='', pelInfoBawah='', pelLabelCap='', pelInfoBawahCap='';
@@ -4197,7 +4199,25 @@ function tampilStrukPPOB(id){
     `<p>Operator: ${p.operator || CU?.username || '-'}</p>${pelLabel}</div>${pelInfoBawah}<hr class="sdiv">`;
   // Detail produk
   h += `<div class="srow" style="font-weight:600">${p.produk||'-'}</div>`;
-  if(p.catatan) h += `<div class="srow" style="color:#888;font-size:11px;padding-left:10px">${p.catatan}</div>`;
+  if(p.catatan){
+    const tokenMatch = p.catatan.match(/([0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4})/);
+    if(tokenMatch){
+      const catatanBersih = p.catatan.replace(tokenMatch[0],'').replace(/Token[:\s]*/i,'').replace(/\|\s*$/,'').replace(/^\s*\|/,'').trim();
+      if(catatanBersih) h += `<div class="srow" style="color:#888;font-size:11px;padding-left:10px">${catatanBersih}</div>`;
+      h += `<div style="margin:10px 0;padding:10px;background:#f0fdf4;border-radius:8px;text-align:center">`;
+      h += `<div style="font-size:10px;color:#666;margin-bottom:4px;font-weight:600">TOKEN LISTRIK</div>`;
+      h += `<div style="font-size:22px;font-weight:900;letter-spacing:2px;color:#14532d;font-family:monospace">${tokenMatch[1]}</div>`;
+      h += `</div>`;
+    } else {
+      // Tampilkan catatan per baris (split by |)
+      p.catatan.split('|').forEach(baris=>{
+        const b=baris.trim(); if(!b)return;
+        const [k,...vs]=b.split(':'); const v=vs.join(':').trim();
+        if(v) h+=`<div class="srow" style="font-size:11px;padding:1px 0"><span style="color:#999;min-width:90px">${k.trim()}</span><span style="color:#444;font-weight:500">${v}</span></div>`;
+        else h+=`<div class="srow" style="color:#888;font-size:11px">${b}</div>`;
+      });
+    }
+  }
   h += `<hr class="sdiv">`;
   // Total
   h += `<div class="srow bold"><span>TOTAL</span><span>${fN(p.harga_jual)}</span></div>`;
@@ -4218,7 +4238,25 @@ function tampilStrukPPOB(id){
     `<div class="sc-sub">${jam ? jam+' | ' : ''}No: ${no} | Op: ${p.operator || CU?.username || '-'}</div>`+
     `${pelLabelCap}${pelInfoBawahCap}<hr class="sc-divider">`;
   cap += `<div class="sc-row in">${p.produk||'-'}</div>`;
-  if(p.catatan) cap += `<div class="sc-row id">${p.catatan}</div>`;
+  if(p.catatan){
+    const tokenMatchCap = p.catatan.match(/([0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4})/);
+    if(tokenMatchCap){
+      const catatanBersihCap = p.catatan.replace(tokenMatchCap[0],'').replace(/Token[:\s]*/i,'').replace(/\|\s*$/,'').replace(/^\s*\|/,'').trim();
+      if(catatanBersihCap) cap += `<div class="sc-row id">${catatanBersihCap}</div>`;
+      cap += `<div style="margin:12px 0;padding:14px 10px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;text-align:center">`;
+      cap += `<div style="font-size:10px;color:#666;margin-bottom:8px;font-weight:700;letter-spacing:1px">TOKEN LISTRIK</div>`;
+      cap += `<div style="font-size:28px;font-weight:900;letter-spacing:3px;color:#14532d;font-family:monospace;line-height:1.4">${tokenMatchCap[1]}</div>`;
+      cap += `</div>`;
+    } else {
+      // Tampilkan catatan per baris
+      p.catatan.split('|').forEach(baris=>{
+        const b=baris.trim(); if(!b)return;
+        const [k,...vs]=b.split(':'); const v=vs.join(':').trim();
+        if(v) cap+=`<div class="sc-row id"><span style="color:#999;font-size:10px;min-width:80px">${k.trim()}</span><span style="color:#444;font-weight:600;font-size:11px">${v}</span></div>`;
+        else cap+=`<div class="sc-row id">${b}</div>`;
+      });
+    }
+  }
   cap += `<hr class="sc-divider"><div class="sc-row tot"><span>TOTAL</span><span>Rp ${fN(p.harga_jual)}</span></div>`;
   if(p.status_bayar === 'lunas'){
     cap += `<div class="sc-row br"><span>Status</span><span style="color:#15803d;font-weight:600">✓ LUNAS</span></div>`;
@@ -4236,6 +4274,7 @@ function tampilStrukPPOB(id){
 
 async function simpanGambar(){
   const btn=document.getElementById('btn-simpan-gambar');btn.textContent='⏳ Memproses...';btn.disabled=true;
+  document.getElementById('struk-dl').download = window._strukNo || ('struk-ubnb-' + Date.now() + '.png');
   try{const c=await html2canvas(document.getElementById('struk-capture'),{scale:3,backgroundColor:'#ffffff',useCORS:true,logging:false});const u=c.toDataURL('image/png');document.getElementById('struk-img').src=u;document.getElementById('struk-dl').href=u;document.getElementById('img-result').style.display='block';btn.style.display='none';toast('Gambar siap!');}
   catch(e){toast('Gagal buat gambar',true);btn.textContent='📸 Simpan Gambar';btn.disabled=false;}
 }
