@@ -1127,50 +1127,80 @@ async function lihatLaporanSensus(id){
 // Helper: buka jendela baru khusus cetak (lebih reliable di mobile)
 function _bukaCetakSensus(htmlContent, title){
   const cssCetak = `
+    <style id="orient-style">@page{size:A4 landscape;margin:6mm;}</style>
     <style>
       *{box-sizing:border-box;}
-      html,body{margin:0;padding:0;background:white;font-family:Calibri,Arial,sans-serif;color:#000;}
-      .lap-sensus{padding:6mm;font-size:11px;}
-      .lap-sensus h1{font-size:14px;text-align:center;margin:0;font-weight:bold;}
-      .lap-sub{text-align:center;font-size:11px;margin:2px 0;}
-      .lap-period{text-align:center;font-size:11px;margin:2px 0 10px;font-style:italic;}
-      table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9.5px;page-break-inside:avoid;}
-      th,td{border:1px solid #000;padding:3px 4px;text-align:center;}
-      th{background:#fef3c7;font-weight:bold;font-size:9px;}
+      html,body{margin:0;padding:0;background:#f3f4f6;font-family:Calibri,Arial,sans-serif;color:#000;}
+      .page-wrap{background:white;max-width:1100px;margin:10px auto;padding:8mm;box-shadow:0 0 8px rgba(0,0,0,0.15);}
+      .lap-sensus{font-size:13px;}
+      .lap-sensus h1{font-size:18px;text-align:center;margin:0 0 4px;font-weight:bold;}
+      .lap-sub{text-align:center;font-size:13px;margin:2px 0;}
+      .lap-period{text-align:center;font-size:13px;margin:2px 0 14px;font-style:italic;}
+      table{width:100%;border-collapse:collapse;margin:10px 0;font-size:11.5px;page-break-inside:avoid;}
+      th,td{border:1px solid #000;padding:5px 5px;text-align:center;}
+      th{background:#fef3c7;font-weight:bold;font-size:11px;}
       .ts-total{background:#fde68a;font-weight:bold;}
       .ts-percent{background:#fef9c3;font-style:italic;}
-      .ts-label{text-align:left;font-weight:bold;}
-      .lap-foot{display:flex;justify-content:space-between;margin-top:14px;font-size:10px;}
-      .lap-keterangan{font-size:9px;line-height:1.5;}
-      .lap-keterangan b{display:inline-block;min-width:160px;}
-      .lap-signer{text-align:center;}
-      .lap-signer .signer-name{margin-top:50px;font-weight:bold;text-decoration:underline;}
-      .warn-incomplete{background:#fef3c7;border-left:3px solid #f59e0b;padding:6px 10px;font-size:10px;margin:8px 0;color:#78350f;}
-      @page{size:A4 landscape;margin:8mm;}
+      .ts-label{text-align:left;font-weight:bold;padding-left:8px;}
+      .lap-foot{display:flex;justify-content:space-between;margin-top:18px;font-size:12px;gap:16px;}
+      .lap-keterangan{font-size:11px;line-height:1.6;}
+      .lap-keterangan b{display:inline-block;min-width:170px;}
+      .lap-signer{text-align:center;min-width:200px;}
+      .lap-signer .signer-name{margin-top:55px;font-weight:bold;text-decoration:underline;}
+      .warn-incomplete{background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 12px;font-size:11px;margin:10px 0;color:#78350f;}
       @media print{
+        html,body{background:white !important;}
         .no-print{display:none !important;}
+        .page-wrap{box-shadow:none !important;margin:0 !important;padding:0 !important;max-width:none !important;}
         body{margin:0;}
       }
-      .toolbar{position:sticky;top:0;background:#1e40af;color:white;padding:10px 14px;display:flex;gap:10px;justify-content:center;z-index:99;}
-      .toolbar button{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+      .toolbar{position:sticky;top:0;background:#1e40af;color:white;padding:10px 14px;display:flex;gap:8px;justify-content:center;align-items:center;z-index:99;flex-wrap:wrap;}
+      .toolbar button{padding:8px 16px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+      .toolbar .label{font-size:12px;opacity:0.9;}
       .btn-cetak{background:#10b981;color:white;}
       .btn-tutup{background:#6b7280;color:white;}
+      .btn-orient{background:#f59e0b;color:white;}
+      .btn-zoom{background:rgba(255,255,255,0.25);color:white;width:36px;font-size:16px !important;padding:6px !important;}
     </style>
   `;
-  const w = window.open('', '_blank', 'width=900,height=700');
+  const w = window.open('', '_blank', 'width=1100,height=800');
   if(!w){
     toast('Browser memblokir popup. Mohon izinkan popup untuk fitur cetak.', true);
     return;
   }
   w.document.open();
-  w.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>${title}</title>${cssCetak}</head><body>
+  w.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=1100,initial-scale=1"><title>${title}</title>${cssCetak}</head><body>
     <div class="toolbar no-print">
-      <button class="btn-cetak" onclick="window.print()">🖨️ Cetak</button>
+      <button class="btn-cetak" onclick="window.print()">🖨️ Cetak / Save PDF</button>
+      <button class="btn-orient" onclick="toggleOrient()">📐 <span id="lbl-orient">Landscape</span></button>
+      <button class="btn-zoom" onclick="setZoom(-1)" title="Perkecil">−</button>
+      <span id="zoom-val" class="label">100%</span>
+      <button class="btn-zoom" onclick="setZoom(1)" title="Perbesar">+</button>
       <button class="btn-tutup" onclick="window.close()">✕ Tutup</button>
     </div>
-    ${htmlContent}
+    <div class="page-wrap" id="page-wrap">
+      ${htmlContent}
+    </div>
     <script>
-      // Auto trigger print di desktop, di mobile user klik tombol manual
+      var orientLandscape = true;
+      var zoomPct = 100;
+      function toggleOrient(){
+        orientLandscape = !orientLandscape;
+        var s = document.getElementById('orient-style');
+        s.innerHTML = orientLandscape 
+          ? '@page{size:A4 landscape;margin:6mm;}'
+          : '@page{size:A4 portrait;margin:8mm;}';
+        document.getElementById('lbl-orient').textContent = orientLandscape ? 'Landscape' : 'Portrait';
+        // Resize wrapper sesuai orientation
+        var w = document.getElementById('page-wrap');
+        w.style.maxWidth = orientLandscape ? '1100px' : '780px';
+      }
+      function setZoom(d){
+        zoomPct = Math.max(60, Math.min(200, zoomPct + d*10));
+        document.getElementById('zoom-val').textContent = zoomPct + '%';
+        var lap = document.querySelector('.lap-sensus');
+        if(lap){ lap.style.fontSize = (13 * zoomPct/100) + 'px'; }
+      }
       setTimeout(function(){
         var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
         if(!isMobile){ window.print(); }
