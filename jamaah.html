@@ -720,10 +720,30 @@ function hitungSensus(refDate){
     klas[k.singkat]._tidak_lengkap = 0;
   });
 
+  // FILTER: Hanya jamaah dengan status_sambung = 'Tetap' yang masuk laporan
+  // 'Pindah Sambung', 'Pindah Sementara', 'Meninggal Dunia', NULL → dikecualikan
+  const aktif = aJamaah.filter(j => j.status_sambung === 'Tetap');
+
   let totalTidakLengkap = 0;
   let totalGenderKosong = 0;
-
+  // Breakdown jamaah yg dikecualikan (untuk info di warning)
+  const dikecualikan = {
+    'Pindah Sambung': 0,
+    'Pindah Sementara': 0,
+    'Meninggal Dunia': 0,
+    'Tidak teridentifikasi': 0, // NULL atau lainnya
+  };
   aJamaah.forEach(j=>{
+    if(j.status_sambung === 'Tetap') return;
+    const ss = j.status_sambung;
+    if(ss === 'Pindah Sambung' || ss === 'Pindah Sementara' || ss === 'Meninggal Dunia'){
+      dikecualikan[ss]++;
+    } else {
+      dikecualikan['Tidak teridentifikasi']++;
+    }
+  });
+
+  aktif.forEach(j=>{
     const kelKode = j.kelompok_nama || '';
     const slot = klas[kelKode];
     if(!slot) return; // skip kalau tidak ada kelompok valid
@@ -764,8 +784,10 @@ function hitungSensus(refDate){
 
   return {
     klasifikasi: klas,
-    total_jiwa: aJamaah.length,
-    total_kk: new Set(aJamaah.map(j=>j.nama_kk).filter(Boolean)).size,
+    total_jiwa: aktif.length,
+    total_kk: new Set(aktif.map(j=>j.nama_kk).filter(Boolean)).size,
+    total_db: aJamaah.length,
+    dikecualikan,
     tidak_lengkap: totalTidakLengkap,
     gender_kosong: totalGenderKosong,
   };
@@ -781,11 +803,19 @@ function renderSensusPreview(){
   const stats = hitungSensus(now);
   const el = document.getElementById('sensus-preview-stats');
   if(el){
+    const totalDikecualikan = (stats.dikecualikan['Pindah Sambung']||0)
+      + (stats.dikecualikan['Pindah Sementara']||0)
+      + (stats.dikecualikan['Meninggal Dunia']||0)
+      + (stats.dikecualikan['Tidak teridentifikasi']||0);
     let warn = '';
     if(stats.tidak_lengkap > 0){
-      warn = ` · ⚠️ ${stats.tidak_lengkap} data tidak lengkap`;
+      warn += ` · ⚠️ ${stats.tidak_lengkap} data belum lengkap`;
     }
-    el.innerHTML = `📊 Total: <b>${stats.total_jiwa} jiwa</b> · <b>${stats.total_kk} KK</b>${warn}`;
+    let info = '';
+    if(totalDikecualikan > 0){
+      info = `<div style="font-size:10px;opacity:0.85;margin-top:4px;">📌 Hanya jamaah <b>Tetap</b> yang dihitung. Dikecualikan: ${totalDikecualikan} record (${stats.dikecualikan['Pindah Sambung']||0} pindah sambung, ${stats.dikecualikan['Pindah Sementara']||0} pindah sementara, ${stats.dikecualikan['Meninggal Dunia']||0} meninggal, ${stats.dikecualikan['Tidak teridentifikasi']||0} tidak teridentifikasi)</div>`;
+    }
+    el.innerHTML = `📊 Total: <b>${stats.total_jiwa} jiwa</b> · <b>${stats.total_kk} KK</b>${warn}${info}`;
   }
 }
 
@@ -985,7 +1015,8 @@ function buildHtmlLaporanSensus(stats, periode_label){
   </tr>`;
   tbl2 += `</tbody></table>`;
 
-  // Warning kalau ada data tidak lengkap
+  // Note: sesuai keputusan, info status_sambung TIDAK ditampilkan di laporan cetak.
+  // Hanya warning data tidak lengkap (tgl_lahir/JK kosong) yang ditampilkan di laporan.
   let warning = '';
   if(stats.tidak_lengkap > 0){
     warning = `<div class="warn-incomplete">⚠️ <b>${stats.tidak_lengkap} data tidak lengkap</b> (tanggal lahir / jenis kelamin kosong) — tidak masuk klasifikasi usia. Mohon lengkapi data untuk akurasi laporan.</div>`;
@@ -1050,7 +1081,13 @@ async function generateLaporanSensus(){
       total_jiwa: stats.total_jiwa,
       total_kk: stats.total_kk,
       data_klasifikasi: stats.klasifikasi,
-      data_info: { tidak_lengkap: stats.tidak_lengkap, gender_kosong: stats.gender_kosong },
+      data_info: { 
+        tidak_lengkap: stats.tidak_lengkap, 
+        gender_kosong: stats.gender_kosong,
+        total_db: stats.total_db,
+        dikecualikan: stats.dikecualikan,
+        filter: 'status_sambung = Tetap'
+      },
       html_content,
     };
 
