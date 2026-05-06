@@ -350,6 +350,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 .main-tab.active{color:var(--green-dark,#15803d);border-bottom-color:var(--green);font-weight:700;}
 .main-tab.tab-beli.active{color:#92400e;border-bottom-color:var(--amber,#f59e0b);}
 .main-tab.tab-ppob.active{color:var(--blue);border-bottom-color:var(--blue);}
+.main-tab.tab-pesan.active{color:#15803d;border-bottom-color:#25D366;}
 .tab-icon{font-size:20px;line-height:1;}
 .tab-lbl{font-size:11px;}
 .tab-content{display:none;flex:1;flex-direction:column;min-height:0;overflow:hidden;}
@@ -394,6 +395,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <button class="main-tab active" id="mtab-jual" onclick="showMainTab('jual')"><span class="tab-icon">🛒</span><span class="tab-lbl">Jual</span></button>
     <button class="main-tab tab-beli" id="mtab-beli" onclick="showMainTab('beli')"><span class="tab-icon">📦</span><span class="tab-lbl">Beli</span></button>
     <button class="main-tab tab-ppob" id="mtab-ppob" onclick="showMainTab('ppob')"><span class="tab-icon">⚡</span><span class="tab-lbl">PPOB</span></button>
+    <button class="main-tab tab-pesan" id="mtab-pesan" onclick="showMainTab('pesan')" style="position:relative"><span class="tab-icon">📱</span><span class="tab-lbl">Pesan</span><span id="kasir-pesan-badge" style="position:absolute;top:4px;right:8px;background:var(--red,#ef4444);color:white;border-radius:99px;min-width:18px;height:18px;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 5px">0</span></button>
   </div>
 
   <div class="tab-content active" id="tc-jual">
@@ -684,7 +686,135 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 </div>
 
 
+
+  <!-- TAB CONTENT: PESAN (Pesanan WA) -->
+  <div class="tab-content" id="tc-pesan">
+    <div class="sub-tabs">
+      <button class="sub-tab active" id="stab-pesan-input" onclick="showSubTab('pesan','input');kasirInitInputWA()" style="border-bottom-color:#25D366">📱 Input WA</button>
+      <button class="sub-tab" id="stab-pesan-pending" onclick="showSubTab('pesan','pending');kasirLoadPesanan()" style="border-bottom-color:#25D366">📋 Pending <span id="kasir-pending-badge" style="background:var(--red,#ef4444);color:white;border-radius:99px;min-width:18px;height:18px;font-size:10px;font-weight:800;display:none;padding:1px 6px;margin-left:4px">0</span></button>
+      <button class="sub-tab" id="stab-pesan-riwayat" onclick="showSubTab('pesan','riwayat');kasirLoadPesanan()" style="border-bottom-color:#25D366">📜 Riwayat</button>
+    </div>
+
+    <!-- SUB: INPUT WA -->
+    <div class="sub-content active" id="sc-pesan-input">
+      <div style="padding:12px;overflow-y:auto;height:calc(100vh - 140px)">
+        <div class="card" style="margin-bottom:10px">
+          <div style="font-weight:700;font-size:14px;margin-bottom:10px;color:#15803d">📱 Input Pesanan dari WhatsApp</div>
+
+          <div class="irow"><label>Pemesan</label>
+            <div style="flex:1;position:relative">
+              <input type="text" id="kwa-pemesan-search" placeholder="Cari nama pemesan..." oninput="kasirCariPemesanWA(this.value)" autocomplete="off" style="width:100%;height:36px;border:1.5px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;outline:none;font-family:inherit"/>
+              <div id="kwa-pemesan-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:6px;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.12);margin-top:2px"></div>
+              <div id="kwa-pemesan-selected" style="margin-top:6px;font-size:12px"></div>
+            </div>
+          </div>
+
+          <div class="irow"><label>Pengantar (Kurir)</label>
+            <select id="kwa-pengantar" style="flex:1;height:36px;border:1.5px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px"></select>
+          </div>
+
+          <div class="irow"><label>Tanggal Pesan</label>
+            <input type="date" id="kwa-tgl-pesan" style="flex:1;height:36px;border:1.5px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px"/>
+          </div>
+
+          <div style="margin-top:10px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Paste Teks WA:</label>
+            <textarea id="kwa-text-input" rows="6" placeholder="Contoh:&#10;• telor 2kg&#10;• beras 1&#10;• Indomie ayam bawang 10&#10;• royco ayam 2 renceng&#10;• ladaku 1 renceng&#10;• Sunlight 2" style="width:100%;border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;resize:vertical"></textarea>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn primary" style="flex:1;height:38px" onclick="kasirParseWAText()">🔍 Parse Pesanan</button>
+            <button class="btn" style="height:38px" onclick="kasirResetFormWA()">🔄 Reset</button>
+          </div>
+        </div>
+
+        <!-- PREVIEW PARSED ITEMS -->
+        <div id="kwa-preview-section" class="card" style="display:none">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#15803d">✏️ Preview Item (editable):</div>
+          <div id="kwa-preview-list"></div>
+          <button class="btn sm" style="margin-top:6px;width:100%" onclick="kasirTambahItemKosongWA()">+ Tambah Item Manual</button>
+          <div style="margin-top:14px;display:flex;gap:8px">
+            <button class="btn primary" style="flex:1;height:42px;background:#25D366;border-color:#25D366" onclick="kasirSimpanPesananWA()">💾 Simpan sebagai Pesanan Baru</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB: PENDING (status='baru') -->
+    <div class="sub-content" id="sc-pesan-pending">
+      <div style="padding:12px;overflow-y:auto;height:calc(100vh - 140px)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:700;font-size:14px">📋 Pesanan Pending</div>
+          <button class="btn sm primary" onclick="kasirLoadPesanan()">🔄 Refresh</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <span style="font-size:12px;color:var(--text-muted)">Sumber:</span>
+          <select id="kasir-filter-sumber" onchange="kasirRenderPesanan()" style="height:30px;border:1.5px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px">
+            <option value="semua">Semua</option>
+            <option value="wa" selected>📱 WA</option>
+            <option value="web">🌐 Web</option>
+          </select>
+        </div>
+        <div id="kasir-pesanan-list-pending"></div>
+      </div>
+    </div>
+
+    <!-- SUB: RIWAYAT (semua) -->
+    <div class="sub-content" id="sc-pesan-riwayat">
+      <div style="padding:12px;overflow-y:auto;height:calc(100vh - 140px)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:700;font-size:14px">📜 Riwayat Pesanan</div>
+          <button class="btn sm primary" onclick="kasirLoadPesanan()">🔄 Refresh</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text-muted)">Status:</span>
+          <select id="kasir-filter-status" onchange="kasirRenderPesanan()" style="height:30px;border:1.5px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px">
+            <option value="semua">Semua</option>
+            <option value="baru">Baru</option>
+            <option value="selesai" selected>Selesai</option>
+            <option value="dibatalkan">Batal</option>
+          </select>
+          <span style="font-size:12px;color:var(--text-muted)">Sumber:</span>
+          <select id="kasir-filter-sumber-rwt" onchange="kasirRenderPesanan()" style="height:30px;border:1.5px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px">
+            <option value="semua">Semua</option>
+            <option value="wa">📱 WA</option>
+            <option value="web">🌐 Web</option>
+          </select>
+        </div>
+        <div id="kasir-pesanan-list-riwayat"></div>
+      </div>
+    </div>
+  </div>
+
+
 <!-- MODALS (di luar app div, agar klik modal berfungsi) -->
+
+<!-- MODAL DETAIL PESANAN (kasir) -->
+<div class="modal-overlay" id="kasir-modal-pesanan-detail">
+  <div class="modal" style="background:white;max-width:480px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700">📬 Detail Pesanan</div>
+      <button class="btn sm" onclick="closeModal('kasir-modal-pesanan-detail')">✕</button>
+    </div>
+    <div id="kasir-pesanan-detail-content"></div>
+  </div>
+</div>
+
+<!-- MODAL ALIAS WA (kasir) -->
+<div class="modal-overlay" id="kasir-modal-alias-wa">
+  <div class="modal" style="background:white;max-width:460px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:0;max-height:85vh;overflow-y:auto">
+    <div id="kasir-modal-alias-wa-content"></div>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH BARANG BARU FROM WA (kasir) -->
+<div class="modal-overlay" id="kasir-modal-barang-baru-wa">
+  <div class="modal" style="background:white;max-width:460px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:0;max-height:85vh;overflow-y:auto">
+    <div id="kasir-modal-barang-baru-wa-content"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="pos-modal-edit">
   <div class="modal" style="background:white;max-width:380px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px 14px 20px;max-height:90vh;overflow-y:auto">
     <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
@@ -5299,6 +5429,572 @@ async function initPOSBeli(){
   posbRenderCart();
 }
 
+
+
+
+/* ============ KASIR PESAN WA - INPUT & PARSER ============ */
+let kasirWAItems=[];                  // parsed items
+let kasirWAPemesan=null;
+let kasirWAUsers=[];
+let kasirWAAliasCache=[];
+let kasirAllPesanan=[];
+let kasirInitedInputWA=false;
+
+const kasirStatusPesanan={
+  baru:{label:'🔴 Baru',color:'var(--red,#ef4444)'},
+  dikonfirmasi:{label:'🟡 Dikonfirmasi',color:'var(--amber,#f59e0b)'},
+  diproses:{label:'🔵 Diproses',color:'var(--blue,#3b82f6)'},
+  selesai:{label:'✅ Selesai',color:'var(--green,#16a34a)'},
+  dibatalkan:{label:'❌ Dibatalkan',color:'#999'}
+};
+
+async function kasirInitInputWA(){
+  if(!kasirInitedInputWA){
+    await kasirLoadUsers();
+    await kasirLoadAlias();
+    // Pastikan jamaah/anggota loaded
+    if(typeof aSahamAnggota==='undefined'||!aSahamAnggota.length){if(typeof lAnggota==='function')await lAnggota();}
+    if(typeof aJamaah==='undefined'||!aJamaah.length){if(typeof lJamaah==='function')await lJamaah();}
+    kasirInitedInputWA=true;
+  }
+  // Default tanggal
+  const tgl=document.getElementById('kwa-tgl-pesan');
+  if(tgl&&!tgl.value)tgl.value=new Date().toISOString().slice(0,10);
+}
+
+async function kasirLoadUsers(){
+  const{data}=await sb.from('users').select('id,username,nama').order('username');
+  kasirWAUsers=data||[];
+  const sel=document.getElementById('kwa-pengantar');
+  if(sel){
+    sel.innerHTML='<option value="">-- Pilih kurir --</option>'+
+      kasirWAUsers.map(u=>`<option value="${u.username}">${u.username}${u.nama?' ('+u.nama+')':''}</option>`).join('');
+    if(CU&&CU.username)sel.value=CU.username;
+  }
+}
+
+async function kasirLoadAlias(){
+  const{data}=await sb.from('warung_produk_alias').select('*');
+  kasirWAAliasCache=data||[];
+}
+
+function kasirResetFormWA(){
+  document.getElementById('kwa-text-input').value='';
+  document.getElementById('kwa-pemesan-search').value='';
+  document.getElementById('kwa-pemesan-selected').innerHTML='';
+  kasirWAPemesan=null;
+  kasirWAItems=[];
+  document.getElementById('kwa-preview-section').style.display='none';
+  document.getElementById('kwa-preview-list').innerHTML='';
+}
+
+function kasirCariPemesanWA(q){
+  const drop=document.getElementById('kwa-pemesan-dropdown');
+  if(!drop)return;
+  q=(q||'').trim().toLowerCase();
+  if(!q){drop.style.display='none';return;}
+  let html='';
+  const fa=(typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).filter(a=>(a.nama||'').toLowerCase().includes(q)).slice(0,5);
+  if(fa.length){
+    html+='<div style="padding:6px 10px;font-size:10px;font-weight:700;background:var(--bg);color:var(--text-muted);text-transform:uppercase">⭐ Anggota (Masuk SHU)</div>';
+    html+=fa.map(a=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border)" onclick='kasirSelPemesanWA(${JSON.stringify({label:a.nama,anggota_id:a.id,jamaah_did:null,sumber:"anggota",extra:a.no_anggota+" · "+(a.kelompok||"")}).replace(/'/g,"&apos;")})'><div style="font-weight:600">${a.nama}</div><div style="font-size:11px;color:var(--text-muted)">${a.no_anggota||""} · ${a.kelompok||""}</div></div>`).join('');
+  }
+  const fj=(typeof aJamaah!=='undefined'?aJamaah:[]).filter(j=>(j.nama||'').toLowerCase().includes(q)||(j.nama_kk||'').toLowerCase().includes(q)).slice(0,8);
+  if(fj.length){
+    html+='<div style="padding:6px 10px;font-size:10px;font-weight:700;background:var(--bg);color:var(--text-muted);text-transform:uppercase">👤 Jamaah Desa</div>';
+    html+=fj.map(j=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border)" onclick='kasirSelPemesanWA(${JSON.stringify({label:j.nama,anggota_id:null,jamaah_did:j.did,sumber:"jamaah",extra:(j.kelompok?"Kel."+j.kelompok+" · ":"")+(j.nama_kk?"KK: "+j.nama_kk:"")}).replace(/'/g,"&apos;")})'><div style="font-weight:600">${j.nama}</div><div style="font-size:11px;color:var(--text-muted)">${j.kelompok?"Kel."+j.kelompok+" · ":""}${j.nama_kk?"KK: "+j.nama_kk:""}</div></div>`).join('');
+  }
+  html+=`<div style="padding:8px 10px;cursor:pointer;border-top:2px solid var(--border)" onclick='kasirSelPemesanWA(${JSON.stringify({label:document.getElementById("kwa-pemesan-search").value,anggota_id:null,jamaah_did:null,sumber:"umum",extra:""}).replace(/'/g,"&apos;")})'><div style="font-weight:600">✏️ "${document.getElementById("kwa-pemesan-search").value}" (Umum / nama bebas)</div><div style="font-size:11px;color:var(--text-muted)">Tidak masuk SHU</div></div>`;
+  drop.innerHTML=html;
+  drop.style.display='block';
+}
+
+function kasirSelPemesanWA(obj){
+  kasirWAPemesan=obj;
+  document.getElementById('kwa-pemesan-search').value=obj.label;
+  document.getElementById('kwa-pemesan-dropdown').style.display='none';
+  const badge=obj.sumber==='anggota'?'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">⭐ Anggota</span>':obj.sumber==='jamaah'?'<span style="background:#e0e7ff;color:#4338ca;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">👤 Jamaah</span>':'<span style="background:#999;color:white;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">Umum</span>';
+  document.getElementById('kwa-pemesan-selected').innerHTML=badge+' '+obj.label+(obj.extra?' <span style="color:var(--text-muted);font-size:11px">('+obj.extra+')</span>':'');
+}
+
+/* PARSER (sama persis dengan warung.html) */
+function kasirParseWALine(line){
+  let t=line.trim().replace(/^[•\-\*\u2022\u00b7]+\s*/,'');
+  if(!t)return null;
+  const SATUAN_KATA=['kg','gr','gram','ml','liter','lt','pcs','pak','bks','bungkus','renceng','sachet','sct','botol','btl','kaleng','krat','dus','box','butir','biji','ekor','ikat','lusin','kodi','lembar','rim'];
+  const matches=[...t.matchAll(/(\d+(?:[.,]\d+)?)\s*([a-zA-Z]*)/g)];
+  if(!matches.length){return {teks_asli:line,nama:t,qty:1,satuan:'',_noQty:true};}
+  const m=matches[matches.length-1];
+  const qty=parseFloat(m[1].replace(',','.'))||1;
+  let satuan=(m[2]||'').toLowerCase().trim();
+  if(satuan&&!SATUAN_KATA.includes(satuan))satuan='';
+  let nama=t.substring(0,m.index).trim();
+  if(!nama)nama=t.substring(m.index+m[0].length).trim();
+  nama=nama.replace(/\s+/g,' ').trim();
+  return {teks_asli:line,nama,qty,satuan};
+}
+
+function kasirFindAlias(parsedNama,parsedSatuan){
+  if(!kasirWAAliasCache.length||!parsedNama)return null;
+  const q=parsedNama.toLowerCase();
+  let match=kasirWAAliasCache.find(a=>(a.alias||'').toLowerCase()===q&&(parsedSatuan?(a.satuan_alias||'').toLowerCase()===parsedSatuan:!a.satuan_alias));
+  if(match)return match;
+  match=kasirWAAliasCache.find(a=>{const al=(a.alias||'').toLowerCase();return al&&(q.includes(al)||al.includes(q));});
+  return match||null;
+}
+
+async function kasirParseWAText(){
+  const txt=document.getElementById('kwa-text-input').value;
+  if(!txt.trim()){toast('Paste teks WA dulu',true);return;}
+  if(!kasirWAAliasCache.length)await kasirLoadAlias();
+  if(typeof aB==='undefined'||!aB.length){if(typeof lB==='function')await lB();}
+  const lines=txt.split(/\r?\n/);
+  kasirWAItems=[];
+  for(const line of lines){
+    const parsed=kasirParseWALine(line);
+    if(!parsed)continue;
+    const skip=/^(assalam|alhamd|jazaak|jazak|wa\s*[\'\u2019]?alaikum|terima|barakallah|aamiin|ibu\s|bapak\s|bpk\s|bu\s|kelompok|hari\s+ini|tanggal|tgl|amal|pesan-anter|pesan\s+anter)/i;
+    const isYear=parsed.qty>=2020&&parsed.qty<=2030&&!parsed.satuan;
+    if((skip.test(parsed.nama)&&!parsed.satuan)||isYear)continue;
+    const alias=kasirFindAlias(parsed.nama,parsed.satuan);
+    let barang=null,konversi=1,satuanFinal=parsed.satuan;
+    if(alias){
+      barang=(typeof aB!=='undefined')?aB.find(b=>b.id===alias.produk_id):null;
+      konversi=parseFloat(alias.konversi_qty)||1;
+      if(barang&&barang.satuan)satuanFinal=barang.satuan;
+    }else{
+      // Fallback search di nama barang
+      if(typeof aB!=='undefined'&&parsed.nama){
+        const q=parsed.nama.toLowerCase();
+        barang=aB.find(b=>(b.nama||'').toLowerCase().includes(q));
+      }
+      if(barang&&barang.satuan)satuanFinal=barang.satuan;
+    }
+    if(!satuanFinal&&barang&&barang.satuan)satuanFinal=barang.satuan;
+    kasirWAItems.push({
+      teks_asli:line.trim(),
+      barang_id:barang?barang.id:null,
+      nama:barang?barang.nama:parsed.nama,
+      qty:parsed.qty,
+      satuan:satuanFinal||parsed.satuan||'pcs',
+      harga:barang?(barang.harga||0):0,
+      konversi:konversi,
+      qtyReal:parsed.qty*konversi,
+      teks_alias:alias?alias.alias:'',
+      satuan_alias:parsed.satuan
+    });
+  }
+  if(!kasirWAItems.length){toast('Tidak ada item terdeteksi',true);return;}
+  document.getElementById('kwa-preview-section').style.display='';
+  kasirRenderPreviewWA();
+}
+
+function kasirRenderPreviewWA(){
+  const el=document.getElementById('kwa-preview-list');
+  if(!el)return;
+  if(!kasirWAItems.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-muted)">📋 Belum ada item</div>';return;}
+  el.innerHTML=kasirWAItems.map((it,idx)=>{
+    const matchOK=!!it.barang_id;
+    const bgColor=matchOK?'white':'#fff7ed';
+    const borderColor=matchOK?'var(--border)':'var(--amber,#f59e0b)';
+    return `<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">📱 WA: <i>${it.teks_asli}</i></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select onchange="kasirSetWAItemBarang(${idx},this.value)" style="flex:1;min-width:140px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;background:white">
+          <option value="">${matchOK?'-- ganti produk --':'⚠️ pilih produk'}</option>
+          ${(typeof aB!=='undefined'?aB:[]).map(b=>`<option value="${b.id}" ${b.id===it.barang_id?'selected':''}>${b.nama}${b.satuan?' ('+b.satuan+')':''}</option>`).join('')}
+        </select>
+        <input type="number" step="0.01" value="${it.qty}" onchange="kasirSetWAItemQty(${idx},this.value)" style="width:60px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="qty"/>
+        <span style="font-size:11px;color:var(--text-muted);min-width:34px">${it.satuan||'-'}</span>
+        <input type="number" value="${it.harga}" onchange="kasirSetWAItemHarga(${idx},this.value)" style="width:80px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="harga"/>
+      </div>
+      <div style="display:flex;gap:6px;justify-content:space-between;margin-top:6px;align-items:center">
+        <div style="font-size:11px;color:var(--text-muted)">${it.konversi>1?`<span style="color:var(--blue,#3b82f6)">📐 ${it.satuan_alias} → ${it.qtyReal} ${it.satuan}</span> · `:''}Subtotal: <b style="color:#15803d">${fmt((it.harga||0)*(it.qtyReal||it.qty))}</b></div>
+        <div style="display:flex;gap:4px">
+          ${matchOK?`<button class="btn xs" onclick="kasirBukaModalAlias(${idx})">🏷️ Alias</button>`:''}
+          <button class="btn xs" onclick="kasirBukaModalBarangBaru(${idx})">➕ Baru</button>
+          <button class="btn xs danger" onclick="kasirHapusWAItem(${idx})">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function kasirSetWAItemBarang(idx,bid){
+  const it=kasirWAItems[idx];if(!it)return;
+  if(!bid){it.barang_id=null;kasirRenderPreviewWA();return;}
+  const b=(typeof aB!=='undefined')?aB.find(x=>x.id===parseInt(bid)):null;
+  if(!b)return;
+  it.barang_id=b.id;
+  it.nama=b.nama;
+  if(!it.harga||it.harga===0)it.harga=b.harga||0;
+  if(b.satuan)it.satuan=b.satuan;
+  it.qtyReal=it.qty*(it.konversi||1);
+  kasirRenderPreviewWA();
+}
+function kasirSetWAItemQty(idx,v){
+  const it=kasirWAItems[idx];if(!it)return;
+  it.qty=parseFloat(v)||0;
+  it.qtyReal=it.qty*(it.konversi||1);
+  kasirRenderPreviewWA();
+}
+function kasirSetWAItemHarga(idx,v){
+  const it=kasirWAItems[idx];if(!it)return;
+  it.harga=parseFloat(v)||0;
+  kasirRenderPreviewWA();
+}
+function kasirHapusWAItem(idx){
+  if(!confirm('Hapus item ini?'))return;
+  kasirWAItems.splice(idx,1);
+  kasirRenderPreviewWA();
+}
+function kasirTambahItemKosongWA(){
+  kasirWAItems.push({teks_asli:'(manual)',barang_id:null,nama:'',qty:1,satuan:'',harga:0,konversi:1,qtyReal:1,teks_alias:'',satuan_alias:''});
+  kasirRenderPreviewWA();
+}
+
+function kasirBukaModalAlias(idx){
+  const it=kasirWAItems[idx];if(!it||!it.barang_id)return;
+  const aliasGuess=(it.teks_alias||kasirExtractAlias(it.teks_asli)).toLowerCase();
+  const satuanGuess=it.satuan_alias||'';
+  const konvGuess=it.konversi||1;
+  const html=`
+  <div style="padding:14px 14px 18px">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px">🏷️ Simpan Alias Produk</div>
+    <div style="background:var(--bg,#f8fafc);padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px">
+      <div>Produk: <b>${it.nama}</b></div>
+      <div>Teks WA asli: <i>${it.teks_asli}</i></div>
+    </div>
+    <div class="irow"><label>Alias</label><input type="text" id="kalias-text" value="${aliasGuess}" placeholder="contoh: telor, ladaku" style="flex:1"/></div>
+    <div class="irow"><label>Satuan WA</label><input type="text" id="kalias-satuan" value="${satuanGuess}" placeholder="kosong / renceng / krat" style="flex:1"/></div>
+    <div class="irow"><label>Konversi Qty</label><input type="number" step="0.01" id="kalias-konversi" value="${konvGuess}" placeholder="1 satuan WA = ?" style="flex:1"/></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Contoh: 1 renceng = 10 pcs → konversi=10</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn primary" style="flex:1;height:42px" onclick="kasirSimpanAlias(${idx})">💾 Simpan</button>
+      <button class="btn" style="height:42px" onclick="closeModal('kasir-modal-alias-wa')">Batal</button>
+    </div>
+  </div>`;
+  document.getElementById('kasir-modal-alias-wa-content').innerHTML=html;
+  openModal('kasir-modal-alias-wa');
+}
+
+function kasirExtractAlias(teks){
+  const p=kasirParseWALine(teks);
+  return p?p.nama:'';
+}
+
+async function kasirSimpanAlias(idx){
+  const it=kasirWAItems[idx];if(!it||!it.barang_id)return;
+  const alias=(document.getElementById('kalias-text').value||'').trim().toLowerCase();
+  const satuan=(document.getElementById('kalias-satuan').value||'').trim().toLowerCase()||null;
+  const konv=parseFloat(document.getElementById('kalias-konversi').value)||1;
+  if(!alias){toast('Alias tidak boleh kosong',true);return;}
+  // Check existing
+  const{data:existing}=await sb.from('warung_produk_alias').select('id').ilike('alias',alias).eq('satuan_alias',satuan||'').maybeSingle();
+  if(existing){
+    await sb.from('warung_produk_alias').update({produk_id:it.barang_id,konversi_qty:konv}).eq('id',existing.id);
+  }else{
+    await sb.from('warung_produk_alias').insert([{produk_id:it.barang_id,alias,satuan_alias:satuan,konversi_qty:konv,created_by:CU?.username||'unknown'}]);
+  }
+  await kasirLoadAlias();
+  closeModal('kasir-modal-alias-wa');
+  toast('✅ Alias tersimpan: '+alias);
+}
+
+function kasirBukaModalBarangBaru(idx){
+  const it=kasirWAItems[idx];if(!it)return;
+  const namaGuess=it.nama||kasirExtractAlias(it.teks_asli);
+  const satuanGuess=it.satuan||'pcs';
+  const html=`
+  <div style="padding:14px 14px 18px">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px">➕ Tambah Produk Baru ke Master</div>
+    <div style="background:#fef3c7;padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;color:#92400e">
+      Produk akan disimpan ke master barang dan dipilih untuk item ini.
+    </div>
+    <div class="irow"><label>Nama Produk</label><input type="text" id="kbb-nama" value="${namaGuess}" style="flex:1"/></div>
+    <div class="irow"><label>Satuan</label><input type="text" id="kbb-satuan" value="${satuanGuess}" placeholder="pcs / kg / bks" style="flex:1"/></div>
+    <div class="irow"><label>Harga Jual</label><input type="number" id="kbb-harga" value="${it.harga||0}" style="flex:1"/></div>
+    <div class="irow"><label>Harga Beli</label><input type="number" id="kbb-hb" value="${it.harga||0}" style="flex:1"/></div>
+    <div class="irow"><label>Stok Awal</label><input type="number" id="kbb-stok" value="0" style="flex:1"/></div>
+    <div class="irow"><label>Kategori</label><input type="text" id="kbb-kat" value="warung" placeholder="warung / sembako" style="flex:1"/></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn primary" style="flex:1;height:42px" onclick="kasirSimpanBarangBaru(${idx})">💾 Simpan & Pilih</button>
+      <button class="btn" style="height:42px" onclick="closeModal('kasir-modal-barang-baru-wa')">Batal</button>
+    </div>
+  </div>`;
+  document.getElementById('kasir-modal-barang-baru-wa-content').innerHTML=html;
+  openModal('kasir-modal-barang-baru-wa');
+}
+
+async function kasirSimpanBarangBaru(idx){
+  const it=kasirWAItems[idx];if(!it)return;
+  const payload={
+    nama:document.getElementById('kbb-nama').value.trim(),
+    satuan:document.getElementById('kbb-satuan').value.trim()||'pcs',
+    harga:parseInt(document.getElementById('kbb-harga').value)||0,
+    harga_beli:parseInt(document.getElementById('kbb-hb').value)||0,
+    stok:parseFloat(document.getElementById('kbb-stok').value)||0,
+    kategori:document.getElementById('kbb-kat').value.trim()||'warung'
+  };
+  if(!payload.nama){toast('Nama wajib diisi',true);return;}
+  const{data,error}=await sb.from('barang').insert([payload]).select().single();
+  if(error){toast('Gagal: '+error.message,true);return;}
+  if(typeof lB==='function')await lB();
+  it.barang_id=data.id;
+  it.nama=data.nama;
+  it.harga=data.harga;
+  it.satuan=data.satuan;
+  closeModal('kasir-modal-barang-baru-wa');
+  toast('✅ Produk baru: '+data.nama);
+  if(confirm('Simpan "'+(it.teks_alias||kasirExtractAlias(it.teks_asli))+'" sebagai alias produk ini?')){
+    kasirBukaModalAlias(idx);
+  }else{
+    kasirRenderPreviewWA();
+  }
+}
+
+async function kasirSimpanPesananWA(){
+  if(!kasirWAPemesan){toast('Pilih pemesan dulu',true);return;}
+  if(!kasirWAItems.length){toast('Tidak ada item',true);return;}
+  const blank=kasirWAItems.filter(it=>!it.barang_id);
+  if(blank.length){
+    if(!confirm(`${blank.length} item belum ter-link ke produk master. Tetap simpan?`))return;
+  }
+  const pengantar=document.getElementById('kwa-pengantar').value;
+  if(!pengantar){toast('Pilih pengantar (kurir)',true);return;}
+  const rawText=document.getElementById('kwa-text-input').value;
+  const items=kasirWAItems.map(it=>({
+    nama:it.nama||it.teks_asli,
+    qty:it.qtyReal||it.qty,
+    harga:it.harga||0,
+    barang_id:it.barang_id,
+    pid:it.barang_id,
+    isPaket:false,
+    isCustom:!it.barang_id,
+    _qtyReal:it.qtyReal||it.qty,
+    _kategori:'warung',
+    _waTeksAsli:it.teks_asli,
+    _waSatuanAsli:it.satuan_alias,
+    _waKonversi:it.konversi||1
+  }));
+  const totalProduk=items.reduce((s,i)=>s+(i.harga*i.qty),0);
+  const kode='WA'+Date.now().toString().slice(-7);
+  const payload={
+    kode,
+    nama:kasirWAPemesan.label,
+    hp:'',
+    alamat:'',
+    metode_ambil:'kirim',
+    bersedia_ongkir:false,
+    ongkir:0,
+    items,
+    total_produk:totalProduk,
+    total_bayar:totalProduk,
+    status:'baru',
+    catatan:'Pesanan via WA (kasir)',
+    sumber:'wa',
+    raw_wa_text:rawText,
+    pengantar:pengantar,
+    anggota_id:kasirWAPemesan.anggota_id||null,
+    jamaah_did:kasirWAPemesan.jamaah_did||null,
+    nama_display:kasirWAPemesan.label
+  };
+  const{error}=await sb.from('pesanan_online').insert([payload]);
+  if(error){toast('Gagal simpan: '+error.message,true);return;}
+  toast('✅ Pesanan tersimpan: '+kode);
+  kasirResetFormWA();
+  // Pindah ke tab Pending
+  showSubTab('pesan','pending');
+  await kasirLoadPesanan();
+}
+
+/* DAFTAR PESANAN (Pending + Riwayat) */
+async function kasirLoadPesanan(){
+  const{data}=await sb.from('pesanan_online').select('*').order('created_at',{ascending:false}).limit(200);
+  kasirAllPesanan=data||[];
+  // Update badge global (jumlah baru)
+  const newCount=kasirAllPesanan.filter(p=>p.status==='baru').length;
+  const badgeMain=document.getElementById('kasir-pesan-badge');
+  const badgePending=document.getElementById('kasir-pending-badge');
+  [badgeMain,badgePending].forEach(b=>{if(b){b.textContent=newCount;b.style.display=newCount>0?(b===badgeMain?'flex':'inline-flex'):'none';}});
+  kasirRenderPesanan();
+}
+
+function kasirRenderPesanan(){
+  // Render dua list: Pending (status=baru) & Riwayat (filterable)
+  const elPending=document.getElementById('kasir-pesanan-list-pending');
+  const elRwt=document.getElementById('kasir-pesanan-list-riwayat');
+  // PENDING
+  if(elPending){
+    let dp=kasirAllPesanan.filter(p=>p.status==='baru');
+    const fs=document.getElementById('kasir-filter-sumber')?.value||'wa';
+    if(fs!=='semua')dp=dp.filter(p=>(p.sumber||'web')===fs);
+    elPending.innerHTML=dp.length?dp.map(p=>kasirRenderPesananCard(p)).join(''):'<div style="text-align:center;padding:30px;color:var(--text-muted)">📭 Tidak ada pesanan pending</div>';
+  }
+  // RIWAYAT
+  if(elRwt){
+    let dr=[...kasirAllPesanan];
+    const fst=document.getElementById('kasir-filter-status')?.value||'selesai';
+    const frs=document.getElementById('kasir-filter-sumber-rwt')?.value||'semua';
+    if(fst!=='semua')dr=dr.filter(p=>p.status===fst);
+    if(frs!=='semua')dr=dr.filter(p=>(p.sumber||'web')===frs);
+    elRwt.innerHTML=dr.length?dr.map(p=>kasirRenderPesananCard(p)).join(''):'<div style="text-align:center;padding:30px;color:var(--text-muted)">📭 Tidak ada riwayat</div>';
+  }
+}
+
+function kasirRenderPesananCard(p){
+  const st=kasirStatusPesanan[p.status]||kasirStatusPesanan.baru;
+  const tgl=fD?fD(p.created_at):p.created_at;
+  const jam=fJ?fJ(p.created_at):'';
+  const sumber=p.sumber||'web';
+  const sumberBadge=sumber==='wa'?'<span style="background:#25D366;color:white;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;margin-right:4px">📱 WA</span>':'<span style="background:#3b82f6;color:white;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;margin-right:4px">🌐 Web</span>';
+  let btnHtml='';
+  if(sumber==='wa'&&p.status==='baru'){
+    btnHtml=`<button class="btn sm primary" style="background:#25D366;border-color:#25D366" onclick="event.stopPropagation();kasirTandaiSelesaiWA(${p.id})">✅ Tandai Selesai</button>`;
+  }
+  return `<div style="background:white;border-radius:8px;border:1.5px solid var(--border);padding:12px 14px;margin-bottom:8px;cursor:pointer" onclick="kasirBukaPesananDetail(${p.id})">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+      <div>
+        <div>${sumberBadge}<span style="font-weight:800;font-size:14px;font-family:'Courier New',monospace;color:#15803d">${p.kode}</span></div>
+        <div style="font-size:11px;color:var(--text-muted)">${tgl} ${jam}</div>
+      </div>
+      <span style="background:${st.color};color:white;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700">${st.label}</span>
+    </div>
+    <div style="font-weight:600;font-size:13px">${p.nama}${p.hp?' · '+p.hp:''}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${(p.items||[]).length} item${p.pengantar?' · 🚚 '+p.pengantar:''}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <span style="font-weight:700;color:#15803d;font-family:'Courier New',monospace">${fmt(p.total_bayar||0)}</span>
+      ${btnHtml}
+    </div>
+  </div>`;
+}
+
+async function kasirBukaPesananDetail(id){
+  const p=kasirAllPesanan.find(x=>x.id===id);if(!p)return;
+  const st=kasirStatusPesanan[p.status]||kasirStatusPesanan.baru;
+  const sumber=p.sumber||'web';
+  let h=`
+  <div style="background:#dcfce7;border-radius:8px;padding:12px;margin-bottom:10px;border:1.5px solid #25D366">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:18px;font-weight:800;font-family:'Courier New',monospace;color:#15803d">${p.kode}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${fD?fD(p.created_at):p.created_at}</div>
+      </div>
+      <span style="background:${st.color};color:white;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700">${st.label}</span>
+    </div>
+  </div>
+  <div style="background:var(--bg,#f8fafc);border-radius:8px;padding:11px;margin-bottom:8px">
+    <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Pemesan</div>
+    <div style="font-weight:700;font-size:13px">${p.nama}</div>
+    ${p.hp?`<div style="font-size:12px;color:var(--text-muted)">📱 ${p.hp}</div>`:''}
+  </div>
+  <div style="background:var(--bg,#f8fafc);border-radius:8px;padding:11px;margin-bottom:8px">
+    <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Item Pesanan</div>
+    ${(p.items||[]).map(i=>`<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px">
+      <span><b>${i.nama}</b> ×${i.qty}</span>
+      <span>${fmt((i.harga||0)*(i.qty||1))}</span>
+    </div>`).join('')}
+    <div style="border-top:2px solid var(--border);padding-top:6px;margin-top:6px;display:flex;justify-content:space-between;font-weight:800;font-size:14px">
+      <span>Total</span><span style="color:#15803d">${fmt(p.total_bayar||0)}</span>
+    </div>
+  </div>
+  ${sumber==='wa'?`<div style="background:#dcfce7;border-radius:8px;padding:11px;margin-bottom:8px;border:1.5px solid #25D366">
+    <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;margin-bottom:4px">📱 Info WA</div>
+    ${p.pengantar?`<div style="font-size:12px"><b>Pengantar:</b> ${p.pengantar}</div>`:''}
+    ${p.diantar_at?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px">Diantar: ${fD?fD(p.diantar_at):p.diantar_at}</div>`:''}
+    ${p.transaksi_id?`<div style="font-size:11px;color:#15803d;font-weight:700;margin-top:3px">✅ Transaksi #${p.transaksi_id}</div>`:''}
+    ${p.raw_wa_text?`<div style="font-size:10px;color:var(--text-muted);margin-top:6px"><b>Teks WA:</b></div><pre style="font-size:11px;background:white;padding:6px;border-radius:6px;margin-top:3px;white-space:pre-wrap;font-family:inherit;border:1px solid #d4d4d4">${p.raw_wa_text}</pre>`:''}
+  </div>`:''}
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+    ${sumber==='wa'&&p.status==='baru'?`<button class="btn primary" style="width:100%;height:42px;background:#25D366;border-color:#25D366" onclick="kasirTandaiSelesaiWA(${p.id});closeModal('kasir-modal-pesanan-detail')">✅ Tandai Selesai (Buat Transaksi)</button>`:''}
+    ${p.status!=='dibatalkan'&&p.status!=='selesai'?`<button class="btn danger" style="width:100%;height:38px" onclick="kasirBatalkanPesanan(${p.id})">❌ Batalkan</button>`:''}
+  </div>`;
+  document.getElementById('kasir-pesanan-detail-content').innerHTML=h;
+  openModal('kasir-modal-pesanan-detail');
+}
+
+async function kasirBatalkanPesanan(id){
+  if(!confirm('Batalkan pesanan ini?'))return;
+  await sb.from('pesanan_online').update({status:'dibatalkan'}).eq('id',id);
+  closeModal('kasir-modal-pesanan-detail');
+  await kasirLoadPesanan();
+  toast('Pesanan dibatalkan');
+}
+
+async function kasirTandaiSelesaiWA(pesananId){
+  const p=kasirAllPesanan.find(x=>x.id===pesananId);
+  if(!p){toast('Pesanan tidak ditemukan',true);return;}
+  if(p.status==='selesai'){toast('Sudah selesai',true);return;}
+  if(!confirm(`Tandai pesanan "${p.kode}" SELESAI dan buat transaksi (status: belum bayar)?\n\nTotal: ${fmt(p.total_bayar||0)}\nPemesan: ${p.nama}`))return;
+  const items=(p.items||[]).map(i=>({
+    nama:i.nama,
+    qty:i.qty,
+    harga:i.harga||0,
+    pid:i.barang_id||i.pid||null,
+    barang_id:i.barang_id||null,
+    isPaket:false,
+    is_manual:!i.barang_id,
+    _qtyReal:i._qtyReal||i.qty,
+    _kategori:i._kategori||'warung',
+    barcode:''
+  }));
+  const total=p.total_bayar||0;
+  const tglTx=new Date().toISOString();
+  const payload={
+    items,total,bayar:0,kembali:0,
+    kasir:CU?.username||p.pengantar||'system',
+    pelanggan:p.nama,pelanggan_id:null,
+    anggota_id:p.anggota_id||null,
+    jamaah_did:p.jamaah_did||null,
+    metode_bayar:'belum',status_bayar:'belum',
+    tgl_transaksi:tglTx,waktu:tglTx,
+    catatan:`Pesanan WA #${p.kode} · Pengantar: ${p.pengantar||'-'}`
+  };
+  const{data:tx,error}=await sb.from('transaksi').insert([payload]).select().single();
+  if(error){toast('Gagal buat transaksi: '+error.message,true);return;}
+  // Update stok
+  for(const it of items){
+    if(it.barang_id&&typeof aB!=='undefined'){
+      const b=aB.find(x=>x.id===it.barang_id);
+      if(b&&!['ppob','laundry','service'].includes(b.kategori)){
+        const qtyReal=it._qtyReal||it.qty;
+        await sb.from('barang').update({stok:Math.max(0,b.stok-qtyReal)}).eq('id',it.barang_id);
+      }
+    }
+  }
+  // Auto-piutang
+  const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,60);
+  await sb.from('hutang').insert([{nama:p.nama||'Pelanggan',jml:total,ket:'Pesanan WA '+p.kode+': '+itemNames,lunas:false,tipe:'piutang',ref_id:tx.id,ref_type:'transaksi'}]);
+  // Update pesanan
+  await sb.from('pesanan_online').update({status:'selesai',transaksi_id:tx.id,diantar_at:new Date().toISOString()}).eq('id',pesananId);
+  // Refresh
+  if(typeof lB==='function')await lB();
+  if(typeof lT==='function')await lT();
+  await kasirLoadPesanan();
+  toast('✅ Pesanan selesai, transaksi #'+tx.id+' (belum bayar)');
+}
+
+/* Auto-load pesanan saat masuk tab Pesan */
+(function(){
+  const orig=window.showMainTab;
+  if(typeof orig==='function'){
+    window.showMainTab=function(tab){
+      orig(tab);
+      if(tab==='pesan'){
+        kasirLoadPesanan();
+        // Default ke sub-tab Input WA
+        if(!document.getElementById('stab-pesan-input').classList.contains('active')){
+          // sudah aktif by default
+        }
+        kasirInitInputWA();
+      }
+    };
+  }
+  // Auto poll badge tiap 60 detik (kalau user di tab lain)
+  setInterval(()=>{ if(typeof CU!=='undefined'&&CU)kasirLoadPesanan(); },60000);
+})();
 
 
 // ===== STUB FUNCTIONS (dipanggil dari HTML yang tersisa) =====
