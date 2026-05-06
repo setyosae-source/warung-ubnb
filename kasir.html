@@ -566,7 +566,11 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
 
           <div class="irow"><label>Pengantar (Kurir)</label>
-            <select id="kwa-pengantar" style="flex:1;height:36px;border:1.5px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px"></select>
+            <button type="button" id="kwa-pengantar-chip" onclick="kasirBukaPengantarPicker()" style="flex:1;height:36px;border:1.5px solid var(--border);border-radius:6px;padding:0 12px;background:var(--bg);text-align:left;cursor:pointer;font-family:inherit;font-size:13px;display:flex;align-items:center;justify-content:space-between">
+              <span id="kwa-pengantar-chip-text" style="color:var(--text-muted)">— Pilih kurir —</span>
+              <span style="color:var(--text-muted)">▼</span>
+            </button>
+            <input type="hidden" id="kwa-pengantar"/>
           </div>
 
           <div class="irow"><label>Tanggal Pesan</label>
@@ -809,6 +813,36 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 <div class="modal-overlay" id="kasir-modal-barang-baru-wa">
   <div class="modal" style="background:white;max-width:460px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:0;max-height:85vh;overflow-y:auto">
     <div id="kasir-modal-barang-baru-wa-content"></div>
+  </div>
+</div>
+
+<!-- MODAL PILIH PRODUK (search) - kasir -->
+<div class="modal-overlay" id="kasir-modal-prod-picker">
+  <div class="modal" style="background:white;max-width:520px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px;max-height:85vh;display:flex;flex-direction:column">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:16px;font-weight:700">🔍 Pilih Produk</div>
+      <button class="btn sm" onclick="closeModal('kasir-modal-prod-picker')">✕</button>
+    </div>
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="kasir-prod-picker-search" placeholder="Ketik nama produk..." oninput="kasirFilterProdPicker(this.value)" autocomplete="off" style="width:100%;height:40px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px;font-size:13px;outline:none;font-family:inherit"/>
+    </div>
+    <div id="kasir-prod-picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;min-height:200px"></div>
+  </div>
+</div>
+
+<!-- MODAL PILIH PENGANTAR (search) - kasir -->
+<div class="modal-overlay" id="kasir-modal-pengantar">
+  <div class="modal" style="background:white;max-width:480px;border-radius:16px 16px 0 0;align-self:flex-end;width:100%;padding:14px;max-height:70vh;display:flex;flex-direction:column">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:16px;font-weight:700">🚚 Pilih Pengantar (Kurir)</div>
+      <button class="btn sm" onclick="closeModal('kasir-modal-pengantar')">✕</button>
+    </div>
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="kasir-pengantar-picker-search" placeholder="Ketik nama kurir..." oninput="kasirFilterPengantar(this.value)" autocomplete="off" style="width:100%;height:40px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px;font-size:13px;outline:none;font-family:inherit"/>
+    </div>
+    <div id="kasir-pengantar-picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;min-height:150px"></div>
   </div>
 </div>
 
@@ -5305,11 +5339,13 @@ async function kasirInitInputWA(){
 async function kasirLoadUsers(){
   const{data}=await sb.from('users').select('id,username,nama').order('username');
   kasirWAUsers=data||[];
-  const sel=document.getElementById('kwa-pengantar');
-  if(sel){
-    sel.innerHTML='<option value="">-- Pilih kurir --</option>'+
-      kasirWAUsers.map(u=>`<option value="${u.username}">${u.username}${u.nama?' ('+u.nama+')':''}</option>`).join('');
-    if(CU&&CU.username)sel.value=CU.username;
+  // Default = user login
+  if(CU&&CU.username){
+    const me=kasirWAUsers.find(u=>u.username===CU.username);
+    const hid=document.getElementById('kwa-pengantar');
+    const txt=document.getElementById('kwa-pengantar-chip-text');
+    if(hid)hid.value=CU.username;
+    if(txt){txt.textContent=CU.username+(me&&me.nama?' ('+me.nama+')':'');txt.style.color='var(--text)';}
   }
 }
 
@@ -5437,13 +5473,16 @@ function kasirRenderPreviewWA(){
     const matchOK=!!it.barang_id;
     const bgColor=matchOK?'white':'#fff7ed';
     const borderColor=matchOK?'var(--border)':'var(--amber,#f59e0b)';
+    const chipBg=matchOK?'#dcfce7':'#fef3c7';
+    const chipColor=matchOK?'#15803d':'#92400e';
+    const chipBorder=matchOK?'#16a34a':'#f59e0b';
+    const chipText=matchOK?(it.nama+(it.satuan?' ('+it.satuan+')':'')):'⚠️ Pilih produk...';
     return `<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:8px;padding:10px;margin-bottom:8px">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">📱 WA: <i>${it.teks_asli}</i></div>
+      <button type="button" onclick="kasirBukaProdPicker(${idx})" style="width:100%;background:${chipBg};color:${chipColor};border:1.5px solid ${chipBorder};border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span>🔍</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${chipText}</span><span>▼</span>
+      </button>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <select onchange="kasirSetWAItemBarang(${idx},this.value)" style="flex:1;min-width:140px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;background:white">
-          <option value="">${matchOK?'-- ganti produk --':'⚠️ pilih produk'}</option>
-          ${(typeof aB!=='undefined'?aB:[]).map(b=>`<option value="${b.id}" ${b.id===it.barang_id?'selected':''}>${b.nama}${b.satuan?' ('+b.satuan+')':''}</option>`).join('')}
-        </select>
         <input type="number" step="0.01" value="${it.qty}" onchange="kasirSetWAItemQty(${idx},this.value)" style="width:60px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="qty"/>
         <span style="font-size:11px;color:var(--text-muted);min-width:34px">${it.satuan||'-'}</span>
         <input type="number" value="${it.harga}" onchange="kasirSetWAItemHarga(${idx},this.value)" style="width:80px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="harga"/>
@@ -5458,6 +5497,69 @@ function kasirRenderPreviewWA(){
       </div>
     </div>`;
   }).join('');
+}
+
+/* ============ PRODUK PICKER MODAL (kasir) ============ */
+let _kasirPickerCurrentIdx=-1;
+function kasirBukaProdPicker(idx){
+  _kasirPickerCurrentIdx=idx;
+  const inp=document.getElementById('kasir-prod-picker-search');
+  if(inp)inp.value='';
+  kasirFilterProdPicker('');
+  openModal('kasir-modal-prod-picker');
+  setTimeout(()=>{const i=document.getElementById('kasir-prod-picker-search');if(i)i.focus();},100);
+}
+function kasirFilterProdPicker(q){
+  const list=document.getElementById('kasir-prod-picker-list');
+  if(!list)return;
+  q=(q||'').trim().toLowerCase();
+  const arr=(typeof aB!=='undefined'?aB:[]);
+  let filtered=q?arr.filter(b=>(b.nama||'').toLowerCase().includes(q)||(b.barcode||'').toLowerCase().includes(q)):arr;
+  filtered=filtered.slice(0,80);
+  if(!filtered.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Tidak ada produk cocok<br><br><button class="btn sm primary" onclick="closeModal(\'kasir-modal-prod-picker\');kasirBukaModalBarangBaru('+_kasirPickerCurrentIdx+')">➕ Tambah Produk Baru</button></div>';return;}
+  list.innerHTML=filtered.map(b=>{
+    const stokBadge=b.stok>0?`<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700">stok ${b.stok}</span>`:`<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700">habis</span>`;
+    return `<div onclick="kasirPilihProdPicker(${b.id})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.nama}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${b.satuan||''} ${stokBadge}</div>
+      </div>
+      <div style="font-weight:700;color:#15803d;font-family:monospace;font-size:13px;flex-shrink:0">${fmt(b.harga||0)}</div>
+    </div>`;
+  }).join('');
+}
+function kasirPilihProdPicker(barangId){
+  if(_kasirPickerCurrentIdx<0)return;
+  kasirSetWAItemBarang(_kasirPickerCurrentIdx,String(barangId));
+  closeModal('kasir-modal-prod-picker');
+  _kasirPickerCurrentIdx=-1;
+}
+
+/* ============ PENGANTAR PICKER MODAL (kasir) ============ */
+function kasirBukaPengantarPicker(){
+  const inp=document.getElementById('kasir-pengantar-picker-search');
+  if(inp)inp.value='';
+  kasirFilterPengantar('');
+  openModal('kasir-modal-pengantar');
+  setTimeout(()=>{const i=document.getElementById('kasir-pengantar-picker-search');if(i)i.focus();},100);
+}
+function kasirFilterPengantar(q){
+  const list=document.getElementById('kasir-pengantar-picker-list');
+  if(!list)return;
+  q=(q||'').trim().toLowerCase();
+  let arr=kasirWAUsers||[];
+  if(q)arr=arr.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.nama||'').toLowerCase().includes(q));
+  if(!arr.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Tidak ada user cocok</div>';return;}
+  list.innerHTML=arr.map(u=>`<div onclick="kasirPilihPengantar('${u.username.replace(/'/g,"\\'")}',${u.nama?'\\''+u.nama.replace(/'/g,"\\'")+'\\'':'null'})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+    <div style="font-weight:600;font-size:13px">${u.username}</div>
+    ${u.nama?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${u.nama}</div>`:''}
+  </div>`).join('');
+}
+function kasirPilihPengantar(username,nama){
+  document.getElementById('kwa-pengantar').value=username;
+  const txt=document.getElementById('kwa-pengantar-chip-text');
+  if(txt){txt.textContent=username+(nama?' ('+nama+')':'');txt.style.color='var(--text)';}
+  closeModal('kasir-modal-pengantar');
 }
 
 function kasirSetWAItemBarang(idx,bid){

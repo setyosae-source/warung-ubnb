@@ -1570,7 +1570,11 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           </div>
 
           <div class="irow"><label>Pengantar (Kurir)</label>
-            <select id="wa-pengantar" style="flex:1"></select>
+            <button type="button" id="wa-pengantar-chip" onclick="bukaPengantarPickerWA()" style="flex:1;height:38px;border:1.5px solid var(--border);border-radius:6px;padding:0 12px;background:var(--bg);text-align:left;cursor:pointer;font-family:inherit;font-size:13px;display:flex;align-items:center;justify-content:space-between">
+              <span id="wa-pengantar-chip-text" style="color:var(--text-muted)">— Pilih kurir —</span>
+              <span style="color:var(--text-muted)">▼</span>
+            </button>
+            <input type="hidden" id="wa-pengantar"/>
           </div>
 
           <div class="irow"><label>Tanggal Pesan</label>
@@ -2410,6 +2414,36 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   <div class="modal" style="max-width:500px">
     <div class="modal-handle"></div>
     <div id="modal-barang-baru-wa-content"></div>
+  </div>
+</div>
+
+<!-- MODAL PILIH PRODUK (search) -->
+<div class="modal-overlay" id="modal-prod-picker-wa">
+  <div class="modal" style="max-width:520px;max-height:80vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="modal-title" style="margin-bottom:0">🔍 Pilih Produk</div>
+      <button class="btn sm" onclick="closeModal('modal-prod-picker-wa')">✕</button>
+    </div>
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="prod-picker-search" placeholder="Ketik nama produk..." oninput="filterProdPickerWA(this.value)" autocomplete="off" style="width:100%;height:40px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px;font-size:13px;outline:none"/>
+    </div>
+    <div id="prod-picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>
+  </div>
+</div>
+
+<!-- MODAL PILIH PENGANTAR (search) -->
+<div class="modal-overlay" id="modal-pengantar-wa">
+  <div class="modal" style="max-width:480px;max-height:70vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="modal-title" style="margin-bottom:0">🚚 Pilih Pengantar (Kurir)</div>
+      <button class="btn sm" onclick="closeModal('modal-pengantar-wa')">✕</button>
+    </div>
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="pengantar-picker-search" placeholder="Ketik nama kurir..." oninput="filterPengantarWA(this.value)" autocomplete="off" style="width:100%;height:40px;border:1.5px solid var(--border);border-radius:8px;padding:0 12px;font-size:13px;outline:none"/>
+    </div>
+    <div id="pengantar-picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>
   </div>
 </div>
 
@@ -6625,12 +6659,13 @@ let waAliasCache=[];              // cache master alias
 async function loadUsersForKurir(){
   const{data}=await sb.from('users').select('id,username,nama').order('username');
   waUsersList=data||[];
-  const sel=document.getElementById('wa-pengantar');
-  if(sel){
-    sel.innerHTML='<option value="">-- Pilih kurir --</option>'+
-      waUsersList.map(u=>`<option value="${u.username}">${u.username}${u.nama?' ('+u.nama+')':''}</option>`).join('');
-    // Default = user yang sedang login
-    if(CU&&CU.username)sel.value=CU.username;
+  // Default = user yang sedang login → set ke chip + hidden input
+  if(CU&&CU.username){
+    const me=waUsersList.find(u=>u.username===CU.username);
+    const hid=document.getElementById('wa-pengantar');
+    const txt=document.getElementById('wa-pengantar-chip-text');
+    if(hid)hid.value=CU.username;
+    if(txt){txt.textContent=CU.username+(me&&me.nama?' ('+me.nama+')':'');txt.style.color='var(--text)';}
   }
 }
 
@@ -6821,13 +6856,15 @@ function renderPreviewWA(){
     const matchOK=!!it.barang_id;
     const bgColor=matchOK?'white':'#fff7ed';
     const borderColor=matchOK?'var(--border)':'var(--amber)';
+    const chipBg=matchOK?'var(--green-light,#dcfce7)':'#fef3c7';
+    const chipColor=matchOK?'var(--green-dark,#15803d)':'#92400e';
+    const chipText=matchOK?(it.nama+(it.satuan?' ('+it.satuan+')':'')):'⚠️ Pilih produk...';
     return `<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:8px;padding:10px;margin-bottom:8px">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">📱 WA: <i>${it.teks_asli}</i></div>
+      <button type="button" onclick="bukaProdPickerWA(${idx})" style="width:100%;background:${chipBg};color:${chipColor};border:1.5px solid ${matchOK?'var(--green,#16a34a)':'var(--amber,#f59e0b)'};border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span>🔍</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${chipText}</span><span>▼</span>
+      </button>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <select onchange="setWAItemBarang(${idx},this.value)" style="flex:1;min-width:160px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;background:white">
-          <option value="">${matchOK?'-- ganti produk --':'⚠️ pilih produk'}</option>
-          ${(typeof aB!=='undefined'?aB:[]).map(b=>`<option value="${b.id}" ${b.id===it.barang_id?'selected':''}>${b.nama}${b.satuan?' ('+b.satuan+')':''}</option>`).join('')}
-        </select>
         <input type="number" step="0.01" value="${it.qty}" onchange="setWAItemQty(${idx},this.value)" style="width:65px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="qty"/>
         <span style="font-size:11px;color:var(--text-muted);min-width:40px">${it.satuan||'-'}</span>
         <input type="number" value="${it.harga}" onchange="setWAItemHarga(${idx},this.value)" style="width:90px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="harga"/>
@@ -6842,6 +6879,69 @@ function renderPreviewWA(){
       </div>
     </div>`;
   }).join('');
+}
+
+/* ============ PRODUK PICKER MODAL (warung) ============ */
+let _waPickerCurrentIdx=-1;
+function bukaProdPickerWA(idx){
+  _waPickerCurrentIdx=idx;
+  const inp=document.getElementById('prod-picker-search');
+  if(inp)inp.value='';
+  filterProdPickerWA('');
+  openModal('modal-prod-picker-wa');
+  setTimeout(()=>{const i=document.getElementById('prod-picker-search');if(i)i.focus();},100);
+}
+function filterProdPickerWA(q){
+  const list=document.getElementById('prod-picker-list');
+  if(!list)return;
+  q=(q||'').trim().toLowerCase();
+  const arr=(typeof aB!=='undefined'?aB:[]);
+  let filtered=q?arr.filter(b=>(b.nama||'').toLowerCase().includes(q)||(b.barcode||'').toLowerCase().includes(q)):arr;
+  filtered=filtered.slice(0,80);
+  if(!filtered.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Tidak ada produk cocok<br><br><button class="btn sm primary" onclick="closeModal(\'modal-prod-picker-wa\');bukaModalBarangBaru('+_waPickerCurrentIdx+')">➕ Tambah Produk Baru</button></div>';return;}
+  list.innerHTML=filtered.map(b=>{
+    const stokBadge=b.stok>0?`<span style="background:var(--green-light,#dcfce7);color:var(--green-dark,#15803d);padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700">stok ${b.stok}</span>`:`<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700">habis</span>`;
+    return `<div onclick="pilihProdPickerWA(${b.id})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.nama}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${b.satuan||''} ${stokBadge}</div>
+      </div>
+      <div style="font-weight:700;color:var(--green);font-family:monospace;font-size:13px;flex-shrink:0">${fmt(b.harga||0)}</div>
+    </div>`;
+  }).join('');
+}
+function pilihProdPickerWA(barangId){
+  if(_waPickerCurrentIdx<0)return;
+  setWAItemBarang(_waPickerCurrentIdx,String(barangId));
+  closeModal('modal-prod-picker-wa');
+  _waPickerCurrentIdx=-1;
+}
+
+/* ============ PENGANTAR PICKER MODAL (warung) ============ */
+function bukaPengantarPickerWA(){
+  const inp=document.getElementById('pengantar-picker-search');
+  if(inp)inp.value='';
+  filterPengantarWA('');
+  openModal('modal-pengantar-wa');
+  setTimeout(()=>{const i=document.getElementById('pengantar-picker-search');if(i)i.focus();},100);
+}
+function filterPengantarWA(q){
+  const list=document.getElementById('pengantar-picker-list');
+  if(!list)return;
+  q=(q||'').trim().toLowerCase();
+  let arr=waUsersList||[];
+  if(q)arr=arr.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.nama||'').toLowerCase().includes(q));
+  if(!arr.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Tidak ada user cocok</div>';return;}
+  list.innerHTML=arr.map(u=>`<div onclick="pilihPengantarWA('${u.username.replace(/'/g,"\\'")}',${u.nama?'\\''+u.nama.replace(/'/g,"\\'")+'\\'':'null'})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+    <div style="font-weight:600;font-size:13px">${u.username}</div>
+    ${u.nama?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${u.nama}</div>`:''}
+  </div>`).join('');
+}
+function pilihPengantarWA(username,nama){
+  document.getElementById('wa-pengantar').value=username;
+  const txt=document.getElementById('wa-pengantar-chip-text');
+  if(txt){txt.textContent=username+(nama?' ('+nama+')':'');txt.style.color='var(--text)';}
+  closeModal('modal-pengantar-wa');
 }
 
 function setWAItemBarang(idx,bid){
