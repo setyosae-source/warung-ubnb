@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPOB UBNB — Bayar Tagihan & Beli Pulsa</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --hijau: #1D9E75;
+  --hijau-dark: #0F6E56;
+  --hijau-light: #e8f7f2;
+  --gold: #f5c842;
+  --gold-dark: #c9a227;
+  --navy: #1e3a5f;
+  --red: #dc2626;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+  --bg: #f8fafb;
+  --white: #ffffff;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── HEADER ─────────────────────────────────── */
+.header {
+  background: linear-gradient(135deg, var(--hijau-dark) 0%, var(--hijau) 100%);
+  color: white;
+  padding: 16px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+}
+.header-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.header-logo {
+  width: 36px; height: 36px;
+  background: var(--gold);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--navy);
+}
+.header-title { font-weight: 800; font-size: 16px; }
+.header-sub { font-size: 11px; opacity: 0.8; margin-top: 1px; }
+.header-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,0.15);
+  padding: 6px 12px; border-radius: 99px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
+
+/* ── MAIN CONTAINER ─────────────────────────── */
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px 16px 100px;
+}
+
+/* ── CUSTOMER IDENTIFIER ────────────────────── */
+.customer-card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+  border: 2px solid transparent;
+  transition: border-color 0.3s;
+}
+.customer-card.anggota { border-color: var(--hijau); }
+.customer-card.jamaah  { border-color: #3b82f6; }
+.customer-card.umum    { border-color: var(--border); }
+
+.cust-label {
+  font-size: 12px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+}
+.cust-search-wrap { position: relative; }
+.cust-search {
+  width: 100%;
+  height: 48px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 48px 0 16px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.cust-search:focus { border-color: var(--hijau); }
+.cust-search-icon {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  font-size: 20px; pointer-events: none;
+}
+.cust-result {
+  display: none;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+.cust-result.anggota { background: var(--hijau-light); color: var(--hijau-dark); }
+.cust-result.jamaah  { background: #eff6ff; color: #1d4ed8; }
+.cust-result.umum    { background: #f3f4f6; color: var(--text-muted); }
+.cust-name { font-weight: 700; font-size: 15px; }
+.cust-meta { font-size: 12px; margin-top: 3px; opacity: 0.8; }
+.cust-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.badge-anggota { background: var(--hijau); color: white; }
+.badge-jamaah  { background: #3b82f6; color: white; }
+.badge-umum    { background: #6b7280; color: white; }
+
+/* Piutang info */
+.piutang-info {
+  display: none;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #fef3c7;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: #92400e;
+}
+
+/* ── KATEGORI TABS ──────────────────────────── */
+.kat-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 0 12px;
+  scrollbar-width: none;
+  margin-bottom: 8px;
+}
+.kat-scroll::-webkit-scrollbar { display: none; }
+.kat-btn {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  min-width: 72px;
+}
+.kat-btn:hover { border-color: var(--hijau); transform: translateY(-1px); }
+.kat-btn.active { border-color: var(--hijau); background: var(--hijau-light); }
+.kat-icon { font-size: 24px; }
+.kat-name { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.kat-btn.active .kat-name { color: var(--hijau-dark); }
+
+/* ── PRODUK LIST ────────────────────────────── */
+.produk-section { margin-bottom: 24px; }
+.produk-section-title {
+  font-size: 13px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.produk-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.produk-card {
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.produk-card:hover {
+  border-color: var(--hijau);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.produk-card.selected {
+  border-color: var(--hijau);
+  background: var(--hijau-light);
+}
+.produk-nama { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.produk-sku { font-size: 10px; color: var(--text-muted); font-family: monospace; margin-bottom: 8px; }
+.produk-harga { font-size: 16px; font-weight: 800; color: var(--hijau-dark); }
+.produk-modal { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ── ORDER FORM ─────────────────────────────── */
+.order-form {
+  display: none;
+  background: white;
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+  border: 2px solid var(--hijau);
+}
+.order-form.show { display: block; }
+.order-form-title {
+  font-weight: 800; font-size: 16px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.form-group { margin-bottom: 14px; }
+.form-group label {
+  display: block; font-size: 12px; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.form-input {
+  width: 100%; height: 46px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  font-size: 15px; font-family: inherit;
+  outline: none; transition: border-color 0.2s;
+}
+.form-input:focus { border-color: var(--hijau); }
+
+/* Produk selected info */
+.produk-selected-info {
+  background: var(--hijau-light);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.psi-nama { font-weight: 700; font-size: 15px; color: var(--hijau-dark); }
+.psi-detail {
+  display: flex; gap: 16px; margin-top: 8px;
+  font-size: 13px; color: var(--text-muted);
+}
+.psi-harga { font-size: 20px; font-weight: 800; color: var(--hijau-dark); margin-top: 6px; }
+
+/* Payment info */
+.payment-info {
+  display: none;
+  background: #fefce8;
+  border: 2px solid var(--gold);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.payment-info.show { display: block; }
+.payment-info h4 { font-size: 13px; font-weight: 700; color: var(--gold-dark); margin-bottom: 8px; }
+.payment-bank { font-size: 15px; font-weight: 700; }
+.payment-norek { font-size: 20px; font-weight: 800; font-family: monospace; letter-spacing: 2px; margin: 4px 0; }
+.payment-atas-nama { font-size: 12px; color: var(--text-muted); }
+.payment-nominal {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gold);
+  font-size: 14px; font-weight: 600; color: var(--gold-dark);
+}
+
+/* ── ORDER BUTTON ───────────────────────────── */
+.btn-order {
+  width: 100%; height: 52px;
+  background: linear-gradient(135deg, var(--hijau-dark), var(--hijau));
+  color: white;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 16px; font-weight: 800;
+  font-family: inherit; cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-order:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(29,158,117,0.4); }
+.btn-order:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.btn-secondary {
+  width: 100%; height: 44px;
+  background: white;
+  color: var(--hijau);
+  border: 2px solid var(--hijau);
+  border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+  transition: all 0.2s; margin-top: 8px;
+}
+.btn-secondary:hover { background: var(--hijau-light); }
+
+/* ── RIWAYAT ────────────────────────────────── */
+.riwayat-section { margin-top: 24px; }
+.riwayat-title { font-size: 16px; font-weight: 800; margin-bottom: 14px; }
+.riwayat-card {
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.riwayat-icon { font-size: 28px; flex-shrink: 0; }
+.riwayat-body { flex: 1; min-width: 0; }
+.riwayat-nama { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.riwayat-tujuan { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+.riwayat-tgl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.riwayat-right { text-align: right; flex-shrink: 0; }
+.riwayat-harga { font-weight: 700; font-size: 14px; color: var(--hijau-dark); }
+.riwayat-status { font-size: 11px; font-weight: 600; margin-top: 3px; }
+.status-sukses { color: var(--hijau); }
+.status-pending { color: #f59e0b; }
+.status-gagal { color: var(--red); }
+
+/* ── TOAST ──────────────────────────────────── */
+.toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; }
+.toast {
+  background: var(--text);
+  color: white;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 13px; font-weight: 600;
+  margin-bottom: 8px;
+  max-width: 300px;
+  box-shadow: var(--shadow-lg);
+  opacity: 0; transform: translateX(20px);
+  transition: all 0.3s;
+}
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast.success { background: var(--hijau); }
+.toast.error   { background: var(--red); }
+.toast.warning { background: #f59e0b; }
+
+/* ── LOADING ────────────────────────────────── */
+.loading {
+  text-align: center; padding: 40px;
+  color: var(--text-muted); font-size: 14px;
+}
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--hijau);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SUCCESS SCREEN ─────────────────────────── */
+.success-screen {
+  display: none;
+  text-align: center;
+  padding: 40px 20px;
+}
+.success-screen.show { display: block; }
+.success-icon { font-size: 72px; margin-bottom: 16px; animation: pop 0.5s ease; }
+@keyframes pop { 0% { transform: scale(0); } 80% { transform: scale(1.1); } 100% { transform: scale(1); } }
+.success-title { font-size: 24px; font-weight: 800; color: var(--hijau-dark); margin-bottom: 8px; }
+.success-sub { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+.success-ref {
+  display: inline-block;
+  background: var(--hijau-light);
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--hijau-dark);
+  margin: 16px 0;
+}
+
+/* ── BOTTOM NAV ─────────────────────────────── */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: white;
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 100;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+}
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.nav-btn.active .nav-icon { color: var(--hijau); }
+.nav-btn.active .nav-label { color: var(--hijau); font-weight: 700; }
+.nav-icon { font-size: 22px; color: var(--text-muted); }
+.nav-label { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">UB</div>
+      <div>
+        <div class="header-title">PPOB UBNB</div>
+        <div class="header-sub">Desa Perwira · Layanan Digital</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="dot"></div>
+      <span id="header-mode">Mode Dev</span>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="container">
+
+  <!-- HALAMAN BERANDA -->
+  <div id="page-beranda">
+
+    <!-- Customer identifier -->
+    <div class="customer-card" id="cust-card">
+      <div class="cust-label">📱 Siapa Anda?</div>
+      <div class="cust-search-wrap">
+        <input type="text" class="cust-search" id="cust-input"
+          placeholder="Ketik nama atau nomor HP..."
+          autocomplete="off"
+          oninput="searchCustomer(this.value)">
+        <span class="cust-search-icon">🔍</span>
+      </div>
+      <div class="cust-result" id="cust-result"></div>
+      <div class="piutang-info" id="piutang-info"></div>
+    </div>
+
+    <!-- Kategori -->
+    <div class="kat-scroll" id="kat-scroll">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Produk list -->
+    <div id="produk-container">
+      <div class="loading"><div class="spinner"></div>Memuat produk...</div>
+    </div>
+
+    <!-- Order form -->
+    <div class="order-form" id="order-form">
+      <div class="order-form-title">🛒 Detail Pembelian</div>
+
+      <div class="produk-selected-info" id="psi">
+        <div class="psi-nama" id="psi-nama">—</div>
+        <div class="psi-detail">
+          <span id="psi-sku">—</span>
+          <span id="psi-kat">—</span>
+        </div>
+        <div class="psi-harga" id="psi-harga">Rp 0</div>
+      </div>
+
+      <div class="form-group">
+        <label id="tujuan-label">📱 Nomor Tujuan</label>
+        <input type="tel" class="form-input" id="input-tujuan"
+          placeholder="Contoh: 08123456789"
+          inputmode="numeric">
+      </div>
+
+      <div class="form-group">
+        <label>📝 Catatan (opsional)</label>
+        <input type="text" class="form-input" id="input-catatan"
+          placeholder="Catatan tambahan...">
+      </div>
+
+      <!-- Payment info untuk customer Umum -->
+      <div class="payment-info" id="payment-info">
+        <h4>💳 Transfer Pembayaran ke:</h4>
+        <div class="payment-bank" id="pay-bank">—</div>
+        <div class="payment-norek" id="pay-norek">—</div>
+        <div class="payment-atas-nama" id="pay-atas-nama">—</div>
+        <div class="payment-nominal" id="pay-nominal">—</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+          ⚠️ Transaksi diproses setelah pembayaran terverifikasi admin
+        </div>
+      </div>
+
+      <button class="btn-order" id="btn-order" onclick="submitOrder()">
+        ⚡ Pesan Sekarang
+      </button>
+      <button class="btn-secondary" onclick="batalOrder()">Batal</button>
+    </div>
+
+  </div>
+
+  <!-- HALAMAN RIWAYAT -->
+  <div id="page-riwayat" style="display:none">
+    <div style="margin-bottom:16px">
+      <div style="font-size:20px;font-weight:800">📋 Riwayat Transaksi</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px" id="riwayat-sub">Transaksi Anda</div>
+    </div>
+    <div id="riwayat-container">
+      <div class="loading"><div class="spinner"></div>Memuat riwayat...</div>
+    </div>
+  </div>
+
+  <!-- SUKSES SCREEN -->
+  <div class="success-screen" id="success-screen">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Pesanan Diterima!</div>
+    <div id="success-ref" class="success-ref">—</div>
+    <div class="success-sub" id="success-msg">—</div>
+    <button class="btn-order" style="margin-top:24px;max-width:300px;margin-left:auto;margin-right:auto" onclick="kembaliDariSukses()">
+      🏠 Kembali ke Beranda
+    </button>
+  </div>
+
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-beranda" onclick="navTo('beranda')">
+    <span class="nav-icon">🏠</span>
+    <span class="nav-label">Beranda</span>
+  </button>
+  <button class="nav-btn" id="nav-riwayat" onclick="navTo('riwayat')">
+    <span class="nav-icon">📋</span>
+    <span class="nav-label">Riwayat</span>
+  </button>
+</nav>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://skltbmcrqutevmtcxqxj.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allProduk    = [];
+let allKategori  = [];
+let selectedKat  = null;
+let selectedProduk = null;
+let currentCustomer = null; // { tipe, nama, id, no_hp, ... }
+let supplierConfig  = null;
+let settingMap      = {};
+let searchTimer     = null;
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function formatRp(n) {
+  return 'Rp ' + Number(n||0).toLocaleString('id-ID');
+}
+function formatTgl(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('id-ID', {
+    day:'2-digit', month:'short', year:'numeric',
+    hour:'2-digit', minute:'2-digit'
+  });
+}
+function toast(msg, type='info') {
+  const colors = { success:'var(--hijau)', error:'var(--red)', warning:'#f59e0b', info:'var(--navy)' };
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.background = colors[type] || colors.info;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+function genRefId() {
+  const ts  = Date.now().toString(36).toUpperCase();
+  const rnd = Math.random().toString(36).substring(2,6).toUpperCase();
+  return `PPOB-${ts}-${rnd}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  try {
+    // Load setting, supplier, kategori, produk paralel
+    const [settingRes, supplierRes, katRes, produkRes] = await Promise.all([
+      sb.from('ppob_setting').select('key,value'),
+      sb.from('ppob_supplier').select('*').eq('status','aktif').limit(1),
+      sb.from('ppob_kategori').select('*').eq('status','aktif').order('urutan'),
+      sb.from('ppob_produk').select('*,ppob_kategori(nama,icon)').eq('status','aktif').order('nama_produk')
+    ]);
+
+    // Setting map
+    (settingRes.data||[]).forEach(s => settingMap[s.key] = s.value);
+
+    // Mode info
+    const mode = settingMap['mode_operasi'] || 'demo';
+    document.getElementById('header-mode').textContent = mode === 'live' ? '🟢 Live' : '🧪 Demo';
+
+    // Supplier
+    supplierConfig = supplierRes.data?.[0] || null;
+
+    // Kategori
+    allKategori = katRes.data || [];
+    renderKategori();
+
+    // Produk
+    allProduk = produkRes.data || [];
+    renderProduk();
+
+  } catch(e) {
+    console.error('init error:', e);
+    toast('Gagal memuat data: ' + e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER KATEGORI
+// ═══════════════════════════════════════════════════════════════
+function renderKategori() {
+  const el = document.getElementById('kat-scroll');
+  const semua = { id: null, icon: '🌐', nama: 'Semua' };
+  const cats  = [semua, ...allKategori];
+
+  el.innerHTML = cats.map(k => `
+    <button class="kat-btn ${selectedKat === k.id ? 'active' : ''}"
+      onclick="pilihKategori(${k.id === null ? 'null' : k.id})">
+      <span class="kat-icon">${k.icon || '📦'}</span>
+      <span class="kat-name">${k.nama}</span>
+    </button>
+  `).join('');
+}
+
+function pilihKategori(katId) {
+  selectedKat = katId;
+  selectedProduk = null;
+  document.getElementById('order-form').classList.remove('show');
+  renderKategori();
+  renderProduk();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER PRODUK
+// ═══════════════════════════════════════════════════════════════
+function renderProduk() {
+  const container = document.getElementById('produk-container');
+  let filtered = allProduk;
+  if (selectedKat) filtered = filtered.filter(p => p.kategori_id === selectedKat);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📦</div>
+        <p>Belum ada produk di kategori ini.<br>Coba kategori lain.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="produk-grid">
+      ${filtered.map(p => `
+        <div class="produk-card ${selectedProduk?.id === p.id ? 'selected' : ''}"
+          onclick="pilihProduk(${p.id})">
+          <div class="produk-nama">${p.nama_produk}</div>
+          <div class="produk-sku">${p.sku_supplier}</div>
+          <div class="produk-harga">${formatRp(p.harga_jual)}</div>
+          <div class="produk-modal">Modal: ${formatRp(p.harga_modal)}</div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PILIH PRODUK → tampilkan order form
+// ═══════════════════════════════════════════════════════════════
+function pilihProduk(id) {
+  selectedProduk = allProduk.find(p => p.id === id);
+  if (!selectedProduk) return;
+
+  // Update selected state
+  renderProduk();
+
+  // Isi form
+  document.getElementById('psi-nama').textContent  = selectedProduk.nama_produk;
+  document.getElementById('psi-sku').textContent   = selectedProduk.sku_supplier;
+  document.getElementById('psi-kat').textContent   = selectedProduk.ppob_kategori?.nama || '—';
+  document.getElementById('psi-harga').textContent = formatRp(selectedProduk.harga_jual);
+
+  // Label tujuan sesuai kategori
+  const kat = (selectedProduk.ppob_kategori?.nama || '').toUpperCase();
+  const tujuanLabel = document.getElementById('tujuan-label');
+  if (kat.includes('PLN') || kat.includes('LISTRIK')) {
+    tujuanLabel.textContent = '⚡ Nomor Meter / ID Pelanggan PLN';
+  } else if (kat.includes('BPJS')) {
+    tujuanLabel.textContent = '🏥 Nomor BPJS';
+  } else if (kat.includes('PDAM') || kat.includes('AIR')) {
+    tujuanLabel.textContent = '💧 Nomor Pelanggan PDAM';
+  } else if (kat.includes('GAME')) {
+    tujuanLabel.textContent = '🎮 ID Game / Username';
+  } else {
+    tujuanLabel.textContent = '📱 Nomor Tujuan (HP)';
+  }
+
+  // Tampilkan info bayar untuk Umum
+  const payInfo = document.getElementById('payment-info');
+  if (currentCustomer?.tipe === 'umum' || !currentCustomer) {
+    payInfo.classList.add('show');
+    document.getElementById('pay-bank').textContent     = settingMap['bank_tujuan_nama'] || 'BSI';
+    document.getElementById('pay-norek').textContent    = settingMap['bank_tujuan_no_rek'] || '—';
+    document.getElementById('pay-atas-nama').textContent = settingMap['bank_tujuan_atas_nama'] || '—';
+    document.getElementById('pay-nominal').textContent  = `Transfer sebesar: ${formatRp(selectedProduk.harga_jual)}`;
+  } else {
+    payInfo.classList.remove('show');
+  }
+
+  // Scroll ke form & tampilkan
+  document.getElementById('order-form').classList.add('show');
+  document.getElementById('order-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('input-tujuan').focus();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEARCH CUSTOMER (auto-detect anggota → jamaah → umum)
+// ═══════════════════════════════════════════════════════════════
+let searchCustomerTimer = null;
+async function searchCustomer(val) {
+  clearTimeout(searchCustomerTimer);
+  const resultEl = document.getElementById('cust-result');
+  const piutangEl = document.getElementById('piutang-info');
+  const cardEl = document.getElementById('cust-card');
+
+  if (!val || val.length < 2) {
+    currentCustomer = null;
+    resultEl.style.display = 'none';
+    piutangEl.style.display = 'none';
+    cardEl.className = 'customer-card';
+    if (selectedProduk) {
+      document.getElementById('payment-info').classList.add('show');
+    }
+    return;
+  }
+
+  searchCustomerTimer = setTimeout(async () => {
+    try {
+      const q = val.toLowerCase();
+
+      // 1. Cek ubnb_anggota
+      const { data: anggota } = await sb.from('ubnb_anggota')
+        .select('id, nama, no_hp, kelompok')
+        .or(`nama.ilike.%${q}%,no_hp.ilike.%${q}%`)
+        .limit(1);
+
+      if (anggota && anggota.length > 0) {
+        const a = anggota[0];
+        currentCustomer = { tipe: 'anggota', anggota_id: a.id, nama: a.nama, no_hp: a.no_hp };
+        resultEl.className = 'cust-result anggota';
+        resultEl.innerHTML = `
+          <div class="cust-name">⭐ ${a.nama}</div>
+          <div class="cust-meta">HP: ${a.no_hp || '—'} · Kelompok: ${a.kelompok || '—'}</div>
+          <span class="cust-badge badge-anggota">Anggota UBNB</span>
+          <div style="font-size:12px;margin-top:6px;color:var(--hijau-dark)">✅ Bayar nanti (catat sebagai utang)</div>`;
+        resultEl.style.display = 'block';
+        cardEl.className = 'customer-card anggota';
+        document.getElementById('payment-info').classList.remove('show');
+
+        // Cek piutang
+        const { data: plg } = await sb.from('ppob_pelanggan')
+          .select('total_piutang').eq('anggota_id', a.id).maybeSingle();
+        if (plg && Number(plg.total_piutang) > 0) {
+          piutangEl.style.display = 'block';
+          piutangEl.textContent = `⚠️ Ada piutang PPOB: ${formatRp(plg.total_piutang)} — akan ditagih saat MPPS/bulanan`;
+        } else {
+          piutangEl.style.display = 'none';
+        }
+        return;
+      }
+
+      // 2. Cek jamaah_desa
+      const { data: jamaah } = await sb.from('jamaah_desa')
+        .select('did, nama_kk, nomor_wa, kelompok')
+        .or(`nama_kk.ilike.%${q}%,nomor_wa.ilike.%${q}%`)
+        .limit(1);
+
+      if (jamaah && jamaah.length > 0) {
+        const j = jamaah[0];
+        currentCustomer = { tipe: 'jamaah', jamaah_did: j.did, nama: j.nama_kk, no_hp: j.nomor_wa };
+        resultEl.className = 'cust-result jamaah';
+        resultEl.innerHTML = `
+          <div class="cust-name">👥 ${j.nama_kk}</div>
+          <div class="cust-meta">WA: ${j.nomor_wa || '—'} · Kelompok: ${j.kelompok || '—'}</div>
+          <span class="cust-badge badge-jamaah">Jamaah Desa Perwira</span>
+          <div style="font-size:12px;margin-top:6px;color:#1d4ed8">✅ Bayar nanti (catat sebagai utang)</div>`;
+        resultEl.style.display = 'block';
+        cardEl.className = 'customer-card jamaah';
+        document.getElementById('payment-info').classList.remove('show');
+        piutangEl.style.display = 'none';
+        return;
+      }
+
+      // 3. Umum
+      currentCustomer = { tipe: 'umum', nama: val, no_hp: val };
+      resultEl.className = 'cust-result umum';
+      resultEl.innerHTML = `
+        <div class="cust-name">🔓 ${val}</div>
+        <div class="cust-meta">Tidak ditemukan di data anggota/jamaah</div>
+        <span class="cust-badge badge-umum">Umum</span>
+        <div style="font-size:12px;margin-top:6px;color:var(--text-muted)">💳 Wajib transfer manual, diverifikasi admin sebelum diproses</div>`;
+      resultEl.style.display = 'block';
+      cardEl.className = 'customer-card umum';
+
+      if (selectedProduk) {
+        document.getElementById('payment-info').classList.add('show');
+      }
+      piutangEl.style.display = 'none';
+
+    } catch(e) {
+      console.error('searchCustomer error:', e);
+    }
+  }, 500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUBMIT ORDER
+// ═══════════════════════════════════════════════════════════════
+async function submitOrder() {
+  if (!selectedProduk) { toast('Pilih produk dulu', 'error'); return; }
+
+  const tujuan = document.getElementById('input-tujuan').value.trim();
+  if (!tujuan) { toast('Nomor tujuan wajib diisi', 'error'); return; }
+
+  const catatan = document.getElementById('input-catatan').value.trim();
+  const btn = document.getElementById('btn-order');
+
+  // Konfirmasi
+  const konfirm = confirm(
+    `Konfirmasi Pesanan:\n\n` +
+    `Produk : ${selectedProduk.nama_produk}\n` +
+    `Tujuan : ${tujuan}\n` +
+    `Harga  : ${formatRp(selectedProduk.harga_jual)}\n` +
+    `Bayar  : ${currentCustomer?.tipe === 'umum' || !currentCustomer ? 'Transfer manual (verifikasi admin)' : 'Bayar nanti (catat utang)'}\n\n` +
+    `Lanjutkan?`
+  );
+  if (!konfirm) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Memproses...';
+
+  try {
+    const refId = genRefId();
+    const now   = new Date().toISOString();
+
+    // 1. Upsert pelanggan
+    let pelangganId = null;
+    const custTipe = currentCustomer?.tipe || 'umum';
+
+    if (currentCustomer) {
+      // Cek apakah sudah ada
+      let existQ = sb.from('ppob_pelanggan').select('id, total_piutang, total_transaksi, total_belanja');
+      if (custTipe === 'anggota') existQ = existQ.eq('anggota_id', currentCustomer.anggota_id);
+      else if (custTipe === 'jamaah') existQ = existQ.eq('jamaah_did', currentCustomer.jamaah_did);
+      else existQ = existQ.eq('nama', currentCustomer.nama).eq('tipe', 'umum');
+
+      const { data: existPelanggan } = await existQ.maybeSingle();
+
+      if (existPelanggan) {
+        pelangganId = existPelanggan.id;
+        // Update stats
+        await sb.from('ppob_pelanggan').update({
+          total_transaksi: (existPelanggan.total_transaksi || 0) + 1,
+          total_belanja: Number(existPelanggan.total_belanja || 0) + Number(selectedProduk.harga_jual),
+          last_order_at: now,
+          updated_at: now
+        }).eq('id', pelangganId);
+      } else {
+        const insertData = {
+          nama: currentCustomer.nama,
+          no_hp: currentCustomer.no_hp,
+          tipe: custTipe,
+          total_transaksi: 1,
+          total_belanja: selectedProduk.harga_jual,
+          last_order_at: now
+        };
+        if (custTipe === 'anggota') insertData.anggota_id = currentCustomer.anggota_id;
+        if (custTipe === 'jamaah')  insertData.jamaah_did = currentCustomer.jamaah_did;
+
+        const { data: newPelanggan } = await sb.from('ppob_pelanggan')
+          .insert(insertData).select('id').single();
+        pelangganId = newPelanggan?.id;
+      }
+    }
+
+    // 2. Tentukan metode bayar & status
+    const metodeBayar = custTipe === 'anggota' ? 'utang_anggota'
+                      : custTipe === 'jamaah'  ? 'utang_jamaah'
+                      : 'transfer_umum';
+    const statusBayar = custTipe === 'umum' ? 'menunggu' : 'utang';
+
+    // 3. Insert transaksi
+    const trxData = {
+      ref_id:       refId,
+      pelanggan_id: pelangganId,
+      produk_id:    selectedProduk.id,
+      supplier_id:  supplierConfig?.id || null,
+      sku_supplier: selectedProduk.sku_supplier,
+      nama_produk:  selectedProduk.nama_produk,
+      tujuan:       tujuan,
+      harga_modal:  selectedProduk.harga_modal,
+      harga_jual:   selectedProduk.harga_jual,
+      markup:       selectedProduk.markup,
+      status:       'pending',
+      metode_bayar: metodeBayar,
+      status_bayar: statusBayar,
+      created_at:   now,
+      updated_at:   now
+    };
+
+    const { data: trx, error: trxErr } = await sb.from('ppob_transaksi')
+      .insert(trxData).select('id').single();
+    if (trxErr) throw trxErr;
+
+    // 4. Insert piutang (untuk anggota & jamaah)
+    if (custTipe !== 'umum' && pelangganId) {
+      await sb.from('ppob_piutang').insert({
+        transaksi_id: trx.id,
+        pelanggan_id: pelangganId,
+        jumlah: selectedProduk.harga_jual,
+        status: 'belum_bayar'
+      });
+      // Update total piutang pelanggan
+      const { data: plg } = await sb.from('ppob_pelanggan')
+        .select('total_piutang').eq('id', pelangganId).single();
+      await sb.from('ppob_pelanggan').update({
+        total_piutang: Number(plg?.total_piutang || 0) + Number(selectedProduk.harga_jual)
+      }).eq('id', pelangganId);
+    }
+
+    // 5. Insert pembayaran_umum (untuk customer Umum)
+    if (custTipe === 'umum') {
+      await sb.from('ppob_pembayaran_umum').insert({
+        transaksi_id: trx.id,
+        jumlah: selectedProduk.harga_jual,
+        nama_pengirim: currentCustomer?.nama || 'Umum',
+        status: 'menunggu'
+      });
+    }
+
+    // 6. Tampilkan success screen
+    const successMsg = custTipe === 'umum'
+      ? `Silakan transfer ${formatRp(selectedProduk.harga_jual)} ke ${settingMap['bank_tujuan_nama'] || 'BSI'} · ${settingMap['bank_tujuan_no_rek'] || '—'}. Transaksi akan diproses setelah admin verifikasi pembayaran Anda.`
+      : `Pesanan tercatat sebagai utang. Pembayaran akan ditagih saat MPPS atau dikonfirmasi admin.`;
+
+    document.getElementById('page-beranda').style.display = 'none';
+    document.getElementById('success-screen').classList.add('show');
+    document.getElementById('success-ref').textContent  = refId;
+    document.getElementById('success-msg').textContent  = successMsg;
+
+    toast('✅ Pesanan berhasil dibuat!', 'success');
+
+  } catch(e) {
+    console.error('submitOrder error:', e);
+    toast('Gagal membuat pesanan: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Pesan Sekarang';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RIWAYAT
+// ═══════════════════════════════════════════════════════════════
+async function loadRiwayat() {
+  const container = document.getElementById('riwayat-container');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div>Memuat...</div>';
+
+  try {
+    if (!currentCustomer) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="icon">👤</div>
+        <p>Masukkan nama/HP Anda di beranda<br>untuk melihat riwayat transaksi</p>
+      </div>`;
+      return;
+    }
+
+    let q = sb.from('ppob_transaksi')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (currentCustomer.tipe === 'anggota' || currentCustomer.tipe === 'jamaah') {
+      const { data: plg } = await sb.from('ppob_pelanggan')
+        .select('id')
+        .eq(currentCustomer.tipe === 'anggota' ? 'anggota_id' : 'jamaah_did',
+            currentCustomer.tipe === 'anggota' ? currentCustomer.anggota_id : currentCustomer.jamaah_did)
+        .maybeSingle();
+
+      if (!plg) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Belum ada transaksi</p></div>';
+        return;
+      }
+      q = q.eq('pelanggan_id', plg.id);
+    }
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    document.getElementById('riwayat-sub').textContent =
+      `${currentCustomer.nama} · ${(data||[]).length} transaksi`;
+
+    if (!data || data.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Belum ada transaksi</p></div>';
+      return;
+    }
+
+    const statusIcon = { sukses:'✅', pending:'⏳', proses:'🔄', gagal:'❌', refund:'↩️' };
+    const statusClass = { sukses:'status-sukses', pending:'status-pending', proses:'status-pending', gagal:'status-gagal' };
+
+    container.innerHTML = data.map(t => `
+      <div class="riwayat-card">
+        <div class="riwayat-icon">📱</div>
+        <div class="riwayat-body">
+          <div class="riwayat-nama">${t.nama_produk || t.sku_supplier || '—'}</div>
+          <div class="riwayat-tujuan">${t.tujuan}</div>
+          <div class="riwayat-tgl">${formatTgl(t.created_at)}</div>
+        </div>
+        <div class="riwayat-right">
+          <div class="riwayat-harga">${formatRp(t.harga_jual)}</div>
+          <div class="riwayat-status ${statusClass[t.status]||''}">
+            ${statusIcon[t.status]||'⏳'} ${t.status}
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+  } catch(e) {
+    console.error('loadRiwayat error:', e);
+    container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>Error: ${e.message}</p></div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function navTo(page) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-' + page).classList.add('active');
+
+  document.getElementById('page-beranda').style.display  = page === 'beranda' ? 'block' : 'none';
+  document.getElementById('page-riwayat').style.display  = page === 'riwayat' ? 'block' : 'none';
+  document.getElementById('success-screen').classList.remove('show');
+
+  if (page === 'riwayat') loadRiwayat();
+}
+
+function batalOrder() {
+  selectedProduk = null;
+  document.getElementById('order-form').classList.remove('show');
+  document.getElementById('input-tujuan').value = '';
+  document.getElementById('input-catatan').value = '';
+  renderProduk();
+}
+
+function kembaliDariSukses() {
+  selectedProduk = null;
+  document.getElementById('success-screen').classList.remove('show');
+  document.getElementById('page-beranda').style.display = 'block';
+  document.getElementById('order-form').classList.remove('show');
+  document.getElementById('input-tujuan').value = '';
+  document.getElementById('input-catatan').value = '';
+  document.getElementById('nav-beranda').classList.add('active');
+  document.getElementById('nav-riwayat').classList.remove('active');
+  renderProduk();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// START
+// ═══════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
