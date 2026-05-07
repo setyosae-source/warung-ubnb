@@ -1495,18 +1495,13 @@ tr:last-child td { border-bottom: none; }
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">🏦 Pengaturan Rekening Bank</div>
-              <div class="card-subtitle">Rekening untuk menerima pembayaran agen/customer</div>
+              <div class="card-title">🏦 Rekening Penerima Pembayaran</div>
+              <div class="card-subtitle">Rekening untuk transfer pembayaran customer Umum</div>
             </div>
-            <button class="btn btn-primary">+ Tambah Bank</button>
+            <button class="btn btn-secondary" onclick="navTo('pengaturan')">✏️ Edit di Pengaturan Web</button>
           </div>
-          <div class="info-row">
-            <div class="key">Bank Utama</div>
-            <div class="val">BCA · 0123456789 · KOPERASI UBNB</div>
-          </div>
-          <div class="info-row">
-            <div class="key">Status</div>
-            <div class="val"><span class="badge success">Aktif</span></div>
+          <div id="bank-info-container">
+            <div style="text-align:center;padding:24px;color:var(--text-muted)">⏳ Memuat...</div>
           </div>
         </div>
       </div>
@@ -2028,7 +2023,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
     // Trigger page-specific loader
     // Mapping khusus: page 'agen' → fungsi loadPelanggan, 'pengaturan' → loadPengaturan
-    const pageLoaderMap = { agen: 'loadPelanggan', pengaturan: 'loadPengaturan' };
+    const pageLoaderMap = { agen: 'loadPelanggan', pengaturan: 'loadPengaturan', bank: 'loadBank' };
     const loaderName = pageLoaderMap[page] || ('load' + page.charAt(0).toUpperCase() + page.slice(1));
     if (typeof window[loaderName] === 'function') {
       window[loaderName]();
@@ -2046,8 +2041,41 @@ document.querySelectorAll('.kategori-tab').forEach(tab => {
 
 
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // PHASE 2c — PRODUK + PELANGGAN + SUPPLIER + PENGATURAN + ADMIN
 // ═══════════════════════════════════════════════════════════════
+
+// ───────────────────────────────────────────────────────────────
+// BANK — loadBank() baca dari ppob_setting
+// ───────────────────────────────────────────────────────────────
+async function loadBank() {
+  const container = document.getElementById('bank-info-container');
+  if (!container) return;
+  try {
+    const keys = ['bank_tujuan_nama','bank_tujuan_no_rek','bank_tujuan_atas_nama',
+                  'bank_tujuan_2_nama','bank_tujuan_2_no_rek'];
+    const { data } = await sb.from('ppob_setting').select('key,value').in('key', keys);
+    const m = {};
+    (data||[]).forEach(s => m[s.key] = s.value);
+    const rows = [
+      { key: 'Bank Utama',   val: m['bank_tujuan_nama'] || '—' },
+      { key: 'No Rekening',  val: `<span style="font-family:monospace;font-size:15px;font-weight:700">${m['bank_tujuan_no_rek'] || '—'}</span>` },
+      { key: 'Atas Nama',    val: m['bank_tujuan_atas_nama'] || '—' },
+    ];
+    if (m['bank_tujuan_2_nama'] && m['bank_tujuan_2_nama'] !== '-') {
+      rows.push({ key: 'Bank Kedua',    val: m['bank_tujuan_2_nama'] });
+      rows.push({ key: 'No Rek Kedua', val: `<span style="font-family:monospace;font-size:15px;font-weight:700">${m['bank_tujuan_2_no_rek'] || '—'}</span>` });
+    }
+    rows.push({ key: 'Status', val: '<span class="badge success">Aktif</span>' });
+    container.innerHTML = rows.map(r =>
+      `<div class="info-row"><div class="key">${r.key}</div><div class="val">${r.val}</div></div>`
+    ).join('') + `<div style="margin-top:16px;padding:12px;background:var(--hijau-bg);border-radius:8px;font-size:13px;color:var(--text-muted)">
+      ✏️ Ubah rekening di <b>Pengaturan Web → Rekening Penerima</b></div>`;
+  } catch(e) {
+    if (container) container.innerHTML = `<div style="color:var(--red);padding:16px">Error: ${e.message}</div>`;
+  }
+}
+
 
 // ───────────────────────────────────────────────────────────────
 // PRODUK — loadProduk()
@@ -2752,6 +2780,10 @@ async function loadTransaksi() {
     const bp = document.getElementById('badge-piutang');
     if (bv) { bv.textContent = verifCount.count; bv.style.display = verifCount.count > 0 ? 'inline' : 'none'; }
     if (bp) { bp.textContent = piutangCount.count; bp.style.display = piutangCount.count > 0 ? 'inline' : 'none'; }
+    // Update sidebar badge — hanya pending verifikasi + piutang belum bayar
+    const sidebarBadge = document.querySelector('.nav-item[data-page="transaksi"] .badge-count');
+    const totalAlert = (verifCount.count||0) + (piutangCount.count||0);
+    if (sidebarBadge) { sidebarBadge.textContent = totalAlert; sidebarBadge.style.display = totalAlert > 0 ? 'inline' : 'none'; }
 
     if (rows.length === 0) {
       tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-muted)">
