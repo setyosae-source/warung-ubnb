@@ -1328,14 +1328,24 @@ async function simpanAnggota(){
   const no=document.getElementById('ma-no').value.trim();
   const nama=document.getElementById('ma-nama').value.trim();
   if(!no||!nama){toast('No. Anggota dan Nama wajib diisi',true);return;}
+  const kel=document.getElementById('ma-kelompok').value;
+  const jns=document.getElementById('ma-jenis').value;
+  const hp=document.getElementById('ma-hp').value.trim()||null;
+  const alamat=document.getElementById('ma-alamat').value.trim()||null;
+  const keluarga=document.getElementById('ma-keluarga').value.trim()||null;
+  // 1. Insert ke ubnb_anggota dulu (master)
+  const{data:newA,error:eA}=await sb.from('ubnb_anggota').upsert([{
+    no_anggota:no, nama, nama_keluarga:keluarga||nama,
+    kelompok:kel, jenis:jns, no_hp:hp, status:'Aktif',
+    tgl_daftar:new Date().toISOString().slice(0,10)
+  }],{onConflict:'no_anggota'}).select('id').single();
+  if(eA){toast('Gagal sync anggota: '+eA.message,true);return;}
+  // 2. Insert ke ubnb_saham dengan anggota_id dari master
   const{error}=await sb.from('ubnb_saham').insert([{
-    no_anggota:no,nama,
-    nama_keluarga:document.getElementById('ma-keluarga').value.trim()||null,
-    kelompok:document.getElementById('ma-kelompok').value,
-    jenis:document.getElementById('ma-jenis').value,
-    no_hp:document.getElementById('ma-hp').value.trim()||null,
-    alamat:document.getElementById('ma-alamat').value.trim()||null,
-    jumlah_lembar:0,nilai_per_lembar:HARGA_SAHAM,status:'Aktif',
+    no_anggota:no, nama, nama_keluarga:keluarga,
+    kelompok:kel, jenis:jns, no_hp:hp, alamat,
+    anggota_id:newA.id,
+    jumlah_lembar:0, nilai_per_lembar:HARGA_SAHAM, status:'Aktif',
   }]);
   if(error){toast('Gagal: '+error.message,true);return;}
   toast('Anggota berhasil ditambahkan!');
@@ -2872,12 +2882,17 @@ async function eksekusiApproveSaham(){
     if(error) throw error;
 
     // Sync ke ubnb_anggota (master anggota untuk kasir, BMT, laundry, dll)
-    await sb.from('ubnb_anggota').upsert([{
+    const{data:masterA,error:eMaster}=await sb.from('ubnb_anggota').upsert([{
       no_anggota:noAnggota, nama, nama_keluarga:keluarga||nama,
       kelompok, jenis:'anggota', no_hp:wa||null,
       status:'Aktif', tgl_daftar:new Date().toISOString().slice(0,10),
       catatan:'Dari pengajuan saham - approve admin'
-    }],{onConflict:'no_anggota'});
+    }],{onConflict:'no_anggota'}).select('id').single();
+    if(eMaster) console.warn('Sync ubnb_anggota warning:',eMaster.message);
+    // Update anggota_id di ubnb_saham agar merujuk ke master
+    if(masterA?.id){
+      await sb.from('ubnb_saham').update({anggota_id:masterA.id}).eq('id',newA.id);
+    }
 
     // Catat transaksi beli
     await sb.from('ubnb_saham_trx').insert([{
