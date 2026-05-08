@@ -1364,6 +1364,7 @@ tr:last-child td { border-bottom: none; }
           </select>
           <input type="text" class="filter-input" id="produk-filter-cari" placeholder="🔍 Nama / SKU produk" style="flex:1;min-width:180px" oninput="loadProduk()">
           <button class="btn btn-secondary" id="btn-sync-produk" onclick="syncProdukFromSupplier()">🔄 Sync dari Digiflazz</button>
+          <button class="btn btn-secondary" style="background:var(--red);color:white;border-color:var(--red)" onclick="hapusSemuaProduk()">🗑️ Hapus Semua</button>
         </div>
 
         <div class="card">
@@ -1390,6 +1391,7 @@ tr:last-child td { border-bottom: none; }
                   <th style="text-align:right">Jual</th>
                   <th style="text-align:right">Profit</th>
                   <th style="text-align:center">Status</th>
+                  <th style="text-align:center">Hapus</th>
                 </tr>
               </thead>
               <tbody id="produk-tbody">
@@ -2163,6 +2165,9 @@ async function loadProduk() {
         <td style="text-align:center">
           <div class="toggle ${isAktif ? 'on' : ''}" onclick="toggleStatusProduk(${p.id},'${p.status}',this)"></div>
         </td>
+        <td style="text-align:center">
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="hapusProduk(${p.id})" title="Hapus produk ini">🗑️</button>
+        </td>
       </tr>`;
     }).join('');
 
@@ -2200,6 +2205,27 @@ async function simpanMarkupDefault() {
   const ok = await setSetting('markup_default', val);
   if (ok) toast('Markup default disimpan: ' + formatRp(Number(val)), 'success');
   else toast('Gagal simpan markup', 'error');
+}
+
+async function hapusProduk(id) {
+  if (!isAdmin()) { toast('Hanya admin yang bisa menghapus produk', 'error'); return; }
+  const produk = _allProduk.find(p => p.id === id);
+  const nama = produk?.nama_produk || 'produk ini';
+  if (!konfirmasi('Hapus produk "' + nama + '"?\nAksi ini tidak bisa dibatalkan.')) return;
+  const { error } = await sb.from('ppob_produk').delete().eq('id', id);
+  if (error) { toast('Gagal hapus: ' + error.message, 'error'); return; }
+  toast('✅ Produk dihapus', 'success');
+  await loadProduk();
+}
+
+async function hapusSemuaProduk() {
+  if (!isAdmin()) { toast('Hanya admin yang bisa menghapus produk', 'error'); return; }
+  if (!konfirmasi('HAPUS SEMUA PRODUK?\n\nSeluruh produk akan dihapus dari database.\nAksi ini tidak bisa dibatalkan!')) return;
+  if (!konfirmasi('Konfirmasi sekali lagi — yakin hapus SEMUA produk?')) return;
+  const { error } = await sb.from('ppob_produk').delete().neq('id', -1);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  toast('✅ Semua produk dihapus. Silakan Sync ulang.', 'success');
+  await loadProduk();
 }
 
 async function syncProdukFromSupplier() {
