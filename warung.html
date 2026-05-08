@@ -1637,18 +1637,40 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
             <div style="font-size:11px;color:var(--text-muted);margin-top:4px" id="h-count-hutang">0 tagihan belum lunas</div>
           </div>
         </div>
-        <div class="tabs">
-          <button class="tab active" onclick="setHutangFilter('semua',this)">Semua</button>
-          <button class="tab" onclick="setHutangFilter('piutang',this)">Piutang Pelanggan</button>
-          <button class="tab" onclick="setHutangFilter('hutang',this)">Hutang Supplier</button>
-          <button class="tab" onclick="setHutangFilter('lunas',this)">Lunas</button>
+        <div class="tabs" style="flex-wrap:wrap">
+          <button class="tab active" id="htab-daftar" onclick="setHutangMode('daftar',this)">📋 Daftar</button>
+          <button class="tab" id="htab-tagihan" onclick="setHutangMode('tagihan',this)">🔔 Tagihan Per Orang</button>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Daftar Hutang & Piutang</div>
-            <button class="btn primary sm" onclick="openModalHutang()">＋ Catat Manual</button>
+
+        <!-- Panel: Daftar Hutang (existing) -->
+        <div id="panel-hutang-daftar">
+          <div class="tabs" style="flex-wrap:wrap;margin-bottom:8px">
+            <button class="tab active" onclick="setHutangFilter('semua',this)">Semua</button>
+            <button class="tab" onclick="setHutangFilter('piutang',this)">Piutang Pelanggan</button>
+            <button class="tab" onclick="setHutangFilter('hutang',this)">Hutang Supplier</button>
+            <button class="tab" onclick="setHutangFilter('lunas',this)">Lunas</button>
           </div>
-          <div id="hutang-list" class="item-list"></div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Daftar Hutang &amp; Piutang</div>
+              <button class="btn primary sm" onclick="openModalHutang()">＋ Catat Manual</button>
+            </div>
+            <div id="hutang-list" class="item-list"></div>
+          </div>
+        </div>
+
+        <!-- Panel: Tagihan Per Orang (BARU) -->
+        <div id="panel-tagihan" style="display:none">
+          <div style="position:relative;margin-bottom:12px">
+            <input type="text" id="tagihan-search"
+              placeholder="🔍 Cari nama, produk, tanggal, keterangan..."
+              oninput="searchTagihan(this.value)"
+              style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:10px;padding:0 40px 0 14px;font-size:13px;outline:none;background:white;box-sizing:border-box"/>
+            <button id="tagihan-search-clear" onclick="clearTagihanSearch()"
+              style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-muted);line-height:1">✕</button>
+          </div>
+          <div id="tagihan-summary"></div>
+          <div id="tagihan-list"></div>
         </div>
       </div>
 
@@ -4185,6 +4207,7 @@ async function simpanEditJual(){
     await lT();await lH();await lB();await lKas();
     renderRiwayatJual();renderHutang();renderStok();
     _markSaved('modal-edit-jual');closeModal('modal-edit-jual');
+    resetTagihanCache();
     toast('Transaksi & stok berhasil diperbarui!');
   }catch(e){
     console.error('simpanEditJual error:',e);
@@ -4302,6 +4325,7 @@ async function hapusTransaksiJual(id){
     if(typeof renderHutang==='function')renderHutang();
     if(typeof renderStok==='function')renderStok();
     if(typeof renderKas==='function')renderKas();
+    resetTagihanCache();
     toast('✅ Transaksi #'+id+' dihapus, stok & kas dikembalikan');
   }catch(e){
     console.error('hapusTransaksiJual:',e);
@@ -4309,7 +4333,7 @@ async function hapusTransaksiJual(id){
   }
 }
 
-async function lunasTransaksi(id){await sb.from('transaksi').update({status_bayar:'lunas'}).eq('id',id);await lT();renderRiwayatJual();toast('Dilunasi!');}
+async function lunasTransaksi(id){await sb.from('transaksi').update({status_bayar:'lunas'}).eq('id',id);await lT();renderRiwayatJual();resetTagihanCache();toast('Dilunasi!');}
 
 /* STRUK */
 function tampilStruk(tx){
@@ -5581,7 +5605,7 @@ function renderVoucherList(){const el=document.getElementById('voucher-list');if
 
 /* HUTANG */
 function openModalHutang(){['h-id','h-nama','h-jml','h-ket'].forEach(i=>document.getElementById(i).value='');openModal('modal-hutang-form');}
-async function simpanHutang(){const tipe=document.getElementById('h-tipe').value,nama=document.getElementById('h-nama').value.trim(),jml=parseInt(document.getElementById('h-jml').value)||0,ket=document.getElementById('h-ket').value.trim();if(!nama||jml<=0){toast('Nama dan jumlah wajib',true);return;}await sb.from('hutang').insert([{nama,jml,ket,lunas:false,tipe}]);_markSaved('modal-hutang-form');closeModal('modal-hutang-form');await lH();renderHutang();toast('Dicatat');}
+async function simpanHutang(){const tipe=document.getElementById('h-tipe').value,nama=document.getElementById('h-nama').value.trim(),jml=parseInt(document.getElementById('h-jml').value)||0,ket=document.getElementById('h-ket').value.trim();if(!nama||jml<=0){toast('Nama dan jumlah wajib',true);return;}await sb.from('hutang').insert([{nama,jml,ket,lunas:false,tipe}]);_markSaved('modal-hutang-form');closeModal('modal-hutang-form');await lH();renderHutang();resetTagihanCache();toast('Dicatat');}
 async function lihatSumberHutang(refType, refId){
   if(refType==='transaksi'){
     const btn=Array.from(document.querySelectorAll('.nav-item')).find(b=>b.onclick&&String(b.onclick).includes("'riwayat'"));
@@ -5598,13 +5622,14 @@ async function lihatSumberHutang(refType, refId){
   }
 }
 
-async function lunasinHutang(id){await sb.from('hutang').update({lunas:true}).eq('id',id);await lH();renderHutang();toast('Dilunasi');}
+async function lunasinHutang(id){await sb.from('hutang').update({lunas:true}).eq('id',id);await lH();renderHutang();resetTagihanCache();toast('Dilunasi');}
 async function hapusHutang(id){
   const h=aH.find(x=>x.id===id);if(!h)return;
   const msg=h.ref_type?'Hapus catatan hutang/piutang ini?\n(Transaksi sumbernya tidak akan dihapus)':'Hapus catatan hutang/piutang ini?';
   if(!confirm(msg))return;
   await sb.from('hutang').delete().eq('id',id);
   await lH();renderHutang();
+  resetTagihanCache();
   toast('Catatan hutang dihapus');
 }
 function setHutangFilter(f,btn){hutangFilter=f;document.querySelectorAll('#page-hutang .tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderHutang();}
@@ -8107,6 +8132,7 @@ async function lunasiPPOB(id){
   await sb.from('hutang').update({lunas:true}).eq('ref_type','ppob').eq('lunas',false).like('ket','PPOB: '+p.produk+'%');
   await lKas();await lPPOB();await lH();
   renderPPOBRiwayat();;renderHutang();renderDashKas();
+  resetTagihanCache();
   toast('PPOB dilunasi!');
 }
 
@@ -8356,6 +8382,7 @@ async function hapusPPOB(id){
     renderPPOBRiwayat();
     renderHutang();
     if(document.getElementById('page-dashboard')?.classList.contains('active'))renderDashboard();
+    resetTagihanCache();
     toast(`✅ Transaksi PPOB #${id} dihapus`);
   }catch(e){
     console.error('hapusPPOB error:',e);
@@ -12117,6 +12144,202 @@ async function initPOSBeli(){
   posbRenderCart();
 }
 
+
+/* ============================================================
+   TAGIHAN PER ORANG — Semua sumber: Warung + PPOB + Manual + BMT
+   ============================================================ */
+let aTagihanBMT=[],aTagihanPPOB=[],aTagihanWarung=[];
+let _tagihanLoaded=false,_tagihanSearchQ='';
+
+function setHutangMode(mode,btn){
+  document.querySelectorAll('#page-hutang>.tabs>.tab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  document.getElementById('panel-hutang-daftar').style.display=mode==='daftar'?'':'none';
+  document.getElementById('panel-tagihan').style.display=mode==='tagihan'?'':'none';
+  if(mode==='tagihan')showTagihanTab();
+}
+
+async function loadTagihan(){
+  const el=document.getElementById('tagihan-list');
+  if(el)el.innerHTML='<div class="empty"><div class="ei">⏳</div>Memuat dari semua sumber...</div>';
+  const[resBMT,resPPOB,resWarung]=await Promise.all([
+    sb.from('bmt_akad').select('id,no_akad,nama_jamaah,jangka,angsuran_perbulan,tanggal_akad,total_angsuran,sisa_angsuran').eq('status','Belum Lunas'),
+    sb.from('ppob').select('id,tanggal,nama,produk,harga_jual,catatan').eq('status_bayar','belum'),
+    sb.from('transaksi').select('id,waktu,tgl_transaksi,pelanggan,nama_display,total,items').eq('status_bayar','belum')
+  ]);
+  aTagihanBMT=resBMT.data||[];
+  aTagihanPPOB=resPPOB.data||[];
+  aTagihanWarung=resWarung.data||[];
+  _tagihanLoaded=true;
+  renderTagihan();
+}
+
+function hitungTunggakanBMT(akad){
+  const tglAkad=new Date(akad.tanggal_akad),now=new Date();
+  let bulan=(now.getFullYear()-tglAkad.getFullYear())*12+(now.getMonth()-tglAkad.getMonth());
+  if(now.getDate()<tglAkad.getDate())bulan--;
+  bulan=Math.max(0,Math.min(bulan,akad.jangka));
+  const angPerBulan=parseFloat(akad.angsuran_perbulan)||0;
+  const sudahBayar=angPerBulan>0?Math.round(parseFloat(akad.total_angsuran||0)/angPerBulan):0;
+  const tunggakanBulan=Math.max(0,bulan-sudahBayar);
+  return{bulan,sudahBayar,tunggakanBulan,tunggakanNilai:tunggakanBulan*angPerBulan,angPerBulan};
+}
+
+function buildTagihanMap(){
+  const sq=(_tagihanSearchQ||'').toLowerCase().trim();
+  const map={};
+  const add=(namaRaw,item)=>{
+    const nama=(namaRaw||'Tanpa Nama').trim();
+    const key=nama.toLowerCase();
+    if(!map[key])map[key]={nama,items:[],total:0};
+    if(sq){
+      const tglStr=item.tgl?new Date(item.tgl).toLocaleDateString('id-ID'):'';
+      const hay=(nama+' '+item.keterangan+' '+item.label+' '+tglStr).toLowerCase();
+      if(!hay.includes(sq))return;
+    }
+    map[key].items.push(item);
+    map[key].total+=item.nilai;
+  };
+  // 1. Warung belum bayar
+  (aTagihanWarung||[]).forEach(t=>{
+    const nama=t.nama_display||t.pelanggan||'Pelanggan Umum';
+    const iNames=(t.items||[]).map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
+    add(nama,{sumber:'warung',label:'Warung',color:'#10b981',ref_id:t.id,
+      tgl:t.tgl_transaksi||t.waktu,keterangan:iNames||'Penjualan warung',nilai:t.total});
+  });
+  // 2. PPOB belum bayar
+  (aTagihanPPOB||[]).forEach(p=>{
+    add(p.nama||'Pelanggan Umum',{sumber:'ppob',label:'PPOB',color:'#8b5cf6',ref_id:p.id,
+      tgl:p.tanggal,keterangan:p.produk+(p.catatan?' - '+p.catatan:''),nilai:p.harga_jual});
+  });
+  // 3. Hutang manual (piutang bukan ref ppob/transaksi — hindari dobel)
+  (aH||[]).filter(h=>h.tipe==='piutang'&&!h.lunas&&h.ref_type!=='ppob'&&h.ref_type!=='transaksi').forEach(h=>{
+    add(h.nama,{sumber:'manual',label:'Manual',color:'#f59e0b',ref_id:h.id,
+      tgl:h.tgl,keterangan:h.ket||'Catatan manual',nilai:h.jml});
+  });
+  // 4. BMT tunggakan sesuai bulan berjalan
+  (aTagihanBMT||[]).forEach(akad=>{
+    const t=hitungTunggakanBMT(akad);
+    if(t.tunggakanBulan<=0)return;
+    const nama=akad.nama_jamaah.replace(/^\[Anggota\]\s*/i,'').trim();
+    add(nama,{sumber:'bmt',label:'BMT',color:'#3b82f6',ref_id:akad.id,
+      tgl:akad.tanggal_akad,
+      keterangan:akad.no_akad+' | '+t.tunggakanBulan+' bln tunggak × '+fmt(t.angPerBulan),
+      nilai:t.tunggakanNilai});
+  });
+  return Object.values(map).filter(x=>x.items.length>0).sort((a,b)=>b.total-a.total);
+}
+
+function renderTagihan(){
+  const el=document.getElementById('tagihan-list');
+  if(!el)return;
+  if(!_tagihanLoaded){el.innerHTML='<div class="empty"><div class="ei">⏳</div>Memuat...</div>';return;}
+  const data=buildTagihanMap();
+  const totalNilai=data.reduce((s,x)=>s+x.total,0);
+  const elSum=document.getElementById('tagihan-summary');
+  if(elSum)elSum.innerHTML=
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<div style="flex:1;min-width:120px;background:white;border-radius:10px;padding:12px;border-left:4px solid var(--red);box-shadow:0 1px 4px rgba(0,0,0,.06)">'
+    +'<div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase">Total Tagihan</div>'
+    +'<div style="font-size:18px;font-weight:800;color:var(--red);margin-top:2px">'+fmt(totalNilai)+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted)">'+data.length+' orang belum bayar</div></div>'
+    +'<div style="flex:1;min-width:120px;background:white;border-radius:10px;padding:12px;border-left:4px solid var(--amber);box-shadow:0 1px 4px rgba(0,0,0,.06)">'
+    +'<div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase">Total Item</div>'
+    +'<div style="font-size:18px;font-weight:800;color:var(--amber);margin-top:2px">'+data.reduce((s,x)=>s+x.items.length,0)+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted)">Warung + PPOB + BMT</div></div></div>';
+
+  if(!data.length){
+    el.innerHTML='<div class="empty"><div class="ei">'+(_tagihanSearchQ?'🔍':'✅')+'</div>'
+      +(_tagihanSearchQ?'Tidak ditemukan untuk "'+_tagihanSearchQ+'"':'Semua tagihan sudah lunas 🎉')+'</div>';
+    return;
+  }
+
+  const colorMap={Warung:'#10b981',PPOB:'#8b5cf6',Manual:'#f59e0b',BMT:'#3b82f6'};
+  el.innerHTML=data.map((orang,idx)=>{
+    const badges=[...new Set(orang.items.map(i=>i.label))].map(l=>
+      '<span style="background:'+colorMap[l]+'22;color:'+colorMap[l]+';border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700">'+l+'</span>'
+    ).join('');
+    const rincian=orang.items.map(item=>{
+      const tgl=item.tgl?new Date(item.tgl).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+      return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #f0f0f0;gap:8px">'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="display:flex;gap:5px;align-items:center;margin-bottom:2px">'
+        +'<span style="font-size:11px;font-weight:700;background:'+item.color+'22;color:'+item.color+';padding:1px 6px;border-radius:99px">'+item.label+'</span>'
+        +'<span style="font-size:10px;color:var(--text-muted)">'+tgl+'</span></div>'
+        +'<div style="font-size:12px;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px" title="'+item.keterangan+'">'+item.keterangan+'</div>'
+        +'</div>'
+        +'<div style="font-size:13px;font-weight:700;font-family:Courier New,monospace;color:var(--red);white-space:nowrap;flex-shrink:0">'+fmt(item.nilai)+'</div>'
+        +'</div>';
+    }).join('');
+    const namaEnc=encodeURIComponent(orang.nama);
+    return '<div style="background:white;border-radius:10px;border:1.5px solid #e5e7eb;margin-bottom:10px;overflow:hidden">'
+      +'<div onclick="toggleTagihanDetail('+idx+')" style="padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;user-select:none">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:800;font-size:14px;margin-bottom:4px">'+orang.nama+'</div>'
+      +'<div style="display:flex;gap:4px;flex-wrap:wrap">'+badges+'</div></div>'
+      +'<div style="text-align:right;margin-left:10px;flex-shrink:0">'
+      +'<div style="font-size:16px;font-weight:900;font-family:Courier New,monospace;color:var(--red)">'+fmt(orang.total)+'</div>'
+      +'<div style="font-size:10px;color:var(--text-muted)">'+orang.items.length+' tagihan ›</div></div></div>'
+      +'<div id="tagihan-detail-'+idx+'" style="display:none;padding:0 14px 12px">'
+      +'<div style="border-top:1px solid #f0f0f0;padding-top:8px;margin-bottom:8px">'+rincian+'</div>'
+      +'<div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:13px">'
+      +'<span>Total Tagihan</span>'
+      +'<span style="color:var(--red);font-family:Courier New,monospace">'+fmt(orang.total)+'</span></div>'
+      +'<button onclick="kirimWATagihan(\''+namaEnc+'\','+idx+')" '
+      +'style="width:100%;margin-top:6px;padding:10px;background:#25d366;color:white;border:none;'
+      +'border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📲 Kirim Tagihan WA</button>'
+      +'</div></div>';
+  }).join('');
+}
+
+function toggleTagihanDetail(idx){
+  const el=document.getElementById('tagihan-detail-'+idx);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+
+function searchTagihan(q){
+  _tagihanSearchQ=q;
+  const clr=document.getElementById('tagihan-search-clear');
+  if(clr)clr.style.display=q?'block':'none';
+  renderTagihan();
+}
+
+function clearTagihanSearch(){
+  _tagihanSearchQ='';
+  const inp=document.getElementById('tagihan-search');if(inp)inp.value='';
+  const clr=document.getElementById('tagihan-search-clear');if(clr)clr.style.display='none';
+  renderTagihan();
+}
+
+function kirimWATagihan(namaEnc,idx){
+  const nama=decodeURIComponent(namaEnc);
+  // Rebuild map tanpa filter search untuk pesan WA yang lengkap
+  const sq=_tagihanSearchQ;_tagihanSearchQ='';
+  const data=buildTagihanMap();
+  _tagihanSearchQ=sq;
+  const orang=data.find(x=>x.nama===nama);
+  if(!orang){toast('Data tidak ditemukan',true);return;}
+  const rincian=orang.items.map(item=>{
+    const tgl=item.tgl?new Date(item.tgl).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
+    return '• ['+item.label+'] '+tgl+':\n  '+item.keterangan+'\n  '+fmt(item.nilai);
+  }).join('\n');
+  const pesan='Halo Bapak/Ibu *'+nama+'*,\n\n'
+    +'Kami dari *UBNB Desa Perwira* mengingatkan adanya tagihan yang belum terbayarkan:\n\n'
+    +rincian+'\n\n'
+    +'*Total: '+fmt(orang.total)+'*\n\n'
+    +'Mohon segera diselesaikan. Terima kasih 🙏\n\n'
+    +'_UBNB Desa Perwira_';
+  window.open('https://wa.me/?text='+encodeURIComponent(pesan),'_blank');
+}
+
+function showTagihanTab(){
+  if(!_tagihanLoaded)loadTagihan();
+}
+
+function resetTagihanCache(){
+  _tagihanLoaded=false;
+}
+/* ============ END TAGIHAN PER ORANG ============ */
 
 </script>
 
