@@ -12147,9 +12147,11 @@ async function initPOSBeli(){
 
 /* ============================================================
    TAGIHAN PER ORANG — Semua sumber: Warung + PPOB + Manual + BMT
+   v2: + Lunasi Semua, Lunasi Sebagian, fix duplikasi nama
    ============================================================ */
 let aTagihanBMT=[],aTagihanPPOB=[],aTagihanWarung=[];
 let _tagihanLoaded=false,_tagihanSearchQ='';
+let _tagihanLunasiMode={}; // {idx: 'semua'|'sebagian'|null}
 
 function setHutangMode(mode,btn){
   document.querySelectorAll('#page-hutang>.tabs>.tab').forEach(b=>b.classList.remove('active'));
@@ -12185,11 +12187,20 @@ function hitungTunggakanBMT(akad){
   return{bulan,sudahBayar,tunggakanBulan,tunggakanNilai:tunggakanBulan*angPerBulan,angPerBulan};
 }
 
+function _normNama(namaRaw){
+  // Strip prefix anggota, emoji, spasi lebih
+  return (namaRaw||'Tanpa Nama')
+    .replace(/^\[Anggota\]\s*/i,'')
+    .replace(/^⭐\s*/,'')
+    .replace(/^👥\s*/,'')
+    .trim();
+}
+
 function buildTagihanMap(){
   const sq=(_tagihanSearchQ||'').toLowerCase().trim();
   const map={};
   const add=(namaRaw,item)=>{
-    const nama=(namaRaw||'Tanpa Nama').trim();
+    const nama=_normNama(namaRaw);
     const key=nama.toLowerCase();
     if(!map[key])map[key]={nama,items:[],total:0};
     if(sq){
@@ -12221,7 +12232,7 @@ function buildTagihanMap(){
   (aTagihanBMT||[]).forEach(akad=>{
     const t=hitungTunggakanBMT(akad);
     if(t.tunggakanBulan<=0)return;
-    const nama=akad.nama_jamaah.replace(/^\[Anggota\]\s*/i,'').trim();
+    const nama=_normNama(akad.nama_jamaah);
     add(nama,{sumber:'bmt',label:'BMT',color:'#3b82f6',ref_id:akad.id,
       tgl:akad.tanggal_akad,
       keterangan:akad.no_akad+' | '+t.tunggakanBulan+' bln tunggak × '+fmt(t.angPerBulan),
@@ -12259,19 +12270,55 @@ function renderTagihan(){
     const badges=[...new Set(orang.items.map(i=>i.label))].map(l=>
       '<span style="background:'+colorMap[l]+'22;color:'+colorMap[l]+';border-radius:99px;padding:2px 8px;font-size:10px;font-weight:700">'+l+'</span>'
     ).join('');
-    const rincian=orang.items.map(item=>{
+
+    // Mode lunasi untuk idx ini
+    const lunasiMode=_tagihanLunasiMode[idx]||null;
+
+    // Rincian per item
+    const rincian=orang.items.map((item,iIdx)=>{
       const tgl=item.tgl?new Date(item.tgl).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):'-';
-      return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #f0f0f0;gap:8px">'
+      const checkId='chk-'+idx+'-'+iIdx;
+      const cbHtml=lunasiMode==='sebagian'
+        ?'<input type="checkbox" id="'+checkId+'" checked style="width:16px;height:16px;accent-color:var(--green);flex-shrink:0;cursor:pointer;margin-top:2px"/>'
+        :'';
+      return '<div style="display:flex;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #f0f0f0;gap:8px">'
+        +cbHtml
         +'<div style="flex:1;min-width:0">'
         +'<div style="display:flex;gap:5px;align-items:center;margin-bottom:2px">'
         +'<span style="font-size:11px;font-weight:700;background:'+item.color+'22;color:'+item.color+';padding:1px 6px;border-radius:99px">'+item.label+'</span>'
         +'<span style="font-size:10px;color:var(--text-muted)">'+tgl+'</span></div>'
-        +'<div style="font-size:12px;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px" title="'+item.keterangan+'">'+item.keterangan+'</div>'
+        +'<div style="font-size:12px;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="'+item.keterangan+'">'+item.keterangan+'</div>'
         +'</div>'
         +'<div style="font-size:13px;font-weight:700;font-family:Courier New,monospace;color:var(--red);white-space:nowrap;flex-shrink:0">'+fmt(item.nilai)+'</div>'
         +'</div>';
     }).join('');
+
     const namaEnc=encodeURIComponent(orang.nama);
+
+    // Tombol aksi lunasi
+    let aksiBawah='';
+    if(!lunasiMode){
+      aksiBawah=
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'
+        +'<button onclick="tagihanLunasSemuaKonfirm(\''+namaEnc+'\','+idx+')" '
+        +'style="padding:10px;background:var(--green);color:white;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">✅ Lunas Semua</button>'
+        +'<button onclick="tagihanModeSebagiaan('+idx+')" '
+        +'style="padding:10px;background:var(--blue);color:white;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">⚡ Lunas Sebagian</button>'
+        +'</div>'
+        +'<button onclick="kirimWATagihan(\''+namaEnc+'\','+idx+')" '
+        +'style="width:100%;margin-top:8px;padding:9px;background:#25d366;color:white;border:none;'
+        +'border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">📲 Kirim Tagihan WA</button>';
+    } else if(lunasiMode==='sebagian'){
+      aksiBawah=
+        '<div style="background:#eff6ff;border-radius:8px;padding:8px 10px;margin-top:10px;font-size:11px;color:#1e40af">💡 Centang item yang sudah dibayar, lalu tap Konfirmasi</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'
+        +'<button onclick="tagihanLunasSebagiankonfirm(\''+namaEnc+'\','+idx+')" '
+        +'style="padding:10px;background:var(--green);color:white;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">✅ Konfirmasi</button>'
+        +'<button onclick="tagihanBatalLunasi('+idx+')" '
+        +'style="padding:10px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer">✕ Batal</button>'
+        +'</div>';
+    }
+
     return '<div style="background:white;border-radius:10px;border:1.5px solid #e5e7eb;margin-bottom:10px;overflow:hidden">'
       +'<div onclick="toggleTagihanDetail('+idx+')" style="padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;user-select:none">'
       +'<div style="flex:1;min-width:0">'
@@ -12280,14 +12327,12 @@ function renderTagihan(){
       +'<div style="text-align:right;margin-left:10px;flex-shrink:0">'
       +'<div style="font-size:16px;font-weight:900;font-family:Courier New,monospace;color:var(--red)">'+fmt(orang.total)+'</div>'
       +'<div style="font-size:10px;color:var(--text-muted)">'+orang.items.length+' tagihan ›</div></div></div>'
-      +'<div id="tagihan-detail-'+idx+'" style="display:none;padding:0 14px 12px">'
-      +'<div style="border-top:1px solid #f0f0f0;padding-top:8px;margin-bottom:8px">'+rincian+'</div>'
+      +'<div id="tagihan-detail-'+idx+'" style="display:'+(lunasiMode?'block':'none')+';padding:0 14px 12px">'
+      +'<div style="border-top:1px solid #f0f0f0;padding-top:8px;margin-bottom:4px">'+rincian+'</div>'
       +'<div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:13px">'
       +'<span>Total Tagihan</span>'
       +'<span style="color:var(--red);font-family:Courier New,monospace">'+fmt(orang.total)+'</span></div>'
-      +'<button onclick="kirimWATagihan(\''+namaEnc+'\','+idx+')" '
-      +'style="width:100%;margin-top:6px;padding:10px;background:#25d366;color:white;border:none;'
-      +'border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📲 Kirim Tagihan WA</button>'
+      +aksiBawah
       +'</div></div>';
   }).join('');
 }
@@ -12295,6 +12340,259 @@ function renderTagihan(){
 function toggleTagihanDetail(idx){
   const el=document.getElementById('tagihan-detail-'+idx);
   if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+
+// === LUNASI SEMUA ===
+async function tagihanLunasSemuaKonfirm(namaEnc,idx){
+  const nama=decodeURIComponent(namaEnc);
+  const sq=_tagihanSearchQ;_tagihanSearchQ='';
+  const data=buildTagihanMap();
+  _tagihanSearchQ=sq;
+  const orang=data.find(x=>x.nama===nama);
+  if(!orang)return;
+  const total=orang.total;
+  if(!confirm('Lunas SEMUA tagihan '+nama+'?\n\nTotal: '+fmt(total)+'\n('+orang.items.length+' item dari semua sumber)'))return;
+  await _eksekusiLunasi(orang.items);
+}
+
+// === MODE SEBAGIAN: tampilkan checkbox ===
+function tagihanModeSebagiaan(idx){
+  _tagihanLunasiMode[idx]='sebagian';
+  renderTagihan();
+  // Auto expand
+  const el=document.getElementById('tagihan-detail-'+idx);
+  if(el)el.style.display='block';
+}
+
+function tagihanBatalLunasi(idx){
+  delete _tagihanLunasiMode[idx];
+  renderTagihan();
+}
+
+// === KONFIRMASI SEBAGIAN: baca checkbox yang dicentang ===
+async function tagihanLunasSebagiankonfirm(namaEnc,idx){
+  const nama=decodeURIComponent(namaEnc);
+  const sq=_tagihanSearchQ;_tagihanSearchQ='';
+  const data=buildTagihanMap();
+  _tagihanSearchQ=sq;
+  const orang=data.find(x=>x.nama===nama);
+  if(!orang)return;
+
+  // Ambil item yang di-centang
+  const dipilih=orang.items.filter((_,iIdx)=>{
+    const cb=document.getElementById('chk-'+idx+'-'+iIdx);
+    return cb&&cb.checked;
+  });
+  if(!dipilih.length){toast('Pilih minimal 1 item',true);return;}
+  const totalDipilih=dipilih.reduce((s,i)=>s+i.nilai,0);
+  if(!confirm('Lunas '+dipilih.length+' item terpilih?\n\nTotal: '+fmt(totalDipilih)))return;
+  await _eksekusiLunasi(dipilih);
+  delete _tagihanLunasiMode[idx];
+}
+
+// === ENGINE LUNASI: handle tiap sumber ===
+/* ---- Helper: generate no_jurnal berikutnya ---- */
+async function _nextNoJurnal(){
+  const thn=new Date().getFullYear();
+  const{data}=await sb.from('jurnal_umum').select('no_jurnal')
+    .ilike('no_jurnal','JU-'+thn+'-%')
+    .order('id',{ascending:false}).limit(1);
+  if(!data||!data.length)return 'JU-'+thn+'-1';
+  const last=data[0].no_jurnal;
+  const num=parseInt(last.split('-').pop())||0;
+  return 'JU-'+thn+'-'+(num+1);
+}
+
+/* ---- Helper: insert jurnal_umum + jurnal_detail ---- */
+async function _insertJurnal(noJurnal,tgl,keterangan,referensi,details){
+  // details: [{coa_id,kode_akun,nama_akun,debit,kredit,keterangan?}]
+  const totalDebit=details.reduce((s,d)=>s+(d.debit||0),0);
+  const totalKredit=details.reduce((s,d)=>s+(d.kredit||0),0);
+  const{data:ju,error}=await sb.from('jurnal_umum').insert([{
+    no_jurnal:noJurnal,
+    tanggal:tgl,
+    keterangan,
+    referensi,
+    total_debit:totalDebit,
+    total_kredit:totalKredit,
+    status:'posted',
+    operator:CU?.username||'sistem'
+  }]).select('id').single();
+  if(error)throw error;
+  const detailRows=details.map(d=>({
+    jurnal_id:ju.id,
+    coa_id:d.coa_id,
+    kode_akun:d.kode_akun,
+    nama_akun:d.nama_akun,
+    debit:d.debit||0,
+    kredit:d.kredit||0,
+    keterangan:d.keterangan||keterangan
+  }));
+  const{error:ed}=await sb.from('jurnal_detail').insert(detailRows);
+  if(ed)throw ed;
+  return ju.id;
+}
+
+/* ---- COA ID mapping (sesuai hasil query) ---- */
+const _COA={
+  KAS_UTAMA:    {id:1,  kode:'1-101',nama:'Kas Utama (Bendahara)'},
+  KAS_BMT:      {id:2,  kode:'1-102',nama:'Kas BMT'},
+  KAS_PPOB_BL:  {id:3,  kode:'1-103',nama:'Kas PPOB Bukalapak'},
+  KAS_PPOB_IG:  {id:47, kode:'1-106',nama:'Kas PPOB Indogrosir'},
+  PIUTANG_POKOK:{id:4,  kode:'1-111',nama:'Piutang Pokok Pembiayaan'},
+  PIUTANG_LABA: {id:5,  kode:'1-112',nama:'Piutang Laba Pembiayaan'},
+  PIUTANG_USAHA:{id:6,  kode:'1-113',nama:'Piutang Usaha'},
+  PENJUALAN:    {id:23, kode:'4-101',nama:'Penjualan Sembako'},
+  PENJUALAN_PPOB:{id:24,kode:'4-201',nama:'Penjualan PPOB'},
+};
+
+async function _eksekusiLunasi(items){
+  const btn=event?.target;
+  if(btn){btn.disabled=true;btn.textContent='⏳ Memproses...';}
+  let berhasil=0,gagal=0;
+  const tglHari=new Date().toISOString().slice(0,10);
+
+  for(const item of items){
+    try{
+      const noJurnal=await _nextNoJurnal();
+
+      if(item.sumber==='warung'){
+        // 1. Update status transaksi & hutang
+        await sb.from('transaksi').update({status_bayar:'lunas'}).eq('id',item.ref_id);
+        await sb.from('hutang').update({lunas:true}).eq('ref_type','transaksi').eq('ref_id',item.ref_id);
+        // 2. Jurnal pelunasan piutang usaha warung:
+        //    Debit  Kas Utama (Bendahara)   [uang masuk]
+        //    Kredit Piutang Usaha           [piutang berkurang]
+        await _insertJurnal(
+          noJurnal, tglHari,
+          'Pelunasan Piutang Warung - '+item.keterangan.slice(0,60),
+          'TRX-'+item.ref_id,
+          [
+            {coa_id:_COA.KAS_UTAMA.id, kode_akun:_COA.KAS_UTAMA.kode, nama_akun:_COA.KAS_UTAMA.nama,
+              debit:item.nilai, kredit:0},
+            {coa_id:_COA.PIUTANG_USAHA.id, kode_akun:_COA.PIUTANG_USAHA.kode, nama_akun:_COA.PIUTANG_USAHA.nama,
+              debit:0, kredit:item.nilai}
+          ]
+        );
+        const t=aT.find(x=>x.id===item.ref_id);
+        if(t)t.status_bayar='lunas';
+        aTagihanWarung=aTagihanWarung.filter(x=>x.id!==item.ref_id);
+      }
+
+      else if(item.sumber==='ppob'){
+        // 1. Update status
+        await sb.from('ppob').update({status_bayar:'lunas'}).eq('id',item.ref_id);
+        await sb.from('hutang').update({lunas:true}).eq('ref_type','ppob').eq('ref_id',item.ref_id);
+        // 2. Jurnal pelunasan piutang PPOB:
+        //    Debit  Kas Utama (Bendahara)   [uang masuk dari pelanggan]
+        //    Kredit Penjualan PPOB          [piutang PPOB berkurang — sudah dicatat saat transaksi]
+        // Note: saat PPOB belum bayar, jurnal asli sudah Debit Kas PPOB Kredit Penjualan PPOB
+        // Saat pelunasan: pelanggan bayar cash → Debit Kas Utama, Kredit Piutang Usaha
+        // Cari apakah ada Piutang Usaha dari PPOB, kalau tidak ada pakai Penjualan PPOB
+        await _insertJurnal(
+          noJurnal, tglHari,
+          'Pelunasan Piutang PPOB - '+item.keterangan.slice(0,60),
+          'PPOB-'+item.ref_id,
+          [
+            {coa_id:_COA.KAS_UTAMA.id, kode_akun:_COA.KAS_UTAMA.kode, nama_akun:_COA.KAS_UTAMA.nama,
+              debit:item.nilai, kredit:0},
+            {coa_id:_COA.PIUTANG_USAHA.id, kode_akun:_COA.PIUTANG_USAHA.kode, nama_akun:_COA.PIUTANG_USAHA.nama,
+              debit:0, kredit:item.nilai}
+          ]
+        );
+        aTagihanPPOB=aTagihanPPOB.filter(x=>x.id!==item.ref_id);
+      }
+
+      else if(item.sumber==='manual'){
+        // Hutang manual: hanya update lunas, insert jurnal umum
+        await sb.from('hutang').update({lunas:true}).eq('id',item.ref_id);
+        await _insertJurnal(
+          noJurnal, tglHari,
+          'Pelunasan Piutang Manual - '+item.keterangan.slice(0,60),
+          'MANUAL-'+item.ref_id,
+          [
+            {coa_id:_COA.KAS_UTAMA.id, kode_akun:_COA.KAS_UTAMA.kode, nama_akun:_COA.KAS_UTAMA.nama,
+              debit:item.nilai, kredit:0},
+            {coa_id:_COA.PIUTANG_USAHA.id, kode_akun:_COA.PIUTANG_USAHA.kode, nama_akun:_COA.PIUTANG_USAHA.nama,
+              debit:0, kredit:item.nilai}
+          ]
+        );
+      }
+
+      else if(item.sumber==='bmt'){
+        // BMT: insert bmt_angsuran sejumlah bulan tunggak
+        const akad=aTagihanBMT.find(x=>x.id===item.ref_id);
+        if(akad){
+          const t=hitungTunggakanBMT(akad);
+          // Hitung proporsi pokok & margin per bulan dari sisa_angsuran
+          // Pakai rasio akad: pokok = plafon/(jangka), margin = sisa margin/bulan
+          const angTotal=t.angPerBulan;
+          // insert angsuran per bulan tunggak
+          for(let b=0;b<t.tunggakanBulan;b++){
+            const{data:ang}=await sb.from('bmt_angsuran').insert([{
+              akad_id:akad.id,
+              jumlah:angTotal,
+              tgl_bayar:tglHari,
+              keterangan:'Tunggakan bln '+(t.sudahBayar+b+1)+' - Lunasi via Tagihan Per Orang',
+              operator:CU?.username||'sistem'
+            }]).select('id').single();
+
+            // Jurnal per angsuran: ambil proporsi pokok & margin
+            // Dari bmt_akad: total_angsuran = sudah bayar, sisa_angsuran = sisa pokok+margin
+            // Rasio sederhana: margin per bulan = (total_margin_akad) / jangka
+            // Cari nilai margin dari jurnal akad (jika tidak, pakai estimasi 10% dari angsuran)
+            const marginPerBulan=Math.round(angTotal*0.1); // fallback 10%
+            const pokokPerBulan=angTotal-marginPerBulan;
+
+            const noJurnalAng=await _nextNoJurnal();
+            await _insertJurnal(
+              noJurnalAng, tglHari,
+              'Angsuran BMT - '+_normNama(akad.nama_jamaah)+' ('+akad.no_akad+')',
+              'ANG-'+item.ref_id+'-'+(t.sudahBayar+b+1),
+              [
+                {coa_id:_COA.KAS_BMT.id, kode_akun:_COA.KAS_BMT.kode, nama_akun:_COA.KAS_BMT.nama,
+                  debit:angTotal, kredit:0},
+                {coa_id:_COA.PIUTANG_POKOK.id, kode_akun:_COA.PIUTANG_POKOK.kode, nama_akun:_COA.PIUTANG_POKOK.nama,
+                  debit:0, kredit:pokokPerBulan},
+                {coa_id:_COA.PIUTANG_LABA.id, kode_akun:_COA.PIUTANG_LABA.kode, nama_akun:_COA.PIUTANG_LABA.nama,
+                  debit:0, kredit:marginPerBulan}
+              ]
+            );
+          }
+
+          // Update total_angsuran & cek lunas
+          const totalBaru=(parseFloat(akad.total_angsuran)||0)+t.tunggakanNilai;
+          await sb.from('bmt_akad').update({total_angsuran:totalBaru}).eq('id',akad.id);
+          const sisaBaru=(parseFloat(akad.sisa_angsuran)||0)-t.tunggakanNilai;
+          if(sisaBaru<=0){
+            await sb.from('bmt_akad').update({status:'Lunas'}).eq('id',akad.id);
+          }
+          akad.total_angsuran=totalBaru;
+          akad.sisa_angsuran=Math.max(0,sisaBaru);
+          if(sisaBaru<=0)aTagihanBMT=aTagihanBMT.filter(x=>x.id!==akad.id);
+        }
+      }
+      berhasil++;
+    }catch(e){
+      console.error('_eksekusiLunasi error item',item,e);
+      gagal++;
+    }
+  }
+
+  // Reload data fresh
+  await Promise.all([lH(),lT(),lPPOB()]);
+  if(items.some(i=>i.sumber==='bmt')){
+    const{data}=await sb.from('bmt_akad')
+      .select('id,no_akad,nama_jamaah,jangka,angsuran_perbulan,tanggal_akad,total_angsuran,sisa_angsuran')
+      .eq('status','Belum Lunas');
+    aTagihanBMT=data||[];
+  }
+  renderHutang();
+  renderTagihan();
+  resetTagihanCache();
+  _tagihanLoaded=true;
+  const msg=gagal>0?'⚠️ '+berhasil+' berhasil, '+gagal+' gagal':'✅ '+berhasil+' tagihan dilunasi + jurnal dibuat!';
+  toast(msg,gagal>0);
 }
 
 function searchTagihan(q){
@@ -12338,6 +12636,7 @@ function showTagihanTab(){
 
 function resetTagihanCache(){
   _tagihanLoaded=false;
+  _tagihanLunasiMode={};
 }
 /* ============ END TAGIHAN PER ORANG ============ */
 
