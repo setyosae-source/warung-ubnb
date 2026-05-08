@@ -1388,7 +1388,7 @@ tr:last-child td { border-bottom: none; }
                   <th>Kategori</th>
                   <th style="text-align:right">Modal</th>
                   <th style="text-align:center">Markup</th>
-                  <th style="text-align:right">Jual</th>
+                  <th style="text-align:right">Harga Jual</th>
                   <th style="text-align:right">Profit</th>
                   <th style="text-align:center">Status</th>
                   <th style="text-align:center">Hapus</th>
@@ -2154,12 +2154,18 @@ async function loadProduk() {
         <td>${kat ? `${kat.icon||''} ${kat.nama}` : '—'}</td>
         <td style="text-align:right">${formatRp(p.harga_modal)}</td>
         <td style="text-align:center">
-          <input type="number" value="${p.markup}" min="0" step="500"
+          <input type="number" id="markup-${p.id}" value="${p.markup}" min="0" step="500"
             style="width:80px;height:28px;text-align:center;border:1px solid var(--border);border-radius:6px;font-size:12px;padding:0 4px"
-            onchange="updateMarkupProduk(${p.id}, this.value, ${p.harga_modal})">
+            oninput="syncHargaJual(${p.id}, ${p.harga_modal})"
+            onblur="updateProdukHarga(${p.id}, ${p.harga_modal})">
         </td>
-        <td style="text-align:right;font-weight:600">${formatRp(p.harga_jual)}</td>
-        <td style="text-align:right;color:${profit>0?'var(--hijau)':'var(--red)'}">
+        <td style="text-align:right">
+          <input type="number" id="jual-${p.id}" value="${p.harga_jual}" min="0" step="500"
+            style="width:90px;height:28px;text-align:right;border:1px solid var(--border);border-radius:6px;font-size:12px;padding:0 6px;font-weight:600;color:var(--hijau)"
+            oninput="syncMarkup(${p.id}, ${p.harga_modal})"
+            onblur="updateProdukHarga(${p.id}, ${p.harga_modal})">
+        </td>
+        <td style="text-align:right;color:var(--hijau);font-weight:700" id="profit-${p.id}">
           ${profit > 0 ? '+'+formatRp(profit) : formatRp(profit)}
         </td>
         <td style="text-align:center">
@@ -2177,14 +2183,46 @@ async function loadProduk() {
   }
 }
 
-async function updateMarkupProduk(id, markup, hargaModal) {
-  const markupNum = Number(markup) || 0;
-  const hargaJual = Number(hargaModal) + markupNum;
+// Saat input markup → auto update harga jual display
+function syncHargaJual(id, modal) {
+  const markup = Number(document.getElementById('markup-'+id)?.value) || 0;
+  const jual = Number(modal) + markup;
+  const jualEl = document.getElementById('jual-'+id);
+  if (jualEl) jualEl.value = jual;
+  updateProfitDisplay(id, modal, jual);
+}
+
+// Saat input harga jual → auto update markup display
+function syncMarkup(id, modal) {
+  const jual = Number(document.getElementById('jual-'+id)?.value) || 0;
+  const markup = jual - Number(modal);
+  const markupEl = document.getElementById('markup-'+id);
+  if (markupEl) markupEl.value = markup > 0 ? markup : 0;
+  updateProfitDisplay(id, modal, jual);
+}
+
+// Update tampilan profit
+function updateProfitDisplay(id, modal, jual) {
+  const profit = jual - Number(modal);
+  const el = document.getElementById('profit-'+id);
+  if (el) {
+    el.textContent = profit > 0 ? '+'+formatRp(profit) : formatRp(profit);
+    el.style.color = profit > 0 ? 'var(--hijau)' : 'var(--red)';
+  }
+}
+
+// Simpan ke DB saat blur (keluar dari input)
+async function updateProdukHarga(id, hargaModal) {
+  const markupEl = document.getElementById('markup-'+id);
+  const jualEl   = document.getElementById('jual-'+id);
+  if (!markupEl || !jualEl) return;
+  const markup   = Number(markupEl.value) || 0;
+  const hargaJual = Number(jualEl.value) || 0;
   const { error } = await sb.from('ppob_produk').update({
-    markup: markupNum, harga_jual: hargaJual, updated_at: new Date().toISOString()
+    markup, harga_jual: hargaJual, updated_at: new Date().toISOString()
   }).eq('id', id);
-  if (error) { toast('Gagal update markup: ' + error.message, 'error'); return; }
-  toast('Markup diperbarui!', 'success');
+  if (error) { toast('Gagal simpan: ' + error.message, 'error'); return; }
+  toast('✅ Harga disimpan', 'success');
 }
 
 async function toggleStatusProduk(id, currentStatus, el) {
