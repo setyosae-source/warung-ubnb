@@ -1410,9 +1410,24 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="fg"><label>No Akad</label><input type="text" id="ea-akad-no"></div>
       <div class="fg"><label>Tanggal Akad</label><input type="date" id="ea-akad-tgl"></div>
     </div>
-    <div class="two-col">
-      <div class="fg"><label>Nama Nasabah</label><input type="text" id="ea-akad-nama"></div>
-      <div class="fg"><label>Kelompok</label><input type="text" id="ea-akad-kel"></div>
+    <div class="fg"><label>Nama Nasabah</label>
+      <div class="ac-wrap">
+        <input type="text" id="ea-akad-nama" placeholder="Cari anggota / jamaah / ketik nama baru..."
+          oninput="searchEaNama(this.value)" onfocus="searchEaNama(this.value)" autocomplete="off">
+        <div class="ac-dd" id="ea-nama-dd"></div>
+      </div>
+      <input type="hidden" id="ea-akad-anggota-id">
+      <div id="ea-nama-badge" style="display:none;margin-top:5px;padding:5px 10px;border-radius:var(--rs);font-size:11px;font-weight:600"></div>
+    </div>
+    <div class="fg"><label>Kelompok</label>
+      <select id="ea-akad-kel">
+        <option value="">Pilih kelompok</option>
+        <option value="PW1">PW1</option>
+        <option value="PW2">PW2</option>
+        <option value="PW3">PW3</option>
+        <option value="PW4">PW4</option>
+        <option value="Luar Perwira">Luar Perwira</option>
+      </select>
     </div>
     <div class="two-col">
       <div class="fg"><label>Jenis Akad</label>
@@ -2029,6 +2044,9 @@ function editAkad(){
   document.getElementById('ea-akad-no').value=a.no_akad||'';
   document.getElementById('ea-akad-tgl').value=a.tanggal_akad||'';
   document.getElementById('ea-akad-nama').value=a.nama_jamaah||'';
+  document.getElementById('ea-akad-anggota-id').value=a.anggota_id||'';
+  document.getElementById('ea-nama-dd').style.display='none';
+  setEaNamaBadge(a.anggota_id, a.nama_jamaah, a.kelompok);
   document.getElementById('ea-akad-kel').value=a.kelompok||'';
   document.getElementById('ea-akad-jenis').value=a.jenis_akad||'Murabahah';
   document.getElementById('ea-akad-status').value=a.status||'Belum Lunas';
@@ -2043,6 +2061,59 @@ function editAkad(){
   openModal('modal-edit-akad');
 }
 
+// Picker Nama Edit Akad
+function searchEaNama(q){
+  var dd=document.getElementById('ea-nama-dd');if(!dd)return;
+  var ql=(q||'').toLowerCase().trim();
+  if(!ql){dd.style.display='none';return;}
+  var fa=aSahamAnggota.filter(function(a){return a.nama.toLowerCase().includes(ql)||(a.no_anggota||'').toLowerCase().includes(ql);}).slice(0,6);
+  var fj=aJamaah.filter(function(j){return j.nama.toLowerCase().includes(ql);}).slice(0,4);
+  var html='';
+  if(fa.length){
+    html+='<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--M);background:#f9fafb;text-transform:uppercase">Anggota UBNB</div>';
+    fa.forEach(function(a){
+      var sNama=a.nama.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      var sKel=(a.kelompok||'').replace(/'/g,"\\'");
+      var sNo=(a.no_anggota||'').replace(/'/g,"\\'");
+      html+='<div class="ac-item" onmousedown="pilihEaNama('+a.id+',\''+sNama+'\',\''+sKel+'\',\''+sNo+'\',true)"><div class="ac-name">* '+a.nama+'</div><div class="ac-sub">'+(a.no_anggota||'-')+' &middot; '+(a.kelompok||'-')+'</div></div>';
+    });
+  }
+  if(fj.length){
+    html+='<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--M);background:#f9fafb;text-transform:uppercase">Jamaah Desa</div>';
+    fj.forEach(function(j){
+      var sNama=j.nama.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      var sKel=(j.kelompok||'').replace(/'/g,"\\'");
+      html+='<div class="ac-item" onmousedown="pilihEaNama(null,\''+sNama+'\',\''+sKel+'\',\'\',false)"><div class="ac-name">'+j.nama+'</div><div class="ac-sub">Jamaah &middot; '+(j.kelompok||'-')+'</div></div>';
+    });
+  }
+  var sQ=q.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  html+='<div class="ac-item" onmousedown="pilihEaNama(null,\''+sQ+'\',\'Luar Perwira\',\'\',false)"><div class="ac-name">'+q+' &mdash; Nama Bebas/Umum</div></div>';
+  dd.innerHTML=html;dd.style.display='block';
+}
+function pilihEaNama(id,nama,kelompok,noAnggota,isAnggota){
+  const namaDisplay=(isAnggota?'[Anggota] ':'[Jamaah] ')+nama+(noAnggota?' ('+noAnggota+')':'');
+  document.getElementById('ea-akad-nama').value=namaDisplay;
+  document.getElementById('ea-akad-anggota-id').value=id||'';
+  const kel=(kelompok||'').trim();
+  if(kel)document.getElementById('ea-akad-kel').value=kel;
+  document.getElementById('ea-nama-dd').style.display='none';
+  setEaNamaBadge(id,nama,kelompok);
+}
+function setEaNamaBadge(anggotaId,nama,kelompok){
+  const el=document.getElementById('ea-nama-badge');if(!el)return;
+  if(anggotaId){
+    el.style.display='block';el.style.background='var(--HL)';el.style.color='var(--H)';
+    el.innerHTML='Anggota UBNB &middot; ID: '+anggotaId+' &middot; '+(kelompok||'-');
+  } else if(nama){
+    el.style.display='block';el.style.background='#f0f9ff';el.style.color='#0369a1';
+    el.innerHTML='Jamaah / Umum &middot; Tanpa no. anggota';
+  } else { el.style.display='none'; }
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('#ea-akad-nama')&&!e.target.closest('#ea-nama-dd')){
+    var dd=document.getElementById('ea-nama-dd');if(dd)dd.style.display='none';
+  }
+});
 function hitungEditAkad(){
   const harga=parseFloat(document.getElementById('ea-akad-harga').value)||0;
   const dp=parseFloat(document.getElementById('ea-akad-dp').value)||0;
@@ -2064,8 +2135,10 @@ async function simpanEditAkad(){
   const a=aAkad.find(x=>x.id===_detailAkadId);if(!a)return;
   const noAkad=document.getElementById('ea-akad-no').value.trim();
   const tgl=document.getElementById('ea-akad-tgl').value;
-  const nama=document.getElementById('ea-akad-nama').value.trim();
+  const namaRaw=document.getElementById('ea-akad-nama').value.trim();
+  const nama=namaRaw.replace(/^(Anggota: |Jamaah: )/,'').split(' (')[0]||namaRaw;
   const kel=document.getElementById('ea-akad-kel').value.trim();
+  const anggotaId=document.getElementById('ea-akad-anggota-id').value||null;
   const jenis=document.getElementById('ea-akad-jenis').value;
   const status=document.getElementById('ea-akad-status').value;
   const objek=document.getElementById('ea-akad-objek').value.trim();
@@ -2080,12 +2153,20 @@ async function simpanEditAkad(){
   const{error}=await sb.from('bmt_akad').update({
     no_akad:noAkad, nama_jamaah:nama, kelompok:kel, tanggal_akad:tgl,
     jenis_akad:jenis, status, objek_pembiayaan:objek, jaminan:jaminan||null,
+    anggota_id:anggotaId?parseInt(anggotaId):null,
     tgl_rutin:parseInt(document.getElementById('ea-akad-tgl-rutin').value)||null,
     harga_beli:harga, uang_muka:dp, total_margin:margin,
     total_pembiayaan:totalPmb, angsuran_perbulan:angs, jangka
   }).eq('id',_detailAkadId);
   if(error){al('ea-akad-alert','Gagal: '+error.message);return;}
-  toast('✅ Data akad berhasil diperbarui');
+  if(anggotaId && String(anggotaId)!==String(a.anggota_id)){
+    const angsIds=aAngsuran.filter(x=>x.akad_id===_detailAkadId).map(x=>x.id);
+    if(angsIds.length){
+      const{error:eLog}=await sb.from('ubnb_shu_trx_log').update({anggota_id:parseInt(anggotaId)}).in('ref_id',angsIds).eq('ref_tabel','bmt_angsuran').eq('jenis_trx','angsuran');
+      if(eLog) console.warn('SHU sync warning:',eLog.message);
+    }
+  }
+  toast('✅ Akad berhasil diperbarui');
   closeModal('modal-edit-akad');
   await loadAll();
   lihatDetail(_detailAkadId);
