@@ -3,6 +3,12 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.0 (08 Mei 2026) — Webhook signature fix
+ *   - HMAC-SHA1 signature verification dari header X-Hub-Signature
+ *   - Raw body capture untuk HMAC computation
+ *   - Fix bug: processed=true tidak ter-update di webhook log
+ *   - Mode lenient: signature invalid tidak block update transaksi (log warning saja)
+ *
  * PHASE 1 endpoints (existing):
  *   GET  /health
  *   POST /api/digiflazz/cek-saldo
@@ -10,8 +16,9 @@
  *   POST /api/digiflazz/transaction
  *   POST /api/digiflazz/transaction/inquiry-pln
  *
- * PHASE 3 endpoints (NEW):
- *   POST /api/digiflazz/sync-products   — import produk dari Digiflazz ke Supabase
+ * PHASE 3 endpoints:
+ *   POST /api/digiflazz/sync-products
+ *   POST /api/digiflazz/execute-transaction
  *   POST /webhook/digiflazz             — callback status transaksi dari Digiflazz
  */
 
@@ -20,25 +27,42 @@ const crypto  = require('crypto');
 const https   = require('https');
 
 const app = express();
-app.use(express.json());
+
+// Capture raw body untuk verifikasi HMAC signature webhook
+// (req.rawBody dipakai di /webhook/digiflazz)
+app.use(express.json({
+  verify: (req, res, buf) => { req.rawBody = buf.toString('utf8'); }
+}));
+
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-proxy-secret');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 // ═══════════════════════════════════════════════════════════════
 // CONFIG — dari environment variables (lebih aman dari hardcode)
 // Set via: export PROXY_SECRET=xxx (atau di systemd service file)
 // ═══════════════════════════════════════════════════════════════
 const PROXY_SECRET     = process.env.PROXY_SECRET     || 'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f';
-const DIGIFLAZZ_USER   = process.env.DIGIFLAZZ_USER   || 'tuwumiWXAdqg';
-const DIGIFLAZZ_APIKEY = process.env.DIGIFLAZZ_APIKEY || 'dev-b8bd5f40-d97c-11ef-8d09-333896381645';
-const DIGIFLAZZ_MODE   = process.env.DIGIFLAZZ_MODE   || 'dev';       // 'dev' | 'prod'
+const DIGIFLAZZ_USER   = process.env.DIGIFLAZZ_USER   || 'meleveDVl4xg';
+const DIGIFLAZZ_APIKEY = process.env.DIGIFLAZZ_APIKEY || 'b4df73f8-0dd7-5e77-bbd1-9ef7addc2fdc';
+const DIGIFLAZZ_MODE   = process.env.DIGIFLAZZ_MODE   || 'prod';       // 'dev' | 'prod'
 const SUPABASE_URL     = process.env.SUPABASE_URL      || 'https://skltbmcrqutevmtcxqxj.supabase.co';
 const SUPABASE_KEY     = process.env.SUPABASE_KEY      || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const PORT             = process.env.PORT              || 3000;
+
+// Webhook secret — defaults to PROXY_SECRET (configured sama di Digiflazz dashboard)
+// Bisa di-rotate ke secret terpisah dengan set env DIGIFLAZZ_WEBHOOK_SECRET
+const DIGIFLAZZ_WEBHOOK_SECRET = process.env.DIGIFLAZZ_WEBHOOK_SECRET || PROXY_SECRET;
 
 const DIGIFLAZZ_BASE   = 'https://api.digiflazz.com/v1';
 const IS_DEV           = DIGIFLAZZ_MODE === 'dev';
 
 // ═══════════════════════════════════════════════════════════════
-// HELPER: MD5 signature untuk Digiflazz
+// HELPER: MD5 signature untuk Digiflazz API request
 // ═══════════════════════════════════════════════════════════════
 function makeSignature(suffix) {
   return crypto.createHash('md5')
@@ -98,7 +122,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.0.0',
+    version: '2.1.0',
     timestamp: new Date().toISOString(),
     endpoints: [
       '/health',
@@ -107,6 +131,7 @@ app.get('/health', (req, res) => {
       '/api/digiflazz/transaction',
       '/api/digiflazz/transaction/inquiry-pln',
       '/api/digiflazz/sync-products',
+      '/api/digiflazz/execute-transaction',
       '/webhook/digiflazz'
     ]
   });
@@ -203,7 +228,7 @@ app.post('/api/digiflazz/transaction/inquiry-pln', authProxy, async (req, res) =
 });
 
 // ═══════════════════════════════════════════════════════════════
-// POST /api/digiflazz/sync-products — NEW PHASE 3
+// POST /api/digiflazz/sync-products
 // Import daftar produk dari Digiflazz ke ppob_produk Supabase
 // Body: { cmd: 'prepaid'|'pasca', supplier_id: number }
 // ═══════════════════════════════════════════════════════════════
@@ -356,44 +381,84 @@ app.post('/api/digiflazz/sync-products', authProxy, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// POST /webhook/digiflazz — NEW PHASE 3
+// POST /webhook/digiflazz — v2.1.0 (signature fix)
 // Callback status transaksi dari Digiflazz
-// Digiflazz kirim POST saat status transaksi berubah
+//
+// Headers yang di-handle:
+//   X-Hub-Signature       : sha1=<hmac_sha1(raw_body, secret)>
+//   X-Digiflazz-Event     : 'create' | 'update'
+//   User-Agent            : 'Digiflazz-Hookshot' (prepaid) | 'Digiflazz-Pasca-Hookshot' (postpaid)
+//
+// Mode: LENIENT — signature invalid hanya log warning, transaksi tetap diupdate
 // ═══════════════════════════════════════════════════════════════
 app.post('/webhook/digiflazz', async (req, res) => {
   const payload = req.body;
   const receivedAt = new Date().toISOString();
 
-  console.log('[webhook] Received:', JSON.stringify(payload).substring(0, 200));
+  // Extract Digiflazz-specific headers
+  const headerSig   = req.headers['x-hub-signature']     || null;
+  const event       = req.headers['x-digiflazz-event']   || null;
+  const userAgent   = req.headers['user-agent']          || null;
+
+  console.log(`[webhook] Received — event=${event}, ua=${userAgent}, sig=${headerSig ? 'present' : 'missing'}`);
+  console.log('[webhook] Payload:', JSON.stringify(payload).substring(0, 200));
 
   // Balas 200 dulu ke Digiflazz (prevent retry)
   res.json({ status: 'received', timestamp: receivedAt });
 
   // Proses async setelah reply
   try {
+    // ═════════════════════════════════════════════════════════════
+    // 1. Verifikasi signature HMAC-SHA1
+    //    Format header: 'sha1=<hex>'
+    //    HMAC = hmac_sha1(raw_body, DIGIFLAZZ_WEBHOOK_SECRET)
+    // ═════════════════════════════════════════════════════════════
+    let isValid = false;
+    let expectedSig = null;
+    if (headerSig && req.rawBody) {
+      expectedSig = 'sha1=' + crypto
+        .createHmac('sha1', DIGIFLAZZ_WEBHOOK_SECRET)
+        .update(req.rawBody)
+        .digest('hex');
+      isValid = (headerSig === expectedSig);
+      if (!isValid) {
+        console.warn(`[webhook] Signature INVALID — got=${headerSig}, expected=${expectedSig}`);
+      } else {
+        console.log('[webhook] Signature OK ✓');
+      }
+    } else {
+      console.warn('[webhook] No X-Hub-Signature header or rawBody — skipping verification');
+    }
+
     const data = payload?.data;
     if (!data) {
       console.warn('[webhook] No data in payload');
+      // Tetap log ke webhook_log walau payload kosong
+      await supabaseQuery('ppob_webhook_log', 'POST', {
+        ref_id: null,
+        payload,
+        signature: headerSig,
+        signature_valid: isValid,
+        processed: false,
+        error_message: 'No data field in payload',
+        created_at: receivedAt
+      });
       return;
     }
 
-    const refId  = data.ref_id;
-    const status = data.status;   // 'Sukses' | 'Gagal' | 'Pending'
-    const sn     = data.sn || null;
-    const rc     = data.rc || null;
+    const refId   = data.ref_id;
+    const status  = data.status;
+    const sn      = data.sn || null;
+    const rc      = data.rc || null;
     const message = data.message || null;
 
-    // Verifikasi signature webhook (opsional tapi recommended)
-    const expectedSign = crypto.createHash('md5')
-      .update(DIGIFLAZZ_USER + DIGIFLAZZ_APIKEY + refId)
-      .digest('hex');
-    const isValid = (data.sign === expectedSign);
-
-    // 1. Log webhook ke ppob_webhook_log
+    // ═════════════════════════════════════════════════════════════
+    // 2. Log webhook ke ppob_webhook_log (selalu log, sebelum proses)
+    // ═════════════════════════════════════════════════════════════
     await supabaseQuery('ppob_webhook_log', 'POST', {
       ref_id: refId,
       payload,
-      signature: data.sign || null,
+      signature: headerSig,
       signature_valid: isValid,
       processed: false,
       created_at: receivedAt
@@ -404,7 +469,9 @@ app.post('/webhook/digiflazz', async (req, res) => {
       return;
     }
 
-    // 2. Cari transaksi di ppob_transaksi by ref_id
+    // ═════════════════════════════════════════════════════════════
+    // 3. Cari transaksi di ppob_transaksi by ref_id
+    // ═════════════════════════════════════════════════════════════
     const trxData = await supabaseQuery(
       'ppob_transaksi', 'GET', null,
       `?ref_id=eq.${encodeURIComponent(refId)}&select=id,status`
@@ -412,31 +479,41 @@ app.post('/webhook/digiflazz', async (req, res) => {
 
     if (!trxData || trxData.length === 0) {
       console.warn('[webhook] Transaksi tidak ditemukan untuk ref_id:', refId);
-      // Update webhook log processed=false dengan pesan error
+      // Update webhook log dengan error
+      await supabaseQuery(
+        'ppob_webhook_log',
+        'PATCH',
+        { error_message: `Transaksi not found for ref_id: ${refId}` },
+        `?ref_id=eq.${encodeURIComponent(refId)}&processed=eq.false`
+      );
       return;
     }
 
     const trx = trxData[0];
 
-    // 3. Map status Digiflazz → status lokal
+    // ═════════════════════════════════════════════════════════════
+    // 4. Map status Digiflazz → status lokal
+    // ═════════════════════════════════════════════════════════════
     const statusMap = {
-      'Sukses': 'sukses',
-      'sukses': 'sukses',
-      'Gagal':  'gagal',
-      'gagal':  'gagal',
-      'Pending':'proses',
-      'pending':'proses'
+      'Sukses':  'sukses',
+      'sukses':  'sukses',
+      'Gagal':   'gagal',
+      'gagal':   'gagal',
+      'Pending': 'proses',
+      'pending': 'proses'
     };
     const newStatus = statusMap[status] || 'proses';
 
-    // 4. Update ppob_transaksi
+    // ═════════════════════════════════════════════════════════════
+    // 5. Update ppob_transaksi
+    // ═════════════════════════════════════════════════════════════
     const updateData = {
-      status:     newStatus,
-      sn:         sn,
-      rc:         rc,
-      message:    message,
+      status:       newStatus,
+      sn:           sn,
+      rc:           rc,
+      message:      message,
       raw_response: data,
-      updated_at: receivedAt
+      updated_at:   receivedAt
     };
     if (newStatus === 'sukses') updateData.completed_at = receivedAt;
 
@@ -446,33 +523,37 @@ app.post('/webhook/digiflazz', async (req, res) => {
       updateData
     );
 
-    // 5. Jika sukses & ada piutang → update status piutang (jika metode_bayar = utang)
-    if (newStatus === 'sukses') {
-      // Cek apakah ada piutang terkait
-      const piutangData = await supabaseQuery(
-        'ppob_piutang', 'GET', null,
-        `?transaksi_id=eq.${trx.id}&status=eq.belum_bayar&select=id`
-      );
-      // Piutang tetap 'belum_bayar' sampai admin konfirmasi terima bayar
-      // Tidak auto-lunas di sini
-    }
+    // ═════════════════════════════════════════════════════════════
+    // 6. (Note) Piutang tetap 'belum_bayar' sampai admin konfirmasi
+    //     terima bayar. Tidak auto-lunas di sini.
+    // ═════════════════════════════════════════════════════════════
 
-    // 6. Update webhook log jadi processed
+    // ═════════════════════════════════════════════════════════════
+    // 7. Update webhook log: processed=true + link ke transaksi
+    //     ⚠️ FIX v2.1.0: tambahkan filter ?ref_id=eq.X&processed=eq.false
+    //     (sebelumnya filter kosong → PATCH tidak match apapun)
+    // ═════════════════════════════════════════════════════════════
     await supabaseQuery(
-      'ppob_webhook_log', 'PATCH',
-      { processed: true, processed_at: receivedAt },
-      // Note: update by ref_id, ambil yang terbaru
+      'ppob_webhook_log',
+      'PATCH',
+      {
+        processed: true,
+        processed_at: receivedAt,
+        transaksi_id: trx.id
+      },
+      `?ref_id=eq.${encodeURIComponent(refId)}&processed=eq.false`
     );
 
-    console.log(`[webhook] Processed: ${refId} → ${newStatus} (SN: ${sn || 'none'})`);
+    console.log(`[webhook] Processed: ${refId} → ${newStatus} (SN: ${sn || 'none'}, sigValid: ${isValid})`);
 
   } catch (e) {
     console.error('[webhook] Processing error:', e.message);
+    console.error(e.stack);
   }
 });
 
 // ═══════════════════════════════════════════════════════════════
-// POST /api/digiflazz/execute-transaction — NEW PHASE 3
+// POST /api/digiflazz/execute-transaction
 // Eksekusi transaksi ke Digiflazz (dipanggil admin setelah verifikasi)
 // Body: { transaksi_id: number }
 // ═══════════════════════════════════════════════════════════════
@@ -578,9 +659,10 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.0.0                ║
+║   UBNB PPOB Proxy v2.1.0                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
+║   Webhook signature: HMAC-SHA1          ║
 ╚══════════════════════════════════════════╝
   `);
 });
