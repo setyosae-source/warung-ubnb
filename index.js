@@ -3,6 +3,12 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.2 (10 Mei 2026) — Mapping kategori fix
+ *   - Fix logic mapKategori: cek brand juga untuk produk pascabayar
+ *     (PLN PASCABAYAR, PDAM, HP PASCABAYAR, dll). Sebelumnya hanya cek
+ *     category yang selalu bernilai "Pascabayar" → kategori_id NULL.
+ *   - Tambah dukungan kategori TAGIHAN_HP untuk Halo/Matrix/dll postpaid.
+ *
  * v2.1.1 (10 Mei 2026) — Sync produk fix
  *   - Fix BUG: UPSERT tanpa on_conflict → seluruh batch gagal kalau ada
  *     produk lama (unique key conflict). Tambahkan ?on_conflict=supplier_id,sku_supplier
@@ -127,7 +133,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.1.1',
+    version: '2.1.2',
     timestamp: new Date().toISOString(),
     endpoints: [
       '/health',
@@ -279,15 +285,34 @@ app.post('/api/digiflazz/sync-products', authProxy, async (req, res) => {
     const markupDefault = Number(settingData?.[0]?.value || 1500);
 
     // 4. Mapping kategori Digiflazz → ppob_kategori
+    //    v2.1.2 — fix: cek brand juga, tidak hanya category
+    //    Untuk produk pascabayar, Digiflazz set category="Pascabayar"
+    //    untuk SEMUA, yang bedain adalah brand (PLN PASCABAYAR, PDAM, dll)
     function mapKategori(product) {
       const cat = (product.category || '').toUpperCase();
       const brand = (product.brand || '').toUpperCase();
+      const isPasca = cat.includes('PASCABAYAR') || cat.includes('POSTPAID');
 
+      // ─── PASCABAYAR: cek BRAND dulu ───
+      if (isPasca) {
+        if (brand.includes('PLN'))                                  return kategoriMap['TAGIHAN_PLN'];
+        if (brand.includes('PDAM') || brand.includes('AIR'))        return kategoriMap['PDAM'];
+        if (brand.includes('BPJS'))                                 return kategoriMap['BPJS'];
+        if (brand.includes('TELKOM') || brand.includes('INDIHOME')) return kategoriMap['TELKOM'];
+        if (brand.includes('HP PASCABAYAR') || brand.includes('PASCABAYAR') ||
+            brand.includes('HALO') || brand.includes('MATRIX') ||
+            brand.includes('KARTU HALO'))                            return kategoriMap['TAGIHAN_HP'];
+        if (brand.includes('FINANCE') || brand.includes('CICILAN') ||
+            brand.includes('MULTIFINANCE'))                          return kategoriMap['MULTIFINANCE'];
+        // Pascabayar lain yang belum dikenal → null (akan di-log untuk review)
+        return null;
+      }
+
+      // ─── PRABAYAR / lainnya: cek category ───
       if (cat.includes('PULSA') || brand.includes('PULSA'))         return kategoriMap['PULSA'];
       if (cat.includes('DATA') || cat.includes('PAKET'))            return kategoriMap['PAKET_DATA'];
       if (cat.includes('PLN') && cat.includes('PREPAID'))           return kategoriMap['TOKEN_PLN'];
-      if (cat.includes('PLN') && cat.includes('POSTPAID'))          return kategoriMap['TAGIHAN_PLN'];
-      if (cat.includes('PLN'))                                       return kategoriMap['TOKEN_PLN'];
+      if (cat.includes('PLN') || brand.includes('PLN'))             return kategoriMap['TOKEN_PLN'];
       if (cat.includes('BPJS'))                                      return kategoriMap['BPJS'];
       if (cat.includes('PDAM') || cat.includes('AIR'))               return kategoriMap['PDAM'];
       if (cat.includes('TELKOM') || cat.includes('INDIHOME'))        return kategoriMap['TELKOM'];
@@ -667,7 +692,7 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.1                ║
+║   UBNB PPOB Proxy v2.1.2                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
