@@ -1145,7 +1145,12 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="tbl-wrap"><table class="bmt-tbl" id="sim-hasil-tbl"><tbody></tbody></table></div>
       <!-- Tabel perbandingan tenor -->
       <div id="sim-tenor-wrap" style="margin-top:12px;display:none">
-        <div class="card-title" style="font-size:13px;margin:8px 0 6px">📊 Perbandingan Tenor</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 6px">
+          <div class="card-title" style="font-size:13px;margin:0">📊 Perbandingan Tenor</div>
+          <button onclick="downloadSimJPG()" style="background:var(--E);color:white;border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px">
+            📥 Download JPG
+          </button>
+        </div>
         <div class="tbl-wrap"><table class="bmt-tbl">
           <thead><tr><th>Tenor</th><th>Margin %/bln</th><th>Total Margin</th><th>Total Bayar</th><th>Angsuran/bln</th></tr></thead>
           <tbody id="sim-tenor-tbl"></tbody>
@@ -2412,12 +2417,21 @@ function hitungSim(){
     });
     const tenorRows=tenorOptions.map(t2=>{
       // Pakai margin tersimpan jika ada, atau margin aktif jika tenor sama, atau default
-      const mPctT2=savedMargins[t2]!==undefined?savedMargins[t2]/100:(t2===t?mPct*100:mPct*100)/100;
+      // Default margin per tenor: kebijakan UBNB (dari tabel standar)
+      const defaultMarginUBNB={3:3,6:2.5,9:2,12:1.5,18:1.4,24:1.25,30:1.12,36:1};
+      let mPctT2;
+      if(savedMargins[t2]!==undefined){
+        mPctT2=savedMargins[t2]/100;
+      } else if(t2===t){
+        mPctT2=mPct;
+      } else {
+        mPctT2=(defaultMarginUBNB[t2]||mPct*100)/100;
+      }
       const mg2=Math.round(pk*mPctT2*t2);
       const total2=pk+mg2;
       const ag2=Math.round(total2/t2);
       const isActive=t2===t;
-      const initVal=(savedMargins[t2]!==undefined?savedMargins[t2]:(mPct*100)).toFixed(2);
+      const initVal=savedMargins[t2]!==undefined?savedMargins[t2].toFixed(2):(t2===t?(mPct*100).toFixed(2):(defaultMarginUBNB[t2]||mPct*100).toFixed(2));
       return`<tr style="background:${isActive?'var(--HL)':''}">
         <td style="font-weight:${isActive?'800':'400'};color:${isActive?'var(--H)':'inherit'};white-space:nowrap">
           <span onclick="document.getElementById('sm-tenor').value=${t2};hitungSim()" style="cursor:pointer">${t2} bln${isActive?' ✓':''}</span>
@@ -2459,6 +2473,41 @@ function updateTenorRow(inp, t2){
   if(mgEl)mgEl.textContent=rp(mg);
   if(totEl)totEl.textContent=rp(total);
   if(agEl)agEl.textContent=rp(ag);
+}
+async function downloadSimJPG(){
+  const wrap=document.getElementById('sim-hasil-modal');
+  if(!wrap)return;
+  // Sembunyikan tombol download sementara
+  const btn=wrap.querySelector('button[onclick="downloadSimJPG()"]');
+  if(btn)btn.style.display='none';
+  try{
+    // Pakai html2canvas jika tersedia, fallback manual
+    if(typeof html2canvas==='undefined'){
+      // Load html2canvas dynamic
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload=res;s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    const canvas=await html2canvas(wrap,{
+      backgroundColor:'#f4f1ea',
+      scale:2,
+      useCORS:true,
+      logging:false,
+    });
+    // Download
+    const link=document.createElement('a');
+    link.download='simulasi-bmt-ubnb.jpg';
+    link.href=canvas.toDataURL('image/jpeg',0.92);
+    link.click();
+    toast('✅ Gambar berhasil didownload');
+  }catch(e){
+    toast('Gagal download: '+e.message,true);
+  }finally{
+    if(btn)btn.style.display='';
+  }
 }
 function mkTbl(rows){return rows.map(([l1,v1,l2,v2])=>`<tr><td style="background:#f4f0e8;color:var(--M);font-size:11px;padding:6px 10px;width:28%">${l1}</td><td style="padding:6px 10px;font-weight:600">${v1}</td><td style="background:#f4f0e8;color:var(--M);font-size:11px;padding:6px 10px;width:28%">${l2||''}</td><td style="padding:6px 10px;font-weight:600;text-align:right">${v2||''}</td></tr>`).join('');}
 
