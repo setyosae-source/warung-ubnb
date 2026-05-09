@@ -3,6 +3,11 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.1 (10 Mei 2026) — Sync produk fix
+ *   - Fix BUG: UPSERT tanpa on_conflict → seluruh batch gagal kalau ada
+ *     produk lama (unique key conflict). Tambahkan ?on_conflict=supplier_id,sku_supplier
+ *     supaya merge-duplicates jalan dengan benar.
+ *
  * v2.1.0 (08 Mei 2026) — Webhook signature fix
  *   - HMAC-SHA1 signature verification dari header X-Hub-Signature
  *   - Raw body capture untuk HMAC computation
@@ -122,7 +127,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.1.0',
+    version: '2.1.1',
     timestamp: new Date().toISOString(),
     endpoints: [
       '/health',
@@ -330,8 +335,11 @@ app.post('/api/digiflazz/sync-products', authProxy, async (req, res) => {
       });
 
       try {
+        // FIX v2.1.1: tambah ?on_conflict=supplier_id,sku_supplier
+        // supaya Supabase tahu kolom mana untuk match upsert.
+        // Tanpa ini, INSERT biasa → conflict unique key → seluruh batch gagal.
         const upsertRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/ppob_produk`,
+          `${SUPABASE_URL}/rest/v1/ppob_produk?on_conflict=supplier_id,sku_supplier`,
           {
             method: 'POST',
             headers: {
@@ -659,7 +667,7 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.0                ║
+║   UBNB PPOB Proxy v2.1.1                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
