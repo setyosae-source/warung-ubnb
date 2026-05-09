@@ -2341,7 +2341,20 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       </select>
     </div>
     <div class="irow"><label>Produk / Layanan</label><input type="text" id="ep-produk"/></div>
-    <div class="irow"><label>Nama Pelanggan</label><input type="text" id="ep-nama"/></div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text-muted);font-weight:500;display:block;margin-bottom:6px">Pelanggan</label>
+      <div id="epp-chip" style="display:none;margin-bottom:6px"></div>
+      <div style="position:relative">
+        <input type="text" id="ep-nama-search"
+          placeholder="🔍 Cari anggota / jamaah / nama..."
+          oninput="eppSearch(this.value)" onfocus="eppSearch(this.value)" autocomplete="off"
+          style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-size:13px;font-family:inherit;outline:none;background:white;box-sizing:border-box"/>
+        <div id="epp-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--green);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,0.15)"></div>
+      </div>
+      <input type="hidden" id="ep-nama"/>
+      <input type="hidden" id="ep-anggota-id"/>
+      <input type="hidden" id="ep-jamaah-did"/>
+    </div>
     <div class="irow"><label>Catatan</label><input type="text" id="ep-catatan"/></div>
     <div class="two-col">
       <div class="irow"><label>Harga Beli</label><input type="number" id="ep-hbeli" oninput="hitungUntungEdit()"/></div>
@@ -2783,7 +2796,20 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:var(--text-muted)">
       <span>Kasir: <strong id="edit-jual-kasir" style="color:var(--text)"></strong></span>
     </div>
-    <div class="irow"><label>Nama Pembeli</label><input type="text" id="edit-jual-pel" placeholder="Nama pembeli / kosongkan jika umum"/></div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text-muted);font-weight:500;display:block;margin-bottom:6px">Pelanggan</label>
+      <div id="ejp-chip" style="display:none;margin-bottom:6px"></div>
+      <div style="position:relative">
+        <input type="text" id="edit-jual-pel-search"
+          placeholder="🔍 Cari anggota / jamaah / nama..."
+          oninput="ejpSearch(this.value)" onfocus="ejpSearch(this.value)" autocomplete="off"
+          style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-size:13px;font-family:inherit;outline:none;background:white;box-sizing:border-box"/>
+        <div id="ejp-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--green);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;z-index:500;box-shadow:0 4px 20px rgba(0,0,0,0.15)"></div>
+      </div>
+      <input type="hidden" id="edit-jual-pel"/>
+      <input type="hidden" id="edit-jual-anggota-id"/>
+      <input type="hidden" id="edit-jual-jamaah-did"/>
+    </div>
     <div class="irow"><label>Tanggal</label><input type="date" id="edit-jual-tgl"/></div>
     <div class="irow"><label>Status Bayar</label>
       <select id="edit-jual-status">
@@ -4148,7 +4174,17 @@ async function editTransaksiJual(id){
   document.getElementById('edit-jual-bayar').value=t.bayar||t.total;
   document.getElementById('edit-jual-status').value=t.status_bayar||'lunas';
   document.getElementById('edit-jual-kasir').textContent=t.kasir||'-';
-  document.getElementById('edit-jual-pel').value=t.pelanggan&&t.pelanggan!=='Umum'?t.pelanggan:'';
+  // Populate pelanggan predictive
+  document.getElementById('edit-jual-pel').value=t.pelanggan||'Umum';
+  document.getElementById('edit-jual-anggota-id').value=t.anggota_id||'';
+  document.getElementById('edit-jual-jamaah-did').value=t.jamaah_did||'';
+  // Set chip & search box
+  ejpSetPel({
+    label:t.pelanggan||'Umum',
+    anggota_id:t.anggota_id||null,
+    jamaah_did:t.jamaah_did||null,
+    sumber:t.anggota_id?'anggota':t.jamaah_did?'jamaah':t.pelanggan&&t.pelanggan!=='Umum'?'baru':'umum'
+  });
   _renderEditItems();
   openModal('modal-edit-jual');
 }
@@ -4164,13 +4200,16 @@ async function simpanEditJual(){
   const newTotal=newItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
   const newHpp=newItems.reduce((s,it)=>s+(it.harga_beli||0)*it.qty,0);
   const pelBaru=document.getElementById('edit-jual-pel').value.trim()||'Umum';
+  const anggotaIdBaru=parseInt(document.getElementById('edit-jual-anggota-id').value)||null;
+  const jamaahDidBaru=document.getElementById('edit-jual-jamaah-did').value.trim()||null;
   // Konversi tgl ke timestamp agar cocok dengan kolom timestamptz
   const tglTs=tglRaw ? new Date(tglRaw+'T00:00:00').toISOString() : (tOld.tgl_transaksi||new Date().toISOString());
   try{
     const{error:errUpd}=await sb.from('transaksi').update({
       tgl_transaksi:tglTs,status_bayar:status,bayar,
       items:newItems,total:newTotal,hpp:newHpp,
-      kembali:Math.max(0,bayar-newTotal),pelanggan:pelBaru
+      kembali:Math.max(0,bayar-newTotal),pelanggan:pelBaru,
+      anggota_id:anggotaIdBaru,jamaah_did:jamaahDidBaru
     }).eq('id',id);
     if(errUpd)throw errUpd;
     if(status==='lunas')await sb.from('hutang').update({lunas:true}).eq('ref_id',id).eq('ref_type','transaksi');
@@ -8145,7 +8184,16 @@ function editPPOB(id){
   document.getElementById('ep-old-status').value=p.status_bayar||'belum';
   document.getElementById('ep-tgl').value=p.tanggal||'';
   document.getElementById('ep-produk').value=p.produk||'';
+  // Populate pelanggan predictive
   document.getElementById('ep-nama').value=p.nama||'';
+  document.getElementById('ep-anggota-id').value=p.anggota_id||'';
+  document.getElementById('ep-jamaah-did').value=p.jamaah_did||'';
+  eppSetPel({
+    label:p.nama||'Umum',
+    anggota_id:p.anggota_id||null,
+    jamaah_did:p.jamaah_did||null,
+    sumber:p.anggota_id?'anggota':p.jamaah_did?'jamaah':p.nama&&p.nama!=='Umum'?'baru':'umum'
+  });
   document.getElementById('ep-catatan').value=p.catatan||'';
   document.getElementById('ep-hbeli').value=p.harga_beli||0;
   document.getElementById('ep-hjual').value=p.harga_jual||0;
@@ -8211,6 +8259,8 @@ async function simpanEditPPOB(){
   const tgl=document.getElementById('ep-tgl').value;
   const produk=document.getElementById('ep-produk').value.trim();
   const nama=document.getElementById('ep-nama').value.trim();
+  const anggotaIdEp=parseInt(document.getElementById('ep-anggota-id').value)||null;
+  const jamaahDidEp=document.getElementById('ep-jamaah-did').value.trim()||null;
   const catatan=document.getElementById('ep-catatan').value.trim();
   const hbeli=parseFloat(document.getElementById('ep-hbeli').value)||0;
   const hjual=parseFloat(document.getElementById('ep-hjual').value)||0;
@@ -8227,6 +8277,7 @@ async function simpanEditPPOB(){
     // Update PPOB record
     const{error:errUp}=await sb.from('ppob').update({
       tanggal:tgl,kas_id:newKasId,produk,nama,catatan,
+      anggota_id:anggotaIdEp,jamaah_did:jamaahDidEp,
       harga_beli:hbeli,harga_jual:hjual,status_bayar:status,
       diskon_tipe:epDiskTipe,diskon_nilai:epDiskNilai,diskon_total:epDiskTotal
     }).eq('id',id);
@@ -12639,6 +12690,117 @@ function resetTagihanCache(){
   _tagihanLunasiMode={};
 }
 /* ============ END TAGIHAN PER ORANG ============ */
+
+/* ============================================================
+   PREDICTIVE AUTOCOMPLETE — Edit Riwayat Jual (ejp) & Edit PPOB (epp)
+   ============================================================ */
+
+// ---- State ----
+let _ejpSel={label:'Umum',anggota_id:null,jamaah_did:null,sumber:'umum'};
+let _eppSel={label:'Umum',anggota_id:null,jamaah_did:null,sumber:'umum'};
+
+// ---- Shared: render dropdown hasil cari ----
+function _pelDropdownHTML(q, onclickFn){
+  const qLow=(q||'').toLowerCase().trim();
+  let html='';
+  // 1. Anggota
+  const fa=(aSahamAnggota||[]).filter(a=>!qLow||(a.nama||'').toLowerCase().includes(qLow)||(a.no_anggota||'').toLowerCase().includes(qLow)).slice(0,6);
+  if(fa.length){
+    html+='<div style="padding:4px 10px;font-size:10px;font-weight:700;background:#f0fdf4;color:var(--green-dark);text-transform:uppercase;letter-spacing:.5px">⭐ Anggota</div>';
+    html+=fa.map(a=>{
+      const obj=JSON.stringify({label:a.nama,anggota_id:a.id,jamaah_did:null,sumber:'anggota'}).replace(/"/g,'&quot;');
+      return `<div onclick="${onclickFn}('${encodeURIComponent(JSON.stringify({label:a.nama,anggota_id:a.id,jamaah_did:null,sumber:'anggota'}))}')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='white'"><div style="font-weight:600;font-size:13px">⭐ ${a.nama}</div><div style="font-size:11px;color:var(--text-muted)">${a.no_anggota||''} · ${a.kelompok||''}</div></div>`;
+    }).join('');
+  }
+  // 2. Jamaah
+  const fj=(aJamaah||[]).filter(j=>!qLow||(j.nama||'').toLowerCase().includes(qLow)).slice(0,6);
+  if(fj.length){
+    html+='<div style="padding:4px 10px;font-size:10px;font-weight:700;background:#eef2ff;color:#4338ca;text-transform:uppercase;letter-spacing:.5px">👥 Jamaah</div>';
+    html+=fj.map(j=>{
+      return `<div onclick="${onclickFn}('${encodeURIComponent(JSON.stringify({label:j.nama,anggota_id:null,jamaah_did:j.did||null,sumber:'jamaah'}))}')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='white'"><div style="font-weight:600;font-size:13px">👥 ${j.nama}</div><div style="font-size:11px;color:var(--text-muted)">${j.kelompok?'Kel. '+j.kelompok:''}</div></div>`;
+    }).join('');
+  }
+  // 3. Umum / ketik bebas
+  html+='<div style="padding:4px 10px;font-size:10px;font-weight:700;background:#f8f8f8;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">✏️ Lainnya</div>';
+  html+=`<div onclick="${onclickFn}('${encodeURIComponent(JSON.stringify({label:'Umum',anggota_id:null,jamaah_did:null,sumber:'umum'}))}')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='#f8f8f8'" onmouseout="this.style.background='white'"><div style="font-size:13px;font-weight:600">— Umum —</div></div>`;
+  if(qLow&&!fa.find(a=>a.nama.toLowerCase()===qLow)&&!fj.find(j=>j.nama.toLowerCase()===qLow)){
+    html+=`<div onclick="${onclickFn}('${encodeURIComponent(JSON.stringify({label:q,anggota_id:null,jamaah_did:null,sumber:'baru'}))}')" style="padding:9px 12px;cursor:pointer" onmouseover="this.style.background='#f8f8f8'" onmouseout="this.style.background='white'"><div style="font-size:13px;font-weight:600">✏️ "${q}" (nama bebas)</div></div>`;
+  }
+  return html||'<div style="padding:10px;text-align:center;font-size:12px;color:var(--text-muted)">Tidak ditemukan</div>';
+}
+
+function _pelChipHTML(sel){
+  const colMap={anggota:'var(--green-dark)',jamaah:'#4338ca',baru:'#92400e',umum:'var(--text-muted)'};
+  const bgMap={anggota:'var(--green-light)',jamaah:'#e0e7ff',baru:'#fef3c7',umum:'#f3f4f6'};
+  const c=colMap[sel.sumber]||'var(--text-muted)';
+  const bg=bgMap[sel.sumber]||'#f3f4f6';
+  return `<div style="display:inline-flex;align-items:center;gap:6px;background:${bg};color:${c};padding:5px 12px;border-radius:99px;font-size:12px;font-weight:700">${sel.label}</div>`;
+}
+
+/* ---- EDIT JUAL (ejp) ---- */
+function ejpSearch(q){
+  const dd=document.getElementById('ejp-dd');
+  if(!dd)return;
+  dd.innerHTML=_pelDropdownHTML(q,'ejpPilih');
+  dd.style.display='block';
+}
+
+function ejpPilih(enc){
+  try{
+    const obj=JSON.parse(decodeURIComponent(enc));
+    ejpSetPel(obj);
+  }catch(e){}
+  document.getElementById('ejp-dd').style.display='none';
+}
+
+function ejpSetPel(obj){
+  _ejpSel=obj;
+  document.getElementById('edit-jual-pel').value=obj.label||'Umum';
+  document.getElementById('edit-jual-anggota-id').value=obj.anggota_id||'';
+  document.getElementById('edit-jual-jamaah-did').value=obj.jamaah_did||'';
+  const chip=document.getElementById('ejp-chip');
+  if(chip){chip.innerHTML=_pelChipHTML(obj);chip.style.display='block';}
+  const inp=document.getElementById('edit-jual-pel-search');
+  if(inp)inp.value=obj.sumber==='umum'?'':obj.label;
+}
+
+/* ---- EDIT PPOB (epp) ---- */
+function eppSearch(q){
+  const dd=document.getElementById('epp-dd');
+  if(!dd)return;
+  dd.innerHTML=_pelDropdownHTML(q,'eppPilih');
+  dd.style.display='block';
+}
+
+function eppPilih(enc){
+  try{
+    const obj=JSON.parse(decodeURIComponent(enc));
+    eppSetPel(obj);
+  }catch(e){}
+  document.getElementById('epp-dd').style.display='none';
+}
+
+function eppSetPel(obj){
+  _eppSel=obj;
+  document.getElementById('ep-nama').value=obj.label||'Umum';
+  document.getElementById('ep-anggota-id').value=obj.anggota_id||'';
+  document.getElementById('ep-jamaah-did').value=obj.jamaah_did||'';
+  const chip=document.getElementById('epp-chip');
+  if(chip){chip.innerHTML=_pelChipHTML(obj);chip.style.display='block';}
+  const inp=document.getElementById('ep-nama-search');
+  if(inp)inp.value=obj.sumber==='umum'?'':obj.label;
+}
+
+// Tutup dropdown saat klik di luar
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#ejp-dd')&&!e.target.closest('#edit-jual-pel-search')){
+    const dd=document.getElementById('ejp-dd');if(dd)dd.style.display='none';
+  }
+  if(!e.target.closest('#epp-dd')&&!e.target.closest('#ep-nama-search')){
+    const dd=document.getElementById('epp-dd');if(dd)dd.style.display='none';
+  }
+});
+/* ============ END PREDICTIVE AUTOCOMPLETE EDIT ============ */
 
 </script>
 
