@@ -3,6 +3,10 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.4 (10 Mei 2026) — Fix endpoint /api/notify/order-baru
+ *   - Hapus kolom 'kelompok' dari select ppob_pelanggan (kolom tidak ada)
+ *   - Tambah null-check defensive untuk relasi ppob_pelanggan
+ *
  * v2.1.3 (10 Mei 2026) — Notifikasi Telegram
  *   - Helper sendTelegram(message) untuk kirim notif via Bot API
  *   - Trigger notif di webhook: sukses, gagal, signature invalid
@@ -225,7 +229,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.1.3',
+    version: '2.1.4',
     timestamp: new Date().toISOString(),
     telegram_enabled: TELEGRAM_ENABLED,
     saldo_threshold: TELEGRAM_SALDO_THRESHOLD,
@@ -836,18 +840,18 @@ app.post('/api/notify/order-baru', authProxy, async (req, res) => {
   if (!TELEGRAM_ENABLED) return res.json({ ok: true, skipped: 'telegram disabled' });
 
   try {
-    // Ambil detail transaksi + pelanggan
+    // Ambil detail transaksi + pelanggan (kolom kelompok tidak ada di ppob_pelanggan)
     const trxData = await supabaseQuery(
       'ppob_transaksi', 'GET', null,
-      `?ref_id=eq.${encodeURIComponent(ref_id)}&select=ref_id,nama_produk,tujuan,harga_jual,ppob_pelanggan(nama,tipe,kelompok)`
+      `?ref_id=eq.${encodeURIComponent(ref_id)}&select=ref_id,nama_produk,tujuan,harga_jual,ppob_pelanggan(nama,tipe,no_hp)`
     );
-    if (!trxData || trxData.length === 0) {
-      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+    if (!trxData || !Array.isArray(trxData) || trxData.length === 0) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan', ref_id });
     }
     const t = trxData[0];
-    const p = t.ppob_pelanggan;
-    const pelangganStr = p
-      ? `${p.nama}${p.kelompok ? ' (' + p.kelompok + ')' : ''}`
+    const p = t.ppob_pelanggan; // bisa null kalau pelanggan_id null
+    const pelangganStr = (p && p.nama)
+      ? `${p.nama}${p.tipe ? ' (' + p.tipe + ')' : ''}`
       : 'Umum';
 
     const msg = `🆕 <b>PESANAN BARU</b>\n` +
@@ -956,7 +960,7 @@ app.post('/api/notify/test', authProxy, async (req, res) => {
   const msg = `🧪 <b>TEST NOTIF</b>\n` +
     `━━━━━━━━━━━━━━\n` +
     `Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n` +
-    `Proxy: v2.1.3\n` +
+    `Proxy: v2.1.4\n` +
     `Mode: ${DIGIFLAZZ_MODE}\n\n` +
     `Kalau pesan ini sampai, berarti notif Telegram sudah jalan ✓`;
   const result = await sendTelegram(msg);
@@ -979,7 +983,7 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.3                ║
+║   UBNB PPOB Proxy v2.1.4                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
