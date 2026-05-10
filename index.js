@@ -3,6 +3,12 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.3 (10 Mei 2026) — Notifikasi Telegram
+ *   - Helper sendTelegram(message) untuk kirim notif via Bot API
+ *   - Trigger notif di webhook: sukses, gagal, signature invalid
+ *   - Endpoint baru: /api/notify/order-baru, /api/notify/saldo-check
+ *   - Anti-spam saldo: maksimal 1x notif per hari
+ *
  * v2.1.2 (10 Mei 2026) — Mapping kategori fix
  *   - Fix logic mapKategori: cek brand juga untuk produk pascabayar
  *     (PLN PASCABAYAR, PDAM, HP PASCABAYAR, dll). Sebelumnya hanya cek
@@ -69,6 +75,13 @@ const PORT             = process.env.PORT              || 3000;
 // Bisa di-rotate ke secret terpisah dengan set env DIGIFLAZZ_WEBHOOK_SECRET
 const DIGIFLAZZ_WEBHOOK_SECRET = process.env.DIGIFLAZZ_WEBHOOK_SECRET || PROXY_SECRET;
 
+// ─── Telegram Bot config (v2.1.3) ─────────────────────────────
+// Kalau TELEGRAM_BOT_TOKEN kosong, fitur notif di-skip silently
+const TELEGRAM_BOT_TOKEN       = process.env.TELEGRAM_BOT_TOKEN       || '';
+const TELEGRAM_CHAT_ID         = process.env.TELEGRAM_CHAT_ID         || '';
+const TELEGRAM_SALDO_THRESHOLD = Number(process.env.TELEGRAM_SALDO_THRESHOLD || 50000);
+const TELEGRAM_ENABLED         = !!(TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID);
+
 const DIGIFLAZZ_BASE   = 'https://api.digiflazz.com/v1';
 const IS_DEV           = DIGIFLAZZ_MODE === 'dev';
 
@@ -114,9 +127,88 @@ async function supabaseQuery(table, method = 'GET', body = null, params = '') {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MIDDLEWARE: Auth via x-proxy-secret header
-// Tidak berlaku untuk /health dan /webhook/digiflazz
+// HELPER (v2.1.3): Kirim pesan ke Telegram Bot API
+// Fire-and-forget — error tidak block flow utama
 // ═══════════════════════════════════════════════════════════════
+async function sendTelegram(message, opts = {}) {
+  if (!TELEGRAM_ENABLED) {
+    console.log('[telegram] DISABLED — skip notif');
+    return { ok: false, reason: 'disabled' };
+  }
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text: message,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...opts
+        })
+      }
+    );
+    const result = await res.json();
+    if (result.ok) {
+      console.log('[telegram] ✓ Sent');
+    } else {
+      console.error('[telegram] ✗ API error:', result.description || result);
+    }
+    return result;
+  } catch (e) {
+    console.error('[telegram] ✗ Network error:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPER (v2.1.3): Format Rupiah
+// ═══════════════════════════════════════════════════════════════
+function formatRp(amount) {
+  return 'Rp ' + Number(amount || 0).toLocaleString('id-ID');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPER (v2.1.3): Anti-spam notif saldo (max 1x per hari)
+// Pakai ppob_setting key="last_saldo_notif_date" untuk tracking
+// ═══════════════════════════════════════════════════════════════
+async function shouldSendSaldoNotif() {
+  try {
+    const data = await supabaseQuery(
+      'ppob_setting', 'GET', null,
+      `?key=eq.last_saldo_notif_date&select=value`
+    );
+    const lastDate = data?.[0]?.value || '';
+    const today = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+    return lastDate !== today;
+  } catch (e) {
+    console.error('[telegram] check saldo notif date error:', e.message);
+    return true; // kalau error, izinkan kirim (fail-open)
+  }
+}
+
+async function markSaldoNotifSent() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    // Upsert ke ppob_setting
+    await fetch(`${SUPABASE_URL}/rest/v1/ppob_setting?on_conflict=key`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify([{ key: 'last_saldo_notif_date', value: today }])
+    });
+  } catch (e) {
+    console.error('[telegram] mark saldo notif date error:', e.message);
+  }
+}
+
+
 function authProxy(req, res, next) {
   const secret = req.headers['x-proxy-secret'];
   if (!secret || secret !== PROXY_SECRET) {
@@ -133,8 +225,10 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.1.2',
+    version: '2.1.3',
     timestamp: new Date().toISOString(),
+    telegram_enabled: TELEGRAM_ENABLED,
+    saldo_threshold: TELEGRAM_SALDO_THRESHOLD,
     endpoints: [
       '/health',
       '/api/digiflazz/cek-saldo',
@@ -143,6 +237,8 @@ app.get('/health', (req, res) => {
       '/api/digiflazz/transaction/inquiry-pln',
       '/api/digiflazz/sync-products',
       '/api/digiflazz/execute-transaction',
+      '/api/notify/order-baru',
+      '/api/notify/saldo-check',
       '/webhook/digiflazz'
     ]
   });
@@ -579,6 +675,59 @@ app.post('/webhook/digiflazz', async (req, res) => {
 
     console.log(`[webhook] Processed: ${refId} → ${newStatus} (SN: ${sn || 'none'}, sigValid: ${isValid})`);
 
+    // ═════════════════════════════════════════════════════════════
+    // 8. (v2.1.3) Notifikasi Telegram untuk admin
+    //     Event: sukses, gagal, signature invalid (warning keamanan)
+    // ═════════════════════════════════════════════════════════════
+    if (TELEGRAM_ENABLED) {
+      try {
+        // Ambil detail transaksi untuk pesan yang lebih lengkap
+        const trxDetail = await supabaseQuery(
+          'ppob_transaksi', 'GET', null,
+          `?id=eq.${trx.id}&select=ref_id,nama_produk,tujuan,harga_jual`
+        );
+        const t = trxDetail?.[0] || {};
+
+        let notifMsg = '';
+        if (newStatus === 'sukses') {
+          notifMsg = `✅ <b>TRANSAKSI SUKSES</b>\n` +
+            `━━━━━━━━━━━━━━\n` +
+            `Ref: <code>${t.ref_id || refId}</code>\n` +
+            `Produk: ${t.nama_produk || '-'}\n` +
+            `Tujuan: <code>${t.tujuan || '-'}</code>\n` +
+            (sn ? `SN: <code>${sn}</code>\n` : '') +
+            `💰 ${formatRp(t.harga_jual)}`;
+        } else if (newStatus === 'gagal') {
+          notifMsg = `❌ <b>TRANSAKSI GAGAL</b>\n` +
+            `━━━━━━━━━━━━━━\n` +
+            `Ref: <code>${t.ref_id || refId}</code>\n` +
+            `Produk: ${t.nama_produk || '-'}\n` +
+            `Tujuan: <code>${t.tujuan || '-'}</code>\n` +
+            (rc ? `RC ${rc}: ${message || '-'}\n` : (message ? `${message}\n` : '')) +
+            `💰 ${formatRp(t.harga_jual)}\n\n` +
+            `⚠️ Perlu refund/kontak pelanggan`;
+        }
+
+        if (notifMsg) sendTelegram(notifMsg).catch(e => console.error('[telegram] send error:', e.message));
+
+        // Warning signature invalid (security alert)
+        if (!isValid) {
+          const warnMsg = `🚨 <b>WEBHOOK SIGNATURE INVALID</b>\n` +
+            `━━━━━━━━━━━━━━\n` +
+            `Ref: <code>${refId}</code>\n` +
+            `Status: ${newStatus}\n\n` +
+            `Kemungkinan:\n` +
+            `• Secret di Digiflazz dashboard tidak match\n` +
+            `• Request bukan dari Digiflazz (potensi attack)\n\n` +
+            `Cek log proxy untuk detail.`;
+          sendTelegram(warnMsg).catch(e => console.error('[telegram] send error:', e.message));
+        }
+      } catch (notifErr) {
+        console.error('[webhook] notif error:', notifErr.message);
+        // Notif error tidak block flow utama
+      }
+    }
+
   } catch (e) {
     console.error('[webhook] Processing error:', e.message);
     console.error(e.stack);
@@ -677,6 +826,144 @@ app.post('/api/digiflazz/execute-transaction', authProxy, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// POST /api/notify/order-baru — v2.1.3
+// Dipanggil dari toko-ppob.html setelah customer submit pesanan
+// Body: { ref_id: string }  → proxy ambil detail transaksi sendiri
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/notify/order-baru', authProxy, async (req, res) => {
+  const { ref_id } = req.body;
+  if (!ref_id) return res.status(400).json({ error: 'ref_id wajib diisi' });
+  if (!TELEGRAM_ENABLED) return res.json({ ok: true, skipped: 'telegram disabled' });
+
+  try {
+    // Ambil detail transaksi + pelanggan
+    const trxData = await supabaseQuery(
+      'ppob_transaksi', 'GET', null,
+      `?ref_id=eq.${encodeURIComponent(ref_id)}&select=ref_id,nama_produk,tujuan,harga_jual,ppob_pelanggan(nama,tipe,kelompok)`
+    );
+    if (!trxData || trxData.length === 0) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+    }
+    const t = trxData[0];
+    const p = t.ppob_pelanggan;
+    const pelangganStr = p
+      ? `${p.nama}${p.kelompok ? ' (' + p.kelompok + ')' : ''}`
+      : 'Umum';
+
+    const msg = `🆕 <b>PESANAN BARU</b>\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `Ref: <code>${t.ref_id}</code>\n` +
+      `Produk: ${t.nama_produk || '-'}\n` +
+      `Tujuan: <code>${t.tujuan || '-'}</code>\n` +
+      `Pengirim: ${pelangganStr}\n` +
+      `💰 Total: ${formatRp(t.harga_jual)}\n\n` +
+      `Mohon segera diverifikasi 🙏`;
+
+    const result = await sendTelegram(msg);
+    res.json({ ok: result.ok, ref_id });
+
+  } catch (e) {
+    console.error('[notify/order-baru]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/notify/saldo-check — v2.1.3
+// Cek saldo Digiflazz, kirim notif kalau di bawah threshold
+// Anti-spam: max 1x notif per hari
+// Body: kosong (atau { force: true } untuk bypass anti-spam)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/notify/saldo-check', authProxy, async (req, res) => {
+  if (!TELEGRAM_ENABLED) return res.json({ ok: true, skipped: 'telegram disabled' });
+
+  try {
+    // 1. Cek saldo Digiflazz
+    const sign = makeSignature('depo');
+    const result = await callDigiflazz('/cek-saldo', {
+      cmd: 'deposit',
+      username: DIGIFLAZZ_USER,
+      sign
+    });
+    const saldo = Number(result?.data?.deposit || 0);
+
+    // 2. Kalau di atas threshold, tidak perlu notif
+    if (saldo >= TELEGRAM_SALDO_THRESHOLD) {
+      return res.json({
+        ok: true,
+        saldo,
+        threshold: TELEGRAM_SALDO_THRESHOLD,
+        notif_sent: false,
+        reason: 'saldo masih di atas threshold'
+      });
+    }
+
+    // 3. Anti-spam: cek apakah sudah notif hari ini
+    const force = req.body?.force === true;
+    if (!force) {
+      const shouldSend = await shouldSendSaldoNotif();
+      if (!shouldSend) {
+        return res.json({
+          ok: true,
+          saldo,
+          threshold: TELEGRAM_SALDO_THRESHOLD,
+          notif_sent: false,
+          reason: 'sudah notif hari ini (anti-spam)'
+        });
+      }
+    }
+
+    // 4. Kirim notif
+    const msg = `⚠️ <b>SALDO MENIPIS</b>\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `Saldo Digiflazz: <b>${formatRp(saldo)}</b>\n` +
+      `Di bawah threshold: ${formatRp(TELEGRAM_SALDO_THRESHOLD)}\n\n` +
+      `Segera top-up untuk hindari transaksi gagal! 💰`;
+
+    const sendResult = await sendTelegram(msg);
+    if (sendResult.ok) {
+      await markSaldoNotifSent();
+    }
+
+    res.json({
+      ok: sendResult.ok,
+      saldo,
+      threshold: TELEGRAM_SALDO_THRESHOLD,
+      notif_sent: sendResult.ok
+    });
+
+  } catch (e) {
+    console.error('[notify/saldo-check]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/notify/test — v2.1.3
+// Endpoint untuk test koneksi Telegram (debug only)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/notify/test', authProxy, async (req, res) => {
+  if (!TELEGRAM_ENABLED) {
+    return res.json({
+      ok: false,
+      reason: 'Telegram disabled',
+      env_check: {
+        TELEGRAM_BOT_TOKEN: TELEGRAM_BOT_TOKEN ? '✓ set' : '✗ missing',
+        TELEGRAM_CHAT_ID: TELEGRAM_CHAT_ID ? '✓ set' : '✗ missing'
+      }
+    });
+  }
+  const msg = `🧪 <b>TEST NOTIF</b>\n` +
+    `━━━━━━━━━━━━━━\n` +
+    `Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n` +
+    `Proxy: v2.1.3\n` +
+    `Mode: ${DIGIFLAZZ_MODE}\n\n` +
+    `Kalau pesan ini sampai, berarti notif Telegram sudah jalan ✓`;
+  const result = await sendTelegram(msg);
+  res.json(result);
+});
+
+// ═══════════════════════════════════════════════════════════════
 // 404 handler
 // ═══════════════════════════════════════════════════════════════
 app.use((req, res) => {
@@ -692,10 +979,11 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.2                ║
+║   UBNB PPOB Proxy v2.1.3                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
+║   Telegram notif: ${TELEGRAM_ENABLED ? '✓ ENABLED  ' : '✗ DISABLED '}            ║
 ╚══════════════════════════════════════════╝
   `);
 });
