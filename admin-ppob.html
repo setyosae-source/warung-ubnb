@@ -2895,6 +2895,11 @@ async function loadTransaksi() {
       } else if (t.status === 'gagal' && (t.rc || t.message)) {
         extraInfo = `<div style="font-size:10px;color:var(--red);margin-top:3px">${t.rc ? 'RC '+t.rc+': ' : ''}${t.message || ''}</div>`;
       }
+      // Tombol Eksekusi — hanya muncul kalau transaksi siap (pending/gagal + bayar lunas/utang)
+      const canExec = ['lunas','utang'].includes(t.status_bayar) && ['pending','gagal'].includes(t.status);
+      const btnEksekusi = canExec
+        ? `<button class="btn btn-primary" style="padding:4px 10px;font-size:12px;margin-bottom:4px;display:block;width:100%" onclick="eksekusiTransaksi('${t.id}','${t.ref_id}')">🚀 Eksekusi</button>`
+        : '';
       return `<tr>
         <td style="font-size:12px;white-space:nowrap">${formatTgl(t.created_at)}</td>
         <td><span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${t.ref_id}</span></td>
@@ -2906,6 +2911,7 @@ async function loadTransaksi() {
         <td style="text-align:right">${formatRp(t.harga_jual)}</td>
         <td style="text-align:right;color:var(--hijau);font-weight:700">${profit > 0 ? '+'+formatRp(profit) : '—'}</td>
         <td>
+          ${btnEksekusi}
           <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="detailTrx('${t.id}')">Detail</button>
         </td>
       </tr>`;
@@ -3235,8 +3241,18 @@ detailTrx = async function(id) {
     .eq('id', id).maybeSingle();
   if (error || !data) { toast('Gagal load detail transaksi', 'error'); return; }
 
-  const canExec = data.status_bayar === 'lunas' && ['pending','gagal'].includes(data.status);
+  // canExec: izinkan eksekusi untuk:
+  //   1. Status bayar 'lunas' (transfer Umum sudah diverifikasi) ATAU
+  //   2. Status bayar 'utang' (anggota/jamaah — auto-charge ke piutang)
+  //   AND status transaksi belum sukses (pending atau gagal bisa di-retry)
+  const canExec = ['lunas', 'utang'].includes(data.status_bayar)
+    && ['pending', 'gagal'].includes(data.status);
   const profit = Number(data.harga_jual||0) - Number(data.harga_modal||0);
+  const bayarLabel = data.status_bayar === 'lunas'
+    ? '✅ Bayar lunas'
+    : data.status_bayar === 'utang'
+      ? '📋 Pembayaran via utang (' + (data.ppob_pelanggan?.tipe || 'anggota/jamaah') + ')'
+      : data.status_bayar.toUpperCase();
   const info = [
     'Ref ID   : ' + data.ref_id,
     'Produk   : ' + (data.nama_produk || data.sku_supplier || '—'),
@@ -3248,7 +3264,7 @@ detailTrx = async function(id) {
     'RC       : ' + (data.rc || '—') + ' — ' + (data.message || ''),
     'Dibuat   : ' + formatTgl(data.created_at),
     data.executed_at ? 'Dieksekusi: ' + formatTgl(data.executed_at) : '',
-    canExec ? '\n✅ Bayar lunas — OK untuk EKSEKUSI ke Digiflazz' : ''
+    canExec ? '\n' + bayarLabel + ' — OK untuk EKSEKUSI ke Digiflazz' : ''
   ].filter(Boolean).join('\n');
 
   if (canExec && confirm(info)) await eksekusiTransaksi(data.id, data.ref_id);
@@ -3378,3 +3394,4 @@ function onLoginSuccess() {
 </script>
 </body>
 </html>
+                
