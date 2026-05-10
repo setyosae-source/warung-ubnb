@@ -712,6 +712,24 @@ tr:last-child td { border-bottom: none; }
   border-color: var(--hijau);
   box-shadow: 0 0 0 3px rgba(29,158,117,0.08);
 }
+.btn-tgl-shortcut {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 11px;
+  font-family: inherit;
+  background: white;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+.btn-tgl-shortcut:hover {
+  border-color: var(--hijau);
+  color: var(--hijau);
+  background: rgba(29,158,117,0.05);
+}
 .btn {
   height: 38px;
   padding: 0 16px;
@@ -1182,8 +1200,10 @@ tr:last-child td { border-bottom: none; }
 
         <!-- TAB: SEMUA TRANSAKSI -->
         <div id="tab-semua">
-          <div class="filter-bar">
-            <input type="date" class="filter-input" id="trx-filter-tgl" style="width:150px">
+          <div class="filter-bar" style="flex-wrap:wrap">
+            <input type="date" class="filter-input" id="trx-filter-tgl-from" title="Dari tanggal" style="width:150px">
+            <span style="align-self:center;color:var(--text-muted);font-size:12px">s/d</span>
+            <input type="date" class="filter-input" id="trx-filter-tgl-to" title="Sampai tanggal" style="width:150px">
             <select class="filter-select" id="trx-filter-status">
               <option value="">Semua Status</option>
               <option value="pending">Pending</option>
@@ -1200,6 +1220,14 @@ tr:last-child td { border-bottom: none; }
             </select>
             <input type="text" class="filter-input" id="trx-filter-cari" placeholder="🔍 Ref ID / no tujuan / nama" style="flex:1;min-width:180px">
             <button class="btn btn-primary" onclick="loadTransaksi()">Filter</button>
+          </div>
+          <!-- Tombol shortcut tanggal -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 12px 0;padding:0 4px">
+            <button class="btn-tgl-shortcut" onclick="setTglShortcut('today')" title="Hari ini">Hari Ini</button>
+            <button class="btn-tgl-shortcut" onclick="setTglShortcut('week')" title="7 hari terakhir">7 Hari</button>
+            <button class="btn-tgl-shortcut" onclick="setTglShortcut('month')" title="Bulan ini (tanggal 1 sampai akhir bulan)">Bulan Ini</button>
+            <button class="btn-tgl-shortcut" onclick="setTglShortcut('lastmonth')" title="Bulan lalu">Bulan Lalu</button>
+            <button class="btn-tgl-shortcut" onclick="setTglShortcut('reset')" title="Tanpa filter tanggal" style="color:var(--red)">Reset</button>
           </div>
           <div class="card">
             <div class="card-header">
@@ -2812,19 +2840,20 @@ async function loadTransaksi() {
   tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-muted)">⏳ Memuat...</td></tr>`;
 
   try {
-    const tgl    = document.getElementById('trx-filter-tgl')?.value;
-    const status = document.getElementById('trx-filter-status')?.value;
-    const bayar  = document.getElementById('trx-filter-bayar')?.value;
-    const cari   = document.getElementById('trx-filter-cari')?.value?.trim();
+    const tglFrom = document.getElementById('trx-filter-tgl-from')?.value;
+    const tglTo   = document.getElementById('trx-filter-tgl-to')?.value;
+    const status  = document.getElementById('trx-filter-status')?.value;
+    const bayar   = document.getElementById('trx-filter-bayar')?.value;
+    const cari    = document.getElementById('trx-filter-cari')?.value?.trim();
 
     let q = sb.from('ppob_transaksi')
       .select('*, ppob_pelanggan(nama, tipe)')
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (tgl) {
-      q = q.gte('created_at', tgl + 'T00:00:00').lte('created_at', tgl + 'T23:59:59');
-    }
+    // Filter range tanggal: dari awal hari tglFrom sampai akhir hari tglTo
+    if (tglFrom) q = q.gte('created_at', tglFrom + 'T00:00:00');
+    if (tglTo)   q = q.lte('created_at', tglTo + 'T23:59:59');
     if (status) q = q.eq('status', status);
     if (bayar)  q = q.eq('status_bayar', bayar);
     if (cari)   q = q.or(`ref_id.ilike.%${cari}%,tujuan.ilike.%${cari}%`);
@@ -3249,10 +3278,8 @@ verifikasiTransfer = async function(id, newStatus) {
 const _origOnLoginSuccess = onLoginSuccess;
 onLoginSuccess = function() {
   if (typeof _origOnLoginSuccess === 'function') _origOnLoginSuccess();
-  // Set default filter tanggal ke hari ini
-  const todayStr = new Date().toISOString().split('T')[0];
-  const tglEl = document.getElementById('trx-filter-tgl');
-  if (tglEl) tglEl.value = todayStr;
+  // Set default filter tanggal ke bulan ini (tgl 1 sampai akhir bulan)
+  setTglShortcut('month', /*silent*/true);
   // Load dashboard
   loadDashboard();
   // Load pengaturan (untuk isi field branding, bank, dll)
@@ -3261,10 +3288,59 @@ onLoginSuccess = function() {
 
 // Init tab default halaman Transaksi
 document.addEventListener('DOMContentLoaded', () => {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const tglEl = document.getElementById('trx-filter-tgl');
-  if (tglEl) tglEl.value = todayStr;
+  setTglShortcut('month', /*silent*/true);
 });
+
+// ───────────────────────────────────────────────────────────────
+// SHORTCUT FILTER TANGGAL — set From-To berdasarkan preset
+// preset: 'today' | 'week' | 'month' | 'lastmonth' | 'reset'
+// silent: true = tidak auto-load (dipakai saat init/login)
+// ───────────────────────────────────────────────────────────────
+function setTglShortcut(preset, silent) {
+  const fromEl = document.getElementById('trx-filter-tgl-from');
+  const toEl   = document.getElementById('trx-filter-tgl-to');
+  if (!fromEl || !toEl) return;
+
+  const today = new Date();
+  const fmt = (d) => {
+    // Format ke YYYY-MM-DD pakai timezone lokal (bukan UTC)
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  let from, to;
+  if (preset === 'today') {
+    from = to = fmt(today);
+  } else if (preset === 'week') {
+    const weekAgo = new Date(today);
+    weekAgo.setDate(today.getDate() - 6); // 7 hari termasuk hari ini
+    from = fmt(weekAgo);
+    to   = fmt(today);
+  } else if (preset === 'month') {
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay  = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    from = fmt(firstDay);
+    to   = fmt(lastDay);
+  } else if (preset === 'lastmonth') {
+    const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastDay  = new Date(today.getFullYear(), today.getMonth(), 0);
+    from = fmt(firstDay);
+    to   = fmt(lastDay);
+  } else if (preset === 'reset') {
+    from = '';
+    to   = '';
+  }
+
+  fromEl.value = from;
+  toEl.value   = to;
+
+  // Auto reload data jika tidak silent
+  if (!silent && typeof loadTransaksi === 'function') {
+    loadTransaksi();
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Hook: dipanggil setelah login sukses (akan di-extend di PHASE 2b)
