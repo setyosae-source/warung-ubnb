@@ -3,6 +3,13 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.5 (10 Mei 2026) — Fix endpoint inquiry-pln
+ *   - Pakai endpoint khusus https://api.digiflazz.com/v1/inquiry-pln
+ *     (sebelumnya pakai /v1/transaction yang salah → SKU tidak ditemukan)
+ *   - Sign formula: md5(username + apiKey + customer_no), bukan ref_id
+ *   - Cuma 3 parameter: username, customer_no, sign
+ *   - Untuk validasi PLN prabayar (Token PLN) — bukan pascabayar
+ *
  * v2.1.4 (10 Mei 2026) — Fix endpoint /api/notify/order-baru
  *   - Hapus kolom 'kelompok' dari select ppob_pelanggan (kolom tidak ada)
  *   - Tambah null-check defensive untuk relasi ppob_pelanggan
@@ -229,7 +236,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.1.4',
+    version: '2.1.5',
     timestamp: new Date().toISOString(),
     telegram_enabled: TELEGRAM_ENABLED,
     saldo_threshold: TELEGRAM_SALDO_THRESHOLD,
@@ -315,22 +322,37 @@ app.post('/api/digiflazz/transaction', authProxy, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// POST /api/digiflazz/transaction/inquiry-pln (existing)
+// POST /api/digiflazz/transaction/inquiry-pln — v2.1.5 FIX
+// Endpoint Digiflazz: https://api.digiflazz.com/v1/inquiry-pln
+// (BUKAN /v1/transaction!)
+//
+// Untuk validasi nomor PLN PRABAYAR (Token PLN) — cek nama pelanggan + daya
+// Sign formula: md5(username + apiKey + customer_no) — bukan ref_id!
+// Hanya 3 parameter: username, customer_no, sign
+//
+// Response: { data: { status, rc, customer_no, meter_no, subscriber_id, name, segment_power } }
 // ═══════════════════════════════════════════════════════════════
 app.post('/api/digiflazz/transaction/inquiry-pln', authProxy, async (req, res) => {
   try {
-    const { customer_no, ref_id } = req.body;
+    const { customer_no } = req.body;
     if (!customer_no) return res.status(400).json({ error: 'customer_no wajib diisi' });
-    const refId = ref_id || `PLN-INQ-${Date.now()}`;
-    const sign  = makeSignature(refId);
-    const result = await callDigiflazz('/transaction', {
-      username: DIGIFLAZZ_USER,
-      buyer_sku_code: 'pln-inquiry',
-      customer_no,
-      ref_id: refId,
-      sign,
-      testing: IS_DEV
+
+    // Sign khusus untuk inquiry-pln: md5(username + apiKey + customer_no)
+    const sign = crypto.createHash('md5')
+      .update(DIGIFLAZZ_USER + DIGIFLAZZ_APIKEY + customer_no)
+      .digest('hex');
+
+    // Endpoint khusus, BUKAN /transaction
+    const response = await fetch('https://api.digiflazz.com/v1/inquiry-pln', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: DIGIFLAZZ_USER,
+        customer_no,
+        sign
+      })
     });
+    const result = await response.json();
     res.json(result);
   } catch (e) {
     console.error('[inquiry-pln]', e.message);
@@ -960,7 +982,7 @@ app.post('/api/notify/test', authProxy, async (req, res) => {
   const msg = `🧪 <b>TEST NOTIF</b>\n` +
     `━━━━━━━━━━━━━━\n` +
     `Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n` +
-    `Proxy: v2.1.4\n` +
+    `Proxy: v2.1.5\n` +
     `Mode: ${DIGIFLAZZ_MODE}\n\n` +
     `Kalau pesan ini sampai, berarti notif Telegram sudah jalan ✓`;
   const result = await sendTelegram(msg);
@@ -983,7 +1005,7 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.4                ║
+║   UBNB PPOB Proxy v2.1.5                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
