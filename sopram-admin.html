@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sopram Admin — UBNB Desa Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#fafafa; --surface:#fff; --border:#dbdbdb; --border-light:#efefef;
+  --text:#262626; --text-muted:#8e8e8e; --accent:#000;
+  --blue:#0095f6; --green:#26a269; --red:#ed4956; --orange:#f59e0b; --purple:#7c3aed;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-size:14px;color:var(--text);background:var(--bg);min-height:100vh;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+input,select{font-family:inherit;font-size:inherit;color:inherit;}
+a{color:var(--blue);text-decoration:none;}
+
+/* Layout */
+.topbar{
+  background:var(--accent);color:white;padding:14px 20px;
+  display:flex;align-items:center;gap:12px;
+  position:sticky;top:0;z-index:50;
+  box-shadow:0 1px 4px rgba(0,0,0,.1);
+}
+.topbar h1{font-size:18px;font-weight:600;flex:1;}
+.topbar .user{font-size:13px;opacity:.85;}
+.topbar button{background:rgba(255,255,255,.15);color:white;
+  padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;}
+.topbar button:hover{background:rgba(255,255,255,.25);}
+
+.tabs{
+  display:flex;background:var(--surface);border-bottom:1px solid var(--border);
+  overflow-x:auto;scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{
+  padding:14px 18px;font-size:13px;font-weight:600;
+  color:var(--text-muted);border-bottom:2px solid transparent;
+  white-space:nowrap;flex-shrink:0;
+}
+.tab.active{color:var(--text);border-color:var(--text);}
+.tab .count{
+  display:inline-block;background:var(--bg);color:var(--text-muted);
+  padding:1px 7px;border-radius:10px;font-size:10px;margin-left:6px;font-weight:700;
+}
+.tab.active .count{background:var(--accent);color:white;}
+
+.container{max-width:1100px;margin:0 auto;padding:18px;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* Login screen */
+.login-bg{
+  position:fixed;inset:0;background:var(--accent);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  z-index:1000;
+}
+.login-card{
+  background:var(--surface);border-radius:8px;padding:30px;
+  width:100%;max-width:380px;
+}
+.login-card h1{font-size:22px;margin-bottom:6px;}
+.login-card .sub{color:var(--text-muted);font-size:13px;margin-bottom:20px;}
+.login-card label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+.login-card input{
+  width:100%;padding:10px 12px;border:1px solid var(--border);
+  border-radius:6px;outline:none;font-size:14px;background:#fafafa;
+  margin-bottom:14px;
+}
+.login-card input:focus{border-color:var(--accent);background:white;}
+.login-card .btn-login{
+  width:100%;background:var(--accent);color:white;
+  padding:12px;border-radius:6px;font-weight:600;font-size:14px;
+}
+.login-card .err{color:var(--red);font-size:13px;margin-top:8px;text-align:center;}
+
+/* Stats grid */
+.stats-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:12px;margin-bottom:18px;
+}
+.stat-card{
+  background:var(--surface);border:1px solid var(--border-light);
+  border-radius:8px;padding:14px 16px;
+}
+.stat-card .num{font-size:28px;font-weight:700;line-height:1;}
+.stat-card .lbl{font-size:11px;color:var(--text-muted);
+  margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
+.stat-card.blue .num{color:var(--blue);}
+.stat-card.green .num{color:var(--green);}
+.stat-card.red .num{color:var(--red);}
+.stat-card.purple .num{color:var(--purple);}
+.stat-card.orange .num{color:var(--orange);}
+
+/* Table */
+.tbl-wrap{
+  background:var(--surface);border:1px solid var(--border-light);
+  border-radius:8px;overflow:hidden;
+}
+.tbl-toolbar{
+  padding:10px 14px;border-bottom:1px solid var(--border-light);
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.tbl-toolbar input,.tbl-toolbar select{
+  padding:6px 10px;border:1px solid var(--border);border-radius:6px;
+  outline:none;background:white;font-size:13px;
+}
+.tbl-toolbar input{flex:1;min-width:160px;}
+.tbl-toolbar .btn{
+  padding:6px 12px;border-radius:6px;font-weight:500;font-size:13px;
+  background:var(--bg);color:var(--text);
+}
+.tbl-toolbar .btn:hover{background:var(--border-light);}
+.tbl-toolbar .btn.primary{background:var(--accent);color:white;}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;}
+.tbl th{
+  text-align:left;padding:10px 14px;background:#fafafa;
+  font-weight:600;font-size:11px;text-transform:uppercase;
+  color:var(--text-muted);letter-spacing:.5px;
+  border-bottom:1px solid var(--border-light);
+  position:sticky;top:0;z-index:1;
+}
+.tbl td{padding:10px 14px;border-bottom:1px solid var(--border-light);vertical-align:top;}
+.tbl tr:hover{background:#fafafa;}
+.tbl .cell-name{font-weight:600;}
+.tbl .cell-sub{color:var(--text-muted);font-size:11px;margin-top:2px;}
+.tbl .pill{
+  display:inline-block;padding:1px 8px;border-radius:10px;
+  font-size:10px;font-weight:600;
+}
+.pill.aktif{background:#e8f5e9;color:#1b5e20;}
+.pill.banned{background:#fde0e0;color:#c62828;}
+.pill.admin{background:#000;color:#fff;}
+.pill.login{background:#e3f2fd;color:#1565c0;}
+.pill.login_failed{background:#fde0e0;color:#c62828;}
+.pill.request_access{background:#fff3e0;color:#bf6500;}
+.pill.logout{background:#eee;color:#666;}
+.pill.banned_event{background:#fde0e0;color:#c62828;}
+.tbl .actions{white-space:nowrap;}
+.tbl .actions button{
+  padding:4px 10px;border-radius:4px;font-size:12px;font-weight:500;
+  margin-right:4px;background:var(--bg);
+}
+.tbl .actions button:hover{background:var(--border-light);}
+.tbl .actions .danger{background:#fde0e0;color:#c62828;}
+.tbl .actions .danger:hover{background:#fbcaca;}
+.tbl .actions .ok{background:#e8f5e9;color:#1b5e20;}
+
+.empty{padding:40px 20px;text-align:center;color:var(--text-muted);}
+.loading{padding:30px;text-align:center;color:var(--text-muted);font-size:13px;}
+
+/* Map link */
+.map-link{
+  font-size:11px;color:var(--blue);font-weight:500;
+}
+.map-link:hover{text-decoration:underline;}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:20px;right:20px;
+  background:var(--accent);color:white;padding:10px 18px;
+  border-radius:6px;font-size:13px;z-index:9999;display:none;
+}
+#toast.show{display:block;}
+#toast.err{background:var(--red);}
+
+/* Mobile */
+@media(max-width:640px){
+  .container{padding:10px;}
+  .topbar{padding:10px 14px;}
+  .topbar h1{font-size:15px;}
+  .topbar .user{display:none;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);}
+  .stat-card .num{font-size:22px;}
+  .tbl th,.tbl td{padding:8px 10px;font-size:12px;}
+  .tbl-toolbar{padding:8px 10px;}
+}
+
+/* Modal */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);
+  display:none;align-items:center;justify-content:center;
+  z-index:500;padding:20px;
+}
+.modal-bg.show{display:flex;}
+.modal{
+  background:var(--surface);border-radius:8px;
+  width:100%;max-width:500px;max-height:90vh;overflow-y:auto;
+}
+.modal-head{
+  padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.modal-head h3{font-size:15px;font-weight:600;}
+.modal-body{padding:14px 18px;}
+.modal-row{padding:8px 0;border-bottom:1px solid var(--border-light);font-size:13px;}
+.modal-row:last-child{border-bottom:none;}
+.modal-row label{font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;}
+.modal-row .val{margin-top:2px;}
+
+.detail-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+@media(max-width:480px){.detail-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-bg" id="login-bg">
+  <div class="login-card">
+    <h1>Sopram Admin</h1>
+    <div class="sub">UBNB Desa Perwira</div>
+    <label>Username</label>
+    <input type="text" id="login-username" placeholder="username" autocomplete="off">
+    <label>Kode Akses</label>
+    <input type="password" id="login-kode" placeholder="kode akses" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn-login" onclick="doLogin()">Login Admin</button>
+    <div class="err" id="login-err"></div>
+    <div class="sub" style="margin-top:14px;font-size:11px;text-align:center">
+      Hanya akun dengan flag <code>is_admin=true</code>
+    </div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar" id="topbar" style="display:none">
+  <h1>🛡️ Sopram Admin Panel</h1>
+  <span class="user" id="topbar-user">—</span>
+  <button onclick="loadAllPages()">↻ Refresh</button>
+  <button onclick="doLogout()">Logout</button>
+</div>
+
+<!-- TABS -->
+<div class="tabs" id="tabs" style="display:none">
+  <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard',this)">📊 Dashboard</button>
+  <button class="tab" data-tab="users" onclick="switchTab('users',this)">👥 Users <span class="count" id="cnt-users">0</span></button>
+  <button class="tab" data-tab="access-log" onclick="switchTab('access-log',this)">🔍 Access Log <span class="count" id="cnt-log">0</span></button>
+  <button class="tab" data-tab="posts" onclick="switchTab('posts',this)">📷 Posts <span class="count" id="cnt-posts">0</span></button>
+  <button class="tab" data-tab="marketplace" onclick="switchTab('marketplace',this)">🛒 Marketplace <span class="count" id="cnt-market">0</span></button>
+  <button class="tab" data-tab="chats" onclick="switchTab('chats',this)">💬 Chat Rooms <span class="count" id="cnt-chats">0</span></button>
+  <button class="tab" data-tab="broadcast" onclick="switchTab('broadcast',this)">📢 Broadcast</button>
+</div>
+
+<div class="container" id="main" style="display:none">
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="stats-grid" id="dashboard-stats"></div>
+    <h3 style="margin:18px 0 10px;font-size:14px;">Aktivitas Terbaru</h3>
+    <div class="tbl-wrap">
+      <div id="dashboard-recent"></div>
+    </div>
+  </div>
+
+  <!-- USERS -->
+  <div class="page" id="page-users">
+    <div class="tbl-wrap">
+      <div class="tbl-toolbar">
+        <input type="text" id="search-users" placeholder="🔍 Cari nama / username..." oninput="renderUsers()">
+        <select id="filter-users" onchange="renderUsers()">
+          <option value="">Semua Status</option>
+          <option value="aktif">Aktif</option>
+          <option value="banned">Banned</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="tbl">
+        <thead><tr>
+          <th>User</th><th>Kelompok</th><th>WA</th><th>Status</th><th>Last Login</th><th>Aksi</th>
+        </tr></thead>
+        <tbody id="tbody-users"><tr><td colspan="6" class="loading">Memuat...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ACCESS LOG -->
+  <div class="page" id="page-access-log">
+    <div class="tbl-wrap">
+      <div class="tbl-toolbar">
+        <input type="text" id="search-log" placeholder="🔍 Cari nama / IP..." oninput="renderAccessLog()">
+        <select id="filter-log" onchange="renderAccessLog()">
+          <option value="">Semua Tipe</option>
+          <option value="request_access">Request Access</option>
+          <option value="login">Login</option>
+          <option value="login_failed">Login Failed</option>
+          <option value="logout">Logout</option>
+          <option value="banned">Banned</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="tbl">
+        <thead><tr>
+          <th>Waktu</th><th>User</th><th>Tipe</th><th>IP</th><th>Lokasi</th><th>User Agent</th>
+        </tr></thead>
+        <tbody id="tbody-log"><tr><td colspan="6" class="loading">Memuat...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- POSTS -->
+  <div class="page" id="page-posts">
+    <div class="tbl-wrap">
+      <div class="tbl-toolbar">
+        <input type="text" id="search-posts" placeholder="🔍 Cari caption / nama poster..." oninput="renderPosts()">
+        <select id="filter-posts" onchange="renderPosts()">
+          <option value="active">Aktif</option>
+          <option value="deleted">Dihapus</option>
+          <option value="all">Semua</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="tbl">
+        <thead><tr>
+          <th>Foto</th><th>Caption</th><th>Posted by</th><th>Likes/Cmt</th><th>Tanggal</th><th>Aksi</th>
+        </tr></thead>
+        <tbody id="tbody-posts"><tr><td colspan="6" class="loading">Memuat...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- MARKETPLACE -->
+  <div class="page" id="page-marketplace">
+    <div class="tbl-wrap">
+      <div class="tbl-toolbar">
+        <input type="text" id="search-market" placeholder="🔍 Cari produk / nama penjual..." oninput="renderMarket()">
+        <select id="filter-market" onchange="renderMarket()">
+          <option value="">Semua Status</option>
+          <option value="aktif">Aktif</option>
+          <option value="sold">Sold</option>
+          <option value="nonaktif">Nonaktif</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="tbl">
+        <thead><tr>
+          <th>Foto</th><th>Produk</th><th>Penjual</th><th>Harga</th><th>Status</th><th>Aksi</th>
+        </tr></thead>
+        <tbody id="tbody-market"><tr><td colspan="6" class="loading">Memuat...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- CHATS -->
+  <div class="page" id="page-chats">
+    <p style="color:var(--text-muted);font-size:12px;margin-bottom:10px">
+      ⓘ Daftar chat rooms. Klik "Lihat Pesan" untuk monitor (untuk audit/keamanan saja).
+    </p>
+    <div class="tbl-wrap">
+      <div class="tbl-toolbar">
+        <input type="text" id="search-chats" placeholder="🔍 Cari nama room..." oninput="renderChats()">
+        <select id="filter-chats" onchange="renderChats()">
+          <option value="">Semua Tipe</option>
+          <option value="private">Private (DM)</option>
+          <option value="group">Group</option>
+          <option value="broadcast">Broadcast</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="tbl">
+        <thead><tr>
+          <th>Tipe</th><th>Nama Room</th><th>Anggota</th><th>Total Pesan</th><th>Last Activity</th><th>Aksi</th>
+        </tr></thead>
+        <tbody id="tbody-chats"><tr><td colspan="6" class="loading">Memuat...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- BROADCAST -->
+  <div class="page" id="page-broadcast">
+    <div class="tbl-wrap" style="padding:18px;">
+      <h3 style="margin-bottom:14px;">📢 Kirim Broadcast ke Semua User</h3>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">
+        Broadcast akan masuk ke channel "📢 Pengumuman UBNB" di chat semua user.
+      </p>
+      <textarea id="bc-isi" placeholder="Tulis pesan broadcast..." rows="6"
+        style="width:100%;padding:12px;border:1px solid var(--border);border-radius:6px;
+               font-family:inherit;font-size:14px;outline:none;resize:vertical;
+               background:#fafafa;"></textarea>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button onclick="kirimBroadcast()"
+          style="background:var(--accent);color:white;padding:10px 18px;border-radius:6px;font-weight:600;">
+          📢 Kirim Broadcast
+        </button>
+        <button onclick="document.getElementById('bc-isi').value=''"
+          style="background:var(--bg);padding:10px 18px;border-radius:6px;font-weight:500;">
+          Hapus
+        </button>
+      </div>
+      <h3 style="margin:24px 0 10px;">📜 Riwayat Broadcast</h3>
+      <div id="bc-history"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-bg" id="modal-detail">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title">Detail</h3>
+      <button onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const ADM_SESSION_KEY='sopram_admin_session_v1';
+
+let CU_ADMIN=null;
+let _cacheUsers=[],_cacheLog=[],_cachePosts=[],_cacheMarket=[],_cacheChats=[];
+
+function toast(msg,err){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.toggle('err',!!err);t.classList.add('show');
+  clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),2500);
+}
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtRp(n){return 'Rp '+(n||0).toLocaleString('id-ID');}
+function fmtKelompok(k){if(!k)return '-';if(/^\d+$/.test(k))return 'PW'+k;return k;}
+function fmtDateTime(iso){if(!iso)return '—';return new Date(iso).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function fmtRelTime(iso){
+  if(!iso)return '';
+  const diff=Math.floor((Date.now()-new Date(iso))/1000);
+  if(diff<60)return 'baru saja';
+  if(diff<3600)return Math.floor(diff/60)+'m';
+  if(diff<86400)return Math.floor(diff/3600)+'j';
+  if(diff<604800)return Math.floor(diff/86400)+'h';
+  return Math.floor(diff/604800)+'mg';
+}
+
+// ================ AUTH ================
+async function doLogin(){
+  const username=document.getElementById('login-username').value.trim().toLowerCase();
+  const kode=document.getElementById('login-kode').value.trim().toUpperCase();
+  const errEl=document.getElementById('login-err');
+  errEl.textContent='';
+  if(!username || !kode){errEl.textContent='Isi username & kode';return;}
+  const {data:user,error}=await sb.from('sopram_user')
+    .select('id, username, kode_akses, is_admin, status, jamaah_did, jamaah_desa(nama)')
+    .eq('username',username).maybeSingle();
+  if(error){errEl.textContent='Error: '+error.message;return;}
+  if(!user){errEl.textContent='Username tidak ditemukan';return;}
+  if(!user.is_admin){errEl.textContent='Akun ini bukan admin';return;}
+  if(user.status==='banned'){errEl.textContent='Akun banned';return;}
+  if(user.kode_akses!==kode){errEl.textContent='Kode akses salah';return;}
+
+  CU_ADMIN={
+    _id:user.id,
+    username:user.username,
+    nama:user.jamaah_desa?.nama||user.username,
+    jamaah_did:user.jamaah_did,
+  };
+  saveSession(CU_ADMIN);
+  // Log
+  sb.from('sopram_access_log').insert({
+    user_id:user.id, jamaah_did:user.jamaah_did,
+    nama_jamaah:CU_ADMIN.nama, tipe:'login',
+    user_agent:'AdminPanel: '+navigator.userAgent.substring(0,200)
+  }).then(()=>{});
+  enterApp();
+}
+function doLogout(){
+  if(CU_ADMIN){
+    sb.from('sopram_access_log').insert({
+      user_id:CU_ADMIN._id,nama_jamaah:CU_ADMIN.nama,tipe:'logout',
+      user_agent:'AdminPanel'
+    }).then(()=>{});
+  }
+  clearSession();CU_ADMIN=null;
+  document.getElementById('topbar').style.display='none';
+  document.getElementById('tabs').style.display='none';
+  document.getElementById('main').style.display='none';
+  document.getElementById('login-bg').style.display='flex';
+  document.getElementById('login-kode').value='';
+}
+function saveSession(u){try{localStorage.setItem(ADM_SESSION_KEY,JSON.stringify(u));}catch(e){}}
+function loadSession(){try{const s=localStorage.getItem(ADM_SESSION_KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
+function clearSession(){try{localStorage.removeItem(ADM_SESSION_KEY);}catch(e){}}
+
+function enterApp(){
+  document.getElementById('login-bg').style.display='none';
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('tabs').style.display='flex';
+  document.getElementById('main').style.display='block';
+  document.getElementById('topbar-user').textContent='👤 '+CU_ADMIN.nama+' · ADMIN';
+  loadAllPages();
+}
+
+// ================ NAVIGATION ================
+function switchTab(tab,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+}
+
+async function loadAllPages(){
+  await Promise.all([
+    loadDashboard(),loadUsers(),loadAccessLog(),loadPosts(),loadMarket(),loadChats(),loadBroadcastHistory()
+  ]);
+  updateTabCounts();
+}
+function updateTabCounts(){
+  document.getElementById('cnt-users').textContent=_cacheUsers.length;
+  document.getElementById('cnt-log').textContent=_cacheLog.length;
+  document.getElementById('cnt-posts').textContent=_cachePosts.length;
+  document.getElementById('cnt-market').textContent=_cacheMarket.length;
+  document.getElementById('cnt-chats').textContent=_cacheChats.length;
+}
+
+// ================ DASHBOARD ================
+async function loadDashboard(){
+  const stEl=document.getElementById('dashboard-stats');
+  stEl.innerHTML='<div class="loading">Memuat statistik...</div>';
+
+  // Counts paralel
+  const [
+    {count:userCount},{count:adminCount},{count:bannedCount},
+    {count:postCount},{count:marketCount},{count:chatRoomCount},
+    {count:msgCount}
+  ]=await Promise.all([
+    sb.from('sopram_user').select('*',{count:'exact',head:true}),
+    sb.from('sopram_user').select('*',{count:'exact',head:true}).eq('is_admin',true),
+    sb.from('sopram_user').select('*',{count:'exact',head:true}).eq('status','banned'),
+    sb.from('sopram_post').select('*',{count:'exact',head:true}).is('deleted_at',null),
+    sb.from('sopram_marketplace').select('*',{count:'exact',head:true}).eq('status','aktif'),
+    sb.from('sopram_chat_room').select('*',{count:'exact',head:true}),
+    sb.from('sopram_chat_message').select('*',{count:'exact',head:true}).is('deleted_at',null),
+  ]);
+
+  // Login hari ini
+  const today=new Date();today.setHours(0,0,0,0);
+  const {count:loginToday}=await sb.from('sopram_access_log')
+    .select('*',{count:'exact',head:true}).eq('tipe','login').gte('created_at',today.toISOString());
+  const {count:requestPending}=await sb.from('sopram_access_log')
+    .select('*',{count:'exact',head:true}).eq('tipe','request_access').gte('created_at',new Date(Date.now()-7*24*3600*1000).toISOString());
+
+  stEl.innerHTML=`
+    <div class="stat-card blue"><div class="num">${userCount||0}</div><div class="lbl">Total Users</div></div>
+    <div class="stat-card purple"><div class="num">${adminCount||0}</div><div class="lbl">Admin</div></div>
+    <div class="stat-card red"><div class="num">${bannedCount||0}</div><div class="lbl">Banned</div></div>
+    <div class="stat-card green"><div class="num">${loginToday||0}</div><div class="lbl">Login Hari Ini</div></div>
+    <div class="stat-card orange"><div class="num">${requestPending||0}</div><div class="lbl">Request 7 Hari</div></div>
+    <div class="stat-card blue"><div class="num">${postCount||0}</div><div class="lbl">Total Post</div></div>
+    <div class="stat-card green"><div class="num">${marketCount||0}</div><div class="lbl">Produk Aktif</div></div>
+    <div class="stat-card purple"><div class="num">${msgCount||0}</div><div class="lbl">Total Pesan</div></div>
+  `;
+
+  // Aktivitas terbaru (gabungan log)
+  const {data:recent}=await sb.from('sopram_access_log')
+    .select('id, tipe, nama_jamaah, ip_address, created_at')
+    .order('created_at',{ascending:false}).limit(10);
+  const recEl=document.getElementById('dashboard-recent');
+  if(!recent||!recent.length){recEl.innerHTML='<div class="empty">Belum ada aktivitas</div>';return;}
+  recEl.innerHTML=`<table class="tbl">
+    <thead><tr><th>Waktu</th><th>User</th><th>Tipe</th><th>IP</th></tr></thead>
+    <tbody>${recent.map(r=>`
+      <tr>
+        <td>${fmtDateTime(r.created_at)}</td>
+        <td class="cell-name">${escapeHtml(r.nama_jamaah||'—')}</td>
+        <td><span class="pill ${r.tipe}">${r.tipe.replace('_',' ')}</span></td>
+        <td><code style="font-size:11px">${escapeHtml(r.ip_address||'—')}</code></td>
+      </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ================ USERS ================
+async function loadUsers(){
+  const {data,error}=await sb.from('sopram_user')
+    .select('id, jamaah_did, username, no_wa, is_admin, status, last_login_at, created_at, jamaah_desa(nama,kelompok,nomor_wa)')
+    .order('created_at',{ascending:false});
+  if(error){console.error(error);return;}
+  _cacheUsers=data||[];
+  renderUsers();
+}
+function renderUsers(){
+  const q=(document.getElementById('search-users').value||'').toLowerCase();
+  const filt=document.getElementById('filter-users').value;
+  let list=_cacheUsers;
+  if(filt==='aktif')list=list.filter(u=>u.status==='aktif'&&!u.is_admin);
+  else if(filt==='banned')list=list.filter(u=>u.status==='banned');
+  else if(filt==='admin')list=list.filter(u=>u.is_admin);
+  if(q)list=list.filter(u=>(u.jamaah_desa?.nama||'').toLowerCase().includes(q)||(u.username||'').toLowerCase().includes(q));
+  const tbody=document.getElementById('tbody-users');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ditemukan</td></tr>';return;}
+  tbody.innerHTML=list.map(u=>{
+    const nama=u.jamaah_desa?.nama||u.username;
+    const wa=u.no_wa||u.jamaah_desa?.nomor_wa||'—';
+    let stat='<span class="pill aktif">aktif</span>';
+    if(u.status==='banned')stat='<span class="pill banned">BANNED</span>';
+    if(u.is_admin)stat+=' <span class="pill admin">ADMIN</span>';
+    return `<tr>
+      <td>
+        <div class="cell-name">${escapeHtml(nama)}</div>
+        <div class="cell-sub">@${escapeHtml(u.username)} · id ${u.id}</div>
+      </td>
+      <td>${fmtKelompok(u.jamaah_desa?.kelompok)}</td>
+      <td>${escapeHtml(wa)}</td>
+      <td>${stat}</td>
+      <td>${u.last_login_at?fmtRelTime(u.last_login_at):'—'}</td>
+      <td class="actions">
+        ${u.status==='banned'
+          ?`<button class="ok" onclick="userToggleBan(${u.id},false)">Unban</button>`
+          :`<button class="danger" onclick="userToggleBan(${u.id},true)">Ban</button>`}
+        <button onclick="userToggleAdmin(${u.id},${!u.is_admin})">${u.is_admin?'Cabut Admin':'Jadikan Admin'}</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function userToggleBan(id,ban){
+  const newStatus=ban?'banned':'aktif';
+  if(ban && !confirm('Banned user ini? User tidak bisa login.'))return;
+  const {error}=await sb.from('sopram_user').update({status:newStatus}).eq('id',id);
+  if(error){toast(error.message,true);return;}
+  // Log
+  const u=_cacheUsers.find(x=>x.id===id);
+  sb.from('sopram_access_log').insert({
+    user_id:id, jamaah_did:u?.jamaah_did, nama_jamaah:u?.jamaah_desa?.nama,
+    tipe:ban?'banned':'login',
+    user_agent:'AdminPanel: '+(ban?'banned':'unbanned')+' by '+CU_ADMIN.username
+  }).then(()=>{});
+  toast(ban?'User di-banned':'User di-unban');
+  loadUsers();
+}
+async function userToggleAdmin(id,makeAdmin){
+  if(!confirm(makeAdmin?'Jadikan user ini admin?':'Cabut hak admin user ini?'))return;
+  const {error}=await sb.from('sopram_user').update({is_admin:makeAdmin}).eq('id',id);
+  if(error){toast(error.message,true);return;}
+  toast(makeAdmin?'Sekarang admin':'Hak admin dicabut');
+  loadUsers();
+}
+
+// ================ ACCESS LOG ================
+async function loadAccessLog(){
+  const {data,error}=await sb.from('sopram_access_log')
+    .select('*').order('created_at',{ascending:false}).limit(500);
+  if(error){console.error(error);return;}
+  _cacheLog=data||[];
+  renderAccessLog();
+}
+function renderAccessLog(){
+  const q=(document.getElementById('search-log').value||'').toLowerCase();
+  const filt=document.getElementById('filter-log').value;
+  let list=_cacheLog;
+  if(filt)list=list.filter(l=>l.tipe===filt);
+  if(q)list=list.filter(l=>(l.nama_jamaah||'').toLowerCase().includes(q)||(l.ip_address||'').toLowerCase().includes(q));
+  const tbody=document.getElementById('tbody-log');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ditemukan</td></tr>';return;}
+  tbody.innerHTML=list.map(l=>{
+    let mapLink='—';
+    if(l.latitude && l.longitude){
+      const url=`https://www.google.com/maps?q=${l.latitude},${l.longitude}`;
+      mapLink=`<a href="${url}" target="_blank" class="map-link">📍 ${l.latitude.toFixed(4)},${l.longitude.toFixed(4)}</a>${l.akurasi_meter?` <span style="color:var(--text-muted)">±${l.akurasi_meter}m</span>`:''}`;
+    }
+    const tipe=l.tipe==='banned'?'banned_event':l.tipe;
+    return `<tr>
+      <td>${fmtDateTime(l.created_at)}</td>
+      <td>
+        <div class="cell-name">${escapeHtml(l.nama_jamaah||'—')}</div>
+        ${l.no_wa?`<div class="cell-sub">${escapeHtml(l.no_wa)}</div>`:''}
+      </td>
+      <td><span class="pill ${tipe}">${l.tipe.replace('_',' ')}</span></td>
+      <td><code style="font-size:11px">${escapeHtml(l.ip_address||'—')}</code></td>
+      <td>${mapLink}</td>
+      <td><div style="font-size:11px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.user_agent||'—')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ================ POSTS ================
+async function loadPosts(){
+  const {data,error}=await sb.from('sopram_post')
+    .select('id, caption, foto_urls, lokasi, likes_count, comments_count, deleted_at, created_at, sopram_user(id, jamaah_desa(nama))')
+    .order('created_at',{ascending:false}).limit(200);
+  if(error){console.error(error);return;}
+  _cachePosts=data||[];
+  renderPosts();
+}
+function renderPosts(){
+  const q=(document.getElementById('search-posts').value||'').toLowerCase();
+  const filt=document.getElementById('filter-posts').value||'active';
+  let list=_cachePosts;
+  if(filt==='active')list=list.filter(p=>!p.deleted_at);
+  else if(filt==='deleted')list=list.filter(p=>p.deleted_at);
+  if(q)list=list.filter(p=>(p.caption||'').toLowerCase().includes(q)||(p.sopram_user?.jamaah_desa?.nama||'').toLowerCase().includes(q));
+  const tbody=document.getElementById('tbody-posts');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ada post</td></tr>';return;}
+  tbody.innerHTML=list.map(p=>{
+    const thumb=(p.foto_urls&&p.foto_urls[0])||'';
+    return `<tr ${p.deleted_at?'style="opacity:.5"':''}>
+      <td>${thumb?`<img src="${escapeHtml(thumb)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer" onclick="window.open('${escapeHtml(thumb)}','_blank')">`:''}</td>
+      <td>
+        <div style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${escapeHtml(p.caption||'—')}</div>
+        ${p.lokasi?`<div class="cell-sub">📍 ${escapeHtml(p.lokasi)}</div>`:''}
+      </td>
+      <td>${escapeHtml(p.sopram_user?.jamaah_desa?.nama||'—')}</td>
+      <td>♥ ${p.likes_count||0} · 💬 ${p.comments_count||0}</td>
+      <td>${fmtRelTime(p.created_at)}</td>
+      <td class="actions">
+        ${p.deleted_at
+          ?`<button class="ok" onclick="postRestore(${p.id})">Restore</button>`
+          :`<button class="danger" onclick="postDelete(${p.id})">Hapus</button>`}
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function postDelete(id){
+  if(!confirm('Hapus post ini? (soft delete, bisa di-restore)'))return;
+  const {error}=await sb.from('sopram_post').update({deleted_at:new Date().toISOString()}).eq('id',id);
+  if(error){toast(error.message,true);return;}
+  toast('Post dihapus');loadPosts();
+}
+async function postRestore(id){
+  const {error}=await sb.from('sopram_post').update({deleted_at:null}).eq('id',id);
+  if(error){toast(error.message,true);return;}
+  toast('Post direstore');loadPosts();
+}
+
+// ================ MARKETPLACE ================
+async function loadMarket(){
+  const {data,error}=await sb.from('sopram_marketplace')
+    .select('*, sopram_user(id, jamaah_desa(nama))')
+    .order('created_at',{ascending:false}).limit(300);
+  if(error){console.error(error);return;}
+  _cacheMarket=data||[];
+  renderMarket();
+}
+function renderMarket(){
+  const q=(document.getElementById('search-market').value||'').toLowerCase();
+  const filt=document.getElementById('filter-market').value;
+  let list=_cacheMarket;
+  if(filt)list=list.filter(m=>m.status===filt);
+  if(q)list=list.filter(m=>(m.judul||'').toLowerCase().includes(q)||(m.sopram_user?.jamaah_desa?.nama||'').toLowerCase().includes(q));
+  const tbody=document.getElementById('tbody-market');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ada produk</td></tr>';return;}
+  tbody.innerHTML=list.map(m=>{
+    const thumb=(m.foto_urls&&m.foto_urls[0])||'';
+    return `<tr>
+      <td>${thumb?`<img src="${escapeHtml(thumb)}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer" onclick="window.open('${escapeHtml(thumb)}','_blank')">`:''}</td>
+      <td>
+        <div class="cell-name" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(m.judul)}</div>
+        <div class="cell-sub">${escapeHtml(m.kategori||'—')}</div>
+      </td>
+      <td>${escapeHtml(m.sopram_user?.jamaah_desa?.nama||'—')}</td>
+      <td>${fmtRp(m.harga)}</td>
+      <td><span class="pill ${m.status==='aktif'?'aktif':m.status==='sold'?'banned':'logout'}">${m.status}</span></td>
+      <td class="actions">
+        ${m.status==='aktif'?`<button onclick="marketSetStatus(${m.id},'nonaktif')">Nonaktifkan</button>`:''}
+        <button class="danger" onclick="marketDelete(${m.id})">Hapus</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function marketSetStatus(id,status){
+  const {error}=await sb.from('sopram_marketplace').update({status}).eq('id',id);
+  if(error){toast(error.message,true);return;}
+  toast('Status diubah ke '+status);loadMarket();
+}
+async function marketDelete(id){
+  if(!confirm('Hapus permanen produk ini?'))return;
+  const {error}=await sb.from('sopram_marketplace').delete().eq('id',id);
+  if(error){toast(error.message,true);return;}
+  toast('Produk dihapus');loadMarket();
+}
+
+// ================ CHATS ================
+async function loadChats(){
+  const {data:rooms,error}=await sb.from('sopram_chat_room').select('*').order('id');
+  if(error){console.error(error);return;}
+  // Stats per room
+  for(const r of rooms){
+    const [{count:msgCount},{count:memberCount}]=await Promise.all([
+      sb.from('sopram_chat_message').select('*',{count:'exact',head:true}).eq('room_id',r.id).is('deleted_at',null),
+      sb.from('sopram_chat_member').select('*',{count:'exact',head:true}).eq('room_id',r.id).eq('status','active'),
+    ]);
+    const {data:lastMsg}=await sb.from('sopram_chat_message')
+      .select('created_at').eq('room_id',r.id).is('deleted_at',null)
+      .order('created_at',{ascending:false}).limit(1).maybeSingle();
+    r._msgCount=msgCount||0;
+    r._memberCount=memberCount||0;
+    r._lastActivity=lastMsg?lastMsg.created_at:r.created_at;
+    // Untuk private: ambil 2 nama anggota
+    if(r.tipe==='private'){
+      const {data:mems}=await sb.from('sopram_chat_member')
+        .select('user_id, sopram_user!inner(jamaah_desa(nama))').eq('room_id',r.id);
+      r._namaPrivate=(mems||[]).map(m=>m.sopram_user?.jamaah_desa?.nama||'?').join(' ↔ ');
+    }
+  }
+  _cacheChats=rooms||[];
+  renderChats();
+}
+function renderChats(){
+  const q=(document.getElementById('search-chats').value||'').toLowerCase();
+  const filt=document.getElementById('filter-chats').value;
+  let list=_cacheChats;
+  if(filt)list=list.filter(r=>r.tipe===filt);
+  if(q)list=list.filter(r=>{
+    const nm=r.tipe==='private'?(r._namaPrivate||''):r.nama;
+    return (nm||'').toLowerCase().includes(q);
+  });
+  const tbody=document.getElementById('tbody-chats');
+  if(!list.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ada chat</td></tr>';return;}
+  tbody.innerHTML=list.map(r=>{
+    const nm=r.tipe==='private'?(r._namaPrivate||'(private)'):r.nama;
+    return `<tr>
+      <td><span class="pill ${r.tipe==='broadcast'?'banned':r.tipe==='group'?'login':'logout'}">${r.tipe}</span></td>
+      <td>
+        <div class="cell-name">${escapeHtml(nm)}</div>
+        <div class="cell-sub">id ${r.id}${r.ikon?' · '+r.ikon:''}</div>
+      </td>
+      <td>${r._memberCount}</td>
+      <td>${r._msgCount}</td>
+      <td>${fmtRelTime(r._lastActivity)}</td>
+      <td class="actions">
+        <button onclick="viewChatMessages(${r.id},'${escapeHtml(nm).replace(/'/g,'')}')">Lihat Pesan</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function viewChatMessages(roomId,nama){
+  const {data:msgs}=await sb.from('sopram_chat_message')
+    .select('*, sopram_user(jamaah_desa(nama))')
+    .eq('room_id',roomId).is('deleted_at',null)
+    .order('created_at',{ascending:false}).limit(50);
+  document.getElementById('modal-title').textContent='Chat: '+nama;
+  const body=document.getElementById('modal-body');
+  if(!msgs||!msgs.length){
+    body.innerHTML='<p style="color:var(--text-muted)">Belum ada pesan.</p>';
+  } else {
+    body.innerHTML=`<div style="max-height:60vh;overflow-y:auto;">${msgs.reverse().map(m=>{
+      const senderName=m.sopram_user?.jamaah_desa?.nama||'?';
+      const photo=m.foto_url?`<br><img src="${escapeHtml(m.foto_url)}" style="max-width:200px;max-height:200px;border-radius:6px;margin-top:6px;">`:'';
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--border-light);">
+        <div style="font-weight:600;font-size:12px;">${escapeHtml(senderName)} <span style="color:var(--text-muted);font-weight:400;font-size:11px">${fmtDateTime(m.created_at)}</span></div>
+        <div style="font-size:13px;margin-top:3px;">${escapeHtml(m.isi||'')}</div>
+        ${photo}
+      </div>`;
+    }).join('')}</div>`;
+  }
+  document.getElementById('modal-detail').classList.add('show');
+}
+function closeModal(){document.getElementById('modal-detail').classList.remove('show');}
+
+// ================ BROADCAST ================
+async function kirimBroadcast(){
+  const isi=document.getElementById('bc-isi').value.trim();
+  if(!isi){toast('Tulis pesan dulu',true);return;}
+  if(!confirm('Kirim broadcast ke SEMUA user?'))return;
+
+  // Insert ke chat broadcast (room id=1)
+  const {error}=await sb.from('sopram_chat_message').insert({
+    room_id:1, sender_id:CU_ADMIN._id, isi
+  });
+  if(error){toast(error.message,true);return;}
+  toast('✓ Broadcast terkirim');
+  document.getElementById('bc-isi').value='';
+  loadBroadcastHistory();
+}
+async function loadBroadcastHistory(){
+  const {data:msgs}=await sb.from('sopram_chat_message')
+    .select('id, isi, created_at, sopram_user(jamaah_desa(nama))')
+    .eq('room_id',1).is('deleted_at',null)
+    .order('created_at',{ascending:false}).limit(20);
+  const el=document.getElementById('bc-history');
+  if(!msgs||!msgs.length){el.innerHTML='<p style="color:var(--text-muted)">Belum ada broadcast</p>';return;}
+  el.innerHTML=msgs.map(m=>`
+    <div style="padding:10px 12px;background:#fff8f0;border:1px solid #f0c896;border-radius:6px;margin-bottom:8px;">
+      <div style="font-size:11px;color:#7a4500;font-weight:600;margin-bottom:3px;">
+        ${escapeHtml(m.sopram_user?.jamaah_desa?.nama||'Admin')} · ${fmtDateTime(m.created_at)}
+      </div>
+      <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(m.isi||'')}</div>
+    </div>
+  `).join('');
+}
+
+// ================ INIT ================
+async function init(){
+  // Cek session
+  const saved=loadSession();
+  if(saved && saved._id){
+    // Verify
+    const {data:user}=await sb.from('sopram_user')
+      .select('id,is_admin,status,username,jamaah_did,jamaah_desa(nama)').eq('id',saved._id).maybeSingle();
+    if(user && user.is_admin && user.status==='aktif'){
+      CU_ADMIN={
+        _id:user.id,username:user.username,jamaah_did:user.jamaah_did,
+        nama:user.jamaah_desa?.nama||user.username
+      };
+      enterApp();
+      return;
+    }
+    clearSession();
+  }
+  // Show login
+  document.getElementById('login-username').focus();
+}
+init();
+</script>
+</body>
+</html>
