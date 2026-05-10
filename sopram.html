@@ -1877,16 +1877,20 @@ let loginAcKbdIdx=-1;
 let loginAcVisibleItems=[];
 
 async function onLoginAcFocus(){
+  console.log('[AC] onLoginAcFocus triggered');
   // Scroll input ke atas supaya dropdown nggak ke-cover keyboard
   const inp=document.getElementById('login-jamaah-search');
   setTimeout(()=>{
     if(inp)inp.scrollIntoView({behavior:'smooth',block:'start'});
   },300);
   await loadAcData();
+  console.log('[AC] data loaded, jamaah count =',(_acDataCache?.jamaahList||[]).length);
   renderLoginAcList();
   document.getElementById('login-ac-list').classList.add('show');
+  console.log('[AC] dropdown class.show added');
 }
 async function onLoginAcInput(){
+  console.log('[AC] onLoginAcInput triggered');
   const inp=document.getElementById('login-jamaah-search');
   const wrap=document.getElementById('if-jamaah');
   // saat user mengetik, reset selected hidden value
@@ -1898,11 +1902,13 @@ async function onLoginAcInput(){
   // Show loading immediately (kalau cache belum ready)
   const list=document.getElementById('login-ac-list');
   if(!_acDataCache){
+    console.log('[AC] cache not ready, showing loading');
     list.innerHTML='<div class="ac-loading">⏳ Memuat daftar jamaah...</div>';
     list.classList.add('show');
   }
 
   await loadAcData();
+  console.log('[AC] input value =',JSON.stringify(inp.value),'cache size =',(_acDataCache?.jamaahList||[]).length);
   renderLoginAcList();
   document.getElementById('login-ac-list').classList.add('show');
   validateLogin();
@@ -1912,12 +1918,14 @@ function renderLoginAcList(){
   const list=document.getElementById('login-ac-list');
   const q=(inp.value||'').trim().toLowerCase();
   const {jamaahList,userByDid}=_acDataCache||{jamaahList:[],userByDid:{}};
+  console.log('[AC] renderLoginAcList: query=',JSON.stringify(q),'jamaah total=',jamaahList.length);
 
   // Filter: cari di nama saja (sesuai pilihan Sotoy: "A. Cari di nama saja")
   let items=jamaahList;
   if(q){
     items=items.filter(j=>(j.nama||'').toLowerCase().includes(q));
   }
+  console.log('[AC] after filter, items =',items.length);
   // Sort: ada akses dulu, lalu alfabetis
   items.sort((a,b)=>{
     const ha=!!userByDid[a.did], hb=!!userByDid[b.did];
@@ -1928,6 +1936,9 @@ function renderLoginAcList(){
   const shown=items.slice(0,50);
   loginAcVisibleItems=shown;
 
+  // Force inline style fallback (in case CSS class .show not applied)
+  list.style.display='block';
+
   if(!shown.length){
     list.innerHTML='<div class="ac-empty">Tidak ditemukan jamaah dengan nama itu</div>';
     return;
@@ -1937,6 +1948,7 @@ function renderLoginAcList(){
     html+=`<div class="ac-empty" style="font-size:11px;border-top:1px solid var(--border-light);">... ${items.length-50} hasil lain. Ketik lebih spesifik untuk filter.</div>`;
   }
   list.innerHTML=html;
+  console.log('[AC] HTML rendered, list children =',list.children.length);
   // Bind click
   list.querySelectorAll('.ac-item[data-did]').forEach(el=>{
     el.addEventListener('mousedown',e=>{
@@ -2003,17 +2015,33 @@ function updateAcKbdActive(items,idx,list){
   if(idx>=0)items[idx].scrollIntoView({block:'nearest'});
 }
 
-// Click outside to close
-document.addEventListener('click',e=>{
+// Click outside to close (gunakan mousedown supaya tidak race dengan focus event)
+document.addEventListener('mousedown',e=>{
   if(!e.target.closest('#if-jamaah')){
     const l=document.getElementById('login-ac-list');
-    if(l)l.classList.remove('show');
+    if(l){
+      l.classList.remove('show');
+      l.style.display='';
+    }
   }
   if(!e.target.closest('#akses-ac-wrap')){
     const l=document.getElementById('akses-ac-list');
     if(l)l.classList.remove('show');
   }
 });
+document.addEventListener('touchstart',e=>{
+  if(!e.target.closest('#if-jamaah') && !e.target.closest('#login-ac-list')){
+    const l=document.getElementById('login-ac-list');
+    if(l){
+      l.classList.remove('show');
+      l.style.display='';
+    }
+  }
+  if(!e.target.closest('#akses-ac-wrap') && !e.target.closest('#akses-ac-list')){
+    const l=document.getElementById('akses-ac-list');
+    if(l)l.classList.remove('show');
+  }
+},{passive:true});
 
 // ====== AUTOCOMPLETE: AKSES (minta akses) ======
 let aksesAcKbdIdx=-1;
