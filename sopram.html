@@ -1150,7 +1150,7 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
         <div class="login-row" id="if-jamaah" style="position:relative">
           <label for="login-jamaah-search">Pilih Nama Jamaah</label>
           <input type="text" id="login-jamaah-search" 
-                 placeholder="Ketik nama (mis. Ngadiman)..."
+                 placeholder="Ketik nama..."
                  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                  name="sopram_search_x"
                  oninput="onLoginNamaInput()" 
@@ -1164,7 +1164,7 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
         <div class="login-row">
           <label for="login-kode">Kode Akses</label>
           <div class="login-row-inner">
-            <input type="password" id="login-kode" placeholder="6 karakter (mis. NGD2026)" oninput="onKodeInput()" autocomplete="off">
+            <input type="password" id="login-kode" placeholder="Kode akses" oninput="onKodeInput()" autocomplete="off">
             <button type="button" class="eye-btn-inline" id="eye-kode" onclick="togglePasswordVisibility('login-kode','eye-kode')" aria-label="Toggle visibility">👁</button>
           </div>
         </div>
@@ -1174,9 +1174,14 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
       <div class="signup-bar">
         <p>Belum punya kode akses? <a onclick="openMintaAkses()" style="cursor:pointer">Minta akses</a></p>
       </div>
+      <div style="text-align:center;margin-top:16px;">
+        <button class="btn-link" onclick="hubungiAdmin()" style="color:#25D366;font-size:13px;font-weight:600;">
+          💬 Hubungi Admin
+        </button>
+      </div>
       <div class="login-foot">
         Sopram &copy; 2026 · UBNB Desa Perwira<br>
-        <span style="opacity:.7">v4.3 — Sopram for jamaah</span>
+        <span style="opacity:.7">v4.4</span>
       </div>
     </div>
   </div>
@@ -1469,7 +1474,7 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
       <div class="create-form">
         <div class="form-label">Nama Jamaah</div>
         <div class="ac-wrap" id="akses-ac-wrap" style="position:relative;">
-          <input type="text" class="form-input" id="akses-jamaah-search" placeholder="Ketik nama Anda..." autocomplete="off"
+          <input type="text" class="form-input" id="akses-jamaah-search" placeholder="Ketik nama..." autocomplete="off"
                  oninput="onAksesAcInput()" onfocus="onAksesAcFocus()" onkeydown="onAksesAcKeydown(event)">
           <input type="hidden" id="akses-jamaah" data-value="">
           <button type="button" class="clear-btn" onclick="clearAksesAc()" title="Hapus" style="background:rgba(0,0,0,.06);">×</button>
@@ -1480,6 +1485,42 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
         <div class="geoloc-status" id="geoloc-status">📍 Menunggu izin lokasi browser...</div>
         <button class="btn-primary dark" onclick="prosesMintaAkses()">Generate Kode Akses</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== MODAL: LUPA KODE AKSES =================== -->
+<div class="modal-bg" id="modal-lupa">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <h3>🔑 Lupa Kode Akses</h3>
+      <button class="btn-close" onclick="closeLupa()">×</button>
+    </div>
+    <div style="padding:14px;">
+      <p style="color:var(--text-muted);font-size:13px;line-height:1.5;margin-bottom:12px;">
+        Masukkan nama dan nomor WA Anda. Sistem akan mengirim ulang kode akses ke nomor WA yang sama dengan saat minta akses.
+      </p>
+      <div class="login-row" id="if-lupa-jamaah" style="position:relative">
+        <label for="lupa-jamaah-search">Nama Anda</label>
+        <input type="text" id="lupa-jamaah-search"
+               placeholder="Ketik nama..."
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               name="sopram_lupa_x"
+               oninput="onLupaNamaInput()"
+               onblur="onLupaNamaBlur()">
+        <input type="hidden" id="lupa-jamaah" data-value="">
+        <button type="button" class="login-clear-btn" onclick="clearLupaNama()" id="lupa-clear-btn" style="display:none;">×</button>
+        <div class="ac-list" id="lupa-ac-list"></div>
+      </div>
+      <div class="login-row" style="margin-top:12px;">
+        <label for="lupa-wa">Nomor WA</label>
+        <input type="tel" class="form-input" id="lupa-wa" placeholder="08xxxxxxxxxx" inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="login-status-box" id="lupa-status" style="display:none;margin-top:10px;"></div>
+      <button class="btn-primary" onclick="prosesLupaKode()" style="margin-top:16px;width:100%;">Kirim Ulang Kode via WhatsApp</button>
+      <button class="btn-link" onclick="closeLupa();hubungiAdmin();" style="margin-top:10px;width:100%;color:#25D366;">
+        💬 Hubungi Admin Jika Bermasalah
+      </button>
     </div>
   </div>
 </div>
@@ -1959,19 +2000,25 @@ async function buildLoginDatalist(){
   await loadAcData();
 }
 
-// Saat user fokus → tampilkan dropdown (semua jamaah, urut akses dulu)
+// Saat user fokus → tampilkan dropdown HANYA kalau sudah ≥ 3 huruf
 async function onLoginNamaFocus(){
   const list=document.getElementById('login-ac-list');
-  if(!list)return;
-  if(!_acDataCache){
-    list.innerHTML='<div class="ac-empty">⏳ Memuat daftar jamaah...</div>';
-    list.classList.add('show');
-  }
-  await loadAcData();
-  renderLoginDropdown();
-  list.classList.add('show');
-  // Scroll input ke atas supaya dropdown visible saat keyboard naik
   const inp=document.getElementById('login-jamaah-search');
+  if(!list||!inp)return;
+
+  // Pre-load data di background (supaya cache siap saat user mulai ketik)
+  loadAcData();
+
+  // Hanya show kalau sudah punya text ≥ 3 huruf
+  const v=(inp.value||'').trim();
+  if(v.length>=3){
+    if(_acDataCache){
+      renderLoginDropdown();
+      list.classList.add('show');
+    }
+  }
+
+  // Scroll input ke atas supaya dropdown visible saat keyboard naik
   setTimeout(()=>{
     if(inp)inp.scrollIntoView({behavior:'smooth',block:'start'});
   },300);
@@ -1979,20 +2026,41 @@ async function onLoginNamaFocus(){
 
 // Saat user mengetik → filter dan re-render
 async function onLoginNamaInput(){
+  const inp=document.getElementById('login-jamaah-search');
   // Reset selected
   const hidden=document.getElementById('login-jamaah');
   hidden.value='';
   hidden.dataset.value='';
   _loginAcSelected=null;
   document.getElementById('login-status-box').style.display='none';
+
+  // Auto-trim leading/trailing space dan collapse multiple space
+  const original=inp.value;
+  const cleaned=original.replace(/\s+/g,' ').replace(/^\s+/,'');
+  if(cleaned!==original){
+    const cursorAtEnd=(inp.selectionStart===original.length);
+    inp.value=cleaned;
+    if(cursorAtEnd)inp.setSelectionRange(cleaned.length,cleaned.length);
+  }
+
   // Toggle clear button
-  const inp=document.getElementById('login-jamaah-search');
   const clearBtn=document.getElementById('login-clear-btn');
   if(clearBtn)clearBtn.style.display=inp.value?'flex':'none';
 
   await loadAcData();
+
+  // Predictive baru muncul setelah ≥ 3 huruf
+  const v=(inp.value||'').trim();
+  const list=document.getElementById('login-ac-list');
+  if(v.length<3){
+    list.classList.remove('show');
+    list.innerHTML='';
+    validateLogin();
+    return;
+  }
+
   renderLoginDropdown();
-  document.getElementById('login-ac-list').classList.add('show');
+  list.classList.add('show');
   validateLogin();
 }
 
@@ -2185,20 +2253,46 @@ let aksesAcKbdIdx=-1;
 let aksesAcVisibleItems=[];
 
 async function onAksesAcFocus(){
-  await loadAcData();
-  renderAksesAcList();
-  document.getElementById('akses-ac-list').classList.add('show');
+  const list=document.getElementById('akses-ac-list');
+  const inp=document.getElementById('akses-jamaah-search');
+  if(!list||!inp)return;
+  loadAcData();
+  // Hanya show kalau sudah ≥ 3 huruf
+  const v=(inp.value||'').trim();
+  if(v.length>=3 && _acDataCache){
+    renderAksesAcList();
+    list.classList.add('show');
+  }
 }
 async function onAksesAcInput(){
   const inp=document.getElementById('akses-jamaah-search');
   const wrap=document.getElementById('akses-ac-wrap');
   document.getElementById('akses-jamaah').value='';
   document.getElementById('akses-jamaah').dataset.value='';
+
+  // Auto-trim spasi multiple
+  const original=inp.value;
+  const cleaned=original.replace(/\s+/g,' ').replace(/^\s+/,'');
+  if(cleaned!==original){
+    const cursorAtEnd=(inp.selectionStart===original.length);
+    inp.value=cleaned;
+    if(cursorAtEnd)inp.setSelectionRange(cleaned.length,cleaned.length);
+  }
+
   wrap.classList.toggle('has-value',!!inp.value);
   aksesAcKbdIdx=-1;
   await loadAcData();
+
+  // Predictive baru muncul setelah ≥ 3 huruf
+  const v=(inp.value||'').trim();
+  const list=document.getElementById('akses-ac-list');
+  if(v.length<3){
+    list.classList.remove('show');
+    list.innerHTML='';
+    return;
+  }
   renderAksesAcList();
-  document.getElementById('akses-ac-list').classList.add('show');
+  list.classList.add('show');
 }
 function renderAksesAcList(){
   const inp=document.getElementById('akses-jamaah-search');
@@ -2369,7 +2463,199 @@ async function doLogin(){
   btn.disabled=false;btn.textContent=oldText;
   enterApp();
 }
-function showHelpReset(){toast('Hubungi admin di WA 0815-xxxx-xxxx untuk reset kode');}
+function showHelpReset(){
+  // Buka modal lupa kode akses
+  document.getElementById('modal-lupa').classList.add('show');
+  // Reset
+  document.getElementById('lupa-jamaah-search').value='';
+  document.getElementById('lupa-jamaah').value='';
+  document.getElementById('lupa-jamaah').dataset.value='';
+  document.getElementById('lupa-wa').value='';
+  document.getElementById('lupa-status').style.display='none';
+  document.getElementById('lupa-clear-btn').style.display='none';
+  document.getElementById('lupa-ac-list').classList.remove('show');
+  loadAcData();
+}
+
+function closeLupa(){
+  document.getElementById('modal-lupa').classList.remove('show');
+}
+
+// Autocomplete handler untuk modal lupa kode
+async function onLupaNamaInput(){
+  const inp=document.getElementById('lupa-jamaah-search');
+  const hidden=document.getElementById('lupa-jamaah');
+  hidden.value='';
+  hidden.dataset.value='';
+  document.getElementById('lupa-status').style.display='none';
+
+  // Auto-trim spasi multiple
+  const original=inp.value;
+  const cleaned=original.replace(/\s+/g,' ').replace(/^\s+/,'');
+  if(cleaned!==original){
+    const cursorAtEnd=(inp.selectionStart===original.length);
+    inp.value=cleaned;
+    if(cursorAtEnd)inp.setSelectionRange(cleaned.length,cleaned.length);
+  }
+
+  const clearBtn=document.getElementById('lupa-clear-btn');
+  if(clearBtn)clearBtn.style.display=inp.value?'flex':'none';
+
+  await loadAcData();
+  const v=(inp.value||'').trim();
+  const list=document.getElementById('lupa-ac-list');
+  if(v.length<3){
+    list.classList.remove('show');
+    list.innerHTML='';
+    return;
+  }
+  renderLupaDropdown();
+  list.classList.add('show');
+}
+
+function renderLupaDropdown(){
+  const inp=document.getElementById('lupa-jamaah-search');
+  const list=document.getElementById('lupa-ac-list');
+  if(!list)return;
+  const q=(inp.value||'').trim().toLowerCase();
+  const cache=_acDataCache;
+  const jamaahList=(cache&&cache.jamaahList)?cache.jamaahList:[];
+  const userByDid=(cache&&cache.userByDid)?cache.userByDid:{};
+
+  // Filter: hanya yang sudah punya akses (sopram_user ada)
+  let items=jamaahList.filter(j=>userByDid[j.did]);
+  if(q){
+    items=items.filter(j=>(j.nama||'').toLowerCase().includes(q));
+  }
+  items.sort((a,b)=>(a.nama||'').localeCompare(b.nama||''));
+
+  const shown=items.slice(0,30);
+  if(!shown.length){
+    list.innerHTML='<div class="ac-empty">Tidak ditemukan. Pastikan Anda sudah pernah minta kode akses.</div>';
+    return;
+  }
+  list.innerHTML=shown.map(j=>{
+    const u=userByDid[j.did];
+    const adminBadge=u.is_admin?' <span class="stat admin">ADMIN</span>':' <span class="stat ok">✓</span>';
+    return `<div class="ac-item" data-did="${j.did}">
+      <div class="nm">${highlightMatch(j.nama,q)} <span class="kel">${fmtKelompok(j.kelompok)}</span>${adminBadge}</div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.ac-item[data-did]').forEach(el=>{
+    el.addEventListener('mousedown',e=>e.preventDefault());
+    el.addEventListener('click',()=>pickLupaJamaah(el.dataset.did));
+  });
+}
+
+function pickLupaJamaah(did){
+  if(!_acDataCache)return;
+  const j=_acDataCache.jamaahList.find(x=>x.did===did);
+  if(!j)return;
+  const inp=document.getElementById('lupa-jamaah-search');
+  const hidden=document.getElementById('lupa-jamaah');
+  inp.value=j.nama;
+  hidden.value=did;
+  hidden.dataset.value=did;
+  document.getElementById('lupa-clear-btn').style.display='flex';
+  document.getElementById('lupa-ac-list').classList.remove('show');
+  setTimeout(()=>{
+    const wa=document.getElementById('lupa-wa');
+    if(wa)wa.focus();
+  },150);
+}
+
+function clearLupaNama(){
+  const inp=document.getElementById('lupa-jamaah-search');
+  const hidden=document.getElementById('lupa-jamaah');
+  inp.value='';
+  hidden.value='';
+  hidden.dataset.value='';
+  document.getElementById('lupa-clear-btn').style.display='none';
+  document.getElementById('lupa-status').style.display='none';
+  document.getElementById('lupa-ac-list').classList.remove('show');
+  inp.focus();
+}
+
+function onLupaNamaBlur(){
+  setTimeout(()=>{
+    document.getElementById('lupa-ac-list').classList.remove('show');
+  },200);
+}
+
+async function prosesLupaKode(){
+  const did=document.getElementById('lupa-jamaah').value;
+  const waInput=document.getElementById('lupa-wa').value.trim();
+  const statusEl=document.getElementById('lupa-status');
+
+  if(!did){toast('Pilih nama Anda dulu');return;}
+  const waNormalized=waInput.replace(/[^0-9]/g,'');
+  if(!/^08\d{8,12}$/.test(waNormalized)){
+    statusEl.style.display='block';
+    statusEl.className='login-status-box err';
+    statusEl.innerHTML='<div class="ico">⛔</div><div class="txt"><strong>Format nomor WA tidak valid</strong><div class="sub">Contoh: 081234567890</div></div>';
+    return;
+  }
+
+  // Cari user di DB
+  const {data:user,error}=await sb.from('sopram_user')
+    .select('id, kode_akses, no_wa, status, jamaah_desa(nama)')
+    .eq('jamaah_did',did).maybeSingle();
+  if(error){toast('Error: '+error.message);return;}
+  if(!user){
+    statusEl.style.display='block';
+    statusEl.className='login-status-box err';
+    statusEl.innerHTML='<div class="ico">⛔</div><div class="txt"><strong>Belum punya akun</strong><div class="sub">Silakan minta kode akses dulu</div></div>';
+    return;
+  }
+  if(user.status==='banned'){
+    statusEl.style.display='block';
+    statusEl.className='login-status-box err';
+    statusEl.innerHTML='<div class="ico">⛔</div><div class="txt"><strong>Akun di-banned</strong><div class="sub">Hubungi admin</div></div>';
+    return;
+  }
+
+  // Verifikasi nomor WA
+  const dbWa=(user.no_wa||'').replace(/[^0-9]/g,'');
+  if(dbWa!==waNormalized){
+    statusEl.style.display='block';
+    statusEl.className='login-status-box err';
+    statusEl.innerHTML='<div class="ico">⛔</div><div class="txt"><strong>Nomor WA tidak cocok</strong><div class="sub">Nomor harus sama dengan saat minta kode akses. Jika lupa, hubungi admin.</div></div>';
+    return;
+  }
+
+  // Match → kirim WA
+  const nama=user.jamaah_desa?.nama||'';
+  const waInternational=waNormalized.replace(/^0/,'62');
+  const pesan=encodeURIComponent(
+    `🔐 Kode Akses Sopram (Pemulihan)\n\nNama: ${nama}\nKode: *${user.kode_akses}*\n\nSimpan kode ini untuk login di Sopram. Jangan bagikan ke siapapun.\n\n— UBNB Desa Perwira`
+  );
+  const waLink=`https://wa.me/${waInternational}?text=${pesan}`;
+
+  // Log audit
+  await logAccess({
+    user_id:user.id,
+    jamaah_did:did,
+    nama_jamaah:nama,
+    no_wa:waNormalized,
+    tipe:'request_access',
+    user_agent:'Lupa kode (recovery): '+navigator.userAgent.substring(0,150)
+  });
+
+  closeLupa();
+  toast('✓ Kode dikirim ulang via WhatsApp');
+  window.location.href=waLink;
+}
+
+// Tombol Hubungi Admin
+function hubungiAdmin(){
+  const adminWA='6285718264782';
+  const namaInfo=CU?CU.nama:'(belum login)';
+  const pesan=encodeURIComponent(
+    `Salam, saya ada yang mau tanya tentang Sopram.\n\nDari: ${namaInfo}`
+  );
+  const waLink=`https://wa.me/${adminWA}?text=${pesan}`;
+  window.location.href=waLink;
+}
 
 // Toggle show/hide password (kode akses)
 function togglePasswordVisibility(inputId,btnId){
@@ -2447,12 +2733,15 @@ async function prosesMintaAkses(){
   const {data:dupe}=await sb.from('sopram_user').select('id').eq('username',username).maybeSingle();
   if(dupe)username=username+'_'+Math.floor(Math.random()*9999);
 
+  // Normalize nomor WA — simpan dalam format 08xxxxxxxxxx
+  const waNormalized=wa.replace(/[^0-9]/g,'');
+
   // INSERT user
   const {data:newUser,error:insErr}=await sb.from('sopram_user').insert({
     jamaah_did:did,
     username:username,
     kode_akses:kode,
-    no_wa:wa,
+    no_wa:waNormalized,
     is_admin:false,
     status:'aktif',
   }).select('id').single();
@@ -2468,40 +2757,29 @@ async function prosesMintaAkses(){
     user_id:newUser.id,
     jamaah_did:did,
     nama_jamaah:jamaah.nama,
-    no_wa:wa,
+    no_wa:waNormalized,
     tipe:'request_access',
     latitude:geolocData?geolocData.lat:null,
     longitude:geolocData?geolocData.lng:null,
     akurasi_meter:geolocData?geolocData.acc:null,
   });
 
-  // Build WA link
-  const noWA=wa.replace(/[^0-9]/g,'').replace(/^0/,'62');
-  const pesan=encodeURIComponent(
-    `🔐 Kode Akses Sopram Anda\n\nNama: ${jamaah.nama}\nKode: *${kode}*\n\n`+
-    `Simpan kode ini untuk login di Sopram. Jangan bagikan ke siapapun.\n\n— UBNB Desa Perwira`
-  );
-  const waLink=`https://wa.me/${noWA}?text=${pesan}`;
-
   // invalidate cache supaya dropdown ke-refresh
   _allJamaahCache=null;
   _acDataCache=null;
 
-  document.getElementById('modal-akses-title').textContent='Kode Akses Berhasil Dibuat';
-  document.getElementById('modal-akses-body').innerHTML=`
-    <div class="modal-success">
-      <div class="icon">✓</div>
-      <h3>Berhasil!</h3>
-      <p>Kode akses untuk <strong>${jamaah.nama}</strong> telah dibuat.<br>Simpan kode ini dan kirim ke WA Anda:</p>
-      <div class="kode-display">${kode}</div>
-      <a class="btn-wa" href="${waLink}" target="_blank">💬 Kirim ke WA Saya (${wa})</a>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:14px;line-height:1.5;">
-        ${geolocData && geolocData.lat ? `📍 Lokasi tercatat: ${geolocData.lat}, ${geolocData.lng}` : '📍 Lokasi tidak tercatat'}<br>
-        🕐 ${new Date().toLocaleString('id-ID')}<br>
-        ✅ Tersimpan di database — admin akan menerima log permintaan untuk audit.
-      </div>
-      <button class="btn-secondary" style="margin-top:14px;" onclick="closeMintaAkses();rebuildAfterAkses('${did}');">Tutup & Login Sekarang</button>
-    </div>`;
+  // Build WA link — kode dikirim langsung ke nomor user sendiri
+  const waInternational=waNormalized.replace(/^0/,'62');
+  const pesan=encodeURIComponent(
+    `🔐 Kode Akses Sopram\n\nNama: ${jamaah.nama}\nKode: *${kode}*\n\nSimpan kode ini untuk login di Sopram. Jangan bagikan ke siapapun.\n\n— UBNB Desa Perwira`
+  );
+  const waLink=`https://wa.me/${waInternational}?text=${pesan}`;
+
+  // Tutup modal & toast info
+  closeMintaAkses();
+  toast('✓ Kode dikirim via WhatsApp. Cek chat Anda sendiri.');
+  // Auto-buka WA
+  window.location.href=waLink;
 }
 
 async function rebuildAfterAkses(did){
