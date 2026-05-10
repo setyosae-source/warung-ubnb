@@ -1176,7 +1176,7 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
       </div>
       <div class="login-foot">
         Sopram &copy; 2026 · UBNB Desa Perwira<br>
-        <span style="opacity:.7">v4.1-debug2 · <span id="ac-debug-status">init</span></span>
+        <span style="opacity:.7">v4.3 — Sopram for jamaah</span>
       </div>
     </div>
   </div>
@@ -1552,6 +1552,14 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
 /* =====================================================
    SOPRAM — Mockup Logic v2 (frontend only, with chat)
    ===================================================== */
+
+// Universal helper: escape HTML untuk aman insert ke innerHTML
+function escapeHtml(s){
+  if(s==null)return '';
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
 
 /* =====================================================
    SUPABASE CLIENT INIT (Tahap 2: Auth integration)
@@ -1953,20 +1961,13 @@ async function buildLoginDatalist(){
 
 // Saat user fokus → tampilkan dropdown (semua jamaah, urut akses dulu)
 async function onLoginNamaFocus(){
-  const dbg=document.getElementById('ac-debug-status');
-  if(dbg)dbg.textContent='focus';
-  // Show loading kalau cache belum ready
   const list=document.getElementById('login-ac-list');
-  if(!list){
-    if(dbg)dbg.textContent='ERR: ac-list element not found';
-    return;
-  }
+  if(!list)return;
   if(!_acDataCache){
     list.innerHTML='<div class="ac-empty">⏳ Memuat daftar jamaah...</div>';
     list.classList.add('show');
   }
   await loadAcData();
-  if(dbg)dbg.textContent=`focus·loaded·${(_acDataCache?.jamaahList||[]).length}`;
   renderLoginDropdown();
   list.classList.add('show');
   // Scroll input ke atas supaya dropdown visible saat keyboard naik
@@ -1974,12 +1975,10 @@ async function onLoginNamaFocus(){
   setTimeout(()=>{
     if(inp)inp.scrollIntoView({behavior:'smooth',block:'start'});
   },300);
-  if(dbg)dbg.textContent=`focus·ok·visible=${list.classList.contains('show')}`;
 }
 
 // Saat user mengetik → filter dan re-render
 async function onLoginNamaInput(){
-  const dbg=document.getElementById('ac-debug-status');
   // Reset selected
   const hidden=document.getElementById('login-jamaah');
   hidden.value='';
@@ -1992,14 +1991,6 @@ async function onLoginNamaInput(){
   if(clearBtn)clearBtn.style.display=inp.value?'flex':'none';
 
   await loadAcData();
-  // Compute filter result LANGSUNG di sini supaya pasti terlihat
-  const v=(inp.value||'').trim();
-  const vLow=v.toLowerCase();
-  const list=_acDataCache?.jamaahList||[];
-  const matched=list.filter(j=>(j.nama||'').toLowerCase().includes(vLow));
-  if(dbg){
-    dbg.textContent=`v='${v}'(len${v.length})·cache=${list.length}·match=${matched.length}`;
-  }
   renderLoginDropdown();
   document.getElementById('login-ac-list').classList.add('show');
   validateLogin();
@@ -2032,7 +2023,9 @@ function renderLoginDropdown(){
   const list=document.getElementById('login-ac-list');
   if(!list)return;
   const q=(inp.value||'').trim().toLowerCase();
-  const {jamaahList,userByDid}=_acDataCache||{jamaahList:[],userByDid:{}};
+  const cache=_acDataCache;
+  const jamaahList=(cache&&cache.jamaahList)?cache.jamaahList:[];
+  const userByDid=(cache&&cache.userByDid)?cache.userByDid:{};
 
   let items=jamaahList;
   if(q){
