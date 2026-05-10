@@ -70,7 +70,36 @@ a{color:var(--text-link);text-decoration:none;}
   font-size:54px;font-weight:400;letter-spacing:1px;color:var(--accent);
 }
 .login-logo .tag{font-size:12px;color:var(--text-muted);margin-top:4px;letter-spacing:.5px;}
-.login-form{display:flex;flex-direction:column;gap:8px;}
+.login-form{display:flex;flex-direction:column;gap:14px;}
+
+/* Login row baru — sangat sederhana, tanpa absolute positioning untuk dropdown */
+.login-row{display:flex;flex-direction:column;gap:6px;}
+.login-row label{
+  font-size:11px;color:var(--text-muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.login-row input[type="text"],
+.login-row input[type="password"]{
+  width:100%;padding:12px 14px;
+  border:1px solid var(--border);border-radius:6px;
+  font-size:15px;background:#fafafa;outline:none;
+  transition:border-color .15s,background .15s;
+  font-family:inherit;
+}
+.login-row input[type="text"]:focus,
+.login-row input[type="password"]:focus{
+  border-color:var(--text);background:white;
+}
+.login-row-inner{position:relative;}
+.login-row-inner input{padding-right:42px !important;}
+.eye-btn-inline{
+  position:absolute;top:50%;right:6px;transform:translateY(-50%);
+  width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;font-size:18px;color:var(--text-muted);
+  background:transparent;border:none;cursor:pointer;
+}
+.eye-btn-inline:hover{background:rgba(0,0,0,.06);}
+.eye-btn-inline.show{color:var(--text);}
 .input-field{
   position:relative;background:#fafafa;border:1px solid var(--border);
   border-radius:3px;padding:9px 8px 7px 8px;
@@ -116,6 +145,16 @@ a{color:var(--text-link);text-decoration:none;}
   -webkit-overflow-scrolling:touch;
 }
 .ac-list.show{display:block;}
+
+/* Clear button untuk login form */
+.login-clear-btn{
+  position:absolute;right:8px;top:32px;
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(0,0,0,.08);color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;cursor:pointer;line-height:1;border:none;
+}
+.login-clear-btn:hover{background:rgba(0,0,0,.15);color:var(--text);}
 .ac-item{
   padding:10px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;
   transition:background .1s;
@@ -146,7 +185,19 @@ a{color:var(--text-link);text-decoration:none;}
 .ac-loading{
   padding:14px;text-align:center;color:var(--text-muted);font-size:12px;
 }
-.ac-list mark{background:#fff59d;color:var(--text);padding:0 1px;border-radius:2px;}
+
+/* Status feedback box untuk login (setelah user pilih nama) */
+.login-status-box{
+  padding:10px 12px;border-radius:6px;font-size:13px;
+  display:flex;align-items:center;gap:8px;
+}
+.login-status-box.ok{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7;}
+.login-status-box.warn{background:#fff3e0;color:#bf6500;border:1px solid #ffcc80;}
+.login-status-box.err{background:#fde0e0;color:#c62828;border:1px solid #ef9a9a;}
+.login-status-box .ico{font-size:18px;flex-shrink:0;}
+.login-status-box .txt{flex:1;line-height:1.3;}
+.login-status-box .sub{font-size:11px;opacity:.85;margin-top:2px;}
+
 .btn-primary{
   background:#0095f6;color:white;border-radius:6px;padding:8px 12px;
   font-weight:600;font-size:14px;margin-top:8px;transition:opacity .15s;
@@ -1096,20 +1147,26 @@ textarea.form-input{resize:vertical;min-height:80px;font-family:inherit;}
         <div class="tag">Jamaah Desa Perwira</div>
       </div>
       <div class="login-form">
-        <div class="input-field empty ac-wrap" id="if-jamaah">
-          <label>Pilih Nama Jamaah</label>
-          <input type="text" id="login-jamaah-search" placeholder="Ketik nama jamaah..."
+        <div class="login-row" id="if-jamaah" style="position:relative">
+          <label for="login-jamaah-search">Pilih Nama Jamaah</label>
+          <input type="text" id="login-jamaah-search" 
+                 placeholder="Ketik nama (mis. Ngadiman)..."
                  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                  name="sopram_search_x"
-                 oninput="onLoginAcInput()" onfocus="onLoginAcFocus()" onkeydown="onLoginAcKeydown(event)">
+                 oninput="onLoginNamaInput()" 
+                 onfocus="onLoginNamaFocus()"
+                 onblur="onLoginNamaBlur()">
           <input type="hidden" id="login-jamaah" data-value="">
-          <button type="button" class="clear-btn" onclick="clearLoginAc()" title="Hapus">×</button>
+          <button type="button" class="login-clear-btn" onclick="clearLoginNama()" title="Hapus" id="login-clear-btn" style="display:none;">×</button>
           <div class="ac-list" id="login-ac-list"></div>
         </div>
-        <div class="input-field empty with-eye" id="if-kode">
-          <label>Kode Akses</label>
-          <input type="password" id="login-kode" placeholder="Kode akses" oninput="onKodeInput()">
-          <button type="button" class="eye-btn" id="eye-kode" onclick="togglePasswordVisibility('login-kode','eye-kode')" title="Tampilkan/sembunyikan kode" aria-label="Toggle visibility">👁</button>
+        <div class="login-status-box" id="login-status-box" style="display:none;"></div>
+        <div class="login-row">
+          <label for="login-kode">Kode Akses</label>
+          <div class="login-row-inner">
+            <input type="password" id="login-kode" placeholder="6 karakter (mis. NGD2026)" oninput="onKodeInput()" autocomplete="off">
+            <button type="button" class="eye-btn-inline" id="eye-kode" onclick="togglePasswordVisibility('login-kode','eye-kode')" aria-label="Toggle visibility">👁</button>
+          </div>
         </div>
         <button class="btn-primary" id="btn-login" onclick="doLogin()" disabled>Login</button>
         <div class="btn-link" onclick="showHelpReset()">Lupa kode akses?</div>
@@ -1824,15 +1881,17 @@ async function loadAcData(){
   return _acDataCache;
 }
 
-// Setup awal: prepare cache + placeholder
+// Setup awal: prepare cache + populate datalist
 async function buildLoginDropdown(){
   const inp1=document.getElementById('login-jamaah-search');
   const inp2=document.getElementById('akses-jamaah-search');
   if(inp1)inp1.placeholder='Memuat data jamaah...';
   if(inp2)inp2.placeholder='Memuat data jamaah...';
   await loadAcData();
-  if(inp1)inp1.placeholder='Ketik nama jamaah...';
+  if(inp1)inp1.placeholder='Ketik nama (mis. Ngadiman, Ruwiyani)...';
   if(inp2)inp2.placeholder='Ketik nama Anda...';
+  // Populate datalist untuk login screen
+  await buildLoginDatalist();
 }
 
 // Helper: highlight match dalam string (case-insensitive)
@@ -1880,119 +1939,176 @@ function renderAcItem(j,userByDid,query,opts){
 let loginAcKbdIdx=-1;
 let loginAcVisibleItems=[];
 
-async function onLoginAcFocus(){
-  console.log('[AC] onLoginAcFocus triggered');
-  // Scroll input ke atas supaya dropdown nggak ke-cover keyboard
+/* =====================================================
+   LOGIN AUTOCOMPLETE — Custom dropdown (bukan datalist)
+   Pasti work di Samsung Internet & semua mobile browser.
+   ===================================================== */
+
+let _loginAcSelected=null; // jamaah yang ter-select
+
+async function buildLoginDatalist(){
+  // Cuma trigger load cache, tidak populate datalist (sudah dihapus)
+  await loadAcData();
+}
+
+// Saat user fokus → tampilkan dropdown (semua jamaah, urut akses dulu)
+async function onLoginNamaFocus(){
+  // Show loading kalau cache belum ready
+  const list=document.getElementById('login-ac-list');
+  if(!_acDataCache){
+    list.innerHTML='<div class="ac-empty">⏳ Memuat daftar jamaah...</div>';
+    list.classList.add('show');
+  }
+  await loadAcData();
+  renderLoginDropdown();
+  list.classList.add('show');
+  // Scroll input ke atas supaya dropdown visible saat keyboard naik
   const inp=document.getElementById('login-jamaah-search');
   setTimeout(()=>{
     if(inp)inp.scrollIntoView({behavior:'smooth',block:'start'});
   },300);
-  // Angkat container ke atas supaya dropdown tidak kepotong field bawahnya
-  document.getElementById('if-jamaah').classList.add('ac-active');
-  await loadAcData();
-  console.log('[AC] data loaded, jamaah count =',(_acDataCache?.jamaahList||[]).length);
-  renderLoginAcList();
-  document.getElementById('login-ac-list').classList.add('show');
-  console.log('[AC] dropdown class.show added');
 }
-async function onLoginAcInput(){
-  console.log('[AC] onLoginAcInput triggered');
-  const inp=document.getElementById('login-jamaah-search');
-  const wrap=document.getElementById('if-jamaah');
-  // saat user mengetik, reset selected hidden value
-  document.getElementById('login-jamaah').value='';
-  document.getElementById('login-jamaah').dataset.value='';
-  wrap.classList.toggle('has-value',!!inp.value);
-  // Angkat container ke atas supaya dropdown tidak kepotong field bawahnya
-  wrap.classList.add('ac-active');
-  loginAcKbdIdx=-1;
 
-  // Show loading immediately (kalau cache belum ready)
-  const list=document.getElementById('login-ac-list');
-  if(!_acDataCache){
-    console.log('[AC] cache not ready, showing loading');
-    list.innerHTML='<div class="ac-loading">⏳ Memuat daftar jamaah...</div>';
-    list.classList.add('show');
-  }
+// Saat user mengetik → filter dan re-render
+async function onLoginNamaInput(){
+  // Reset selected
+  const hidden=document.getElementById('login-jamaah');
+  hidden.value='';
+  hidden.dataset.value='';
+  _loginAcSelected=null;
+  document.getElementById('login-status-box').style.display='none';
+  // Toggle clear button
+  const inp=document.getElementById('login-jamaah-search');
+  const clearBtn=document.getElementById('login-clear-btn');
+  if(clearBtn)clearBtn.style.display=inp.value?'flex':'none';
 
   await loadAcData();
-  console.log('[AC] input value =',JSON.stringify(inp.value),'cache size =',(_acDataCache?.jamaahList||[]).length);
-  renderLoginAcList();
+  renderLoginDropdown();
   document.getElementById('login-ac-list').classList.add('show');
   validateLogin();
 }
-function renderLoginAcList(){
+
+// Saat blur (klik di luar) → tutup dropdown setelah delay (supaya click item bisa fire)
+function onLoginNamaBlur(){
+  setTimeout(()=>{
+    document.getElementById('login-ac-list').classList.remove('show');
+  },200);
+}
+
+// Tombol × clear
+function clearLoginNama(){
+  const inp=document.getElementById('login-jamaah-search');
+  const hidden=document.getElementById('login-jamaah');
+  inp.value='';
+  hidden.value='';
+  hidden.dataset.value='';
+  _loginAcSelected=null;
+  document.getElementById('login-clear-btn').style.display='none';
+  document.getElementById('login-status-box').style.display='none';
+  validateLogin();
+  inp.focus();
+}
+
+// Render dropdown
+function renderLoginDropdown(){
   const inp=document.getElementById('login-jamaah-search');
   const list=document.getElementById('login-ac-list');
   const q=(inp.value||'').trim().toLowerCase();
   const {jamaahList,userByDid}=_acDataCache||{jamaahList:[],userByDid:{}};
-  console.log('[AC] renderLoginAcList: query=',JSON.stringify(q),'jamaah total=',jamaahList.length);
 
-  // Filter: cari di nama saja (sesuai pilihan Sotoy: "A. Cari di nama saja")
   let items=jamaahList;
   if(q){
     items=items.filter(j=>(j.nama||'').toLowerCase().includes(q));
   }
-  console.log('[AC] after filter, items =',items.length);
-  // Sort: ada akses dulu, lalu alfabetis
-  items.sort((a,b)=>{
+  // Sort: yang ada akses (sudah punya sopram_user) duluan, lalu alfabetis
+  items=items.slice().sort((a,b)=>{
     const ha=!!userByDid[a.did], hb=!!userByDid[b.did];
     if(ha!==hb)return ha?-1:1;
     return (a.nama||'').localeCompare(b.nama||'');
   });
-  // Limit max 50 utk performa
+
   const shown=items.slice(0,50);
-  loginAcVisibleItems=shown;
-
-  // Force inline style fallback (in case CSS class .show not applied)
-  list.style.display='block';
-
   if(!shown.length){
     list.innerHTML='<div class="ac-empty">Tidak ditemukan jamaah dengan nama itu</div>';
     return;
   }
   let html=shown.map(j=>renderAcItem(j,userByDid,q)).join('');
   if(items.length>50){
-    html+=`<div class="ac-empty" style="font-size:11px;border-top:1px solid var(--border-light);">... ${items.length-50} hasil lain. Ketik lebih spesifik untuk filter.</div>`;
+    html+=`<div class="ac-empty" style="font-size:11px;border-top:1px solid var(--border-light);">... ${items.length-50} hasil lain. Ketik lebih spesifik.</div>`;
   }
   list.innerHTML=html;
-  console.log('[AC] HTML rendered, list children =',list.children.length);
-  // Bind click
+  // Bind click pada setiap .ac-item
   list.querySelectorAll('.ac-item[data-did]').forEach(el=>{
-    el.addEventListener('mousedown',e=>{
-      e.preventDefault(); // jangan blur dulu
+    el.addEventListener('mousedown',e=>e.preventDefault()); // cegah blur input
+    el.addEventListener('click',()=>{
       const did=el.dataset.did;
-      pickLoginAc(did);
+      pickLoginJamaah(did);
     });
   });
 }
 
-function pickLoginAc(did){
-  const {jamaahList}=_acDataCache||{jamaahList:[]};
+// Saat user pilih satu nama dari dropdown
+function pickLoginJamaah(did){
+  if(!_acDataCache)return;
+  const {jamaahList,userByDid}=_acDataCache;
   const j=jamaahList.find(x=>x.did===did);
   if(!j)return;
+  _loginAcSelected=j;
   const inp=document.getElementById('login-jamaah-search');
   const hidden=document.getElementById('login-jamaah');
-  inp.value=j.nama+' · '+fmtKelompok(j.kelompok);
+  inp.value=j.nama;
   hidden.value=did;
   hidden.dataset.value=did;
-  document.getElementById('if-jamaah').classList.remove('empty');
-  document.getElementById('if-jamaah').classList.add('has-value');
+  document.getElementById('login-clear-btn').style.display='flex';
+  // Show status
+  const u=userByDid[did];
+  const statusBox=document.getElementById('login-status-box');
+  statusBox.style.display='flex';
+  statusBox.className='login-status-box';
+  if(u){
+    if(u.status==='banned'){
+      statusBox.classList.add('err');
+      statusBox.innerHTML=`<div class="ico">⛔</div><div class="txt"><strong>Akun di-banned</strong><div class="sub">Hubungi admin untuk info lebih lanjut</div></div>`;
+    } else if(u.is_admin){
+      statusBox.classList.add('ok');
+      statusBox.innerHTML=`<div class="ico">⭐</div><div class="txt"><strong>${escapeHtml(j.nama)}</strong> · ADMIN<div class="sub">Masukkan kode akses</div></div>`;
+    } else {
+      statusBox.classList.add('ok');
+      statusBox.innerHTML=`<div class="ico">✓</div><div class="txt"><strong>${escapeHtml(j.nama)}</strong> · ${fmtKelompok(j.kelompok)}<div class="sub">Masukkan kode akses</div></div>`;
+    }
+  } else {
+    statusBox.classList.add('warn');
+    statusBox.innerHTML=`<div class="ico">⚠️</div><div class="txt"><strong>${escapeHtml(j.nama)}</strong> belum punya kode akses<div class="sub">Klik "Minta akses" di bawah untuk daftar</div></div>`;
+  }
+  // Tutup dropdown
   document.getElementById('login-ac-list').classList.remove('show');
+  // Auto-focus ke kode akses kalau user punya akses
+  if(u && u.status!=='banned'){
+    setTimeout(()=>{
+      const kode=document.getElementById('login-kode');
+      if(kode)kode.focus();
+    },150);
+  }
   validateLogin();
-  // focus ke kode akses
-  setTimeout(()=>document.getElementById('login-kode').focus(),50);
 }
+
+// Backward-compat (kalau ada panggilan lama)
+function onLoginNamaChange(){tryMatchJamaah();validateLogin();}
+
+function tryMatchJamaah(){
+  // Tidak dipakai lagi — pickLoginJamaah handle semua
+}
+
 function clearLoginAc(){
-  const inp=document.getElementById('login-jamaah-search');
-  const hidden=document.getElementById('login-jamaah');
-  inp.value='';hidden.value='';hidden.dataset.value='';
-  document.getElementById('if-jamaah').classList.add('empty');
-  document.getElementById('if-jamaah').classList.remove('has-value');
-  document.getElementById('login-ac-list').classList.remove('show');
-  validateLogin();
-  inp.focus();
+  // Alias untuk clearLoginNama
+  clearLoginNama();
 }
+
+// Stub untuk fungsi-fungsi lama yang masih dipanggil di handler events lain
+function onLoginAcInput(){onLoginNamaInput();}
+function onLoginAcFocus(){}
+function onLoginAcKeydown(e){}
+function pickLoginAc(){}
 function onLoginAcKeydown(e){
   const list=document.getElementById('login-ac-list');
   if(!list.classList.contains('show'))return;
