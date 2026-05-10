@@ -212,6 +212,26 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 }
 .pc.selected .pc-check{display:flex}
 
+/* ── PLN INFO BOX ──────────────────────── */
+.pln-info-box{
+  margin:8px 16px 0;background:#fff;border-radius:var(--r);
+  border:2px solid var(--g4);box-shadow:var(--sh);
+  padding:14px 16px;animation:slideDown .3s ease-out;
+}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.pln-info-box.error{border-color:#fecaca;background:#fef2f2}
+.pln-info-box.loading{border-color:var(--border);background:#fafafa}
+.pln-info-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--border)}
+.pln-info-icon{font-size:18px}
+.pln-info-title{font-size:13px;font-weight:700;color:var(--text);flex:1}
+.pln-info-badge{font-size:11px;font-weight:600;background:var(--g3);color:var(--g2);padding:3px 8px;border-radius:99px}
+.pln-info-box.error .pln-info-badge{background:#fee2e2;color:var(--red)}
+.pln-info-box.loading .pln-info-badge{background:#f3f4f6;color:var(--muted)}
+.pln-info-rows{display:flex;flex-direction:column;gap:6px}
+.pln-info-row{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.pln-info-label{color:var(--muted);font-weight:500}
+.pln-info-val{color:var(--text);font-weight:600;text-align:right;font-family:monospace}
+
 /* ── EMPTY / LOADING ─────────────────────── */
 .empty-state{text-align:center;padding:40px 20px;color:var(--muted)}
 .empty-state .ico{font-size:48px;margin-bottom:12px}
@@ -427,6 +447,29 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
       <div class="history-row" id="history-row" style="display:none">
         <span class="history-icon">🕐</span>
         <div id="history-chips" style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info Pelanggan PLN (hanya tampil untuk kategori Token PLN setelah inquiry sukses) -->
+  <div class="pln-info-box" id="pln-info-box" style="display:none">
+    <div class="pln-info-header">
+      <span class="pln-info-icon">⚡</span>
+      <span class="pln-info-title">Informasi Pelanggan</span>
+      <span class="pln-info-badge" id="pln-info-badge">✓ Terverifikasi</span>
+    </div>
+    <div class="pln-info-rows">
+      <div class="pln-info-row">
+        <span class="pln-info-label">Nomor Meter</span>
+        <span class="pln-info-val" id="pln-meter">—</span>
+      </div>
+      <div class="pln-info-row">
+        <span class="pln-info-label">Nama</span>
+        <span class="pln-info-val" id="pln-nama">—</span>
+      </div>
+      <div class="pln-info-row">
+        <span class="pln-info-label">Tarif/Daya</span>
+        <span class="pln-info-val" id="pln-daya">—</span>
       </div>
     </div>
   </div>
@@ -732,6 +775,7 @@ async function goKategori(katId){
   document.getElementById('bottom-bar').classList.remove('show');
   document.getElementById('input-nomor').value='';
   document.getElementById('btn-clear').classList.remove('show');
+  if(typeof resetPlnInfo === 'function') resetPlnInfo();
 
   // Set UI
   document.getElementById('kat-topbar-title').textContent=currentKat.nama;
@@ -787,6 +831,103 @@ async function ulangiTransaksi(produkId, nomor){
 // INPUT NOMOR
 // ═══════════════════════════════════════════
 let nomorTimer=null;
+let plnInquiryTimer=null;
+let plnInquiryData=null; // hasil inquiry untuk dipakai di submitOrder
+
+function isKategoriTokenPLN(){
+  const kode=(currentKat?.kode||'').toUpperCase();
+  // TOKEN_PLN — kategori prabayar PLN (yang bisa pakai endpoint /v1/inquiry-pln)
+  return kode === 'TOKEN_PLN';
+}
+
+function resetPlnInfo(){
+  plnInquiryData=null;
+  const box=document.getElementById('pln-info-box');
+  if(box) box.style.display='none';
+}
+
+async function inquiryPLN(customerNo){
+  const box=document.getElementById('pln-info-box');
+  const badge=document.getElementById('pln-info-badge');
+  if(!box) return;
+
+  // Loading state
+  box.style.display='block';
+  box.classList.remove('error');
+  box.classList.add('loading');
+  badge.textContent='⏳ Mengecek...';
+  document.getElementById('pln-meter').textContent=customerNo;
+  document.getElementById('pln-nama').textContent='—';
+  document.getElementById('pln-daya').textContent='—';
+
+  try {
+    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction/inquiry-pln',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'
+      },
+      body:JSON.stringify({customer_no:customerNo})
+    });
+    const json=await res.json();
+    const d=json?.data;
+
+    if(d && d.status==='Sukses' && d.rc==='00'){
+      // Sukses — simpan data dan tampilkan info
+      plnInquiryData={
+        customer_no:d.customer_no,
+        meter_no:d.meter_no,
+        subscriber_id:d.subscriber_id,
+        name:(d.name||'').trim(),
+        segment_power:(d.segment_power||'').trim()
+      };
+      box.classList.remove('loading','error');
+      badge.textContent='✓ Terverifikasi';
+      document.getElementById('pln-meter').textContent=d.meter_no||customerNo;
+      document.getElementById('pln-nama').textContent=plnInquiryData.name||'—';
+      document.getElementById('pln-daya').textContent=plnInquiryData.segment_power||'—';
+    } else {
+      // Gagal — tampilkan pesan error dari Digiflazz
+      plnInquiryData=null;
+      box.classList.remove('loading');
+      box.classList.add('error');
+      badge.textContent='✕ Tidak Valid';
+      document.getElementById('pln-nama').textContent=(d?.message)||'Nomor tidak ditemukan';
+      document.getElementById('pln-daya').textContent='Cek ulang nomor meter';
+    }
+  } catch(e){
+    console.error('[inquiry-pln]',e);
+    plnInquiryData=null;
+    box.classList.remove('loading');
+    box.classList.add('error');
+    badge.textContent='✕ Gagal Cek';
+    document.getElementById('pln-nama').textContent='Koneksi bermasalah';
+    document.getElementById('pln-daya').textContent='Coba lagi nanti';
+  }
+
+  // Update tombol Bayar berdasarkan hasil inquiry
+  updateBottomBarPLN();
+}
+
+function updateBottomBarPLN(){
+  if(!isKategoriTokenPLN()) return;
+  const btn=document.getElementById('btn-bayar');
+  if(!btn) return;
+  if(selectedProduk && plnInquiryData){
+    // Inquiry sukses + produk terpilih → enable Bayar
+    btn.disabled=false;
+    btn.style.opacity='';
+    btn.style.cursor='';
+    btn.innerHTML='💳 Bayar';
+  } else if(selectedProduk && !plnInquiryData){
+    // Produk terpilih tapi inquiry belum sukses → disable
+    btn.disabled=true;
+    btn.style.opacity='0.5';
+    btn.style.cursor='not-allowed';
+    btn.innerHTML='⚠️ Cek nomor meter dulu';
+  }
+}
+
 function onNomorInput(val){
   document.getElementById('btn-clear').classList.toggle('show', val.length>0);
 
@@ -796,7 +937,9 @@ function onNomorInput(val){
 
   // Tampilkan produk setelah minimal 4 digit
   clearTimeout(nomorTimer);
+  clearTimeout(plnInquiryTimer);
   const cleanVal=val.replace(/[^0-9]/g,'');
+
   if(cleanVal.length>=4){
     nomorTimer=setTimeout(()=>renderProdukList(val), 400);
   } else {
@@ -805,6 +948,20 @@ function onNomorInput(val){
     detectedOperator=null;
     document.getElementById('bottom-bar').classList.remove('show');
     document.getElementById('produk-content').innerHTML='<div class="empty-state"><div class="ico">'+( currentKat?.icon||'📱')+'</div><p>Masukkan nomor tujuan<br>untuk melihat produk</p></div>';
+    resetPlnInfo();
+  }
+
+  // ⚡ INQUIRY PLN — auto-trigger untuk kategori Token PLN
+  // Nomor meter PLN minimal 11 digit (subscriber id) atau 11-12 digit (meter no)
+  if(isKategoriTokenPLN()){
+    if(cleanVal.length>=11){
+      // Auto inquiry setelah 1 detik delay (debounce)
+      plnInquiryTimer=setTimeout(()=>inquiryPLN(cleanVal), 1000);
+    } else {
+      // Nomor belum lengkap — sembunyikan info
+      resetPlnInfo();
+      updateBottomBarPLN();
+    }
   }
 }
 
@@ -820,6 +977,7 @@ function clearNomor(){
   selectedProduk=null;
   document.getElementById('bottom-bar').classList.remove('show');
   document.getElementById('produk-content').innerHTML='<div class="empty-state"><div class="ico">'+(currentKat?.icon||'📱')+'</div><p>Masukkan nomor tujuan<br>untuk melihat produk</p></div>';
+  resetPlnInfo();
 }
 
 // ═══════════════════════════════════════════
@@ -869,6 +1027,9 @@ function pilihProduk(id){
   document.getElementById('bb-harga').textContent=rp(selectedProduk.harga_jual);
   document.getElementById('bottom-bar').classList.add('show');
 
+  // Update tombol Bayar berdasarkan inquiry PLN (kalau kategori Token PLN)
+  if(typeof updateBottomBarPLN === 'function') updateBottomBarPLN();
+
   // Scroll ke produk terpilih
   document.getElementById('pc-'+id)?.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -881,10 +1042,21 @@ function showKonfirmasi(){
   const nomor=document.getElementById('input-nomor').value.trim();
   if(!nomor){toast('Masukkan nomor tujuan dulu','e');return;}
 
+  // Validasi inquiry PLN — wajib sukses sebelum bisa lanjut bayar (Token PLN)
+  if(isKategoriTokenPLN() && !plnInquiryData){
+    toast('Cek nomor meter dulu (tunggu verifikasi)','e');
+    return;
+  }
+
   // Isi detail
   document.getElementById('od-produk').textContent=selectedProduk.nama_produk;
   document.getElementById('od-tujuan').textContent=nomor;
-  document.getElementById('od-operator').textContent=detectedOperator||currentKat?.nama||'—';
+  // Untuk Token PLN tampilkan nama pelanggan di kolom operator
+  if(isKategoriTokenPLN() && plnInquiryData){
+    document.getElementById('od-operator').textContent=plnInquiryData.name + ' · ' + plnInquiryData.segment_power;
+  } else {
+    document.getElementById('od-operator').textContent=detectedOperator||currentKat?.nama||'—';
+  }
   document.getElementById('od-total').textContent=rp(selectedProduk.harga_jual);
 
   // Reset customer
