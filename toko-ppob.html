@@ -622,7 +622,21 @@ async function init(){
     ]);
     (setRes.data||[]).forEach(s=>settingMap[s.key]=s.value);
     supplierCfg=supRes.data?.[0]||null;
-    allKategori=katRes.data||[];
+    const kategoriRaw = katRes.data || [];
+
+    // Filter: hanya tampilkan kategori yang punya produk aktif
+    // (dynamic — kalau Pak Sotoy tambah produk, kategori otomatis muncul kembali)
+    const katIds = kategoriRaw.map(k=>k.id);
+    if (katIds.length) {
+      const { data: produkAktif } = await sb.from('ppob_produk')
+        .select('kategori_id')
+        .eq('status','aktif')
+        .in('kategori_id', katIds);
+      const katYangPunyaProduk = new Set((produkAktif||[]).map(p=>p.kategori_id));
+      allKategori = kategoriRaw.filter(k => katYangPunyaProduk.has(k.id));
+    } else {
+      allKategori = [];
+    }
 
     const mode=settingMap['mode_operasi']||'demo';
     const badge=document.getElementById('home-mode');
@@ -1018,6 +1032,17 @@ async function submitOrder(){
     // Simpan history nomor
     if(currentKat) saveNomorHistory(currentKat.kode||currentKat.id, nomor);
 
+    // Notif Telegram ke admin (fire-and-forget — tidak block UI customer)
+    // Endpoint /api/notify/order-baru di proxy. Kalau gagal, tidak ganggu order.
+    fetch('https://proxy.ubnb.pw/api/notify/order-baru', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-proxy-secret': 'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'
+      },
+      body: JSON.stringify({ ref_id: refId })
+    }).catch(err => console.warn('[notif] gagal kirim notif Telegram:', err));
+
     // Success
     tutupModal();
     const msg=custTipe==='umum'
@@ -1028,8 +1053,20 @@ async function submitOrder(){
     document.getElementById('success-overlay').classList.add('show');
 
   } catch(e){
-    console.error(e);
-    toast('Gagal: '+e.message,'e');
+    console.error('[submitOrder]', e);
+    // Error message yang lebih informatif untuk customer
+    let userMsg = 'Gagal memproses pesanan';
+    if (e.message) {
+      // Common errors yang bisa di-translate ke pesan ramah
+      if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+        userMsg = 'Koneksi internet bermasalah. Cek sinyal lalu coba lagi.';
+      } else if (e.message.includes('duplicate')) {
+        userMsg = 'Pesanan sudah pernah dibuat. Cek riwayat transaksi.';
+      } else {
+        userMsg = 'Gagal: ' + e.message;
+      }
+    }
+    toast(userMsg, 'e');
   } finally {
     btn.disabled=false;btn.textContent='⚡ Konfirmasi & Pesan';
   }
