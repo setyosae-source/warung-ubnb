@@ -242,6 +242,7 @@ a{color:var(--blue);text-decoration:none;}
   <button class="tab" data-tab="posts" onclick="switchTab('posts',this)">📷 Posts <span class="count" id="cnt-posts">0</span></button>
   <button class="tab" data-tab="marketplace" onclick="switchTab('marketplace',this)">🛒 Marketplace <span class="count" id="cnt-market">0</span></button>
   <button class="tab" data-tab="chats" onclick="switchTab('chats',this)">💬 Chat Rooms <span class="count" id="cnt-chats">0</span></button>
+  <button class="tab" data-tab="reports" onclick="switchTab('reports',this)">🚩 Reports <span class="count" id="cnt-reports">0</span></button>
   <button class="tab" data-tab="broadcast" onclick="switchTab('broadcast',this)">📢 Broadcast</button>
 </div>
 
@@ -365,6 +366,26 @@ a{color:var(--blue);text-decoration:none;}
     </div>
   </div>
 
+  <!-- REPORTS -->
+  <div class="page" id="page-reports">
+    <div class="tbl-wrap">
+      <div class="tbl-toolbar">
+        <select id="filter-reports" onchange="renderReports()">
+          <option value="pending">⏳ Pending</option>
+          <option value="resolved">✓ Resolved</option>
+          <option value="rejected">✗ Rejected</option>
+          <option value="">Semua Status</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="tbl">
+        <thead><tr>
+          <th>Waktu</th><th>Reporter</th><th>Target</th><th>Alasan</th><th>Status</th><th>Aksi</th>
+        </tr></thead>
+        <tbody id="tbody-reports"><tr><td colspan="6" class="loading">Memuat...</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
   <!-- BROADCAST -->
   <div class="page" id="page-broadcast">
     <div class="tbl-wrap" style="padding:18px;">
@@ -413,7 +434,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const ADM_SESSION_KEY='sopram_admin_session_v1';
 
 let CU_ADMIN=null;
-let _cacheUsers=[],_cacheLog=[],_cachePosts=[],_cacheMarket=[],_cacheChats=[];
+let _cacheUsers=[],_cacheLog=[],_cachePosts=[],_cacheMarket=[],_cacheChats=[],_cacheReports=[];
 
 function toast(msg,err){
   const t=document.getElementById('toast');
@@ -502,7 +523,7 @@ function switchTab(tab,btn){
 
 async function loadAllPages(){
   await Promise.all([
-    loadDashboard(),loadUsers(),loadAccessLog(),loadPosts(),loadMarket(),loadChats(),loadBroadcastHistory()
+    loadDashboard(),loadUsers(),loadAccessLog(),loadPosts(),loadMarket(),loadChats(),loadReports(),loadBroadcastHistory()
   ]);
   updateTabCounts();
 }
@@ -512,6 +533,14 @@ function updateTabCounts(){
   document.getElementById('cnt-posts').textContent=_cachePosts.length;
   document.getElementById('cnt-market').textContent=_cacheMarket.length;
   document.getElementById('cnt-chats').textContent=_cacheChats.length;
+  // Reports: hitung yang status pending saja (red badge)
+  const pendingCount=_cacheReports.filter(r=>r.status==='pending').length;
+  const cntEl=document.getElementById('cnt-reports');
+  if(cntEl){
+    cntEl.textContent=pendingCount;
+    cntEl.style.background=pendingCount>0?'#c62828':'';
+    cntEl.style.color=pendingCount>0?'white':'';
+  }
 }
 
 // ================ DASHBOARD ================
@@ -541,15 +570,24 @@ async function loadDashboard(){
   const {count:requestPending}=await sb.from('sopram_access_log')
     .select('*',{count:'exact',head:true}).eq('tipe','request_access').gte('created_at',new Date(Date.now()-7*24*3600*1000).toISOString());
 
+  // Reports pending + stories aktif
+  const {count:reportsPending}=await sb.from('sopram_report')
+    .select('*',{count:'exact',head:true}).eq('status','pending');
+  const nowIso=new Date().toISOString();
+  const {count:storiesActive}=await sb.from('sopram_story')
+    .select('*',{count:'exact',head:true}).gt('expires_at',nowIso).is('deleted_at',null);
+
   stEl.innerHTML=`
     <div class="stat-card blue"><div class="num">${userCount||0}</div><div class="lbl">Total Users</div></div>
     <div class="stat-card purple"><div class="num">${adminCount||0}</div><div class="lbl">Admin</div></div>
     <div class="stat-card red"><div class="num">${bannedCount||0}</div><div class="lbl">Banned</div></div>
     <div class="stat-card green"><div class="num">${loginToday||0}</div><div class="lbl">Login Hari Ini</div></div>
     <div class="stat-card orange"><div class="num">${requestPending||0}</div><div class="lbl">Request 7 Hari</div></div>
+    <div class="stat-card red"><div class="num">${reportsPending||0}</div><div class="lbl">🚩 Reports Pending</div></div>
     <div class="stat-card blue"><div class="num">${postCount||0}</div><div class="lbl">Total Post</div></div>
     <div class="stat-card green"><div class="num">${marketCount||0}</div><div class="lbl">Produk Aktif</div></div>
     <div class="stat-card purple"><div class="num">${msgCount||0}</div><div class="lbl">Total Pesan</div></div>
+    <div class="stat-card orange"><div class="num">${storiesActive||0}</div><div class="lbl">📸 Stories Aktif</div></div>
   `;
 
   // Aktivitas terbaru (gabungan log)
@@ -846,6 +884,145 @@ async function viewChatMessages(roomId,nama){
   document.getElementById('modal-detail').classList.add('show');
 }
 function closeModal(){document.getElementById('modal-detail').classList.remove('show');}
+
+// ================ REPORTS ================
+async function loadReports(){
+  const {data,error}=await sb.from('sopram_report')
+    .select(`
+      id, target_type, target_id, alasan, status, admin_note, created_at, reviewed_at,
+      reporter:reporter_id(id, jamaah_desa(nama)),
+      reviewer:reviewed_by(id, jamaah_desa(nama))
+    `)
+    .order('created_at',{ascending:false})
+    .limit(200);
+  if(error){console.error('loadReports:',error);return;}
+  _cacheReports=data||[];
+  renderReports();
+}
+
+async function renderReports(){
+  const filt=document.getElementById('filter-reports')?.value;
+  let list=_cacheReports;
+  if(filt!==undefined && filt!=='')list=list.filter(r=>r.status===filt);
+  // Default ke pending kalau filter awal kosong
+  if(filt===undefined||filt===null){
+    document.getElementById('filter-reports').value='pending';
+    list=list.filter(r=>r.status==='pending');
+  }
+  const tbody=document.getElementById('tbody-reports');
+  if(!list.length){
+    tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ada laporan</td></tr>';
+    return;
+  }
+  // Untuk setiap report, fetch target detail (post/marketplace/etc)
+  const html=await Promise.all(list.map(async(r)=>{
+    const reporterName=r.reporter?.jamaah_desa?.nama||'?';
+    let targetInfo='—';
+    if(r.target_type==='post'){
+      const {data:p}=await sb.from('sopram_post')
+        .select('id, caption, foto_urls, sopram_user(jamaah_desa(nama))').eq('id',r.target_id).maybeSingle();
+      if(p){
+        const thumb=(p.foto_urls&&p.foto_urls[0])||'';
+        targetInfo=`<div style="display:flex;gap:6px;align-items:center;">
+          ${thumb?`<img src="${escapeHtml(thumb)}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;" onclick="window.open('${escapeHtml(thumb)}','_blank')">`:''}
+          <div><div style="font-size:11px;color:var(--text-muted);">Post #${p.id} oleh ${escapeHtml(p.sopram_user?.jamaah_desa?.nama||'?')}</div>
+          <div style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml((p.caption||'').substring(0,50))}</div></div>
+        </div>`;
+      } else {
+        targetInfo=`<span style="color:var(--text-muted)">Post #${r.target_id} (sudah dihapus)</span>`;
+      }
+    } else if(r.target_type==='marketplace'){
+      const {data:m}=await sb.from('sopram_marketplace')
+        .select('id, judul, foto_urls').eq('id',r.target_id).maybeSingle();
+      if(m){
+        const thumb=(m.foto_urls&&m.foto_urls[0])||'';
+        targetInfo=`<div style="display:flex;gap:6px;align-items:center;">
+          ${thumb?`<img src="${escapeHtml(thumb)}" style="width:32px;height:32px;object-fit:cover;border-radius:3px;">`:''}
+          <div><div style="font-size:11px;color:var(--text-muted);">Produk #${m.id}</div>
+          <div style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(m.judul)}</div></div>
+        </div>`;
+      } else {
+        targetInfo=`<span style="color:var(--text-muted)">Produk #${r.target_id}</span>`;
+      }
+    } else {
+      targetInfo=`${r.target_type} #${r.target_id}`;
+    }
+    let statusPill='';
+    if(r.status==='pending')statusPill='<span class="pill request_access">⏳ Pending</span>';
+    else if(r.status==='resolved')statusPill='<span class="pill aktif">✓ Resolved</span>';
+    else if(r.status==='rejected')statusPill='<span class="pill banned">✗ Rejected</span>';
+    else if(r.status==='reviewed')statusPill='<span class="pill login">👁 Reviewed</span>';
+    let actions='';
+    if(r.status==='pending'){
+      actions=`
+        <button class="ok" onclick="resolveReport(${r.id},'resolved')">✓ Resolve</button>
+        <button class="danger" onclick="resolveReport(${r.id},'rejected')">✗ Reject</button>
+        ${r.target_type==='post'?`<button class="danger" onclick="deleteTargetPost(${r.target_id},${r.id})">🗑️ Hapus Post</button>`:''}
+        ${r.target_type==='marketplace'?`<button class="danger" onclick="deleteTargetMarket(${r.target_id},${r.id})">🗑️ Hapus Produk</button>`:''}
+      `;
+    } else {
+      const revName=r.reviewer?.jamaah_desa?.nama||'admin';
+      actions=`<span style="font-size:11px;color:var(--text-muted)">oleh ${escapeHtml(revName)}<br>${fmtRelTime(r.reviewed_at)}</span>`;
+    }
+    return `<tr ${r.status!=='pending'?'style="opacity:.6"':''}>
+      <td>${fmtDateTime(r.created_at)}</td>
+      <td><div class="cell-name">${escapeHtml(reporterName)}</div></td>
+      <td>${targetInfo}</td>
+      <td><div style="max-width:200px;font-size:12px;line-height:1.4;">${escapeHtml(r.alasan)}</div></td>
+      <td>${statusPill}</td>
+      <td class="actions">${actions}</td>
+    </tr>`;
+  }));
+  tbody.innerHTML=html.join('');
+}
+
+async function resolveReport(reportId,newStatus){
+  const note=prompt(`Catatan admin (opsional) untuk status "${newStatus}":`,'');
+  if(note===null)return; // user cancel
+  const {error}=await sb.from('sopram_report').update({
+    status:newStatus,
+    admin_note:note||null,
+    reviewed_by:CU_ADMIN._id,
+    reviewed_at:new Date().toISOString()
+  }).eq('id',reportId);
+  if(error){toast(error.message,true);return;}
+  toast('Laporan: '+newStatus);
+  loadReports();
+  updateTabCounts();
+}
+
+async function deleteTargetPost(postId,reportId){
+  if(!confirm('Hapus post ini (soft delete)?'))return;
+  const {error:e1}=await sb.from('sopram_post').update({deleted_at:new Date().toISOString()}).eq('id',postId);
+  if(e1){toast(e1.message,true);return;}
+  // Auto-resolve report
+  await sb.from('sopram_report').update({
+    status:'resolved',
+    admin_note:'Post dihapus oleh admin',
+    reviewed_by:CU_ADMIN._id,
+    reviewed_at:new Date().toISOString()
+  }).eq('id',reportId);
+  toast('Post dihapus + laporan resolved');
+  loadReports();
+  loadPosts();
+  updateTabCounts();
+}
+
+async function deleteTargetMarket(marketId,reportId){
+  if(!confirm('Hapus produk ini permanen?'))return;
+  const {error:e1}=await sb.from('sopram_marketplace').delete().eq('id',marketId);
+  if(e1){toast(e1.message,true);return;}
+  await sb.from('sopram_report').update({
+    status:'resolved',
+    admin_note:'Produk dihapus oleh admin',
+    reviewed_by:CU_ADMIN._id,
+    reviewed_at:new Date().toISOString()
+  }).eq('id',reportId);
+  toast('Produk dihapus + laporan resolved');
+  loadReports();
+  loadMarket();
+  updateTabCounts();
+}
 
 // ================ BROADCAST ================
 async function kirimBroadcast(){
