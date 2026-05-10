@@ -2859,13 +2859,20 @@ async function loadTransaksi() {
     tbody.innerHTML = rows.map(t => {
       const profit = Number(t.harga_jual||0) - Number(t.harga_modal||0);
       const pelanggan = t.ppob_pelanggan;
+      // Info tambahan SN (untuk sukses) atau RC+message (untuk gagal)
+      let extraInfo = '';
+      if (t.status === 'sukses' && t.sn) {
+        extraInfo = `<div style="font-family:monospace;font-size:10px;margin-top:3px;word-break:break-all">SN: ${t.sn}</div>`;
+      } else if (t.status === 'gagal' && (t.rc || t.message)) {
+        extraInfo = `<div style="font-size:10px;color:var(--red);margin-top:3px">${t.rc ? 'RC '+t.rc+': ' : ''}${t.message || ''}</div>`;
+      }
       return `<tr>
         <td style="font-size:12px;white-space:nowrap">${formatTgl(t.created_at)}</td>
         <td><span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${t.ref_id}</span></td>
         <td>${t.nama_produk || '—'}</td>
         <td><span style="font-family:monospace;font-size:12px">${t.tujuan}</span></td>
         <td>${pelanggan ? `<span title="${pelanggan.tipe}">${pelanggan.nama}</span>` : '—'}</td>
-        <td>${badgeTrx(t.status)}</td>
+        <td>${badgeTrx(t.status)}${extraInfo}</td>
         <td>${badgeBayar(t.status_bayar)}</td>
         <td style="text-align:right">${formatRp(t.harga_jual)}</td>
         <td style="text-align:right;color:var(--hijau);font-weight:700">${profit > 0 ? '+'+formatRp(profit) : '—'}</td>
@@ -2912,7 +2919,7 @@ async function loadVerifikasi() {
 
   try {
     const { data, error } = await sb.from('ppob_pembayaran_umum')
-      .select('*, ppob_transaksi(ref_id, nama_produk, tujuan, harga_jual, status)')
+      .select('*, ppob_transaksi(ref_id, nama_produk, tujuan, harga_jual, status, sn, rc, message)')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -2928,6 +2935,19 @@ async function loadVerifikasi() {
     tbody.innerHTML = rows.map(v => {
       const trx = v.ppob_transaksi;
       const isMenunggu = v.status === 'menunggu';
+      const isDiverifikasi = v.status === 'diverifikasi';
+      // Tampilan status transaksi Digiflazz (untuk yang sudah diverifikasi)
+      let infoTrx = '';
+      if (isDiverifikasi && trx) {
+        const lines = [badgeTrx(trx.status)];
+        if (trx.status === 'sukses' && trx.sn) {
+          lines.push(`<div style="font-family:monospace;font-size:10px;margin-top:3px;word-break:break-all">SN: ${trx.sn}</div>`);
+        }
+        if (trx.status === 'gagal' && (trx.rc || trx.message)) {
+          lines.push(`<div style="font-size:10px;color:var(--red);margin-top:3px">${trx.rc ? 'RC '+trx.rc+': ' : ''}${trx.message || ''}</div>`);
+        }
+        infoTrx = lines.join('');
+      }
       return `<tr>
         <td style="font-size:12px;white-space:nowrap">${formatTgl(v.created_at)}</td>
         <td><span style="font-family:monospace;font-size:11px">${trx?.ref_id || '—'}</span></td>
@@ -2941,7 +2961,7 @@ async function loadVerifikasi() {
           ${isMenunggu ? `
             <button class="btn btn-primary" style="padding:4px 10px;font-size:12px;margin-bottom:4px" onclick="verifikasiTransfer(${v.id},'diverifikasi')">✓ Verifikasi</button>
             <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="verifikasiTransfer(${v.id},'ditolak')">✕ Tolak</button>
-          ` : `<span style="font-size:12px;color:var(--text-muted)">${v.status === 'diverifikasi' ? '✓ Sudah diproses' : '✕ Ditolak'}</span>`}
+          ` : isDiverifikasi ? infoTrx : `<span style="font-size:12px;color:var(--text-muted)">✕ Ditolak</span>`}
         </td>
       </tr>`;
     }).join('');
