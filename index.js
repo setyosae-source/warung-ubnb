@@ -3,6 +3,11 @@
  * VPS: 163.61.58.162 | Port: 3000
  * Lokasi: /home/ubnb/ubnb-proxy/index.js
  *
+ * v2.1.6 (10 Mei 2026) — Link admin di notif Telegram
+ *   - Tambah link ke admin-ppob di pesan notif (PESANAN BARU, SUKSES, GAGAL, SALDO)
+ *   - Pakai hash routing: #verifikasi, #semua untuk auto-buka tab tertentu
+ *   - URL admin via env ADMIN_URL (default: https://ubnb.pw/admin-ppob.html)
+ *
  * v2.1.5 (10 Mei 2026) — Fix endpoint inquiry-pln
  *   - Pakai endpoint khusus https://api.digiflazz.com/v1/inquiry-pln
  *     (sebelumnya pakai /v1/transaction yang salah → SKU tidak ditemukan)
@@ -92,6 +97,7 @@ const TELEGRAM_BOT_TOKEN       = process.env.TELEGRAM_BOT_TOKEN       || '';
 const TELEGRAM_CHAT_ID         = process.env.TELEGRAM_CHAT_ID         || '';
 const TELEGRAM_SALDO_THRESHOLD = Number(process.env.TELEGRAM_SALDO_THRESHOLD || 50000);
 const TELEGRAM_ENABLED         = !!(TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID);
+const ADMIN_URL                = process.env.ADMIN_URL || 'https://ubnb.pw/admin-ppob.html';
 
 const DIGIFLAZZ_BASE   = 'https://api.digiflazz.com/v1';
 const IS_DEV           = DIGIFLAZZ_MODE === 'dev';
@@ -236,7 +242,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'UBNB PPOB Proxy',
     mode: DIGIFLAZZ_MODE,
-    version: '2.1.5',
+    version: '2.1.6',
     timestamp: new Date().toISOString(),
     telegram_enabled: TELEGRAM_ENABLED,
     saldo_threshold: TELEGRAM_SALDO_THRESHOLD,
@@ -722,7 +728,8 @@ app.post('/webhook/digiflazz', async (req, res) => {
             `Produk: ${t.nama_produk || '-'}\n` +
             `Tujuan: <code>${t.tujuan || '-'}</code>\n` +
             (sn ? `SN: <code>${sn}</code>\n` : '') +
-            `💰 ${formatRp(t.harga_jual)}`;
+            `💰 ${formatRp(t.harga_jual)}\n\n` +
+            `🔗 <a href="${ADMIN_URL}#semua">Lihat di admin</a>`;
         } else if (newStatus === 'gagal') {
           notifMsg = `❌ <b>TRANSAKSI GAGAL</b>\n` +
             `━━━━━━━━━━━━━━\n` +
@@ -731,7 +738,8 @@ app.post('/webhook/digiflazz', async (req, res) => {
             `Tujuan: <code>${t.tujuan || '-'}</code>\n` +
             (rc ? `RC ${rc}: ${message || '-'}\n` : (message ? `${message}\n` : '')) +
             `💰 ${formatRp(t.harga_jual)}\n\n` +
-            `⚠️ Perlu refund/kontak pelanggan`;
+            `⚠️ Perlu refund/kontak pelanggan\n` +
+            `🔗 <a href="${ADMIN_URL}#semua">Buka admin</a>`;
         }
 
         if (notifMsg) sendTelegram(notifMsg).catch(e => console.error('[telegram] send error:', e.message));
@@ -883,7 +891,7 @@ app.post('/api/notify/order-baru', authProxy, async (req, res) => {
       `Tujuan: <code>${t.tujuan || '-'}</code>\n` +
       `Pengirim: ${pelangganStr}\n` +
       `💰 Total: ${formatRp(t.harga_jual)}\n\n` +
-      `Mohon segera diverifikasi 🙏`;
+      `🔗 <a href="${ADMIN_URL}#verifikasi">Verifikasi sekarang</a>`;
 
     const result = await sendTelegram(msg);
     res.json({ ok: result.ok, ref_id });
@@ -944,7 +952,8 @@ app.post('/api/notify/saldo-check', authProxy, async (req, res) => {
       `━━━━━━━━━━━━━━\n` +
       `Saldo Digiflazz: <b>${formatRp(saldo)}</b>\n` +
       `Di bawah threshold: ${formatRp(TELEGRAM_SALDO_THRESHOLD)}\n\n` +
-      `Segera top-up untuk hindari transaksi gagal! 💰`;
+      `Segera top-up untuk hindari transaksi gagal! 💰\n\n` +
+      `🔗 <a href="${ADMIN_URL}">Buka Admin Panel</a>`;
 
     const sendResult = await sendTelegram(msg);
     if (sendResult.ok) {
@@ -982,7 +991,7 @@ app.post('/api/notify/test', authProxy, async (req, res) => {
   const msg = `🧪 <b>TEST NOTIF</b>\n` +
     `━━━━━━━━━━━━━━\n` +
     `Waktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n` +
-    `Proxy: v2.1.5\n` +
+    `Proxy: v2.1.6\n` +
     `Mode: ${DIGIFLAZZ_MODE}\n\n` +
     `Kalau pesan ini sampai, berarti notif Telegram sudah jalan ✓`;
   const result = await sendTelegram(msg);
@@ -1005,7 +1014,7 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.5                ║
+║   UBNB PPOB Proxy v2.1.6                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
