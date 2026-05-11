@@ -317,6 +317,11 @@ function getLinkUrl(token){return window.location.origin+window.location.pathnam
 function escapeHtml(s){if(!s)return '';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 // ===== LOGIN =====
+async function sha256Hex(str){
+  const buf=new TextEncoder().encode(str);
+  const hashBuf=await crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 async function doLogin(){
   const u=document.getElementById('inp-user').value.trim();
   const p=document.getElementById('inp-pass').value.trim();
@@ -325,7 +330,8 @@ async function doLogin(){
   if(!u||!p){err.textContent='Username & password wajib diisi';return}
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Memeriksa...';
   err.textContent='';
-  const {data,error}=await sb.from('users').select('username,role').eq('username',u).eq('password',p).maybeSingle();
+  const pHash=await sha256Hex(p);
+  const {data,error}=await sb.from('users').select('username,role').eq('username',u).eq('password_hash',pHash).maybeSingle();
   btn.disabled=false;btn.innerHTML='Masuk';
   if(error||!data){err.textContent='Username/password salah';return}
   CU={username:data.username,role:data.role};
