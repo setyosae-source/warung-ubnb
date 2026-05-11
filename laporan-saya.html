@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Saya - UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --green:#1a6640;--green-dark:#0f4a2d;--green-light:#e6f4ec;
+  --gold:#c9a961;--gold-dark:#a8893f;--gold-light:#fdf6e3;
+  --blue:#2563eb;--blue-light:#dbeafe;
+  --red:#dc2626;--red-light:#fee2e2;
+  --amber:#f59e0b;--amber-light:#fef3c7;
+  --purple:#7c3aed;--purple-light:#ede9fe;
+  --bg:#f5f5f0;--surface:#fff;
+  --text:#1a1a1a;--text-muted:#666;--border:#e5e5e0;
+  --radius:16px;--radius-sm:12px;--radius-xs:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;font-size:14px;-webkit-font-smoothing:antialiased}
+a{color:var(--green);text-decoration:none}
+
+/* HEADER */
+.hero{background:linear-gradient(135deg,var(--green) 0%,var(--green-dark) 100%);color:white;padding:32px 20px 70px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-50px;right:-50px;width:200px;height:200px;background:rgba(255,255,255,0.05);border-radius:50%}
+.hero::after{content:'';position:absolute;bottom:-80px;left:-30px;width:160px;height:160px;background:rgba(201,169,97,0.15);border-radius:50%}
+.hero-inner{max-width:600px;margin:0 auto;position:relative;z-index:2}
+.hero .badge-top{display:inline-block;background:rgba(255,255,255,0.15);padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:14px;backdrop-filter:blur(10px)}
+.hero h1{font-size:24px;font-weight:800;margin-bottom:6px;letter-spacing:-0.5px}
+.hero .salam{font-size:14px;opacity:0.9}
+.hero .kelompok{margin-top:10px;font-size:13px;opacity:0.85}
+
+/* CONTAINER */
+.container{max-width:600px;margin:-50px auto 30px;padding:0 16px;position:relative;z-index:3}
+
+/* CARD */
+.card{background:white;border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.05)}
+.card-title{font-weight:700;font-size:14px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title .icon{font-size:18px}
+
+/* SAHAM CARD */
+.saham-card{background:linear-gradient(135deg,#fdf6e3 0%,#fef3c7 100%);border:2px solid var(--gold);position:relative;overflow:hidden}
+.saham-card::before{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:rgba(201,169,97,0.2);border-radius:50%}
+.saham-stat{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;position:relative;z-index:2}
+.saham-stat .box{background:white;border-radius:var(--radius-sm);padding:12px;text-align:center}
+.saham-stat .lbl{font-size:10px;color:var(--gold-dark);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.saham-stat .val{font-size:22px;font-weight:800;color:var(--gold-dark)}
+.saham-stat .val.small{font-size:14px}
+
+/* SHU CARD */
+.shu-list .shu-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--green-light);border-radius:var(--radius-sm);margin-bottom:6px}
+.shu-row .info{flex:1;min-width:0}
+.shu-row .periode{font-weight:700;font-size:13px;color:var(--green-dark)}
+.shu-row .sub{font-size:11px;color:var(--text-muted)}
+.shu-row .amt{font-weight:800;color:var(--green-dark);font-family:'Courier New',monospace;font-size:14px}
+
+/* RIWAYAT */
+.tx-row{padding:10px 0;border-bottom:1px solid var(--border)}
+.tx-row:last-child{border-bottom:none}
+.tx-row .top{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}
+.tx-row .item{font-weight:600;font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tx-row .nominal{font-weight:700;font-family:'Courier New',monospace;font-size:13px;flex-shrink:0}
+.tx-row .tag{font-size:11px;color:var(--text-muted)}
+
+/* PENDING SECTION */
+.pending-card{background:#fffbeb;border:2px solid #fbbf24}
+.pending-card .card-title{color:#92400e}
+.pending-row{background:white;border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;border:1px solid #fde68a}
+.pending-row .pen-top{display:flex;justify-content:space-between;gap:10px;margin-bottom:6px}
+.pending-row .pen-item{font-weight:600;font-size:13px;flex:1;min-width:0}
+.pending-row .pen-amt{font-weight:800;color:#92400e;font-family:'Courier New',monospace;font-size:14px;flex-shrink:0}
+.pending-row .pen-meta{font-size:11px;color:var(--text-muted)}
+.pending-info{background:#fef3c7;border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:#78350f;margin-top:10px;border-left:3px solid #fbbf24}
+.btn-konfirmasi{display:inline-block;background:var(--green);color:white;padding:9px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;text-decoration:none;margin-top:10px;border:none;cursor:pointer;width:100%;text-align:center}
+.btn-konfirmasi:hover{background:var(--green-dark)}
+
+/* CTA SECTION */
+.cta-card{background:linear-gradient(135deg,var(--green) 0%,var(--green-dark) 100%);color:white;text-align:center}
+.cta-card .card-title{color:white;justify-content:center}
+.cta-card p{font-size:13px;opacity:0.95;margin-bottom:14px;line-height:1.6}
+.cta-card .cta-btn{display:inline-block;background:white;color:var(--green-dark);padding:11px 22px;border-radius:var(--radius-sm);font-weight:800;font-size:13px;text-decoration:none}
+.cta-card .cta-btn:hover{transform:translateY(-1px)}
+
+/* TOTAL KONTRIBUSI */
+.kontri-stat{background:var(--green-light);border-radius:var(--radius-sm);padding:14px;text-align:center}
+.kontri-stat .lbl{font-size:11px;color:var(--green-dark);font-weight:700;text-transform:uppercase;margin-bottom:4px}
+.kontri-stat .val{font-size:24px;font-weight:800;color:var(--green-dark)}
+.kontri-stat .sub{font-size:11px;color:var(--text-muted);margin-top:4px}
+
+/* EMPTY */
+.empty{text-align:center;padding:24px 16px;color:var(--text-muted);font-size:13px}
+.empty .ei{font-size:36px;margin-bottom:6px;opacity:0.5}
+
+/* LOADING */
+.loading{text-align:center;padding:60px 20px;color:var(--text-muted)}
+.spinner-big{display:inline-block;width:36px;height:36px;border:3px solid var(--border);border-radius:50%;border-top-color:var(--green);animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ERROR */
+.err-page{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:30px;text-align:center}
+.err-page .err-icon{font-size:64px;margin-bottom:14px}
+.err-page h2{font-size:18px;color:var(--red);margin-bottom:8px}
+.err-page p{color:var(--text-muted);max-width:400px}
+
+/* FOOTER */
+.footer{text-align:center;padding:24px 20px 30px;color:var(--text-muted);font-size:11px}
+.footer a{color:var(--green);font-weight:600}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-bg.show{display:flex}
+.modal{background:white;border-radius:var(--radius);padding:20px;max-width:380px;width:100%;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:16px;margin-bottom:12px;color:var(--green-dark)}
+.modal textarea{width:100%;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:13px;font-family:inherit;min-height:80px;outline:none}
+.modal textarea:focus{border-color:var(--green)}
+.modal-btn-row{display:flex;gap:8px;margin-top:14px}
+.modal-btn-row button{flex:1;padding:10px;border:none;border-radius:var(--radius-xs);font-weight:700;font-size:13px;cursor:pointer}
+.btn-cancel{background:var(--bg);color:var(--text);border:1.5px solid var(--border) !important}
+.btn-submit{background:var(--green);color:white}
+
+@media(min-width:600px){
+  .hero h1{font-size:28px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading" class="loading">
+  <div class="spinner-big"></div>
+  <p style="margin-top:14px">Memuat laporan...</p>
+</div>
+
+<!-- ERROR -->
+<div id="error" style="display:none" class="err-page">
+  <div class="err-icon">🔒</div>
+  <h2 id="err-title">Link Tidak Valid</h2>
+  <p id="err-msg">Token tidak ditemukan atau sudah kadaluarsa. Silakan hubungi pengurus UBNB Perwira.</p>
+</div>
+
+<!-- CONTENT -->
+<div id="content" style="display:none">
+  
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="badge-top">📊 UBNB Desa Perwira</div>
+      <div class="salam">Assalamualaikum,</div>
+      <h1 id="hero-nama">-</h1>
+      <div class="kelompok" id="hero-kel"></div>
+    </div>
+  </div>
+
+  <div class="container">
+    
+    <!-- STATUS ANGGOTA & SAHAM -->
+    <div id="card-saham"></div>
+
+    <!-- SHU DITERIMA -->
+    <div id="card-shu"></div>
+
+    <!-- TOTAL KONTRIBUSI -->
+    <div id="card-kontribusi"></div>
+
+    <!-- RIWAYAT AKTIVITAS -->
+    <div id="card-riwayat"></div>
+
+    <!-- PENYELESAIAN PENDING -->
+    <div id="card-pending"></div>
+
+    <!-- CTA -->
+    <div id="card-cta"></div>
+
+  </div>
+
+  <div class="footer">
+    © 2026 UBNB Desa Perwira<br>
+    <small>Laporan ini bersifat personal. Mohon tidak dibagikan.</small>
+  </div>
+</div>
+
+<!-- MODAL KONFIRMASI BAYAR -->
+<div class="modal-bg" id="modal-konf">
+  <div class="modal">
+    <h3>📝 Konfirmasi Sudah Bayar</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+      Jika ada tagihan di atas yang sebenarnya sudah Bapak/Ibu bayar tapi belum tercatat, mohon informasikan di sini:
+    </p>
+    <textarea id="konf-text" placeholder="Contoh: Saya sudah bayar Token Listrik Rp 200.000 tgl 5 Mei via transfer..."></textarea>
+    <div class="modal-btn-row">
+      <button class="btn-cancel" onclick="closeKonf()">Batal</button>
+      <button class="btn-submit" onclick="kirimKonfirmasi()">💬 Kirim via WA</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+// Nomor WA pengurus (untuk konfirmasi pembayaran)
+const WA_PENGURUS='6285718264782'; // Nomor pengurus UB
+
+// ====== STATE ======
+let DATA={token:null,jamaah:null,saham:null,anggota:null,piutang:[],bmt:[],shuDetail:[]};
+
+function rp(n){if(n==null||isNaN(n))return 'Rp 0';return 'Rp '+Math.round(n).toLocaleString('id-ID')}
+function fD(s){if(!s)return '-';const d=new Date(s);return d.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}
+function escapeHtml(s){if(!s)return '';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function showError(title,msg){
+  document.getElementById('loading').style.display='none';
+  document.getElementById('content').style.display='none';
+  document.getElementById('error').style.display='flex';
+  if(title)document.getElementById('err-title').textContent=title;
+  if(msg)document.getElementById('err-msg').textContent=msg;
+}
+
+// ====== BOOT ======
+async function init(){
+  const params=new URLSearchParams(location.search);
+  const tok=params.get('t');
+  if(!tok){showError('Link Tidak Valid','Token tidak ditemukan di URL.');return}
+  
+  // Validasi token + increment counter via RPC (1 call sekaligus)
+  const {data:rpcData,error:rpcErr}=await sb.rpc('increment_laporan_token_open',{p_token:tok});
+  if(rpcErr||!rpcData||!rpcData.length){showError('Link Tidak Valid','Token tidak ditemukan. Mohon hubungi pengurus UB Desa Perwira.');return}
+  
+  // RPC return pakai prefix out_*, normalisasi nama field
+  const r=rpcData[0];
+  const tokData={
+    token:r.out_token,
+    jamaah_did:r.out_jamaah_did,
+    nama_snapshot:r.out_nama_snapshot,
+    expired_at:r.out_expired_at,
+    dibuka_count:r.out_dibuka_count
+  };
+  
+  // Cek expiry
+  if(tokData.expired_at&&new Date(tokData.expired_at)<new Date()){
+    showError('Link Kadaluarsa','Link ini sudah tidak berlaku. Silakan hubungi pengurus untuk link baru.');return;
+  }
+  
+  DATA.token=tokData;
+  
+  // Load data jamaah & semua relasi
+  await loadAllData(tokData.jamaah_did);
+  
+  // Render
+  document.getElementById('loading').style.display='none';
+  document.getElementById('content').style.display='block';
+  render();
+}
+
+async function loadAllData(did){
+  const [jr,sr,ar,hr,br,bhr]=await Promise.all([
+    sb.from('jamaah_desa').select('*').eq('did',did).maybeSingle(),
+    sb.from('ubnb_saham').select('*').eq('jamaah_did',did).eq('status','Aktif'),
+    sb.from('ubnb_anggota').select('*').eq('jamaah_did',did).maybeSingle(),
+    sb.from('hutang').select('*').eq('jamaah_did',did).eq('tipe','piutang').eq('lunas',false).order('tgl',{ascending:false}),
+    sb.from('bmt_akad').select('*').eq('jamaah_did',did).eq('status','Belum Lunas'),
+    Promise.resolve({data:[]})  // SHU detail nanti
+  ]);
+  DATA.jamaah=jr.data;
+  DATA.saham=sr.data||[];
+  DATA.anggota=ar.data;
+  DATA.piutang=hr.data||[];
+  DATA.bmt=br.data||[];
+  
+  // SHU detail (jika anggota saham)
+  if(DATA.saham.length){
+    const sahamIds=DATA.saham.map(s=>s.id);
+    const {data:shu}=await sb.from('ubnb_saham_bagi_hasil_detail')
+      .select('*, ubnb_saham_bagi_hasil(periode,tanggal_bagi)')
+      .in('saham_id',sahamIds)
+      .order('created_at',{ascending:false});
+    DATA.shuDetail=shu||[];
+  }
+}
+
+// ====== RENDER ======
+function render(){
+  const jm=DATA.jamaah;
+  document.getElementById('hero-nama').textContent=jm?.nama||DATA.token.nama_snapshot||'-';
+  document.getElementById('hero-kel').textContent=jm?.kelompok?'Kelompok '+(jm.kelompok.startsWith('PW')?jm.kelompok:'PW'+jm.kelompok):'';
+  
+  renderSaham();
+  renderSHU();
+  renderKontribusi();
+  renderRiwayat();
+  renderPending();
+  renderCTA();
+}
+
+function renderSaham(){
+  const el=document.getElementById('card-saham');
+  if(!DATA.saham.length){
+    // Belum jadi anggota saham
+    el.innerHTML=`<div class="card">
+      <div class="card-title"><span class="icon">💎</span> Status Keanggotaan</div>
+      <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:14px;text-align:center">
+        <div style="font-size:14px;color:var(--blue);font-weight:600;margin-bottom:4px">Belum menjadi anggota UB</div>
+        <div style="font-size:12px;color:var(--text-muted)">Bapak/Ibu belum memiliki saham di Usaha Bersama UBNB. Cek info di bawah untuk bergabung.</div>
+      </div>
+    </div>`;
+    return;
+  }
+  const totalLembar=DATA.saham.reduce((s,x)=>s+(x.jumlah_lembar||0),0);
+  const totalNilai=DATA.saham.reduce((s,x)=>s+parseFloat(x.total_nilai||0),0);
+  const certs=DATA.saham.map(s=>s.no_saham).filter(Boolean);
+  
+  el.innerHTML=`<div class="card saham-card">
+    <div class="card-title" style="color:var(--gold-dark);position:relative;z-index:2">
+      <span class="icon">💎</span> Kepemilikan Saham
+    </div>
+    <div class="saham-stat">
+      <div class="box">
+        <div class="lbl">Jumlah Lembar</div>
+        <div class="val">${totalLembar}</div>
+      </div>
+      <div class="box">
+        <div class="lbl">Total Nilai</div>
+        <div class="val small">${rp(totalNilai)}</div>
+      </div>
+    </div>
+    ${certs.length?`<div style="background:white;border-radius:var(--radius-sm);padding:10px 12px;position:relative;z-index:2">
+      <div style="font-size:10px;color:var(--gold-dark);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">No. Sertifikat</div>
+      <div style="font-family:monospace;font-size:11px;color:var(--text)">${certs.map(escapeHtml).join('<br>')}</div>
+    </div>`:''}
+  </div>`;
+}
+
+function renderSHU(){
+  const el=document.getElementById('card-shu');
+  if(!DATA.shuDetail.length){
+    if(DATA.saham.length){
+      el.innerHTML=`<div class="card">
+        <div class="card-title"><span class="icon">🎁</span> SHU / Bagi Hasil</div>
+        <div class="empty">
+          <div class="ei">⏳</div>
+          Belum ada pembagian SHU pada periode ini.
+        </div>
+      </div>`;
+    }
+    return;
+  }
+  // Group by periode
+  const byPer={};
+  DATA.shuDetail.forEach(d=>{
+    const per=d.ubnb_saham_bagi_hasil?.periode||'-';
+    if(!byPer[per])byPer[per]={total:0,tgl:d.ubnb_saham_bagi_hasil?.tanggal_bagi,sudah:true};
+    byPer[per].total+=parseFloat(d.jumlah_diterima||0);
+    if(!d.sudah_dibayar)byPer[per].sudah=false;
+  });
+  const total=Object.values(byPer).reduce((s,v)=>s+v.total,0);
+  
+  el.innerHTML=`<div class="card">
+    <div class="card-title"><span class="icon">🎁</span> SHU / Bagi Hasil Diterima</div>
+    <div class="shu-list">
+      ${Object.entries(byPer).map(([per,v])=>`<div class="shu-row">
+        <div class="info">
+          <div class="periode">📅 Periode ${escapeHtml(per)}</div>
+          <div class="sub">${v.tgl?'Realisasi: '+fD(v.tgl):''} ${v.sudah?'· ✓ Sudah dibagi':'· ⏳ Belum dibagi'}</div>
+        </div>
+        <div class="amt">${rp(v.total)}</div>
+      </div>`).join('')}
+    </div>
+    <div style="background:var(--green);color:white;border-radius:var(--radius-sm);padding:10px 12px;margin-top:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;opacity:0.85">Total SHU Diterima</div>
+      <div style="font-size:22px;font-weight:800;font-family:monospace">${rp(total)}</div>
+    </div>
+  </div>`;
+}
+
+function renderKontribusi(){
+  // Hitung total transaksi (lunas + belum lunas, kasar dari hutang lama + bmt margin)
+  // Catatan: ini estimasi karena tidak ada relasi transaksi yg sudah lunas ke jamaah
+  // Untuk yang belum anggota saham → simulasi SHU
+  if(!DATA.piutang.length&&!DATA.bmt.length&&!DATA.saham.length){
+    document.getElementById('card-kontribusi').innerHTML='';
+    return;
+  }
+  
+  let html='';
+  
+  // Total piutang sebagai indikator kontribusi (warung+ppob)
+  const totWarung=DATA.piutang.filter(p=>p.ref_type==='transaksi').reduce((s,p)=>s+(p.jml||0),0);
+  const totPpob=DATA.piutang.filter(p=>p.ref_type==='ppob').reduce((s,p)=>s+(p.jml||0),0);
+  const totBmt=DATA.bmt.reduce((s,a)=>s+parseFloat(a.total_angsuran||0),0); // yg sudah dibayar
+  const totalKontri=totWarung+totPpob+totBmt;
+  
+  if(totalKontri<=0&&!DATA.saham.length)return;
+  
+  // Simulasi SHU untuk yang belum anggota
+  let simulasiHtml='';
+  if(!DATA.saham.length&&(totWarung+totPpob)>500000){
+    // Asumsi: SHU/lembar terakhir, kalau punya 5 lembar
+    simulasiHtml=`<div style="background:var(--purple-light);border-radius:var(--radius-sm);padding:12px;margin-top:10px;border-left:3px solid var(--purple)">
+      <div style="font-size:11px;color:var(--purple);font-weight:700;text-transform:uppercase;margin-bottom:4px">💡 Tahukah Anda?</div>
+      <div style="font-size:13px;color:var(--text)">Jika Bapak/Ibu menjadi anggota dengan minimal <b>5 lembar saham</b>, transaksi seperti ini bisa berkontribusi pada SHU yang akan Bapak/Ibu terima sendiri.</div>
+    </div>`;
+  }
+  
+  html=`<div class="card">
+    <div class="card-title"><span class="icon">🤝</span> Kontribusi Bapak/Ibu</div>
+    <div class="kontri-stat">
+      <div class="lbl">Total Aktivitas di UB</div>
+      <div class="val">${rp(totalKontri)}</div>
+      <div class="sub">Terima kasih atas dukungannya 🙏</div>
+    </div>
+    ${simulasiHtml}
+  </div>`;
+  
+  document.getElementById('card-kontribusi').innerHTML=html;
+}
+
+function renderRiwayat(){
+  // Untuk versi ini, kita tampilkan transaksi BMT (yg sudah dibayar)
+  // Plus piutang yg sudah ada (sebagai "aktivitas tercatat", bukan tagihan murni)
+  const el=document.getElementById('card-riwayat');
+  if(!DATA.bmt.length&&!DATA.piutang.length){
+    el.innerHTML='';
+    return;
+  }
+  
+  let rows='';
+  // BMT akad sebagai aktivitas
+  DATA.bmt.slice(0,5).forEach(a=>{
+    const dibayar=parseFloat(a.total_angsuran||0);
+    const pct=a.total_pembiayaan>0?Math.round((dibayar/parseFloat(a.total_pembiayaan))*100):0;
+    rows+=`<div class="tx-row">
+      <div class="top">
+        <div class="item">🏦 Pembiayaan BMT: ${escapeHtml(a.objek_pembiayaan||a.jenis_akad)}</div>
+        <div class="nominal" style="color:var(--green-dark)">${pct}%</div>
+      </div>
+      <div class="tag">${escapeHtml(a.no_akad)} · ${fD(a.tanggal_akad)} · Sudah dibayar: ${rp(dibayar)} dari ${rp(a.total_pembiayaan)}</div>
+    </div>`;
+  });
+  
+  if(!rows){el.innerHTML='';return}
+  
+  el.innerHTML=`<div class="card">
+    <div class="card-title"><span class="icon">📋</span> Aktivitas Tercatat</div>
+    ${rows}
+  </div>`;
+}
+
+function renderPending(){
+  const el=document.getElementById('card-pending');
+  const totalPiutang=DATA.piutang.reduce((s,p)=>s+(p.jml||0),0);
+  const totalSisaBmt=DATA.bmt.reduce((s,a)=>s+parseFloat(a.sisa_angsuran||0),0);
+  
+  if(totalPiutang<=0&&totalSisaBmt<=0){
+    el.innerHTML='';
+    return;
+  }
+  
+  let html=`<div class="card pending-card">
+    <div class="card-title">
+      <span class="icon">📝</span> Catatan Administrasi
+    </div>
+    <p style="font-size:12px;color:#78350f;margin-bottom:12px">Berikut beberapa aktivitas yang masih dalam proses penyelesaian administrasi:</p>`;
+  
+  // Piutang warung & PPOB
+  DATA.piutang.forEach(p=>{
+    const isPpob=p.ref_type==='ppob'||String(p.ket||'').toLowerCase().includes('ppob');
+    html+=`<div class="pending-row">
+      <div class="pen-top">
+        <div class="pen-item">${isPpob?'📱':'🛒'} ${escapeHtml(p.ket||(isPpob?'PPOB':'Belanja Warung'))}</div>
+        <div class="pen-amt">${rp(p.jml)}</div>
+      </div>
+      <div class="pen-meta">${fD(p.tgl)}</div>
+    </div>`;
+  });
+  
+  // BMT sisa
+  DATA.bmt.forEach(a=>{
+    const sudahBayar=parseFloat(a.total_angsuran||0);
+    const totalPembiayaan=parseFloat(a.total_pembiayaan||0);
+    html+=`<div class="pending-row">
+      <div class="pen-top">
+        <div class="pen-item">🏦 Pembiayaan BMT: ${escapeHtml(a.objek_pembiayaan||a.jenis_akad)}</div>
+        <div class="pen-amt">${rp(a.sisa_angsuran)}</div>
+      </div>
+      <div class="pen-meta">${escapeHtml(a.no_akad)} · Angsuran/bln: ${rp(a.angsuran_perbulan)} · Tgl rutin: ${a.tgl_rutin||'-'}</div>
+    </div>`;
+  });
+  
+  html+=`<div class="pending-info">
+    💡 Jika ada yang sudah Bapak/Ibu bayar tapi belum tercatat, mohon informasikan ke pengurus melalui tombol di bawah.
+  </div>
+  <button class="btn-konfirmasi" onclick="openKonf()">
+    ✓ Konfirmasi Sudah Bayar
+  </button>
+  </div>`;
+  
+  el.innerHTML=html;
+}
+
+function renderCTA(){
+  const el=document.getElementById('card-cta');
+  if(DATA.saham.length){
+    // Sudah anggota → ajak tambah saham
+    el.innerHTML=`<div class="card cta-card">
+      <div class="card-title"><span class="icon">🚀</span> Tingkatkan Kepemilikan Saham</div>
+      <p>Bapak/Ibu sudah menjadi bagian dari UB. Tambah kepemilikan saham untuk meningkatkan SHU yang akan diterima setiap periode.</p>
+      <a href="dashboard-keluarga.html" class="cta-btn">➕ Ajukan Tambah Saham</a>
+    </div>`;
+  }else{
+    // Belum anggota → ajak jadi anggota
+    el.innerHTML=`<div class="card cta-card">
+      <div class="card-title"><span class="icon">🌟</span> Bergabung Sebagai Anggota</div>
+      <p>Jadi bagian dari Usaha Bersama UBNB Perwira. Dapatkan SHU (Sisa Hasil Usaha) setiap periode dari aktivitas usaha bersama.</p>
+      <a href="dashboard-keluarga.html" class="cta-btn">💎 Daftar Anggota & Beli Saham</a>
+    </div>`;
+  }
+}
+
+// ===== KONFIRMASI BAYAR =====
+function openKonf(){document.getElementById('modal-konf').classList.add('show')}
+function closeKonf(){document.getElementById('modal-konf').classList.remove('show')}
+function kirimKonfirmasi(){
+  const txt=document.getElementById('konf-text').value.trim();
+  if(!txt){alert('Mohon tulis informasi pembayaran');return}
+  const nama=DATA.jamaah?.nama||DATA.token.nama_snapshot||'-';
+  const pesan=`Assalamualaikum, mohon konfirmasi pembayaran untuk:
+
+*Nama:* ${nama}
+
+*Detail:*
+${txt}
+
+Terima kasih 🙏`;
+  window.open(`https://wa.me/${WA_PENGURUS}?text=${encodeURIComponent(pesan)}`,'_blank');
+  closeKonf();
+}
+
+// ===== BOOT =====
+init().catch(e=>{
+  console.error(e);
+  showError('Terjadi Kesalahan','Mohon coba lagi nanti atau hubungi pengurus.');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Piutang - UBNB Perwira</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --green:#1a6640;--green-dark:#0f4a2d;--green-light:#e6f4ec;
+  --gold:#c9a961;--gold-dark:#a8893f;--gold-light:#fdf6e3;
+  --blue:#2563eb;--blue-light:#dbeafe;
+  --red:#dc2626;--red-light:#fee2e2;
+  --amber:#f59e0b;--amber-light:#fef3c7;
+  --purple:#7c3aed;
+  --bg:#f5f5f0;--surface:#fff;--surface2:#fafaf5;
+  --text:#1a1a1a;--text-muted:#666;--border:#e5e5e0;
+  --radius:14px;--radius-sm:10px;--radius-xs:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;font-size:14px}
+
+/* LOGIN */
+#login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-card{background:white;border-radius:var(--radius);padding:30px 24px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.1)}
+.login-logo{text-align:center;margin-bottom:24px}
+.licon{font-size:48px;margin-bottom:10px}
+.login-logo h1{font-size:18px;color:var(--green);margin-bottom:4px}
+.login-logo p{font-size:12px;color:var(--text-muted)}
+.lfield{margin-bottom:14px}
+.lfield label{display:block;font-size:12px;font-weight:600;margin-bottom:5px;color:var(--text-muted)}
+.lfield input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:14px;outline:none}
+.lfield input:focus{border-color:var(--green)}
+.btn-login{width:100%;padding:11px;background:var(--green);color:white;border:none;border-radius:var(--radius-xs);font-weight:700;font-size:14px;cursor:pointer;margin-top:8px}
+.btn-login:hover{background:var(--green-dark)}
+#login-err{color:var(--red);font-size:12px;margin-top:10px;text-align:center;min-height:18px}
+
+/* APP */
+#app{display:none}
+.topbar{background:white;border-bottom:1.5px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:50}
+.topbar h1{font-size:16px;color:var(--green);flex:1}
+.topbar .user{font-size:12px;color:var(--text-muted)}
+.btn-logout{background:none;border:1.5px solid var(--border);padding:6px 12px;border-radius:var(--radius-xs);font-size:12px;cursor:pointer;color:var(--text-muted)}
+.btn-logout:hover{background:var(--red-light);color:var(--red);border-color:var(--red)}
+
+.main-wrap{max-width:1100px;margin:0 auto;padding:20px}
+
+/* TABS */
+.tabs{display:flex;gap:4px;background:white;border-radius:var(--radius);padding:6px;margin-bottom:18px;overflow-x:auto;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.tab{padding:10px 16px;border-radius:var(--radius-sm);font-weight:600;font-size:13px;cursor:pointer;border:none;background:transparent;color:var(--text-muted);white-space:nowrap;flex:1;min-width:max-content}
+.tab.active{background:var(--green);color:white}
+.tab:hover:not(.active){background:var(--bg)}
+
+.page{display:none}
+.page.active{display:block}
+
+/* CARD */
+.card{background:white;border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.card-title{font-weight:700;font-size:15px;margin-bottom:14px;color:var(--green);display:flex;align-items:center;gap:8px;justify-content:space-between}
+.card-title small{font-size:11px;color:var(--text-muted);font-weight:500}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.stat{background:white;border-radius:var(--radius-sm);padding:12px;text-align:center;border:1.5px solid var(--border)}
+.stat .lbl{font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+.stat .val{font-size:20px;font-weight:800;color:var(--green)}
+.stat.red .val{color:var(--red)}
+.stat.gold .val{color:var(--gold-dark)}
+.stat.blue .val{color:var(--blue)}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border)}
+table.dt{width:100%;border-collapse:collapse;font-size:12px}
+table.dt th{background:var(--green-light);color:var(--green-dark);font-weight:700;padding:10px 8px;text-align:left;border-bottom:2px solid var(--green);font-size:11px;text-transform:uppercase;letter-spacing:0.3px}
+table.dt td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.dt tr:hover td{background:var(--surface2)}
+table.dt .nominal{font-family:'Courier New',monospace;text-align:right;font-weight:600}
+
+/* FILTER BAR */
+.fbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.fbar input,.fbar select{padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:13px;outline:none;background:white}
+.fbar input:focus,.fbar select:focus{border-color:var(--green)}
+.pill{padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--text-muted)}
+.pill.active{background:var(--green);color:white;border-color:var(--green)}
+
+/* BUTTONS */
+.btn{padding:7px 12px;border:none;border-radius:var(--radius-xs);font-weight:600;font-size:12px;cursor:pointer;transition:all 0.15s}
+.btn.primary{background:var(--green);color:white}
+.btn.primary:hover{background:var(--green-dark)}
+.btn.gold{background:var(--gold);color:white}
+.btn.blue{background:var(--blue);color:white}
+.btn.danger{background:var(--red);color:white}
+.btn.sec{background:var(--bg);color:var(--text);border:1.5px solid var(--border)}
+.btn.sm{padding:5px 9px;font-size:11px}
+.btn.wa{background:#25d366;color:white;display:inline-flex;align-items:center;gap:4px}
+
+/* BADGE */
+.badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:0.3px}
+.bg-green{background:var(--green-light);color:var(--green-dark)}
+.bg-gold{background:var(--gold-light);color:var(--gold-dark)}
+.bg-red{background:var(--red-light);color:var(--red)}
+.bg-blue{background:var(--blue-light);color:var(--blue)}
+.bg-amber{background:var(--amber-light);color:#92400e}
+
+/* MAPPING ROW */
+.map-row{background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px}
+.map-row.done{border-color:var(--green);background:var(--green-light)}
+.map-row .row-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+.map-row .meta{font-size:11px;color:var(--text-muted);margin-top:3px}
+.map-row .nominal-big{font-size:16px;font-weight:800;color:var(--red);font-family:'Courier New',monospace}
+.map-row.done .nominal-big{color:var(--green)}
+.map-row .actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+
+/* AUTOCOMPLETE */
+.ac-wrap{position:relative;flex:1;min-width:200px}
+.ac-wrap input{width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:13px;outline:none}
+.ac-dropdown{position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--green);border-radius:var(--radius-xs);max-height:240px;overflow-y:auto;z-index:100;box-shadow:0 4px 20px rgba(0,0,0,0.15);display:none}
+.ac-dropdown.show{display:block}
+.ac-item{padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px}
+.ac-item:hover,.ac-item.hl{background:var(--green-light)}
+.ac-item .nm{font-weight:600}
+.ac-item .sub{font-size:11px;color:var(--text-muted);margin-top:2px}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:#1a1a1a;color:white;padding:12px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;z-index:9999;transition:transform 0.3s;max-width:90vw}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.err{background:var(--red)}
+#toast.ok{background:var(--green)}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--text-muted)}
+.empty .ei{font-size:48px;margin-bottom:8px;opacity:0.5}
+
+/* SPINNER */
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:white;animation:spin 0.8s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* LINK BOX */
+.link-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs);padding:6px 10px;font-family:monospace;font-size:11px;word-break:break-all;display:inline-block;max-width:100%}
+
+@media(max-width:768px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .topbar h1{font-size:14px}
+  .main-wrap{padding:14px}
+  table.dt{font-size:11px}
+  table.dt th,table.dt td{padding:7px 5px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="licon">📊</div>
+      <h1>Laporan Piutang UBNB</h1>
+      <p>Mapping & Generate Link Personal</p>
+    </div>
+    <div class="lfield"><label>Username</label><input type="text" id="inp-user" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="lfield"><label>Password</label><input type="password" id="inp-pass" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-login" onclick="doLogin()" id="btn-login">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <h1>📊 Laporan Piutang UBNB Perwira</h1>
+    <span class="user" id="user-info">-</span>
+    <button class="btn-logout" onclick="doLogout()">Keluar</button>
+  </div>
+
+  <div class="main-wrap">
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active" onclick="showPage('dashboard',this)">📊 Ringkasan</button>
+      <button class="tab" onclick="showPage('mapping',this)">🔗 Map Tagihan</button>
+      <button class="tab" onclick="showPage('token',this)">🎟️ Generate Link</button>
+      <button class="tab" onclick="showPage('monitor',this)">👁️ Monitoring</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stat-grid">
+        <div class="stat red"><div class="lbl">Piutang Warung</div><div class="val" id="s-warung">-</div></div>
+        <div class="stat red"><div class="lbl">Piutang PPOB</div><div class="val" id="s-ppob">-</div></div>
+        <div class="stat red"><div class="lbl">Sisa BMT</div><div class="val" id="s-bmt">-</div></div>
+        <div class="stat gold"><div class="lbl">Total Piutang</div><div class="val" id="s-total">-</div></div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><div class="lbl">Sudah Dimap</div><div class="val" id="s-map-done">-</div></div>
+        <div class="stat red"><div class="lbl">Belum Dimap</div><div class="val" id="s-map-todo">-</div></div>
+        <div class="stat blue"><div class="lbl">Token Aktif</div><div class="val" id="s-token">-</div></div>
+        <div class="stat"><div class="lbl">Link Sudah Dibuka</div><div class="val" id="s-opened">-</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 Petunjuk Penggunaan</div>
+        <ol style="padding-left:20px;font-size:13px;color:var(--text);line-height:1.8">
+          <li><b>Tab Map Tagihan</b> — Hubungkan piutang warung/PPOB lama (yang hanya simpan nama) ke data jamaah. Klik nama di dropdown untuk map. Akad BMT yang belum punya jamaah_did juga muncul di sini.</li>
+          <li><b>Tab Generate Link</b> — Bikin token unik untuk setiap orang yang punya piutang/akad/saham. Bisa per orang atau batch sekaligus. Link bisa dikirim via WhatsApp.</li>
+          <li><b>Tab Monitoring</b> — Lihat siapa yang sudah buka link, kapan terakhir dibuka, berapa kali.</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- MAPPING -->
+    <div class="page" id="page-mapping">
+      <div class="card">
+        <div class="card-title">
+          <span>🔗 Map Piutang Warung & PPOB ke Jamaah</span>
+          <small id="map-count">-</small>
+        </div>
+        <div class="fbar">
+          <button class="pill active" onclick="setMapFilter('belum',this)">🔴 Belum Dimap</button>
+          <button class="pill" onclick="setMapFilter('sudah',this)">🟢 Sudah Dimap</button>
+          <button class="pill" onclick="setMapFilter('semua',this)">📋 Semua</button>
+          <input type="text" id="map-search" placeholder="🔍 Cari nama..." oninput="renderMappingHutang()" style="flex:1;min-width:180px">
+        </div>
+        <div id="map-list-hutang"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>🏦 Map Akad BMT ke Jamaah</span>
+          <small id="map-bmt-count">-</small>
+        </div>
+        <div class="fbar">
+          <button class="pill active" onclick="setMapBmtFilter('belum',this)">🔴 Belum Dimap</button>
+          <button class="pill" onclick="setMapBmtFilter('sudah',this)">🟢 Sudah Dimap</button>
+          <button class="pill" onclick="setMapBmtFilter('semua',this)">📋 Semua</button>
+        </div>
+        <div id="map-list-bmt"></div>
+      </div>
+    </div>
+
+    <!-- TOKEN -->
+    <div class="page" id="page-token">
+      <div class="card">
+        <div class="card-title">🎟️ Generate Link Personal</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Link akan otomatis dibuat untuk semua jamaah yang punya piutang, akad BMT, atau saham aktif.</p>
+        <button class="btn primary" onclick="generateBatchToken()" id="btn-batch">⚡ Generate Token untuk Semua</button>
+        <button class="btn sec" onclick="loadTokens()">↻ Refresh</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>📋 Daftar Token Tersimpan</span>
+          <small id="tok-count">-</small>
+        </div>
+        <div class="fbar">
+          <input type="text" id="tok-search" placeholder="🔍 Cari nama..." oninput="renderTokens()" style="flex:1;min-width:180px">
+          <select id="tok-filter" onchange="renderTokens()">
+            <option value="semua">Semua</option>
+            <option value="dibuka">Sudah dibuka</option>
+            <option value="belum">Belum dibuka</option>
+            <option value="ada-piutang">Ada piutang</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table class="dt">
+            <thead><tr>
+              <th>Nama</th><th>Kelompok</th><th>No HP/WA</th>
+              <th>Status</th><th>Dibuka</th><th>Link</th><th>Aksi</th>
+            </tr></thead>
+            <tbody id="tok-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MONITOR -->
+    <div class="page" id="page-monitor">
+      <div class="card">
+        <div class="card-title">👁️ Monitoring Akses Link</div>
+        <div class="stat-grid">
+          <div class="stat blue"><div class="lbl">Total Link</div><div class="val" id="m-total">-</div></div>
+          <div class="stat"><div class="lbl">Sudah Dibuka</div><div class="val" id="m-opened">-</div></div>
+          <div class="stat red"><div class="lbl">Belum Dibuka</div><div class="val" id="m-pending">-</div></div>
+          <div class="stat gold"><div class="lbl">Total Kunjungan</div><div class="val" id="m-visits">-</div></div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="dt">
+            <thead><tr><th>Nama</th><th>Kelompok</th><th>Dibuat</th><th>Dibuka Terakhir</th><th>Jumlah Buka</th></tr></thead>
+            <tbody id="mon-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== SUPABASE =====
+const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+let CU=null;
+
+// Data global
+let aHutang=[],aBmt=[],aJamaah=[],aSaham=[],aAnggota=[],aTokens=[];
+let mapFilter='belum',mapBmtFilter='belum';
+
+// ===== UTILS =====
+function rp(n){if(n==null||isNaN(n))return 'Rp 0';return 'Rp '+Math.round(n).toLocaleString('id-ID')}
+function fD(s){if(!s)return '-';const d=new Date(s);return d.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}
+function fDT(s){if(!s)return '-';const d=new Date(s);return d.toLocaleDateString('id-ID',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}
+function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='show'+(type==='err'?' err':type==='ok'?' ok':'');setTimeout(()=>t.className=t.className.replace('show',''),3000)}
+function genToken(){const chars='abcdefghijklmnopqrstuvwxyz0123456789';let s='';for(let i=0;i<16;i++)s+=chars[Math.floor(Math.random()*chars.length)];return s}
+function getLinkUrl(token){return window.location.origin+window.location.pathname.replace('laporan-piutang.html','laporan-saya.html')+'?t='+token}
+function escapeHtml(s){if(!s)return '';return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+// ===== LOGIN =====
+async function doLogin(){
+  const u=document.getElementById('inp-user').value.trim();
+  const p=document.getElementById('inp-pass').value.trim();
+  const btn=document.getElementById('btn-login');
+  const err=document.getElementById('login-err');
+  if(!u||!p){err.textContent='Username & password wajib diisi';return}
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Memeriksa...';
+  err.textContent='';
+  const {data,error}=await sb.from('users').select('username,role').eq('username',u).eq('password',p).maybeSingle();
+  btn.disabled=false;btn.innerHTML='Masuk';
+  if(error||!data){err.textContent='Username/password salah';return}
+  CU={username:data.username,role:data.role};
+  sessionStorage.setItem('lp_user',JSON.stringify(CU));
+  document.getElementById('login-wrap').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-info').textContent='👤 '+CU.username+' ('+CU.role+')';
+  await loadAll();
+}
+function doLogout(){sessionStorage.removeItem('lp_user');location.reload()}
+window.addEventListener('DOMContentLoaded',async ()=>{
+  const saved=sessionStorage.getItem('lp_user');
+  if(saved){
+    try{
+      CU=JSON.parse(saved);
+      document.getElementById('login-wrap').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('user-info').textContent='👤 '+CU.username+' ('+CU.role+')';
+      await loadAll();
+    }catch(e){sessionStorage.removeItem('lp_user')}
+  }
+});
+
+// ===== LOAD ALL =====
+async function loadAll(){
+  toast('⏳ Memuat data...');
+  const [h,b,j,s,a,t]=await Promise.all([
+    sb.from('hutang').select('*').eq('tipe','piutang').eq('lunas',false).order('tgl',{ascending:false}),
+    sb.from('bmt_akad').select('*').eq('status','Belum Lunas').order('tanggal_akad',{ascending:false}),
+    sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok,nomor_wa').order('nama'),
+    sb.from('ubnb_saham').select('id,nama,jamaah_did,jumlah_lembar,kelompok,nama_keluarga,no_hp,status').eq('status','Aktif'),
+    sb.from('ubnb_anggota').select('id,nama,jamaah_did,kelompok,no_hp,status').eq('status','Aktif'),
+    sb.from('laporan_token').select('*').order('created_at',{ascending:false})
+  ]);
+  aHutang=h.data||[];aBmt=b.data||[];aJamaah=j.data||[];aSaham=s.data||[];aAnggota=a.data||[];aTokens=t.data||[];
+  renderDashboard();renderMappingHutang();renderMappingBmt();renderTokens();renderMonitor();
+  toast('✅ Data dimuat','ok');
+}
+
+// ===== NAV =====
+function showPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(btn)btn.classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(){
+  const wp=aHutang.filter(h=>h.ref_type==='transaksi'||(!h.ref_type&&!String(h.ket||'').toLowerCase().includes('ppob')));
+  const pp=aHutang.filter(h=>h.ref_type==='ppob'||String(h.ket||'').toLowerCase().includes('ppob'));
+  const totWarung=wp.reduce((s,h)=>s+(h.jml||0),0);
+  const totPpob=pp.reduce((s,h)=>s+(h.jml||0),0);
+  const totBmt=aBmt.reduce((s,a)=>s+parseFloat(a.sisa_angsuran||0),0);
+  document.getElementById('s-warung').textContent=rp(totWarung);
+  document.getElementById('s-ppob').textContent=rp(totPpob);
+  document.getElementById('s-bmt').textContent=rp(totBmt);
+  document.getElementById('s-total').textContent=rp(totWarung+totPpob+totBmt);
+
+  const mapDone=aHutang.filter(h=>h.jamaah_did).length+aBmt.filter(a=>a.jamaah_did).length;
+  const mapTodo=aHutang.filter(h=>!h.jamaah_did).length+aBmt.filter(a=>!a.jamaah_did).length;
+  document.getElementById('s-map-done').textContent=mapDone;
+  document.getElementById('s-map-todo').textContent=mapTodo;
+  document.getElementById('s-token').textContent=aTokens.length;
+  document.getElementById('s-opened').textContent=aTokens.filter(t=>t.dibuka_count>0).length;
+}
+
+// ===== FUZZY MATCH =====
+function suggestJamaah(searchText,limit=8){
+  if(!searchText||searchText.length<2)return [];
+  const q=searchText.toLowerCase();
+  // Score sederhana: nama match dapat poin lebih tinggi dari nama_kk
+  const scored=aJamaah.map(j=>{
+    const nm=(j.nama||'').toLowerCase();
+    const kk=(j.nama_kk||'').toLowerCase();
+    let score=0;
+    if(nm===q)score=100;
+    else if(nm.startsWith(q))score=80;
+    else if(nm.includes(q))score=60;
+    else if(kk.includes(q))score=40;
+    // bonus untuk kelompok match (e.g. "klp 3" atau "pw3")
+    const kelMatch=q.match(/(?:klp|pw|kelompok)\s*(\d+)/i);
+    if(kelMatch&&j.kelompok&&j.kelompok.includes(kelMatch[1]))score+=10;
+    return {j,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,limit);
+  return scored.map(x=>x.j);
+}
+
+// ===== MAPPING HUTANG =====
+function setMapFilter(f,btn){
+  mapFilter=f;
+  btn.parentElement.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  renderMappingHutang();
+}
+function renderMappingHutang(){
+  const search=(document.getElementById('map-search')?.value||'').toLowerCase();
+  let data=[...aHutang];
+  if(mapFilter==='belum')data=data.filter(h=>!h.jamaah_did);
+  else if(mapFilter==='sudah')data=data.filter(h=>h.jamaah_did);
+  if(search)data=data.filter(h=>(h.nama||'').toLowerCase().includes(search)||(h.ket||'').toLowerCase().includes(search));
+  
+  document.getElementById('map-count').textContent=data.length+' tagihan';
+  const el=document.getElementById('map-list-hutang');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">📋</div>Tidak ada data</div>';return}
+  
+  el.innerHTML=data.map(h=>{
+    const mapped=!!h.jamaah_did;
+    const jm=mapped?aJamaah.find(j=>j.did===h.jamaah_did):null;
+    const isPpob=h.ref_type==='ppob'||String(h.ket||'').toLowerCase().includes('ppob');
+    return `<div class="map-row ${mapped?'done':''}">
+      <div class="row-top">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px">${escapeHtml(h.nama||'(tanpa nama)')}</div>
+          <div class="meta">
+            <span class="badge ${isPpob?'bg-blue':'bg-gold'}">${isPpob?'PPOB':'Warung'}</span>
+            · ${fD(h.tgl)} 
+            ${h.ket?'· '+escapeHtml(h.ket.slice(0,80)):''}
+          </div>
+        </div>
+        <div class="nominal-big">${rp(h.jml)}</div>
+      </div>
+      ${mapped?
+        `<div class="actions">
+          <span class="badge bg-green">✓ Dimap ke: ${escapeHtml(jm?.nama||h.jamaah_did)} ${jm?.kelompok?'('+jm.kelompok+')':''}</span>
+          <button class="btn sec sm" onclick="unmapHutang(${h.id})">✕ Batalkan</button>
+        </div>`
+        :
+        `<div class="actions">
+          <div class="ac-wrap">
+            <input type="text" id="ac-h-${h.id}" placeholder="Ketik nama jamaah..." 
+              value="${escapeHtml(h.nama||'')}"
+              oninput="acSearch('h-${h.id}',this.value,${h.id})"
+              onfocus="acSearch('h-${h.id}',this.value,${h.id})">
+            <div class="ac-dropdown" id="acd-h-${h.id}"></div>
+          </div>
+        </div>`
+      }
+    </div>`;
+  }).join('');
+}
+function acSearch(ctxId,val,refId){
+  const dd=document.getElementById('acd-'+ctxId);
+  if(!dd)return;
+  const list=suggestJamaah(val);
+  if(!list.length){dd.classList.remove('show');return}
+  dd.innerHTML=list.map(j=>`<div class="ac-item" onclick="mapHutangPick('${ctxId}',${refId},'${j.did}')">
+    <div class="nm">${escapeHtml(j.nama)} ${j.kelompok?'<span class="badge bg-blue">PW'+j.kelompok+'</span>':''}</div>
+    <div class="sub">KK: ${escapeHtml(j.nama_kk||'-')} ${j.nomor_wa?'· 📱 '+escapeHtml(j.nomor_wa):''}</div>
+  </div>`).join('');
+  dd.classList.add('show');
+  // Close on outside click
+  setTimeout(()=>{
+    document.addEventListener('click',function h(e){
+      if(!e.target.closest('#acd-'+ctxId)&&!e.target.closest('#ac-'+ctxId)){
+        dd.classList.remove('show');
+        document.removeEventListener('click',h);
+      }
+    });
+  },10);
+}
+async function mapHutangPick(ctxId,hutangId,did){
+  const {error}=await sb.from('hutang').update({jamaah_did:did}).eq('id',hutangId);
+  if(error){toast('Gagal map: '+error.message,'err');return}
+  const h=aHutang.find(x=>x.id===hutangId);if(h)h.jamaah_did=did;
+  toast('✅ Berhasil dimap','ok');
+  renderMappingHutang();renderDashboard();
+}
+async function unmapHutang(hutangId){
+  if(!confirm('Batalkan mapping piutang ini?'))return;
+  const {error}=await sb.from('hutang').update({jamaah_did:null}).eq('id',hutangId);
+  if(error){toast('Gagal: '+error.message,'err');return}
+  const h=aHutang.find(x=>x.id===hutangId);if(h)h.jamaah_did=null;
+  toast('Mapping dibatalkan','ok');
+  renderMappingHutang();renderDashboard();
+}
+
+// ===== MAPPING BMT =====
+function setMapBmtFilter(f,btn){
+  mapBmtFilter=f;
+  btn.parentElement.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  renderMappingBmt();
+}
+function renderMappingBmt(){
+  let data=[...aBmt];
+  if(mapBmtFilter==='belum')data=data.filter(a=>!a.jamaah_did);
+  else if(mapBmtFilter==='sudah')data=data.filter(a=>a.jamaah_did);
+  document.getElementById('map-bmt-count').textContent=data.length+' akad';
+  const el=document.getElementById('map-list-bmt');
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">🏦</div>Tidak ada data</div>';return}
+  el.innerHTML=data.map(a=>{
+    const mapped=!!a.jamaah_did;
+    const jm=mapped?aJamaah.find(j=>j.did===a.jamaah_did):null;
+    return `<div class="map-row ${mapped?'done':''}">
+      <div class="row-top">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px">${escapeHtml(a.nama_jamaah)} ${a.kelompok?'<span class="badge bg-blue">'+a.kelompok+'</span>':''}</div>
+          <div class="meta">${a.no_akad} · ${a.jenis_akad} · ${escapeHtml(a.objek_pembiayaan||'-').slice(0,60)}</div>
+        </div>
+        <div class="nominal-big">${rp(a.sisa_angsuran)}</div>
+      </div>
+      ${mapped?
+        `<div class="actions">
+          <span class="badge bg-green">✓ Dimap ke: ${escapeHtml(jm?.nama||a.jamaah_did)}</span>
+          <button class="btn sec sm" onclick="unmapBmt(${a.id})">✕ Batalkan</button>
+        </div>`
+        :
+        `<div class="actions">
+          <div class="ac-wrap">
+            <input type="text" id="ac-b-${a.id}" placeholder="Ketik nama jamaah..." 
+              value="${escapeHtml(a.nama_jamaah||'')}"
+              oninput="acSearchBmt('b-${a.id}',this.value,${a.id})"
+              onfocus="acSearchBmt('b-${a.id}',this.value,${a.id})">
+            <div class="ac-dropdown" id="acd-b-${a.id}"></div>
+          </div>
+        </div>`
+      }
+    </div>`;
+  }).join('');
+}
+function acSearchBmt(ctxId,val,refId){
+  const dd=document.getElementById('acd-'+ctxId);
+  if(!dd)return;
+  const list=suggestJamaah(val);
+  if(!list.length){dd.classList.remove('show');return}
+  dd.innerHTML=list.map(j=>`<div class="ac-item" onclick="mapBmtPick(${refId},'${j.did}')">
+    <div class="nm">${escapeHtml(j.nama)} ${j.kelompok?'<span class="badge bg-blue">PW'+j.kelompok+'</span>':''}</div>
+    <div class="sub">KK: ${escapeHtml(j.nama_kk||'-')}</div>
+  </div>`).join('');
+  dd.classList.add('show');
+  setTimeout(()=>{
+    document.addEventListener('click',function h(e){
+      if(!e.target.closest('#acd-'+ctxId)&&!e.target.closest('#ac-'+ctxId)){
+        dd.classList.remove('show');
+        document.removeEventListener('click',h);
+      }
+    });
+  },10);
+}
+async function mapBmtPick(akadId,did){
+  const {error}=await sb.from('bmt_akad').update({jamaah_did:did}).eq('id',akadId);
+  if(error){toast('Gagal map: '+error.message,'err');return}
+  const a=aBmt.find(x=>x.id===akadId);if(a)a.jamaah_did=did;
+  toast('✅ Akad BMT berhasil dimap','ok');
+  renderMappingBmt();renderDashboard();
+}
+async function unmapBmt(akadId){
+  if(!confirm('Batalkan mapping akad ini?'))return;
+  const {error}=await sb.from('bmt_akad').update({jamaah_did:null}).eq('id',akadId);
+  if(error){toast('Gagal: '+error.message,'err');return}
+  const a=aBmt.find(x=>x.id===akadId);if(a)a.jamaah_did=null;
+  toast('Mapping dibatalkan','ok');
+  renderMappingBmt();renderDashboard();
+}
+
+// ===== GENERATE TOKEN =====
+function getJamaahPunyaPiutangAtauAkad(){
+  // Kumpulkan semua jamaah_did unik dari hutang+bmt+saham+anggota
+  const set=new Set();
+  aHutang.filter(h=>h.jamaah_did).forEach(h=>set.add(h.jamaah_did));
+  aBmt.filter(a=>a.jamaah_did).forEach(a=>set.add(a.jamaah_did));
+  aSaham.filter(s=>s.jamaah_did).forEach(s=>set.add(s.jamaah_did));
+  aAnggota.filter(a=>a.jamaah_did).forEach(a=>set.add(a.jamaah_did));
+  return [...set];
+}
+
+async function generateBatchToken(){
+  const btn=document.getElementById('btn-batch');
+  const dids=getJamaahPunyaPiutangAtauAkad();
+  if(!dids.length){toast('Tidak ada jamaah yang perlu di-generate (semua belum dimap?)','err');return}
+  
+  // Skip jamaah yang sudah punya token
+  const existing=new Set(aTokens.map(t=>t.jamaah_did));
+  const need=dids.filter(d=>!existing.has(d));
+  
+  if(!need.length){toast('Semua jamaah sudah punya token','ok');return}
+  
+  if(!confirm(`Generate ${need.length} token baru?\n(${dids.length-need.length} sudah ada, akan dilewati)`))return;
+  
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Membuat...';
+  let ok=0,fail=0;
+  for(const did of need){
+    const jm=aJamaah.find(j=>j.did===did);
+    if(!jm){fail++;continue}
+    // Cari no_hp dari saham/anggota dulu, fallback ke jamaah_desa.nomor_wa
+    const sh=aSaham.find(s=>s.jamaah_did===did);
+    const ag=aAnggota.find(a=>a.jamaah_did===did);
+    const hp=sh?.no_hp||ag?.no_hp||jm.nomor_wa||'';
+    const tok=genToken();
+    const {error}=await sb.from('laporan_token').insert([{
+      token:tok,jamaah_did:did,nama_snapshot:jm.nama,no_hp:hp,created_by:CU.username
+    }]);
+    if(error)fail++;else ok++;
+  }
+  btn.disabled=false;btn.innerHTML='⚡ Generate Token untuk Semua';
+  toast(`✅ ${ok} token dibuat${fail?', '+fail+' gagal':''}`,fail?'err':'ok');
+  await loadTokens();
+}
+
+async function generateOneToken(did){
+  const exist=aTokens.find(t=>t.jamaah_did===did);
+  if(exist){toast('Sudah punya token','err');return}
+  const jm=aJamaah.find(j=>j.did===did);
+  if(!jm){toast('Jamaah tidak ditemukan','err');return}
+  const sh=aSaham.find(s=>s.jamaah_did===did);
+  const ag=aAnggota.find(a=>a.jamaah_did===did);
+  const hp=sh?.no_hp||ag?.no_hp||jm.nomor_wa||'';
+  const tok=genToken();
+  const {error}=await sb.from('laporan_token').insert([{
+    token:tok,jamaah_did:did,nama_snapshot:jm.nama,no_hp:hp,created_by:CU.username
+  }]);
+  if(error){toast('Gagal: '+error.message,'err');return}
+  toast('✅ Token dibuat','ok');
+  await loadTokens();
+}
+
+async function loadTokens(){
+  const {data}=await sb.from('laporan_token').select('*').order('created_at',{ascending:false});
+  aTokens=data||[];
+  renderTokens();renderMonitor();renderDashboard();
+}
+
+async function deleteToken(tok){
+  if(!confirm('Hapus token ini? Link tidak akan bisa dibuka lagi.'))return;
+  const {error}=await sb.from('laporan_token').delete().eq('token',tok);
+  if(error){toast('Gagal: '+error.message,'err');return}
+  toast('Token dihapus','ok');
+  loadTokens();
+}
+
+function copyLink(token){
+  const url=getLinkUrl(token);
+  navigator.clipboard.writeText(url).then(()=>toast('✅ Link disalin','ok'));
+}
+
+function kirimWA(token,hp,nama){
+  if(!hp){
+    const inp=prompt('Nomor HP/WA untuk '+nama+':');
+    if(!inp)return;
+    hp=inp;
+    sb.from('laporan_token').update({no_hp:hp}).eq('token',token).then(()=>{
+      const t=aTokens.find(x=>x.token===token);if(t)t.no_hp=hp;
+    });
+  }
+  let phone=String(hp).replace(/\D/g,'');
+  if(phone.startsWith('0'))phone='62'+phone.slice(1);
+  else if(!phone.startsWith('62'))phone='62'+phone;
+  const url=getLinkUrl(token);
+  const pesan=`Assalamualaikum *${nama}*,
+
+Berikut laporan keanggotaan & kontribusi Bapak/Ibu di Usaha Bersama (UB) Desa Perwira:
+
+${url}
+
+Mohon dicek dan diinfo jika ada yang perlu disesuaikan. Terima kasih 🙏
+
+_UBNB Perwira_`;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`,'_blank');
+}
+
+function renderTokens(){
+  const search=(document.getElementById('tok-search')?.value||'').toLowerCase();
+  const filter=document.getElementById('tok-filter')?.value||'semua';
+  let data=[...aTokens];
+  if(search)data=data.filter(t=>(t.nama_snapshot||'').toLowerCase().includes(search));
+  if(filter==='dibuka')data=data.filter(t=>t.dibuka_count>0);
+  else if(filter==='belum')data=data.filter(t=>!t.dibuka_count);
+  else if(filter==='ada-piutang'){
+    const haveP=new Set();
+    aHutang.filter(h=>h.jamaah_did).forEach(h=>haveP.add(h.jamaah_did));
+    aBmt.filter(a=>a.jamaah_did).forEach(a=>haveP.add(a.jamaah_did));
+    data=data.filter(t=>haveP.has(t.jamaah_did));
+  }
+  document.getElementById('tok-count').textContent=data.length+' link';
+  
+  const tb=document.getElementById('tok-tbody');
+  if(!data.length){tb.innerHTML='<tr><td colspan="7" class="empty">Belum ada token. Klik "Generate Token untuk Semua" di atas.</td></tr>';return}
+  
+  tb.innerHTML=data.map(t=>{
+    const jm=aJamaah.find(j=>j.did===t.jamaah_did);
+    const kel=jm?.kelompok||'-';
+    const url=getLinkUrl(t.token);
+    const dibuka=t.dibuka_count>0
+      ? `<span class="badge bg-green">${t.dibuka_count}x</span> <div style="font-size:10px;color:var(--text-muted)">${fDT(t.dibuka_terakhir)}</div>`
+      : `<span class="badge bg-amber">Belum dibuka</span>`;
+    return `<tr>
+      <td><b>${escapeHtml(t.nama_snapshot||'-')}</b></td>
+      <td>${kel}</td>
+      <td>${escapeHtml(t.no_hp||'<i style="color:var(--text-muted)">-</i>')}</td>
+      <td><span class="badge ${t.dibuka_count>0?'bg-green':'bg-amber'}">${t.dibuka_count>0?'Aktif':'Pending'}</span></td>
+      <td>${dibuka}</td>
+      <td><span class="link-box">${url}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn sec sm" onclick="copyLink('${t.token}')" title="Copy">📋</button>
+        <button class="btn wa sm" onclick="kirimWA('${t.token}','${escapeHtml(t.no_hp||'')}','${escapeHtml(t.nama_snapshot||'')}')">💬 WA</button>
+        <button class="btn danger sm" onclick="deleteToken('${t.token}')" title="Hapus">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== MONITORING =====
+function renderMonitor(){
+  document.getElementById('m-total').textContent=aTokens.length;
+  document.getElementById('m-opened').textContent=aTokens.filter(t=>t.dibuka_count>0).length;
+  document.getElementById('m-pending').textContent=aTokens.filter(t=>!t.dibuka_count).length;
+  document.getElementById('m-visits').textContent=aTokens.reduce((s,t)=>s+(t.dibuka_count||0),0);
+  
+  const tb=document.getElementById('mon-tbody');
+  const sorted=[...aTokens].sort((a,b)=>(b.dibuka_count||0)-(a.dibuka_count||0));
+  if(!sorted.length){tb.innerHTML='<tr><td colspan="5" class="empty">Belum ada token</td></tr>';return}
+  tb.innerHTML=sorted.map(t=>{
+    const jm=aJamaah.find(j=>j.did===t.jamaah_did);
+    return `<tr>
+      <td>${escapeHtml(t.nama_snapshot||'-')}</td>
+      <td>${jm?.kelompok||'-'}</td>
+      <td>${fDT(t.created_at)}</td>
+      <td>${t.dibuka_terakhir?fDT(t.dibuka_terakhir):'<span class="badge bg-amber">Belum</span>'}</td>
+      <td><b>${t.dibuka_count||0}</b>x</td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
