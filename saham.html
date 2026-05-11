@@ -3127,14 +3127,36 @@ async function eksekusiApproveSaham(){
       await sb.from('ubnb_saham').update({anggota_id:masterA.id}).eq('id',newA.id);
     }
 
-    // Catat transaksi beli
+    // Generate no_saham — ambil max dari ubnb_saham_trx
     const tglBeli=new Date().toISOString().slice(0,10);
+    const tahunBeli=new Date().getFullYear();
+    const{data:aTrxAll}=await sb.from('ubnb_saham_trx').select('no_saham,catatan');
+    const reSHMApv=/([0-9]{4})[/]SHM-UBNB[/][0-9]{4}/g;
+    let maxNoApv=0;
+    (aTrxAll||[]).forEach(t=>{
+      const src=t.no_saham||t.catatan||'';
+      let m; reSHMApv.lastIndex=0;
+      while((m=reSHMApv.exec(src))!==null){
+        const n=parseInt(m[1]); if(n>maxNoApv) maxNoApv=n;
+      }
+    });
+    const noSahamApv=String(maxNoApv+1).padStart(4,'0')+'/SHM-UBNB/'+tahunBeli;
+
+    // Catat transaksi beli
     const{data:newTrxApprove}=await sb.from('ubnb_saham_trx').insert([{
       saham_id:newA.id, tipe:'beli', jumlah_lembar:lembar,
       harga_per_lembar:harga, total_nilai:total,
-      tanggal:tglBeli,
-      catatan:'Dari pengajuan dashboard keluarga', operator:CU?.username||'admin'
+      tanggal:tglBeli, no_saham:noSahamApv,
+      catatan:noSahamApv+' - Dari pengajuan dashboard keluarga',
+      operator:CU?.username||'admin'
     }]).select('id').single();
+
+    // Insert sertifikat
+    await sb.from('ubnb_saham_sertifikat').insert([{
+      no_saham:noSahamApv, jumlah_lembar:lembar, tanggal_terbit:tglBeli,
+      pemilik_awal_id:newA.id, pemilik_kini_id:newA.id, status:'aktif'
+    }]);
+
     if(newTrxApprove?.id && masterA?.id){
       await insertShuLogSaham(masterA.id, newTrxApprove.id, tglBeli, total);
     }
