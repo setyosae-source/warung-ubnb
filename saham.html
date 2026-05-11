@@ -1565,6 +1565,12 @@ async function daftarDanBeliSaham(){
 
 async function simpanAnggota(){toast('Gunakan tombol + Anggota Baru untuk mendaftar',true);}
 
+// Placeholder — SHU dihitung saat periode MPPS via hitungDanSimpanSHU()
+// Fungsi ini sengaja no-op agar tidak error; logging saja untuk audit trail
+async function insertShuLogSaham(anggota_id, trx_id, tanggal, total){
+  console.log('[SHU Log] anggota_id:', anggota_id, '| trx_id:', trx_id, '| tgl:', tanggal, '| total:', total);
+}
+
 document.addEventListener('click',function(e){
   if(!e.target.closest('#ma-jamaah-search')&&!e.target.closest('#ma-jamaah-dd')){const dd=document.getElementById('ma-jamaah-dd');if(dd)dd.style.display='none';}
   if(!e.target.closest('#jb-nama-kk')&&!e.target.closest('#jb-kk-dd')){const dd=document.getElementById('jb-kk-dd');if(dd)dd.style.display='none';}
@@ -3076,6 +3082,16 @@ async function eksekusiApproveSaham(){
 
   btn.disabled=true; btn.textContent='⏳ Memproses...';
   try{
+    // Guard: cek apakah pengajuan sudah di-approve (mencegah double-submit)
+    const{data:cekStatus}=await sb.from('pengajuan_saham').select('status').eq('id',id).single();
+    if(cekStatus?.status === 'approved'){
+      toast('⚠️ Pengajuan ini sudah di-approve sebelumnya.', true);
+      btn.disabled=false; btn.textContent='✅ Buat Anggota & Approve';
+      document.getElementById('modal-approve-saham').classList.remove('show');
+      await loadPengajuanSaham(); renderPengajuanSaham();
+      return;
+    }
+
     // Cek duplikat nama
     const{data:existing}=await sb.from('ubnb_saham').select('id,nama').ilike('nama',nama);
     if(existing&&existing.length>0){
