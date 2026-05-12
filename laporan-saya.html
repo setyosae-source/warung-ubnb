@@ -255,21 +255,70 @@ async function init(){
 }
 
 async function loadAllData(did){
-  const [jr,sr,ar,hr,br,bhr]=await Promise.all([
+  // === STEP 1: Cari profil jamaah & anggota_id (kunci lookup) ===
+  const [jr,sr,ar]=await Promise.all([
     sb.from('jamaah_desa').select('*').eq('did',did).maybeSingle(),
     sb.from('ubnb_saham').select('*').eq('jamaah_did',did).eq('status','Aktif'),
-    sb.from('ubnb_anggota').select('*').eq('jamaah_did',did).maybeSingle(),
-    sb.from('hutang').select('*').eq('jamaah_did',did).eq('tipe','piutang').eq('lunas',false).order('tgl',{ascending:false}),
-    sb.from('bmt_akad').select('*').eq('jamaah_did',did).eq('status','Belum Lunas'),
-    Promise.resolve({data:[]})  // SHU detail nanti
+    sb.from('ubnb_anggota').select('*').eq('jamaah_did',did).maybeSingle()
   ]);
   DATA.jamaah=jr.data;
   DATA.saham=sr.data||[];
   DATA.anggota=ar.data;
+  
+  const anggotaId=ar.data?.id||null;
+  
+  // === STEP 2: Load semua tabel transaksi ===
+  // Filter ketat: jamaah_did = X OR anggota_id = Y
+  // Tidak pakai nama match (data utama harus pakai jamaah_did, source of truth)
+  // Helper: build OR clause untuk supabase
+  const orClause=anggotaId 
+    ? `jamaah_did.eq.${did},anggota_id.eq.${anggotaId}`
+    : `jamaah_did.eq.${did}`;
+  
+  const [hr,br,trWarung,trPpob,trLaundry,trService]=await Promise.all([
+    // Hutang: piutang belum lunas dgn jamaah_did
+    sb.from('hutang').select('*').eq('jamaah_did',did).eq('tipe','piutang').eq('lunas',false).order('tgl',{ascending:false}),
+    // BMT akad (semua status, untuk total + filter belum lunas saat render)
+    anggotaId 
+      ? sb.from('bmt_akad').select('*').or(orClause)
+      : sb.from('bmt_akad').select('*').eq('jamaah_did',did),
+    // Warung transaksi
+    sb.from('transaksi').select('id,total,status_bayar,pelanggan,items,tgl_transaksi,waktu,nama_display').or(orClause),
+    // PPOB (dari tabel ppob lama, semua status)
+    sb.from('ppob').select('id,tanggal,nama,produk,harga_jual,status_bayar,catatan,anggota_id').or(orClause),
+    // Laundry
+    sb.from('laundry_order').select('total_harga,status_bayar').or(orClause),
+    // Service
+    sb.from('service_order').select('total_harga,status_bayar').or(orClause)
+  ]);
+  
   DATA.piutang=hr.data||[];
   DATA.bmt=br.data||[];
+  DATA.ppobDetail=trPpob.data||[];
   
-  // SHU detail (jika anggota saham)
+  // === STEP 3: Hitung total per kategori (semua transaksi, lunas + belum lunas) ===
+  DATA.kategori={
+    warung: (trWarung.data||[]).reduce((s,x)=>s+(x.total||0),0),
+    ppob:   (trPpob.data||[]).reduce((s,x)=>s+parseFloat(x.harga_jual||0),0),
+    bmt:    (br.data||[]).reduce((s,x)=>s+parseFloat(x.total_pembiayaan||0),0),
+    laundry:(trLaundry.data||[]).reduce((s,x)=>s+parseFloat(x.total_harga||0),0),
+    service:(trService.data||[]).reduce((s,x)=>s+parseFloat(x.total_harga||0),0)
+  };
+  DATA.kategoriJml={
+    warung: (trWarung.data||[]).length,
+    ppob:   (trPpob.data||[]).length,
+    bmt:    (br.data||[]).length,
+    laundry:(trLaundry.data||[]).length,
+    service:(trService.data||[]).length
+  };
+  
+  // === STEP 4: Simpan yang belum lunas untuk Catatan Administrasi ===
+  DATA.warungBelum=(trWarung.data||[]).filter(t=>t.status_bayar==='belum');
+  DATA.ppobBelum=(trPpob.data||[]).filter(p=>p.status_bayar==='belum');
+  DATA.laundryBelum=(trLaundry.data||[]).filter(l=>l.status_bayar==='belum');
+  DATA.serviceBelum=(trService.data||[]).filter(s=>s.status_bayar==='belum');
+  
+  // === STEP 5: SHU detail (jika anggota saham) ===
   if(DATA.saham.length){
     const sahamIds=DATA.saham.map(s=>s.id);
     const {data:shu}=await sb.from('ubnb_saham_bagi_hasil_detail')
@@ -375,45 +424,58 @@ function renderSHU(){
 }
 
 function renderKontribusi(){
-  // Hitung total transaksi (lunas + belum lunas, kasar dari hutang lama + bmt margin)
-  // Catatan: ini estimasi karena tidak ada relasi transaksi yg sudah lunas ke jamaah
-  // Untuk yang belum anggota saham → simulasi SHU
-  if(!DATA.piutang.length&&!DATA.bmt.length&&!DATA.saham.length){
-    document.getElementById('card-kontribusi').innerHTML='';
-    return;
-  }
+  const k=DATA.kategori;
+  const j=DATA.kategoriJml;
+  const total=k.warung+k.ppob+k.bmt+k.laundry+k.service;
   
-  let html='';
+  // Definisi kategori (ikon, label, key)
+  const kats=[
+    {key:'warung', icon:'🛒', label:'Warung'},
+    {key:'ppob',   icon:'📱', label:'PPOB'},
+    {key:'bmt',    icon:'🏦', label:'BMT'},
+    {key:'laundry',icon:'🧺', label:'Laundry'},
+    {key:'service',icon:'🔧', label:'Service'}
+  ];
   
-  // Total piutang sebagai indikator kontribusi (warung+ppob)
-  const totWarung=DATA.piutang.filter(p=>p.ref_type==='transaksi').reduce((s,p)=>s+(p.jml||0),0);
-  const totPpob=DATA.piutang.filter(p=>p.ref_type==='ppob').reduce((s,p)=>s+(p.jml||0),0);
-  const totBmt=DATA.bmt.reduce((s,a)=>s+parseFloat(a.total_angsuran||0),0); // yg sudah dibayar
-  const totalKontri=totWarung+totPpob+totBmt;
-  
-  if(totalKontri<=0&&!DATA.saham.length)return;
-  
-  // Simulasi SHU untuk yang belum anggota
+  // Simulasi SHU untuk yang belum anggota (kalau total > 500rb)
   let simulasiHtml='';
-  if(!DATA.saham.length&&(totWarung+totPpob)>500000){
-    // Asumsi: SHU/lembar terakhir, kalau punya 5 lembar
-    simulasiHtml=`<div style="background:var(--purple-light);border-radius:var(--radius-sm);padding:12px;margin-top:10px;border-left:3px solid var(--purple)">
+  if(!DATA.saham.length&&total>500000){
+    simulasiHtml=`<div style="background:var(--purple-light);border-radius:var(--radius-sm);padding:12px;margin-top:12px;border-left:3px solid var(--purple)">
       <div style="font-size:11px;color:var(--purple);font-weight:700;text-transform:uppercase;margin-bottom:4px">💡 Tahukah Anda?</div>
       <div style="font-size:13px;color:var(--text)">Jika Bapak/Ibu menjadi anggota dengan minimal <b>5 lembar saham</b>, transaksi seperti ini bisa berkontribusi pada SHU yang akan Bapak/Ibu terima sendiri.</div>
     </div>`;
   }
   
-  html=`<div class="card">
+  // Render breakdown row per kategori
+  const breakdownHtml=kats.map(kt=>{
+    const nilai=k[kt.key]||0;
+    const jml=j[kt.key]||0;
+    const isZero=nilai===0;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:${isZero?'#fafaf5':'var(--green-light)'};border-radius:var(--radius-xs);margin-bottom:5px;${isZero?'opacity:0.6':''}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px">${kt.icon}</span>
+        <div>
+          <div style="font-weight:600;font-size:13px;color:var(--text)">${kt.label}</div>
+          <div style="font-size:10px;color:var(--text-muted)">${jml} transaksi</div>
+        </div>
+      </div>
+      <div style="font-weight:700;font-family:'Courier New',monospace;font-size:13px;color:${isZero?'var(--text-muted)':'var(--green-dark)'}">${rp(nilai)}</div>
+    </div>`;
+  }).join('');
+  
+  document.getElementById('card-kontribusi').innerHTML=`<div class="card">
     <div class="card-title"><span class="icon">🤝</span> Kontribusi Bapak/Ibu</div>
     <div class="kontri-stat">
       <div class="lbl">Total Aktivitas di UB</div>
-      <div class="val">${rp(totalKontri)}</div>
+      <div class="val">${rp(total)}</div>
       <div class="sub">Terima kasih atas dukungannya 🙏</div>
+    </div>
+    <div style="margin-top:14px">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Rincian per Kategori</div>
+      ${breakdownHtml}
     </div>
     ${simulasiHtml}
   </div>`;
-  
-  document.getElementById('card-kontribusi').innerHTML=html;
 }
 
 function renderRiwayat(){
@@ -449,10 +511,66 @@ function renderRiwayat(){
 
 function renderPending(){
   const el=document.getElementById('card-pending');
-  const totalPiutang=DATA.piutang.reduce((s,p)=>s+(p.jml||0),0);
-  const totalSisaBmt=DATA.bmt.reduce((s,a)=>s+parseFloat(a.sisa_angsuran||0),0);
   
-  if(totalPiutang<=0&&totalSisaBmt<=0){
+  // Kumpulkan SEMUA pending dari sumber langsung
+  // Dedup: simpan ref yang sudah ada di tabel hutang supaya tidak dobel
+  const piutangPpobRefIds=new Set();
+  const piutangTrxRefIds=new Set();
+  DATA.piutang.forEach(p=>{
+    if(p.ref_type==='ppob' && p.ref_id) piutangPpobRefIds.add(p.ref_id);
+    if(p.ref_type==='transaksi' && p.ref_id) piutangTrxRefIds.add(p.ref_id);
+  });
+  
+  const items=[];
+  
+  // 1. PPOB belum bayar (dari tabel ppob, bukan hutang)
+  (DATA.ppobBelum||[]).forEach(p=>{
+    items.push({
+      icon:'📱',
+      label:'PPOB',
+      keterangan:p.produk+(p.catatan?' - '+p.catatan:''),
+      nilai:parseFloat(p.harga_jual||0),
+      tgl:p.tanggal
+    });
+  });
+  
+  // 2. Warung belum bayar (dari tabel transaksi)
+  (DATA.warungBelum||[]).forEach(t=>{
+    const itemNames=(t.items||[]).map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,70)||'Belanja Warung';
+    items.push({
+      icon:'🛒',
+      label:'Warung',
+      keterangan:itemNames,
+      nilai:parseFloat(t.total||0),
+      tgl:t.tgl_transaksi||t.waktu
+    });
+  });
+  
+  // 3. Laundry & Service belum bayar
+  (DATA.laundryBelum||[]).forEach(l=>{
+    items.push({icon:'🧺',label:'Laundry',keterangan:'Layanan Laundry',nilai:parseFloat(l.total_harga||0),tgl:null});
+  });
+  (DATA.serviceBelum||[]).forEach(s=>{
+    items.push({icon:'🔧',label:'Service',keterangan:'Layanan Service',nilai:parseFloat(s.total_harga||0),tgl:null});
+  });
+  
+  // 4. Hutang manual (yang TIDAK ada ref_type — dicatat manual via "Catat Hutang/Piutang")
+  DATA.piutang.filter(p=>!p.ref_type).forEach(p=>{
+    items.push({
+      icon:'📝',
+      label:'Manual',
+      keterangan:p.ket||'Tagihan',
+      nilai:parseFloat(p.jml||0),
+      tgl:p.tgl
+    });
+  });
+  
+  // BMT sisa - hanya yang belum lunas
+  const bmtBelum=DATA.bmt.filter(a=>a.status==='Belum Lunas');
+  const totalSisaBmt=bmtBelum.reduce((s,a)=>s+parseFloat(a.sisa_angsuran||0),0);
+  const totalItems=items.reduce((s,i)=>s+i.nilai,0);
+  
+  if(items.length===0 && totalSisaBmt<=0){
     el.innerHTML='';
     return;
   }
@@ -463,22 +581,25 @@ function renderPending(){
     </div>
     <p style="font-size:12px;color:#78350f;margin-bottom:12px">Berikut beberapa aktivitas yang masih dalam proses penyelesaian administrasi:</p>`;
   
-  // Piutang warung & PPOB
-  DATA.piutang.forEach(p=>{
-    const isPpob=p.ref_type==='ppob'||String(p.ket||'').toLowerCase().includes('ppob');
+  // Sort items by tgl desc
+  items.sort((a,b)=>{
+    const da=a.tgl?new Date(a.tgl).getTime():0;
+    const db=b.tgl?new Date(b.tgl).getTime():0;
+    return db-da;
+  });
+  
+  items.forEach(it=>{
     html+=`<div class="pending-row">
       <div class="pen-top">
-        <div class="pen-item">${isPpob?'📱':'🛒'} ${escapeHtml(p.ket||(isPpob?'PPOB':'Belanja Warung'))}</div>
-        <div class="pen-amt">${rp(p.jml)}</div>
+        <div class="pen-item">${it.icon} ${escapeHtml(it.keterangan)}</div>
+        <div class="pen-amt">${rp(it.nilai)}</div>
       </div>
-      <div class="pen-meta">${fD(p.tgl)}</div>
+      <div class="pen-meta">${it.tgl?fD(it.tgl):'-'} · <span style="font-size:10px;background:#fef3c7;padding:1px 6px;border-radius:8px">${it.label}</span></div>
     </div>`;
   });
   
   // BMT sisa
-  DATA.bmt.forEach(a=>{
-    const sudahBayar=parseFloat(a.total_angsuran||0);
-    const totalPembiayaan=parseFloat(a.total_pembiayaan||0);
+  bmtBelum.forEach(a=>{
     html+=`<div class="pending-row">
       <div class="pen-top">
         <div class="pen-item">🏦 Pembiayaan BMT: ${escapeHtml(a.objek_pembiayaan||a.jenis_akad)}</div>
@@ -487,6 +608,13 @@ function renderPending(){
       <div class="pen-meta">${escapeHtml(a.no_akad)} · Angsuran/bln: ${rp(a.angsuran_perbulan)} · Tgl rutin: ${a.tgl_rutin||'-'}</div>
     </div>`;
   });
+  
+  // Total summary
+  const grandTotal=totalItems+totalSisaBmt;
+  html+=`<div style="background:#92400e;color:white;border-radius:var(--radius-sm);padding:10px 12px;margin-top:10px;text-align:center">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;opacity:0.85">Total Tagihan</div>
+    <div style="font-size:20px;font-weight:800;font-family:monospace">${rp(grandTotal)}</div>
+  </div>`;
   
   html+=`<div class="pending-info">
     💡 Jika ada yang sudah Bapak/Ibu bayar tapi belum tercatat, mohon informasikan ke pengurus melalui tombol di bawah.
