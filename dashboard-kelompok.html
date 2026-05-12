@@ -2965,7 +2965,9 @@ function generateLaporanKegiatan(id){
   }
 
   const hadir  = hadirAll.filter(h => h.status_hadir === 'hadir');
-  const tidak  = hadirAll.filter(h => h.status_hadir !== 'hadir');
+  const sakit  = hadirAll.filter(h => h.status_hadir === 'sakit');
+  const izin   = hadirAll.filter(h => h.status_hadir === 'izin');
+  const tidak  = hadirAll.filter(h => h.status_hadir === 'tidak_hadir');
 
   // Hitung per kategori
   const CAT = ['bapak','ibu','janda','remaja_l','remaja_p'];
@@ -2974,19 +2976,23 @@ function generateLaporanKegiatan(id){
   const catBg    = { bapak:'#eff6ff', ibu:'#fdf2f8', janda:'#f5f3ff', remaja_l:'#fff7ed', remaja_p:'#f0fdfa' };
 
   const stat = {};
-  CAT.forEach(c => { stat[c] = { total:0, hadir:[], tidak:[] }; });
-  stat.lainnya = { total:0, hadir:[], tidak:[] };
+  CAT.forEach(c => { stat[c] = { total:0, hadir:[], sakit:[], izin:[], tidak:[] }; });
+  stat.lainnya = { total:0, hadir:[], sakit:[], izin:[], tidak:[] };
 
   hadirAll.forEach(h => {
     const c = kategori(h);
     const s = stat[c] || stat.lainnya;
     s.total++;
-    if(h.status_hadir === 'hadir') s.hadir.push(h);
-    else s.tidak.push(h);
+    if(h.status_hadir === 'hadir')        s.hadir.push(h);
+    else if(h.status_hadir === 'sakit')   s.sakit.push(h);
+    else if(h.status_hadir === 'izin')    s.izin.push(h);
+    else                                   s.tidak.push(h);
   });
   CAT.forEach(c => { stat[c].hadir.sort((a,b)=>(a.jamaah_nama||'').localeCompare(b.jamaah_nama||'')); });
 
   const totalHadir = hadir.length;
+  const totalSakit = sakit.length;
+  const totalIzin  = izin.length;
   const totalTidak = tidak.length;
   const pct = total > 0 ? Math.round(totalHadir/total*100) : 0;
 
@@ -3066,6 +3072,8 @@ function generateLaporanKegiatan(id){
 
   // Progress bar
   const barHadir = total > 0 ? Math.round(totalHadir/total*100) : 0;
+  const barSakit = total > 0 ? Math.round(totalSakit/total*100) : 0;
+  const barIzin  = total > 0 ? Math.round(totalIzin/total*100)  : 0;
 
   const html = `
   <div style="font-family:'Segoe UI',sans-serif;max-width:800px;margin:0 auto;font-size:10px;">
@@ -3083,9 +3091,11 @@ function generateLaporanKegiatan(id){
     </div>
 
     <!-- STAT BARIS 1 -->
-    <div style="display:flex;gap:5px;padding:8px 10px;border:1px solid #e5e7eb;border-top:none;">
+    <div style="display:flex;gap:4px;padding:8px 10px;border:1px solid #e5e7eb;border-top:none;flex-wrap:wrap;">
       ${statBox(total,        'Total Peserta', '#1a6640', '#e8f5ee', '#1a6640')}
       ${statBox(totalHadir,   'Hadir',         '#1a6640', '#e8f5ee', '#1a6640')}
+      ${statBox(totalSakit,   'Sakit',         '#d97706', '#fffbeb', '#d97706')}
+      ${statBox(totalIzin,    'Izin',          '#0891b2', '#ecfeff', '#0891b2')}
       ${statBox(totalTidak,   'Tidak Hadir',   '#cc3333', '#fff0f0', '#cc3333')}
       ${statBox(pct+'%',      'Kehadiran',     '#c9a84c', '#fdf8ee', '#c9a84c')}
       ${statBox(hadirL+'/'+totalL, 'Laki ('+pctL+'%)', '#1d4ed8', '#eff6ff', '#1d4ed8')}
@@ -3104,11 +3114,13 @@ function generateLaporanKegiatan(id){
     <!-- PROGRESS BAR -->
     <div style="padding:0 10px 10px;border:1px solid #e5e7eb;border-top:none;">
       <div style="display:flex;border-radius:4px;overflow:hidden;height:16px;">
-        <div style="width:${barHadir}%;background:#1a6640;display:flex;align-items:center;padding-left:6px;">
-          <span style="font-size:8px;color:white;font-weight:700;white-space:nowrap;">Hadir ${totalHadir} (${pct}%)</span>
+        <div style="width:${barHadir}%;background:#1a6640;display:flex;align-items:center;padding-left:6px;min-width:${barHadir>0?'40px':'0'};">
+          ${barHadir>0?`<span style="font-size:7px;color:white;font-weight:700;white-space:nowrap;">Hadir ${totalHadir}</span>`:''}
         </div>
+        ${barSakit>0?`<div style="width:${barSakit}%;background:#fbbf24;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:#78350f;font-weight:700;white-space:nowrap;">Sakit ${totalSakit}</span></div>`:''}
+        ${barIzin>0?`<div style="width:${barIzin}%;background:#67e8f9;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:#164e63;font-weight:700;white-space:nowrap;">Izin ${totalIzin}</span></div>`:''}
         <div style="flex:1;background:#ffdede;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;">
-          <span style="font-size:8px;color:#cc3333;font-weight:700;white-space:nowrap;">Tidak ${totalTidak} (${100-pct}%)</span>
+          <span style="font-size:7px;color:#cc3333;font-weight:700;white-space:nowrap;">Tidak ${totalTidak}</span>
         </div>
       </div>
     </div>
@@ -3120,6 +3132,24 @@ function generateLaporanKegiatan(id){
       ${tabelHadir('✅ JANDA / DUDA — '+stat.janda.hadir.length+' hadir dari '+stat.janda.total, stat.janda.hadir, '#7c3aed','#f5f3ff')}
       ${tabelHadir('✅ REMAJA PUTRA (Belum Menikah L) — '+stat.remaja_l.hadir.length+' hadir dari '+stat.remaja_l.total, stat.remaja_l.hadir, '#c2410c','#fff7ed')}
       ${tabelHadir('✅ REMAJA PUTRI (Belum Menikah P) — '+stat.remaja_p.hadir.length+' hadir dari '+stat.remaja_p.total, stat.remaja_p.hadir, '#0f766e','#f0fdfa')}
+    </div>
+
+    <!-- SAKIT -->
+    <div style="padding:6px 10px 8px;border:1px solid #e5e7eb;border-top:none;">
+      <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:5px;">🤒 SAKIT (${totalSakit} orang)</div>
+      ${totalSakit===0
+        ? `<div style="font-size:9px;color:#aaa;padding:4px 8px;">— Tidak ada —</div>`
+        : CAT.map(c => tabelTidak(catLabel[c]+' ('+stat[c].sakit.length+')', stat[c].sakit, catColor[c], catBg[c])).join('')
+      }
+    </div>
+
+    <!-- IZIN -->
+    <div style="padding:6px 10px 8px;border:1px solid #e5e7eb;border-top:none;">
+      <div style="font-size:10px;font-weight:700;color:#0891b2;margin-bottom:5px;">📋 IZIN (${totalIzin} orang)</div>
+      ${totalIzin===0
+        ? `<div style="font-size:9px;color:#aaa;padding:4px 8px;">— Tidak ada —</div>`
+        : CAT.map(c => tabelTidak(catLabel[c]+' ('+stat[c].izin.length+')', stat[c].izin, catColor[c], catBg[c])).join('')
+      }
     </div>
 
     <!-- TIDAK HADIR -->
