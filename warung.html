@@ -9849,6 +9849,8 @@ let posOngkir = 0;
 let posCatatan = '';
 let posTglTrx = ''; // empty = today, kalau di-set = backdate ISO date YYYY-MM-DD
 let posEditingIdx = -1;
+let posPendingActiveId = null; // ID kasir_pending yg sedang di-edit (null = transaksi baru)
+let posPendingSyncTimer = null; // debounce timer untuk live sync
 
 const POS_TOKO = {
   nama:'Warung UBNB',
@@ -10059,6 +10061,8 @@ function posRenderCart(){
     }).join('');
   }
   posUpdateTotal();
+  // Live sync ke DB kalau sedang edit pending (debounced)
+  posSyncPendingIfActive();
 }
 
 function posUpdateTotal(){
@@ -10840,16 +10844,45 @@ async function posKonfirmasiBayar(){
     };
 
     closeModal('pos-modal-bayar', true);
+    // Hapus row pending kalau transaksi ini berasal dari pending (sudah dibayar sukses)
+    if(posPendingActiveId !== null){
+      try{ await sb.from('kasir_pending').delete().eq('id', posPendingActiveId); }catch(_){}
+      posPendingActiveId = null;
+    }
     posResetCart();
     posShowStruk(trxSnapshot);
     toast('✅ Transaksi #'+txId+(posMetode==='hutang'?' (Bayar Nanti)':' lunas'));
     // Refresh top 5 pelanggan async
     posLoadTopPelanggan();
+    posUpdatePendingBadge();
   } catch(e){
     console.error('posKonfirmasiBayar:',e);
     toast('❌ Gagal: '+(e.message||e),true);
     btn.disabled=false; btn.innerHTML='✓ Konfirmasi'; btn.style.opacity='1';
   }
+}
+
+/* === LIVE SYNC: kalau sedang edit pending, auto-update DB tiap cart berubah === */
+function posSyncPendingIfActive(){
+  if(posPendingActiveId === null) return;
+  // Debounce 500ms supaya tidak spam DB saat user cepat tambah/kurang
+  if(posPendingSyncTimer) clearTimeout(posPendingSyncTimer);
+  posPendingSyncTimer = setTimeout(async ()=>{
+    if(posPendingActiveId === null) return; // double-check (mungkin sudah reset)
+    try{
+      const total = posComputeTotal();
+      await sb.from('kasir_pending').update({
+        cart_data: posCart,
+        member_data: posPel,
+        diskon_data: posDiskon,
+        catatan: posCatatan||null,
+        ongkir: posOngkir||0,
+        total
+      }).eq('id', posPendingActiveId);
+    }catch(e){
+      console.error('posSyncPendingIfActive:', e);
+    }
+  }, 500);
 }
 
 function posResetCart(){
@@ -10860,6 +10893,8 @@ function posResetCart(){
   posOngkir=0;
   posCatatan='';
   posTglTrx='';
+  posPendingActiveId=null; // lepas dari pending aktif
+  if(posPendingSyncTimer){ clearTimeout(posPendingSyncTimer); posPendingSyncTimer=null; }
   // Reset pill pelanggan
   const pill=document.getElementById('pos-pel-pill');
   if(pill){
@@ -10954,14 +10989,31 @@ function posCetakStruk(){window.print();}
 /* === PENDING (DB persisted) === */
 async function posPendingTrx(){
   if(!posCart.length){toast('Keranjang kosong',true);return;}
-  // Cek slot kosong
   try{
+    const total=posComputeTotal();
+    // Mode UPDATE: kalau sedang edit pending aktif, langsung update slot yg sama
+    if(posPendingActiveId !== null){
+      if(posPendingSyncTimer){ clearTimeout(posPendingSyncTimer); posPendingSyncTimer=null; }
+      await sb.from('kasir_pending').update({
+        cart_data: posCart,
+        member_data: posPel,
+        diskon_data: posDiskon,
+        catatan: posCatatan||null,
+        ongkir: posOngkir||0,
+        total
+      }).eq('id', posPendingActiveId);
+      const savedId = posPendingActiveId;
+      posResetCart(); // ini juga clear posPendingActiveId
+      toast('⏸ Pending diperbarui & disimpan');
+      posUpdatePendingBadge();
+      return;
+    }
+    // Mode CREATE: cari slot kosong
     const{data:existing}=await sb.from('kasir_pending').select('slot_no').eq('operator',CU?CU.username:'unknown');
     const usedSlots=new Set((existing||[]).map(r=>r.slot_no));
     let slot=0;
     for(let i=1;i<=10;i++){if(!usedSlots.has(i)){slot=i;break;}}
     if(slot===0){toast('Semua 10 slot terisi! Selesaikan dulu salah satu',true);return;}
-    const total=posComputeTotal();
     await sb.from('kasir_pending').insert([{
       slot_no:slot,
       operator:CU?CU.username:'unknown',
@@ -10999,15 +11051,21 @@ async function posRenderPending(){
         const time=new Date(p.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
         const cnt=(p.cart_data||[]).length;
         const memLbl=(p.member_data&&p.member_data.label)||'Umum';
-        html+=`<div style="background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border-left:4px solid var(--amber, #f59e0b)">
+        const isActive = (posPendingActiveId === p.id);
+        const borderColor = isActive ? 'var(--green, #16a34a)' : 'var(--amber, #f59e0b)';
+        const activeBadge = isActive ? '<span style="background:var(--green-light,#dcfce7);color:var(--green-dark,#15803d);font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:6px">● sedang diedit</span>' : '';
+        const btnLanjut = isActive
+          ? `<button onclick="document.querySelector('.pos-tab[data-postab=&quot;kasir&quot;]').click()" style="flex:1;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--green-dark,#15803d);color:white">↗ Buka Kasir</button>`
+          : `<button onclick="posLanjutkanPending(${p.id})" style="flex:1;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--green);color:white">▶ Lanjutkan</button>`;
+        html+=`<div style="background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border-left:4px solid ${borderColor}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <div style="font-weight:700;font-size:13px;color:var(--amber, #f59e0b)">Slot ${i}</div>
+            <div style="font-weight:700;font-size:13px;color:${isActive?'var(--green-dark,#15803d)':'var(--amber, #f59e0b)'}">Slot ${i}${activeBadge}</div>
             <div style="font-size:11px;color:var(--text-muted)">⏰ ${time}</div>
           </div>
           <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${cnt} item · ${memLbl}</div>
           <div style="font-size:18px;font-weight:800;color:var(--green-dark, #15803d);font-family:'SF Mono',Monaco,monospace;margin-bottom:8px">${fmt(p.total||0)}</div>
           <div style="display:flex;gap:6px">
-            <button onclick="posLanjutkanPending(${p.id})" style="flex:1;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--green);color:white">▶ Lanjutkan</button>
+            ${btnLanjut}
             <button onclick="posHapusPending(${p.id},${i})" style="flex:1;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:#fee2e2;color:var(--red)">🗑 Hapus</button>
           </div>
         </div>`;
@@ -11021,8 +11079,13 @@ async function posRenderPending(){
 }
 
 async function posLanjutkanPending(id){
-  if(posCart.length){
-    if(!confirm('Keranjang aktif akan diganti. Lanjutkan?'))return;
+  // Kalau sedang edit pending lain dgn ID berbeda, atau cart aktif tanpa pending → clear langsung
+  // (sesuai keputusan Q3: cart auto-clear, slot lama tetap utuh di list)
+  // Tidak ada confirm karena slot lama aman di DB (tidak akan hilang)
+  if(posPendingActiveId !== null && posPendingActiveId === id){
+    toast('Slot ini sudah aktif');
+    document.querySelector('.pos-tab[data-postab="kasir"]').click();
+    return;
   }
   try{
     const{data:p}=await sb.from('kasir_pending').select('*').eq('id',id).single();
@@ -11033,15 +11096,15 @@ async function posLanjutkanPending(id){
     posCatatan=p.catatan||'';
     posOngkir=p.ongkir||0;
     posTglTrx='';
-    // Hapus slot
-    await sb.from('kasir_pending').delete().eq('id',id);
+    // Set sebagai pending aktif (TIDAK dihapus dari DB — baru dihapus setelah bayar sukses)
+    posPendingActiveId = id;
     // Refresh visual pelanggan
     posSetPel(posPel);
     posRenderCart();
+    posUpdatePendingBadge();
     // Pindah ke tab kasir
     document.querySelector('.pos-tab[data-postab="kasir"]').click();
-    posUpdatePendingBadge();
-    toast('Slot dilanjutkan');
+    toast('Slot '+p.slot_no+' dilanjutkan');
   }catch(e){
     console.error(e);
     toast('Gagal: '+(e.message||e),true);
@@ -11052,6 +11115,10 @@ async function posHapusPending(id,slot){
   if(!confirm('Hapus slot '+slot+'?'))return;
   try{
     await sb.from('kasir_pending').delete().eq('id',id);
+    // Kalau yg dihapus = pending aktif → clear cart juga (krn sumbernya sudah hilang)
+    if(posPendingActiveId === id){
+      posResetCart();
+    }
     posRenderPending();
     posUpdatePendingBadge();
     toast('Slot dihapus');
@@ -11063,8 +11130,17 @@ async function posHapusPending(id,slot){
 
 async function posUpdatePendingBadge(){
   try{
-    const{count}=await sb.from('kasir_pending').select('*',{count:'exact',head:true}).eq('operator',CU?CU.username:'unknown');
-    document.getElementById('pos-pending-badge').textContent=count?'('+count+')':'';
+    const{data,count}=await sb.from('kasir_pending').select('id,slot_no',{count:'exact'}).eq('operator',CU?CU.username:'unknown');
+    const badge=document.getElementById('pos-pending-badge');
+    if(!badge)return;
+    if(posPendingActiveId !== null){
+      // Cari slot_no dari ID aktif
+      const active=(data||[]).find(r=>r.id===posPendingActiveId);
+      const slotNo=active?active.slot_no:'?';
+      badge.innerHTML='('+count+') <span style="background:#fbbf24;color:#78350f;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:700;margin-left:2px">▶ Slot '+slotNo+'</span>';
+    } else {
+      badge.textContent=count?'('+count+')':'';
+    }
   }catch(e){}
 }
 
