@@ -7587,7 +7587,7 @@ function pilihPelPPOB(id,nama){
   ppobPelId=null;
   ppobAnggotaId=null; // tidak pakai pelanggan_id lama
   ppobAnggotaId=id; // anggota saham id
-  document.getElementById('ppob-pel-search').value=id?(('⭐ ')+nama):nama;
+  document.getElementById('ppob-pel-search').value=nama;
   document.getElementById('ppob-pel-dd').style.display='none';
 }
 function tambahPelPPOB(namaPrefill){
@@ -11804,7 +11804,44 @@ function posbSupSearch(q){
   } else {
     html+=`<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">${q?'Supplier tidak ditemukan':'Belum ada supplier terdaftar'}</div>`;
   }
+  // Opsi: Tambah supplier baru (muncul kalau user sudah ketik nama)
+  if(q){
+    const qEsc=q.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    html+=`<div onclick="posbTambahSupBaru('${qEsc}')" style="padding:10px 12px;border-top:2px dashed var(--border);margin-top:6px;cursor:pointer;display:flex;align-items:center;gap:10px;background:#f0fdf4;border-radius:8px">
+      <div style="width:34px;height:34px;border-radius:50%;background:#bbf7d0;color:#15803d;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0">＋</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:#15803d">Tambah supplier baru: "${q}"</div>
+        <div style="font-size:10px;color:var(--text-muted)">Telp/alamat bisa dilengkapi di tab Supplier</div>
+      </div>
+    </div>`;
+  }
   el.innerHTML=html;
+}
+
+async function posbTambahSupBaru(nama){
+  nama=(nama||'').trim();
+  if(!nama){toast('Nama supplier kosong',true);return;}
+  // Cek duplikat case-insensitive di list lokal
+  const supList=(typeof aSup!=='undefined'?aSup:[]);
+  const dup=supList.find(s=>(s.nama||'').toLowerCase()===nama.toLowerCase());
+  if(dup){
+    toast('Supplier "'+dup.nama+'" sudah ada, dipilih',false);
+    posbSetSup({id:dup.id,label:dup.nama,sumber:'supplier'});
+    return;
+  }
+  try{
+    const{data,error}=await sb.from('supplier').insert([{nama,telp:'',alamat:''}]).select().single();
+    if(error){toast('Gagal tambah supplier: '+error.message,true);return;}
+    // Reload list supplier
+    if(typeof lSup==='function')await lSup();
+    if(typeof renderSup==='function')renderSup();
+    if(typeof filterSD==='function')filterSD('sup');
+    // Auto-pilih supplier yang baru dibuat
+    posbSetSup({id:data.id,label:data.nama,sumber:'supplier'});
+    toast('✅ Supplier "'+nama+'" ditambahkan');
+  }catch(e){
+    toast('Error: '+(e.message||e),true);
+  }
 }
 
 function posbSetSup(s){
