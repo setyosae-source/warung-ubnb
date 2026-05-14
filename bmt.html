@@ -1660,8 +1660,25 @@ function gosub(main,sub,btn){
     if(main==='pmd'&&sub==='bh')renderPmdBH();
   }
 }
-function openModal(id){document.getElementById(id).classList.add('show');}
-function closeModal(id){document.getElementById(id).classList.remove('show');}
+let _activeModal=null;
+function openModal(id){
+  document.getElementById(id).classList.add('show');
+  _activeModal=id;
+  history.pushState({modal:id},'');
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('show');
+  if(_activeModal===id){
+    _activeModal=null;
+    if(history.state&&history.state.modal===id)history.back();
+  }
+}
+window.addEventListener('popstate',function(e){
+  if(_activeModal){
+    document.getElementById(_activeModal).classList.remove('show');
+    _activeModal=null;
+  }
+});
 
 // FAB
 const fabDefs={
@@ -2176,7 +2193,7 @@ async function simpanBaru(){
   if(!baruD.total_pembiayaan){al('b-alert','Hitung kalkulasi dulu');return;}
   const tglRutinVal=document.getElementById('b-tgl-rutin').value;
   if(!tglRutinVal){al('b-alert','Tanggal kesanggupan bayar wajib diisi');return;}
-  const{data:res,error}=await sb.from('bmt_akad').insert([{no_akad:noAkad,nama_jamaah:nama,kelompok,anggota_id:anggotaId?parseInt(anggotaId):null,tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,harga_beli:baruD.harga_beli,total_pembiayaan:baruD.total_pembiayaan,total_margin:baruD.total_margin,angsuran_perbulan:baruD.angsuran,jangka:baruD.jangka,tgl_rutin:parseInt(document.getElementById('b-tgl-rutin').value)||null,sisa_angsuran:(baruD.total_pembiayaan||0)+(baruD.total_margin||0),total_angsuran:0,status:'Belum Lunas',operator:CU.username}]).select().single();
+  const{data:res,error}=await sb.from('bmt_akad').insert([{no_akad:noAkad,nama_jamaah:nama,kelompok,anggota_id:anggotaId?parseInt(anggotaId):null,tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,harga_beli:baruD.harga_beli,total_pembiayaan:baruD.total_pembiayaan,total_margin:baruD.total_margin,angsuran_perbulan:baruD.angsuran,jangka:baruD.jangka,tgl_rutin:parseInt(document.getElementById('b-tgl-rutin').value)||null,status:'Belum Lunas',operator:CU.username}]).select().single();
   if(error){al('b-alert','Gagal: '+error.message);return;}
   if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:baruD.total_pembiayaan,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username}]);
   toast('✅ Akad '+noAkad+' berhasil disimpan!');
