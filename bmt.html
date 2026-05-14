@@ -2695,9 +2695,85 @@ function renderPengajuan(){
   const data=aPengajuan.filter(p=>(!st||p.status===st)&&(!q||(p.nama||'').toLowerCase().includes(q)));
   const tbody=document.getElementById('pjy-body');
   if(!data.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ada pengajuan</td></tr>';return;}
-  tbody.innerHTML=data.map(p=>`<tr><td style="font-size:11px">${fmtTgl(p.created_at)}</td><td><strong>${p.nama}</strong><br><span style="font-size:10px;color:var(--M)">${p.no_hp||'—'}</span></td><td style="font-size:11px">${p.objek_pembiayaan||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:11px">${rp(p.estimasi_harga)}</td><td><span class="badge ${p.status==='Disetujui'?'lunas':p.status==='Ditolak'?'red':'pending'}">${p.status}</span></td><td><select onchange="ubahStatusPjy(${p.id},this.value)" style="font-size:11px;border:1px solid var(--B);border-radius:4px;padding:2px"><option ${p.status==='Baru'?'selected':''}>Baru</option><option ${p.status==='Review'?'selected':''}>Review</option><option ${p.status==='Disetujui'?'selected':''}>Disetujui</option><option ${p.status==='Ditolak'?'selected':''}>Ditolak</option></select></td></tr>`).join('');
+  tbody.innerHTML=data.map(p=>`<tr style="cursor:pointer" onclick="showDetailPjy(${p.id})">
+    <td style="font-size:11px">${fmtTgl(p.created_at)}</td>
+    <td><strong>${p.nama}</strong><br><span style="font-size:10px;color:var(--M)">${p.no_hp||'—'}</span></td>
+    <td style="font-size:11px">${p.objek_pembiayaan||'—'}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:11px">${rp(p.estimasi_harga)}</td>
+    <td><span class="badge ${p.status==='Disetujui'?'lunas':p.status==='Ditolak'?'red':'pending'}">${p.status}</span></td>
+    <td><span style="font-size:11px;color:var(--M)">👁 Detail</span></td>
+  </tr>`).join('');
 }
 async function ubahStatusPjy(id,status){await sb.from('bmt_pengajuan').update({status}).eq('id',id);const p=aPengajuan.find(x=>x.id===id);if(p)p.status=status;renderPengajuan();toast('Status diupdate');}
+
+function showDetailPjy(id){
+  const p=aPengajuan.find(x=>x.id===id);
+  if(!p)return;
+  const badgeCls=p.status==='Disetujui'?'lunas':p.status==='Ditolak'?'red':'pending';
+  function row(lbl,val){return`<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--B);gap:8px"><span style="font-size:11px;color:var(--M);min-width:130px;flex-shrink:0">${lbl}</span><span style="font-size:12px;font-weight:600;text-align:right">${val||'—'}</span></div>`;}
+  document.getElementById('dpjy-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;color:var(--H);font-weight:700">${p.nama}</div>
+        <div style="font-size:12px;color:var(--M);margin-top:2px">${fmtTgl(p.created_at)}</div>
+      </div>
+      <span class="badge ${badgeCls}">${p.status}</span>
+    </div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--H);text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--HL)">👤 Data Pribadi</div>
+    ${row('No. HP',p.no_hp)}
+    ${row('Tgl Lahir',p.tgl_lahir?new Date(p.tgl_lahir).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}):'—')}
+    ${row('Alamat',p.alamat)}
+    ${row('Status Keluarga',p.keluarga)}
+    ${row('Pekerjaan',p.pekerjaan)}
+    ${row('Pendapatan/Bln',p.pendapatan?rp(p.pendapatan):'—')}
+    ${row('Pengeluaran/Bln',p.pengeluaran?rp(p.pengeluaran):'—')}
+
+    <div style="font-size:10px;font-weight:700;color:var(--H);text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--HL)">💰 Info Pembiayaan</div>
+    ${row('Objek Pembiayaan',p.objek_pembiayaan)}
+    ${row('Estimasi Harga',p.estimasi_harga?rp(p.estimasi_harga):'—')}
+    ${row('Rencana Tenor',p.rencana_tenor?p.rencana_tenor+' bulan':'—')}
+    ${row('Sanggup Angsur/Bln',p.rencana_angsuran?rp(p.rencana_angsuran):'—')}
+
+    <div style="font-size:10px;font-weight:700;color:var(--H);text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--HL)">🤝 Info Sambung</div>
+    ${row('Daerah',p.sambung_daerah)}
+    ${row('Desa',p.sambung_desa)}
+    ${row('Kelompok',p.sambung_kelompok)}
+    ${row('Nama KI',p.nama_ki)}
+    ${row('HP KI',p.hp_ki)}
+    ${row('Ketertiban IR',p.ketertiban_ir)}
+    ${row('Setuju KI',p.setuju_ki)}
+
+    <div style="font-size:10px;font-weight:700;color:var(--H);text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--HL)">📋 Status & Catatan Admin</div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:11px;color:var(--M);display:block;margin-bottom:4px">Status</label>
+      <select id="dpjy-status" style="width:100%;padding:8px 10px;border:1.5px solid var(--B);border-radius:var(--rs);font-size:13px;font-family:inherit">
+        <option ${p.status==='Baru'?'selected':''}>Baru</option>
+        <option ${p.status==='Review'?'selected':''}>Review</option>
+        <option ${p.status==='Disetujui'?'selected':''}>Disetujui</option>
+        <option ${p.status==='Ditolak'?'selected':''}>Ditolak</option>
+      </select>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--M);display:block;margin-bottom:4px">Catatan Admin</label>
+      <textarea id="dpjy-catatan" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid var(--B);border-radius:var(--rs);font-size:13px;font-family:inherit;resize:vertical">${p.catatan_admin||''}</textarea>
+    </div>
+    <button onclick="simpanDetailPjy(${p.id})" style="width:100%;padding:11px;background:var(--H);color:white;border:none;border-radius:var(--rs);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">💾 Simpan</button>
+  `;
+  openModal('modal-detail-pjy');
+}
+
+async function simpanDetailPjy(id){
+  const status=document.getElementById('dpjy-status').value;
+  const catatan=document.getElementById('dpjy-catatan').value;
+  const{error}=await sb.from('bmt_pengajuan').update({status,catatan_admin:catatan}).eq('id',id);
+  if(error){toast('Gagal: '+error.message,true);return;}
+  const p=aPengajuan.find(x=>x.id===id);
+  if(p){p.status=status;p.catatan_admin=catatan;}
+  toast('✅ Pengajuan diupdate');
+  closeModal('modal-detail-pjy');
+  renderPengajuan();
+}
 
 // MAPPING
 const AKAD_MAPPING=[{id:14,no_akad:"BMT/2024/02/002",nama_di_bmt:"MAS ANDRE"},{id:15,no_akad:"BMT/2024/03/003",nama_di_bmt:"ALDINO"},{id:16,no_akad:"BMT/2024/09/004",nama_di_bmt:"JEMIRIN"},{id:17,no_akad:"BMT/2024/10/005",nama_di_bmt:"DENNY PW1"},{id:18,no_akad:"BMT/2024/12/006",nama_di_bmt:"RUSMAN"},{id:20,no_akad:"BMT/2025/03/008",nama_di_bmt:"AINAN"},{id:21,no_akad:"BMT/2025/03/009",nama_di_bmt:"AZIZ"},{id:23,no_akad:"BMT/2025/08/011",nama_di_bmt:"HIRZAN"},{id:24,no_akad:"BMT/2025/10/012",nama_di_bmt:"KELOMPOK 3"},{id:26,no_akad:"BMT/2025/11/014",nama_di_bmt:"TANTE AKBAR"},{id:27,no_akad:"BMT/2025/11/015",nama_di_bmt:"SYAKUR"},{id:28,no_akad:"BMT/2025/11/016",nama_di_bmt:"MAS TYO"},{id:29,no_akad:"BMT/2025/11/017",nama_di_bmt:"AKBAR KABUL"},{id:30,no_akad:"BMT/2025/12/018",nama_di_bmt:"BU KARNO"},{id:31,no_akad:"BMT/2025/12/019",nama_di_bmt:"P EKO ABDILLAH"},{id:32,no_akad:"BMT/2025/12/020",nama_di_bmt:"P AGUNG 1"},{id:33,no_akad:"BMT/2025/12/021",nama_di_bmt:"BU DEWI"},{id:34,no_akad:"BMT/2026/02/022",nama_di_bmt:"REZA PW1"},{id:35,no_akad:"BMT/2026/03/023",nama_di_bmt:"AGUNG 2"},{id:36,no_akad:"BMT/2026/03/024",nama_di_bmt:"REZA PW1"},{id:38,no_akad:"BMT/2026/03/026",nama_di_bmt:"BU MEDHI"},{id:39,no_akad:"BMT/2026/03/027",nama_di_bmt:"MAS FAJAR"}];
@@ -3448,4 +3524,16 @@ function bukaDetailBH(tipe, id){
 
 // BHI dropdown diinit di dalam loadPemodal
 </script>
+
+<!-- MODAL DETAIL PENGAJUAN -->
+<div class="modal-overlay" id="modal-detail-pjy" onclick="if(event.target===this)closeModal('modal-detail-pjy')">
+  <div class="modal-box" style="max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <span style="font-size:11px;font-weight:700;color:var(--M);text-transform:uppercase;letter-spacing:.8px">📥 Detail Pengajuan</span>
+      <button onclick="closeModal('modal-detail-pjy')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--M);line-height:1">×</button>
+    </div>
+    <div id="dpjy-body"></div>
+  </div>
+</div>
+
 </html>
