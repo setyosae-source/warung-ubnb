@@ -2310,7 +2310,8 @@ function renderKegiatanList(){
     el.innerHTML='<div class="empty"><div class="ei">📋</div>Belum ada kegiatan. Klik "+ Buat Kegiatan" untuk mulai.</div>';
     return;
   }
-  el.innerHTML=list.map(k=>{
+
+  function cardHTML(k){
     const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
     const hadirCount=aHadir.filter(h=>h.kegiatan_id===k.id&&h.status_hadir==='hadir').length;
     const total=k.peserta_wajib_count||0;
@@ -2337,10 +2338,51 @@ function renderKegiatanList(){
         <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🖨️ Cetak</button>
         <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
         <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
-        <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
+        <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${(k.acara_naam||k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
       </div>
     </div>`;
-  }).join('');
+  }
+
+  // Pengurus desa → separasi per kelompok
+  const isDesa = CU && CU.role === 'pengurus_desa';
+  if(isDesa){
+    const KLP_ORDER = [
+      {key:null,  label:'🏛️ Kegiatan Desa', color:'#1a6640'},
+      {key:'PW1', label:'🟢 PW1 · Perwirasari', color:'#15803d'},
+      {key:'PW2', label:'🔵 PW2 · Alinda', color:'#1d4ed8'},
+      {key:'PW3', label:'🟠 PW3 · Bulak Perwira', color:'#c2410c'},
+      {key:'PW4', label:'🟣 PW4 · Vila Indah Permai', color:'#7c3aed'},
+    ];
+    let html = '';
+    KLP_ORDER.forEach(({key, label, color}) => {
+      const items = list.filter(k => (k.kelompok||null) === key);
+      if(!items.length) return;
+      html += `<div style="margin-bottom:6px;margin-top:12px;">
+        <div style="font-size:11px;font-weight:800;color:${color};letter-spacing:0.5px;padding:5px 10px;
+          background:${color}18;border-left:3px solid ${color};border-radius:0 6px 6px 0;margin-bottom:6px;">
+          ${label} <span style="font-weight:400;opacity:0.7;">(${items.length})</span>
+        </div>
+        ${items.map(k=>cardHTML(k)).join('')}
+      </div>`;
+    });
+    // Kelompok lain yang tidak terdaftar
+    const knownKeys = KLP_ORDER.map(x=>x.key);
+    const others = list.filter(k=>!knownKeys.includes(k.kelompok||null));
+    if(others.length){
+      html += `<div style="margin-bottom:6px;margin-top:12px;">
+        <div style="font-size:11px;font-weight:800;color:#6b7280;padding:5px 10px;
+          background:#f3f4f6;border-left:3px solid #9ca3af;border-radius:0 6px 6px 0;margin-bottom:6px;">
+          📁 Lainnya <span style="font-weight:400;">(${others.length})</span>
+        </div>
+        ${others.map(k=>cardHTML(k)).join('')}
+      </div>`;
+    }
+    el.innerHTML = html || '<div class="empty"><div class="ei">📋</div>Belum ada kegiatan.</div>';
+    return;
+  }
+
+  // Pengurus kelompok → tampil biasa
+  el.innerHTML = list.map(k=>cardHTML(k)).join('');
 }
 
 // ===== MODAL: Buat / Edit Kegiatan =====
@@ -2365,6 +2407,16 @@ function editKegiatan(id){
         <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">💡 Pilih dari daftar atau ketik nama baru (auto-tambah ke master)</div>
       </div>
     </div>
+    ${CU&&CU.role==='pengurus_desa'?`
+    <div class="modal-row"><label>Scope Kegiatan *</label>
+      <select id="kg-scope" onchange="onScopeChange()" style="flex:1;">
+        <option value="" ${k&&!k.kelompok?'selected':''}>🏛️ Kegiatan Desa (semua kelompok)</option>
+        <option value="PW1" ${k&&k.kelompok==='PW1'?'selected':''}>🟢 PW1 · Perwirasari</option>
+        <option value="PW2" ${k&&k.kelompok==='PW2'?'selected':''}>🔵 PW2 · Alinda</option>
+        <option value="PW3" ${k&&k.kelompok==='PW3'?'selected':''}>🟠 PW3 · Bulak Perwira</option>
+        <option value="PW4" ${k&&k.kelompok==='PW4'?'selected':''}>🟣 PW4 · Vila Indah Permai</option>
+      </select>
+    </div>`:''}
     <div class="modal-row"><label>Tanggal *</label><input type="date" id="kg-tgl" value="${k?k.tanggal:today}"/></div>
     <div class="modal-row"><label>Waktu</label><input type="time" id="kg-waktu" value="${k&&k.waktu?k.waktu.substring(0,5):''}"/></div>
     <div class="modal-row" style="position:relative;"><label>Lokasi</label>
@@ -2417,7 +2469,7 @@ function editKegiatan(id){
     <div id="kg-preview" style="padding:10px 16px;background:var(--gold-light);font-size:12px;color:var(--gold-dark);">⏳ Preview peserta akan muncul setelah filter dipilih</div>
   `;
   // Auto-preview
-  ['kg-flt-gender','kg-flt-umur-min','kg-flt-umur-max','kg-flt-nikah-menikah','kg-flt-nikah-belum','kg-flt-nikah-janda'].forEach(id=>{
+  ['kg-flt-gender','kg-flt-umur-min','kg-flt-umur-max','kg-flt-nikah-menikah','kg-flt-nikah-belum','kg-flt-nikah-janda','kg-scope'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){
       el.addEventListener('change',previewPeserta);
@@ -2589,12 +2641,17 @@ async function simpanKegiatan(){
   if(document.getElementById('kg-mode-online').checked) modes.push('online');
   if(!modes.length){toast('Pilih minimal 1 mode',true);return;}
   const filter=buildFilterPeserta();
-  const peserta=getPesertaWajib(filter,CU.kelompok_scope);
+  const kegiatanScope=(CU&&CU.role==='pengurus_desa')
+    ? (document.getElementById('kg-scope')?document.getElementById('kg-scope').value||null:null)
+    : CU.kelompok_scope||null;
+  const peserta=getPesertaWajib(filter,kegiatanScope);
 
   const payload={
     acara_id,
     acara_nama:acaraNama,
-    kelompok:CU.kelompok_scope||null,
+    kelompok:(CU&&CU.role==='pengurus_desa')
+      ? (document.getElementById('kg-scope')?document.getElementById('kg-scope').value||null:null)
+      : CU.kelompok_scope||null,
     tanggal:tgl,
     waktu:document.getElementById('kg-waktu').value||null,
     lokasi:document.getElementById('kg-lokasi').value.trim()||null,
