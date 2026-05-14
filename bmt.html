@@ -1660,25 +1660,8 @@ function gosub(main,sub,btn){
     if(main==='pmd'&&sub==='bh')renderPmdBH();
   }
 }
-let _activeModal=null;
-function openModal(id){
-  document.getElementById(id).classList.add('show');
-  _activeModal=id;
-  history.pushState({modal:id},'');
-}
-function closeModal(id){
-  document.getElementById(id).classList.remove('show');
-  if(_activeModal===id){
-    _activeModal=null;
-    if(history.state&&history.state.modal===id)history.back();
-  }
-}
-window.addEventListener('popstate',function(e){
-  if(_activeModal){
-    document.getElementById(_activeModal).classList.remove('show');
-    _activeModal=null;
-  }
-});
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
 
 // FAB
 const fabDefs={
@@ -1801,7 +1784,7 @@ function renderDashboard(){
   document.getElementById('sb-int').textContent=fmtRb(mpTotal);
   document.getElementById('sb-ext').textContent=fmtRb(peTotal);
   const aktifAkad=aAkad.filter(a=>a.status==='Belum Lunas');
-  const totalKewAktifDash=aktifAkad.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0)),0);
+  const totalKewAktifDash=aktifAkad.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0)),0);
   const totalByrAktifDash=aAngsuran.filter(an=>aktifAkad.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
   const out=Math.max(0,totalKewAktifDash-totalByrAktifDash);
   document.getElementById('lyr-pmb-akad').textContent=aktifAkad.length;
@@ -1833,7 +1816,7 @@ function renderPmbDash(){
   document.getElementById('pmb-stat-aktif').textContent=aktif.length;
   document.getElementById('pmb-stat-total').textContent='dari '+aAkad.length+' total';
   // Outstanding = total kewajiban aktif - total sudah dibayar
-  const totalKewAktif=aktif.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0)),0);
+  const totalKewAktif=aktif.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0)),0);
   const totalBayarAktif=aAngsuran.filter(an=>aktif.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
   const sisaKewajiban=Math.max(0,totalKewAktif-totalBayarAktif);
   document.getElementById('pmb-stat-out').textContent=fmtRb(sisaKewajiban);
@@ -1894,7 +1877,7 @@ function renderPmbDash(){
       const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
       const tglTerakhirMs=angsAkad.length?Math.max(...angsAkad.map(x=>new Date(x.tanggal).getTime())):0;
       const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
-      const totalKew=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+      const totalKew=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
       const sisa=Math.max(0,totalKew-totalBayar);
       const hariTanpaBayar=tglTerakhirMs?Math.floor((Date.now()-tglTerakhirMs)/86400000):9999;
       const tglTerakhirStr=angsAkad.length?angsAkad.reduce((mx,x)=>x.tanggal>mx?x.tanggal:mx,''):'';
@@ -1995,7 +1978,7 @@ function renderDaftar(){
   tbody.innerHTML=data.map(a=>{
     const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
     const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
-    const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+    const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
     const sisaAktual=Math.max(0,totalKewajiban-totalBayar);
     const sisaColor=a.status==='Lunas'?'var(--H3)':'var(--R)';
     return`<tr onclick="lihatDetail(${a.id})">
@@ -2030,7 +2013,7 @@ function lihatDetail(id){
     else if(!isAdmin&&hasAksi){hasAksi.remove();}
   }
   // Sisa kewajiban running: total_kewajiban - akumulasi bayar
-  const totalKewDB=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+  const totalKewDB=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
   let sisaRunning=totalKewDB;
   tbody.innerHTML=angs.length?angs.map((an,i)=>{
     const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i+1);
@@ -2219,7 +2202,7 @@ function pilihPayAkad(id,nama,noAkad){
   document.getElementById('pay-dd').style.display='none';
   const a=aAkad.find(x=>x.id===id);if(!a)return;
   const angs=aAngsuran.filter(x=>x.akad_id===id);
-  const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
   const sisaPokok=angs.reduce((s,x)=>s-parseFloat(x.pokok||0),totalKewajiban*parseFloat(a.total_pembiayaan||0)/(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)));
   const sisaMargin=angs.reduce((s,x)=>s-parseFloat(x.margin||0),totalKewajiban*parseFloat(a.total_margin||0)/(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)));
   const bulanKe=angs.length+1;
@@ -2533,7 +2516,7 @@ function mkTbl(rows){return rows.map(([l1,v1,l2,v2])=>`<tr><td style="background
 function _buildKartuRows(a, styleMode){
   const angs=aAngsuran.filter(x=>x.akad_id===a.id);
   const jangka=a.jangka||12;
-  const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
   let rows='',sisa=totalKewajiban;
   for(let i=1;i<=jangka;i++){
     const b=angs[i-1];
@@ -2606,7 +2589,7 @@ function cetakKartu(){
   bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuPreview(a), ()=>buildKartuPrint(a));
 }
 function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClass, footClass){
-  const totalKewajiban=parseFloat(a.total_pembiayaan||0);// T Kewajiban = total_pembiayaan (sudah include margin)
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0);// T Kewajiban = pokok + margin
   const hargaBeli=parseFloat(a.harga_beli||0)||totalKewajiban-parseFloat(a.total_margin||0);
   // Narasi per jenis akad
   const narasi={
