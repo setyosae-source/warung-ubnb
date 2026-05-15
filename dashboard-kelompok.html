@@ -3043,21 +3043,87 @@ function generateLaporanKegiatan(id){
       ${bI>0?`<div style="width:${bI}%;background:#67e8f9;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:#164e63;font-weight:700;">Izin ${tI}</span></div>`:''}
       <div style="flex:1;background:#ffdede;display:flex;align-items:center;justify-content:flex-end;padding-right:4px;"><span style="font-size:7px;color:#cc3333;font-weight:700;">Tidak ${tT}</span></div>
     </div>
-    <div style="padding:0 8px 6px;border:1px solid #e5e7eb;border-top:none;">
-      ${CAT.map(c=>tblH('✅ '+LBL[c]+' — '+stat[c].hadir.length+' hadir dari '+stat[c].total,stat[c].hadir,CLR[c],BG[c])).join('')}
-    </div>
-    <div style="padding:6px 8px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:4px;">🤒 SAKIT (${tS})</div>
-      ${tS===0?'<div style="font-size:9px;color:#aaa;">— Tidak ada —</div>':CAT.map(c=>tblT(LBL[c]+' ('+stat[c].sakit.length+')',stat[c].sakit,CLR[c],BG[c])).join('')}
-    </div>
-    <div style="padding:6px 8px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="font-size:10px;font-weight:700;color:#0891b2;margin-bottom:4px;">📋 IZIN (${tI})</div>
-      ${tI===0?'<div style="font-size:9px;color:#aaa;">— Tidak ada —</div>':CAT.map(c=>tblT(LBL[c]+' ('+stat[c].izin.length+')',stat[c].izin,CLR[c],BG[c])).join('')}
-    </div>
-    <div style="padding:6px 8px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="font-size:10px;font-weight:700;color:#cc3333;margin-bottom:4px;">❌ TIDAK HADIR (${tT})</div>
-      ${CAT.map(c=>tblT(LBL[c]+' ('+stat[c].tidak.length+')',stat[c].tidak,CLR[c],BG[c])).join('')}
-    </div>
+    ${(()=>{
+      // Helper: render tabel 1 kolom nama saja
+      function kolNama(title, rows, color, bg){
+        if(!rows.length) return '<div style="font-size:9px;font-weight:700;color:'+color+';margin:6px 0 2px;">'+title+'</div><div style="font-size:8px;color:#aaa;padding:2px 4px;">— Tidak ada —</div>';
+        let h='<div style="font-size:9px;font-weight:700;color:'+color+';margin:6px 0 2px;">'+title+'</div>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed;">'
+          +'<colgroup><col style="width:20px"/><col/></colgroup>'
+          +'<thead><tr><th style="background:'+color+';color:white;padding:2px 3px;text-align:center;">No</th>'
+          +'<th style="background:'+color+';color:white;padding:2px 3px;text-align:left;">Nama</th></tr></thead><tbody>';
+        rows.forEach((r,i)=>{
+          const nc=r._isDuda?CLR_DUDA:r._isJanda?CLR_JANDA:'inherit';
+          const fw=(r._isDuda||r._isJanda)?'700':'400';
+          h+='<tr style="background:'+(i%2===0?'white':bg)+';">'
+            +'<td style="padding:2px 3px;border:1px solid #e5e7eb;text-align:center;">'+(i+1)+'</td>'
+            +'<td style="padding:2px 3px;border:1px solid #e5e7eb;color:'+nc+';font-weight:'+fw+';">'+r.jamaah_nama+'</td>'
+            +'</tr>';
+        });
+        return h+'</tbody></table>';
+      }
+
+      // Helper: render tabel tidak hadir 1 kolom nama
+      function kolTidak(title, lst, color, bg){
+        if(!lst.length) return '<div style="font-size:9px;font-weight:700;color:'+color+';margin:6px 0 2px;">'+title+'</div><div style="font-size:8px;color:#aaa;padding:2px 4px;">— Tidak ada —</div>';
+        let h='<div style="font-size:9px;font-weight:700;color:'+color+';margin:6px 0 2px;">'+title+'</div>'
+          +'<table style="width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed;">'
+          +'<colgroup><col style="width:20px"/><col/></colgroup>'
+          +'<thead><tr><th style="background:'+color+';color:white;padding:2px 3px;text-align:center;">No</th>'
+          +'<th style="background:'+color+';color:white;padding:2px 3px;text-align:left;">Nama</th></tr></thead><tbody>';
+        lst.forEach((r,i)=>{
+          h+='<tr style="background:'+(i%2===0?'white':bg)+';">'
+            +'<td style="padding:2px 3px;border:1px solid #e5e7eb;text-align:center;">'+(i+1)+'</td>'
+            +'<td style="padding:2px 3px;border:1px solid #e5e7eb;">'+r.jamaah_nama+'</td>'
+            +'</tr>';
+        });
+        return h+'</tbody></table>';
+      }
+
+      function seksi2kol(judul, warna, fnL_bapak, fnL_remaja, fnP_ibu, fnP_remaja){
+        return '<div style="padding:6px 8px;border:1px solid #e5e7eb;border-top:none;">'
+          +'<div style="font-size:10px;font-weight:700;color:'+warna+';margin-bottom:6px;">'+judul+'</div>'
+          +'<div style="display:flex;gap:8px;">'
+          // Kolom kiri: Laki-laki
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:9px;font-weight:800;color:#1d4ed8;background:#eff6ff;padding:3px 6px;border-radius:4px;margin-bottom:4px;text-align:center;">♂ Laki-laki</div>'
+          +fnL_bapak+fnL_remaja
+          +'</div>'
+          // Garis pemisah
+          +'<div style="width:1px;background:#e0e0e0;flex-shrink:0;"></div>'
+          // Kolom kanan: Perempuan
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:9px;font-weight:800;color:#be185d;background:#fdf2f8;padding:3px 6px;border-radius:4px;margin-bottom:4px;text-align:center;">♀ Perempuan</div>'
+          +fnP_ibu+fnP_remaja
+          +'</div>'
+          +'</div></div>';
+      }
+
+      const hBapak  = kolNama('Bapak-bapak ('+stat.bapak.hadir.length+'/'+stat.bapak.total+')', stat.bapak.hadir, '#1d4ed8','#eff6ff');
+      const hRemL   = kolNama('Remaja Putra ('+stat.remaja_l.hadir.length+'/'+stat.remaja_l.total+')', stat.remaja_l.hadir, '#c2410c','#fff7ed');
+      const hIbu    = kolNama('Ibu-ibu ('+stat.ibu.hadir.length+'/'+stat.ibu.total+')', stat.ibu.hadir, '#be185d','#fdf2f8');
+      const hRemP   = kolNama('Remaja Putri ('+stat.remaja_p.hadir.length+'/'+stat.remaja_p.total+')', stat.remaja_p.hadir, '#0f766e','#f0fdfa');
+
+      const sBapak  = kolNama('Bapak-bapak ('+stat.bapak.sakit.length+')', stat.bapak.sakit, '#1d4ed8','#eff6ff');
+      const sRemL   = kolNama('Remaja Putra ('+stat.remaja_l.sakit.length+')', stat.remaja_l.sakit, '#c2410c','#fff7ed');
+      const sIbu    = kolNama('Ibu-ibu ('+stat.ibu.sakit.length+')', stat.ibu.sakit, '#be185d','#fdf2f8');
+      const sRemP   = kolNama('Remaja Putri ('+stat.remaja_p.sakit.length+')', stat.remaja_p.sakit, '#0f766e','#f0fdfa');
+
+      const iBapak  = kolNama('Bapak-bapak ('+stat.bapak.izin.length+')', stat.bapak.izin, '#1d4ed8','#eff6ff');
+      const iRemL   = kolNama('Remaja Putra ('+stat.remaja_l.izin.length+')', stat.remaja_l.izin, '#c2410c','#fff7ed');
+      const iIbu    = kolNama('Ibu-ibu ('+stat.ibu.izin.length+')', stat.ibu.izin, '#be185d','#fdf2f8');
+      const iRemP   = kolNama('Remaja Putri ('+stat.remaja_p.izin.length+')', stat.remaja_p.izin, '#0f766e','#f0fdfa');
+
+      const tBapak  = kolTidak('Bapak-bapak ('+stat.bapak.tidak.length+')', stat.bapak.tidak, '#1d4ed8','#eff6ff');
+      const tRemL   = kolTidak('Remaja Putra ('+stat.remaja_l.tidak.length+')', stat.remaja_l.tidak, '#c2410c','#fff7ed');
+      const tIbu    = kolTidak('Ibu-ibu ('+stat.ibu.tidak.length+')', stat.ibu.tidak, '#be185d','#fdf2f8');
+      const tRemP   = kolTidak('Remaja Putri ('+stat.remaja_p.tidak.length+')', stat.remaja_p.tidak, '#0f766e','#f0fdfa');
+
+      return seksi2kol('✅ HADIR ('+tH+')', '#1a6640', hBapak, hRemL, hIbu, hRemP)
+           + seksi2kol('🤒 SAKIT ('+tS+')', '#d97706', sBapak, sRemL, sIbu, sRemP)
+           + seksi2kol('📋 IZIN ('+tI+')', '#0891b2', iBapak, iRemL, iIbu, iRemP)
+           + seksi2kol('❌ TIDAK HADIR ('+tT+')', '#cc3333', tBapak, tRemL, tIbu, tRemP);
+    })()}
     <div style="padding:6px 10px;border:1px solid #e5e7eb;border-top:none;text-align:right;">
       <span style="font-size:8px;color:#bbb;font-style:italic;">Powered by UBNB Perwira Super Apps · @rdsn-2026</span>
     </div></div>`;
