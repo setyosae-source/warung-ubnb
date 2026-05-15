@@ -4542,10 +4542,19 @@ function tampilStruk(tx){
   }
   // ====================================
   const sub=tx.items.reduce((a,i)=>a+(i.hE||i.hargaEfektif||i.harga)*i.qty,0);
+  const _totalDiskonItemS=tx.items.reduce((s,i)=>s+(i.diskon_total||i.dI||0),0);
+  const _subBersihS=sub-_totalDiskonItemS;
+  // Hitung diskon nominal: fallback dari tipe+nilai kalau diskon_nominal=0
+  let _dNomS=tx.diskon_nominal||0;
+  if(_dNomS===0&&tx.diskon_tipe&&tx.diskon_tipe!==''){
+    if(tx.diskon_tipe==='persen'&&tx.diskon_nilai>0) _dNomS=Math.round(_subBersihS*tx.diskon_nilai/100);
+    else if(tx.diskon_tipe==='nominal'&&tx.diskon_nilai>0) _dNomS=Math.min(tx.diskon_nilai,_subBersihS);
+  }
+  const _dLabelS=tx.voucher_kode?`Disc (${tx.voucher_kode})`:tx.diskon_tipe==='persen'?`Disc ${tx.diskon_nilai}%`:_dNomS>0?'Diskon':'';
   let h=`<div class="sh"><div class="logo">🛒</div><h3>WARUNG UBNB</h3><p>${tgl}</p><p>${jam} | No: ${no}</p><p>Kasir: ${tx.kasir||'-'}</p>${pelLabel}</div>${pelInfoBawah}<hr class="sdiv">`;
   tx.items.forEach(i=>{const hE=i.hE||i.hargaEfektif||i.harga;const dT=i.dI>0||i.diskonItem>0?` <span style="color:var(--red);font-size:10px">(-${fN(i.dI||i.diskonItem)}/item)</span>`:'';h+=`<div class="srow" style="font-weight:600">${i.nama}${dT}</div><div class="srow" style="color:#888"><span style="padding-left:10px">${i.qty} × ${fN(hE)}</span><span>${fN(hE*i.qty)}</span></div>`;});
   h+=`<hr class="sdiv">`;
-  if(tx.diskon_nominal>0){const dL=tx.voucher_kode?`Disc (${tx.voucher_kode})`:tx.diskon_tipe==='persen'?`Disc ${tx.diskon_nilai}%`:'Disc';h+=`<div class="srow" style="color:#888"><span>Subtotal</span><span>${fN(sub)}</span></div><div class="srow disc"><span>${dL}</span><span>-${fN(tx.diskon_nominal)}</span></div>`;}
+  if(_dNomS>0){h+=`<div class="srow" style="color:#888"><span>Subtotal</span><span>${fN(sub)}</span></div><div class="srow disc"><span>${_dLabelS}</span><span>-${fN(_dNomS)}</span></div>`;}
   if(tx.ongkir>0)h+=`<div class="srow"><span>Ongkir</span><span>${fN(tx.ongkir)}</span></div>`;
   h+=`<div class="srow bold"><span>TOTAL</span><span>${fN(tx.total)}</span></div>`;
   if(tx.status_bayar==='belum')h+=`<div class="srow disc"><span>Status</span><span>BELUM BAYAR</span></div>`;
@@ -4568,7 +4577,7 @@ function tampilStruk(tx){
   let cap=`<div class="sc-logo">🛒</div><div class="sc-name">WARUNG UBNB</div><div class="sc-sub">${tgl}</div><div class="sc-sub">${jam} | No: ${no} | Kasir: ${tx.kasir||'-'}</div>${pelLabelCap}${pelInfoBawahCap}<hr class="sc-divider">`;
   tx.items.forEach(i=>{const hE=i.hE||i.hargaEfektif||i.harga;cap+=`<div class="sc-row in">${i.nama}</div><div class="sc-row id"><span>${i.qty} × Rp ${fN(hE)}</span><span>Rp ${fN(hE*i.qty)}</span></div>`;});
   cap+=`<hr class="sc-divider">`;
-  if(tx.diskon_nominal>0){const dL=tx.voucher_kode?`Disc (${tx.voucher_kode})`:tx.diskon_tipe==='persen'?`Disc ${tx.diskon_nilai}%`:'Disc';cap+=`<div class="sc-row br"><span>Subtotal</span><span>Rp ${fN(sub)}</span></div><div class="sc-row dr"><span>${dL}</span><span>-Rp ${fN(tx.diskon_nominal)}</span></div>`;}
+  if(_dNomS>0){cap+=`<div class="sc-row br"><span>Subtotal</span><span>Rp ${fN(sub)}</span></div><div class="sc-row dr"><span>${_dLabelS||'Diskon'}</span><span>-Rp ${fN(_dNomS)}</span></div>`;}
   if(tx.ongkir>0)cap+=`<div class="sc-row br"><span>Ongkir</span><span>Rp ${fN(tx.ongkir)}</span></div>`;
   cap+=`<div class="sc-row tot"><span>TOTAL</span><span>Rp ${fN(tx.total)}</span></div>`;
   if(tx.status_bayar==='belum')cap+=`<div class="sc-row dr"><span>Status</span><span>BELUM BAYAR</span></div>`;
@@ -11422,8 +11431,19 @@ async function posShowStrukFromHistory(txId){
     const{data:t}=await sb.from('transaksi').select('*').eq('id',txId).single();
     if(!t){toast('Transaksi tidak ditemukan',true);return;}
     const _itemsSub=(t.items||[]).reduce((s,i)=>s+(i.qty||0)*(i.harga||0),0);
-    const _dNom=t.diskon_nominal||0;
-    const _dLabel=t.voucher_kode?`Voucher (${t.voucher_kode})`:t.diskon_tipe==='persen'?`Diskon ${t.diskon_nilai}%`:t.diskon_tipe==='nominal'?'Diskon':'Diskon';
+    const _totalDiskonItem=(t.items||[]).reduce((s,i)=>s+(i.diskon_total||0),0);
+    const _subtotalBersih=_itemsSub-_totalDiskonItem;
+    // Hitung diskonNominal: prioritas diskon_nominal, fallback hitung dari tipe+nilai
+    let _dNom=t.diskon_nominal||0;
+    if(_dNom===0&&t.diskon_tipe&&t.diskon_tipe!==''){
+      if(t.diskon_tipe==='persen'&&t.diskon_nilai>0)
+        _dNom=Math.round(_subtotalBersih*t.diskon_nilai/100);
+      else if(t.diskon_tipe==='nominal'&&t.diskon_nilai>0)
+        _dNom=Math.min(t.diskon_nilai,_subtotalBersih);
+    }
+    const _dLabel=t.voucher_kode?`Voucher (${t.voucher_kode})`:
+      t.diskon_tipe==='persen'?`Diskon ${t.diskon_nilai}%`:
+      t.diskon_tipe==='nominal'&&_dNom>0?`Diskon Rp ${_dNom.toLocaleString('id-ID')}`:'';
     const trxSnapshot={
       id:t.id,
       time:new Date(t.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
