@@ -10957,6 +10957,12 @@ function posHitungKembalian(){
 
 /* === KONFIRMASI BAYAR (CORE LOGIC) === */
 async function posKonfirmasiBayar(){
+  // Anti-dobel guard: kalau fungsi sudah jalan, klik kedua langsung di-reject
+  if(window._posSubmitting){
+    console.warn('posKonfirmasiBayar: submit sudah berjalan, klik kedua diabaikan');
+    return;
+  }
+
   const total=posComputeTotal();
   let bayarVal=0;
   let kasId=null;
@@ -10974,6 +10980,8 @@ async function posKonfirmasiBayar(){
     }
   }
 
+  // Set guard ON setelah validasi pass (sebelum operasi async apapun)
+  window._posSubmitting=true;
   const btn=document.getElementById('pos-btn-konfirmasi');
   btn.disabled=true; btn.innerHTML='⏳ Menyimpan...'; btn.style.opacity='0.6';
 
@@ -11121,7 +11129,7 @@ async function posKonfirmasiBayar(){
       items:JSON.parse(JSON.stringify(posCart)),
       subtotal,
       diskonNominal,
-      diskonLabel:vKode?`Voucher (${vKode})`:dTipe==='persen'?`Diskon ${dNilaiS}%`:dTipe==='nominal'?'Diskon':'',
+      diskonLabel:posDiskon.voucher_kode?`Voucher (${posDiskon.voucher_kode})`:posDiskon.tipe==='persen'?`Diskon ${posDiskon.nilai}%`:posDiskon.tipe==='nominal'?'Diskon':'',
       ongkir:posOngkir,
       total,
       bayar:bayarVal,
@@ -11143,6 +11151,9 @@ async function posKonfirmasiBayar(){
     console.error('posKonfirmasiBayar:',e);
     toast('❌ Gagal: '+(e.message||e),true);
     btn.disabled=false; btn.innerHTML='✓ Konfirmasi'; btn.style.opacity='1';
+  } finally {
+    // Release guard di semua jalur (happy path & catch)
+    window._posSubmitting=false;
   }
 }
 
