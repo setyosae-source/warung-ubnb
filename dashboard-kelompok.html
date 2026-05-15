@@ -2945,282 +2945,43 @@ function cetakDaftarHadir(){
   _bukaCetakKegiatan(body,'Daftar Hadir - '+(k.acara_nama||''));
 }
 
-// ===== LAPORAN REKAP KEHADIRAN (PDF-style print) =====
-function generateLaporanKegiatan(id){
-  const k = aKegiatan.find(x => x.id === id);
-  if(!k){ toast('Kegiatan tidak ditemukan', true); return; }
-
-  const hadirAll = aHadir.filter(h => h.kegiatan_id === id);
-  const total = k.peserta_wajib_count || hadirAll.length;
-
-  // Build lookup jamaah → jenis_kelamin & status_nikah
-  const jMap = {};
-  aJamaah.forEach(j => { jMap[j.did] = j; });
-
-  // Kategorikan tiap peserta
-  function kategori(h){
-    const j = jMap[h.jamaah_did] || {};
-    const jk = (j.jenis_kelamin||'').charAt(0).toUpperCase(); // L / P
-    const sn = (j.status_nikah||'').trim();
-    if(sn === 'Menikah' && jk === 'L') return 'bapak';
-    if(sn === 'Menikah' && jk === 'P') return 'ibu';
-    if(sn === 'Janda / Duda')          return 'janda';
-    if(sn === 'Belum Menikah' && jk === 'L') return 'remaja_l';
-    if(sn === 'Belum Menikah' && jk === 'P') return 'remaja_p';
-    return 'lainnya';
-  }
-
-  const hadir  = hadirAll.filter(h => h.status_hadir === 'hadir');
-  const sakit  = hadirAll.filter(h => h.status_hadir === 'sakit');
-  const izin   = hadirAll.filter(h => h.status_hadir === 'izin');
-  const tidak  = hadirAll.filter(h => h.status_hadir === 'tidak_hadir');
-
-  // Hitung per kategori
-  const CAT = ['bapak','ibu','janda','remaja_l','remaja_p'];
-  const catLabel = { bapak:'Bapak-bapak', ibu:'Ibu-ibu', janda:'Janda/Duda', remaja_l:'Remaja Putra', remaja_p:'Remaja Putri' };
-  const catColor = { bapak:'#1d4ed8', ibu:'#be185d', janda:'#7c3aed', remaja_l:'#c2410c', remaja_p:'#0f766e' };
-  const catBg    = { bapak:'#eff6ff', ibu:'#fdf2f8', janda:'#f5f3ff', remaja_l:'#fff7ed', remaja_p:'#f0fdfa' };
-
-  const stat = {};
-  CAT.forEach(c => { stat[c] = { total:0, hadir:[], sakit:[], izin:[], tidak:[] }; });
-  stat.lainnya = { total:0, hadir:[], sakit:[], izin:[], tidak:[] };
-
-  hadirAll.forEach(h => {
-    const c = kategori(h);
-    const s = stat[c] || stat.lainnya;
-    s.total++;
-    if(h.status_hadir === 'hadir')        s.hadir.push(h);
-    else if(h.status_hadir === 'sakit')   s.sakit.push(h);
-    else if(h.status_hadir === 'izin')    s.izin.push(h);
-    else                                   s.tidak.push(h);
-  });
-  CAT.forEach(c => { stat[c].hadir.sort((a,b)=>(a.jamaah_nama||'').localeCompare(b.jamaah_nama||'')); });
-
-  const totalHadir = hadir.length;
-  const totalSakit = sakit.length;
-  const totalIzin  = izin.length;
-  const totalTidak = tidak.length;
-  const pct = total > 0 ? Math.round(totalHadir/total*100) : 0;
-
-  // Hitung L/P
-  const hadirL = hadir.filter(h => (jMap[h.jamaah_did]?.jenis_kelamin||'').charAt(0).toUpperCase()==='L').length;
-  const hadirP = hadir.filter(h => (jMap[h.jamaah_did]?.jenis_kelamin||'').charAt(0).toUpperCase()==='P').length;
-  const totalL = hadirAll.filter(h => (jMap[h.jamaah_did]?.jenis_kelamin||'').charAt(0).toUpperCase()==='L').length;
-  const totalP = hadirAll.filter(h => (jMap[h.jamaah_did]?.jenis_kelamin||'').charAt(0).toUpperCase()==='P').length;
-  const pctL = totalL > 0 ? Math.round(hadirL/totalL*100) : 0;
-  const pctP = totalP > 0 ? Math.round(hadirP/totalP*100) : 0;
-
-  const tgl = new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  const kelompokNama = k.kelompok || CU?.kelompok_scope || 'Desa Perwira';
-
-  // ===== BUILD HTML =====
-  function statBox(val, label, valColor, bg, border){
-    return `<div style="flex:1;min-width:70px;background:${bg};border:1.5px solid ${border};border-radius:6px;padding:8px 4px;text-align:center;">
-      <div style="font-size:18px;font-weight:800;color:${valColor};line-height:1.2;">${val}</div>
-      <div style="font-size:9px;color:#555;margin-top:2px;">${label}</div>
-    </div>`;
-  }
-
-  function statBox2(val, label, sub, valColor, bg, border){
-    return `<div style="flex:1;min-width:60px;background:${bg};border:1.5px solid ${border};border-radius:6px;padding:7px 4px;text-align:center;">
-      <div style="font-size:16px;font-weight:800;color:${valColor};line-height:1.2;">${val}</div>
-      <div style="font-size:8.5px;font-weight:700;color:#222;margin-top:1px;">${label}</div>
-      <div style="font-size:7.5px;color:#777;">${sub}</div>
-    </div>`;
-  }
-
-  function tabelHadir(title, rows, color, bg){
-    if(!rows.length) return `<div style="font-size:10px;font-weight:700;color:${color};margin:10px 0 2px;">${title}</div>
-      <div style="font-size:9px;color:#888;padding:6px 8px;background:${bg};border-radius:4px;">— Tidak ada yang hadir —</div>`;
-    let html = `<div style="font-size:10px;font-weight:700;color:${color};margin:10px 0 3px;">${title}</div>
-      <table style="width:100%;border-collapse:collapse;font-size:9px;">
-        <thead><tr>
-          <th style="background:${color};color:white;padding:4px;width:24px;text-align:center;">No</th>
-          <th style="background:${color};color:white;padding:4px;text-align:left;">Nama</th>
-          <th style="background:${color};color:white;padding:4px;text-align:left;">Nama KK</th>
-        </tr></thead><tbody>`;
-    rows.forEach((h,i) => {
-      const rowBg = i%2===0 ? 'white' : bg;
-      html += `<tr style="background:${rowBg};">
-        <td style="padding:3px 4px;border:1px solid #e5e7eb;text-align:center;">${i+1}</td>
-        <td style="padding:3px 4px;border:1px solid #e5e7eb;">${h.jamaah_nama||''}</td>
-        <td style="padding:3px 4px;border:1px solid #e5e7eb;">${h.jamaah_kk||''}</td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-    return html;
-  }
-
-  function tabelTidak(label, lst, color, bg){
-    if(!lst.length) return '';
-    const mid = Math.ceil(lst.length/2);
-    const col1 = lst.slice(0,mid); const col2 = lst.slice(mid);
-    let html = `<div style="font-size:9px;font-weight:700;color:${color};margin:4px 0 2px;">${label}</div>
-      <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
-        <thead><tr>
-          <th style="background:${color};color:white;padding:3px;width:20px;text-align:center;">No</th>
-          <th style="background:${color};color:white;padding:3px;">Nama</th>
-          <th style="background:${color};color:white;padding:3px;width:20px;text-align:center;">No</th>
-          <th style="background:${color};color:white;padding:3px;">Nama</th>
-        </tr></thead><tbody>`;
-    for(let i=0;i<mid;i++){
-      const rowBg = i%2===0?'white':bg;
-      html += `<tr style="background:${rowBg};">
-        <td style="padding:2px 3px;border:1px solid #e5e7eb;text-align:center;">${i+1}</td>
-        <td style="padding:2px 3px;border:1px solid #e5e7eb;">${col1[i]?.jamaah_nama||''}</td>
-        <td style="padding:2px 3px;border:1px solid #e5e7eb;text-align:center;">${i<col2.length?mid+i+1:''}</td>
-        <td style="padding:2px 3px;border:1px solid #e5e7eb;">${col2[i]?.jamaah_nama||''}</td>
-      </tr>`;
-    }
-    html += '</tbody></table>';
-    return html;
-  }
-
-  // Progress bar
-  const barHadir = total > 0 ? Math.round(totalHadir/total*100) : 0;
-  const barSakit = total > 0 ? Math.round(totalSakit/total*100) : 0;
-  const barIzin  = total > 0 ? Math.round(totalIzin/total*100)  : 0;
-
-  const html = `
-  <div style="font-family:'Segoe UI',sans-serif;max-width:800px;margin:0 auto;font-size:10px;">
-
-    <!-- JUDUL -->
-    <div style="text-align:center;padding:10px 0 4px;border:1px solid #e5e7eb;">
-      <div style="font-size:14px;font-weight:800;color:#1a6640;letter-spacing:0.5px;">LAPORAN REKAP KEHADIRAN</div>
-      <div style="font-size:9px;color:#555;margin-top:3px;">${k.acara_nama} &nbsp;·&nbsp; ${tgl}${k.waktu?' · '+k.waktu.substring(0,5):''}${k.lokasi?' · '+k.lokasi:''}</div>
-    </div>
-
-    <!-- STAT BARIS 1 -->
-    <div style="display:flex;gap:4px;padding:8px 10px;border:1px solid #e5e7eb;border-top:none;flex-wrap:wrap;">
-      ${statBox(total,        'Total Peserta', '#1a6640', '#e8f5ee', '#1a6640')}
-      ${statBox(totalHadir,   'Hadir',         '#1a6640', '#e8f5ee', '#1a6640')}
-      ${statBox(totalSakit,   'Sakit',         '#d97706', '#fffbeb', '#d97706')}
-      ${statBox(totalIzin,    'Izin',          '#0891b2', '#ecfeff', '#0891b2')}
-      ${statBox(totalTidak,   'Tidak Hadir',   '#cc3333', '#fff0f0', '#cc3333')}
-      ${statBox(pct+'%',      'Kehadiran',     '#c9a84c', '#fdf8ee', '#c9a84c')}
-      ${statBox(hadirL+'/'+totalL, 'Laki ('+pctL+'%)', '#1d4ed8', '#eff6ff', '#1d4ed8')}
-      ${statBox(hadirP+'/'+totalP, 'Perempuan ('+pctP+'%)', '#be185d', '#fdf2f8', '#be185d')}
-    </div>
-
-    <!-- STAT BARIS 2 -->
-    <div style="display:flex;gap:5px;padding:0 10px 8px;border:1px solid #e5e7eb;border-top:none;">
-      ${statBox2(stat.bapak.hadir.length+'/'+stat.bapak.total,   'Bapak-bapak', stat.bapak.total>0?Math.round(stat.bapak.hadir.length/stat.bapak.total*100)+'%':'-', '#1d4ed8','#eff6ff','#1d4ed8')}
-      ${statBox2(stat.ibu.hadir.length+'/'+stat.ibu.total,       'Ibu-ibu',     stat.ibu.total>0?Math.round(stat.ibu.hadir.length/stat.ibu.total*100)+'%':'-',    '#be185d','#fdf2f8','#be185d')}
-      ${statBox2(stat.janda.hadir.length+'/'+stat.janda.total,   'Janda/Duda',  stat.janda.total>0?Math.round(stat.janda.hadir.length/stat.janda.total*100)+'%':'-','#7c3aed','#f5f3ff','#7c3aed')}
-      ${statBox2(stat.remaja_l.hadir.length+'/'+stat.remaja_l.total,'Remaja Putra',stat.remaja_l.total>0?Math.round(stat.remaja_l.hadir.length/stat.remaja_l.total*100)+'%':'-','#c2410c','#fff7ed','#c2410c')}
-      ${statBox2(stat.remaja_p.hadir.length+'/'+stat.remaja_p.total,'Remaja Putri',stat.remaja_p.total>0?Math.round(stat.remaja_p.hadir.length/stat.remaja_p.total*100)+'%':'-','#0f766e','#f0fdfa','#0f766e')}
-    </div>
-
-    <!-- PROGRESS BAR -->
-    <div style="padding:0 10px 10px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="display:flex;border-radius:4px;overflow:hidden;height:16px;">
-        <div style="width:${barHadir}%;background:#1a6640;display:flex;align-items:center;padding-left:6px;min-width:${barHadir>0?'40px':'0'};">
-          ${barHadir>0?`<span style="font-size:7px;color:white;font-weight:700;white-space:nowrap;">Hadir ${totalHadir}</span>`:''}
-        </div>
-        ${barSakit>0?`<div style="width:${barSakit}%;background:#fbbf24;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:#78350f;font-weight:700;white-space:nowrap;">Sakit ${totalSakit}</span></div>`:''}
-        ${barIzin>0?`<div style="width:${barIzin}%;background:#67e8f9;display:flex;align-items:center;justify-content:center;"><span style="font-size:7px;color:#164e63;font-weight:700;white-space:nowrap;">Izin ${totalIzin}</span></div>`:''}
-        <div style="flex:1;background:#ffdede;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;">
-          <span style="font-size:7px;color:#cc3333;font-weight:700;white-space:nowrap;">Tidak ${totalTidak}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- DAFTAR HADIR -->
-    <div style="padding:0 10px 6px;border:1px solid #e5e7eb;border-top:none;">
-      ${tabelHadir('✅ BAPAK-BAPAK (Menikah L) — '+stat.bapak.hadir.length+' hadir dari '+stat.bapak.total, stat.bapak.hadir, '#1d4ed8','#eff6ff')}
-      ${tabelHadir('✅ IBU-IBU (Menikah P) — '+stat.ibu.hadir.length+' hadir dari '+stat.ibu.total, stat.ibu.hadir, '#be185d','#fdf2f8')}
-      ${tabelHadir('✅ JANDA / DUDA — '+stat.janda.hadir.length+' hadir dari '+stat.janda.total, stat.janda.hadir, '#7c3aed','#f5f3ff')}
-      ${tabelHadir('✅ REMAJA PUTRA (Belum Menikah L) — '+stat.remaja_l.hadir.length+' hadir dari '+stat.remaja_l.total, stat.remaja_l.hadir, '#c2410c','#fff7ed')}
-      ${tabelHadir('✅ REMAJA PUTRI (Belum Menikah P) — '+stat.remaja_p.hadir.length+' hadir dari '+stat.remaja_p.total, stat.remaja_p.hadir, '#0f766e','#f0fdfa')}
-    </div>
-
-    <!-- SAKIT -->
-    <div style="padding:6px 10px 8px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:5px;">🤒 SAKIT (${totalSakit} orang)</div>
-      ${totalSakit===0
-        ? `<div style="font-size:9px;color:#aaa;padding:4px 8px;">— Tidak ada —</div>`
-        : CAT.map(c => tabelTidak(catLabel[c]+' ('+stat[c].sakit.length+')', stat[c].sakit, catColor[c], catBg[c])).join('')
-      }
-    </div>
-
-    <!-- IZIN -->
-    <div style="padding:6px 10px 8px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="font-size:10px;font-weight:700;color:#0891b2;margin-bottom:5px;">📋 IZIN (${totalIzin} orang)</div>
-      ${totalIzin===0
-        ? `<div style="font-size:9px;color:#aaa;padding:4px 8px;">— Tidak ada —</div>`
-        : CAT.map(c => tabelTidak(catLabel[c]+' ('+stat[c].izin.length+')', stat[c].izin, catColor[c], catBg[c])).join('')
-      }
-    </div>
-
-    <!-- TIDAK HADIR -->
-    <div style="padding:6px 10px 8px;border:1px solid #e5e7eb;border-top:none;">
-      <div style="font-size:10px;font-weight:700;color:#cc3333;margin-bottom:5px;">❌ TIDAK HADIR (${totalTidak} orang)</div>
-      ${tabelTidak('Bapak-bapak ('+stat.bapak.tidak.length+')', stat.bapak.tidak, '#1d4ed8','#eff6ff')}
-      ${tabelTidak('Ibu-ibu ('+stat.ibu.tidak.length+')', stat.ibu.tidak, '#be185d','#fdf2f8')}
-      ${tabelTidak('Janda/Duda ('+stat.janda.tidak.length+')', stat.janda.tidak, '#7c3aed','#f5f3ff')}
-      ${tabelTidak('Remaja Putra ('+stat.remaja_l.tidak.length+')', stat.remaja_l.tidak, '#c2410c','#fff7ed')}
-      ${tabelTidak('Remaja Putri ('+stat.remaja_p.tidak.length+')', stat.remaja_p.tidak, '#0f766e','#f0fdfa')}
-    </div>
-
-    <!-- FOOTER -->
-    <div style="padding:7px 12px;border:1px solid #e5e7eb;border-top:none;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:8px;color:#bbb;">${new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</span>
-      <span style="font-size:8px;color:#bbb;font-style:italic;">Powered by UBNB Perwira Super Apps &nbsp;·&nbsp; @rdsn-2026</span>
-    </div>
-
-  </div>`;
-
-  // Buka di window baru untuk cetak/save PDF
-  const w = window.open('','_blank','width=900,height=700');
-  if(!w){ toast('Browser memblokir popup. Mohon izinkan popup untuk fitur ini.',true); return; }
-  w.document.write(`<!DOCTYPE html><html lang="id"><head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=900,initial-scale=1">
-    <title>Laporan Rekap - ${k.acara_nama}</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Segoe UI',Arial,sans-serif;background:#f9fafb;padding:16px;}
-      .no-print{margin-bottom:12px;display:flex;gap:8px;}
-      .btn-cetak{background:#1a6640;color:white;border:none;padding:8px 18px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;}
-      .btn-tutup{background:#6b7280;color:white;border:none;padding:8px 18px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;}
-      @media print{
-        .no-print{display:none!important;}
-        body{background:white;padding:4px;}
-        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
-      }
-      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    </style>
-  </head><body>
-    <div class="no-print">
-      <button class="btn-cetak" onclick="window.print()">🖨️ Cetak / Save PDF</button>
-      <button class="btn-tutup" onclick="window.close()">✕ Tutup</button>
-    </div>
-    ${html}
-  </body></html>`);
-  w.document.close();
-}
-
-
-
-// ===== LAPORAN REKAP KEHADIRAN =====
 function generateLaporanKegiatan(id){
   const k=aKegiatan.find(x=>x.id===id);
   if(!k){toast('Kegiatan tidak ditemukan',true);return;}
   const hadirAll=aHadir.filter(h=>h.kegiatan_id===id);
   const total=k.peserta_wajib_count||hadirAll.length;
   const jMap={};aJamaah.forEach(j=>{jMap[j.did]=j;});
+  // Janda → ibu, Duda → bapak
   const kat=h=>{const j=jMap[h.jamaah_did]||{},jk=(j.jenis_kelamin||'').charAt(0).toUpperCase(),sn=(j.status_nikah||'').trim();
-    if(sn==='Menikah'&&jk==='L') return 'bapak';if(sn==='Menikah'&&jk==='P') return 'ibu';
-    if(sn==='Janda / Duda') return 'janda';if(sn==='Belum Menikah'&&jk==='L') return 'remaja_l';
-    if(sn==='Belum Menikah'&&jk==='P') return 'remaja_p';return 'lain';};
-  const CAT=['bapak','ibu','janda','remaja_l','remaja_p'];
-  const LBL={bapak:'Bapak-bapak',ibu:'Ibu-ibu',janda:'Janda/Duda',remaja_l:'Remaja Putra',remaja_p:'Remaja Putri'};
-  const CLR={bapak:'#1d4ed8',ibu:'#be185d',janda:'#7c3aed',remaja_l:'#c2410c',remaja_p:'#0f766e'};
-  const BG={bapak:'#eff6ff',ibu:'#fdf2f8',janda:'#f5f3ff',remaja_l:'#fff7ed',remaja_p:'#f0fdfa'};
-  const stat={};CAT.forEach(c=>{stat[c]={total:0,hadir:[],sakit:[],izin:[],tidak:[]};});
-  hadirAll.forEach(h=>{const c=kat(h);if(!stat[c])return;stat[c].total++;
-    if(h.status_hadir==='hadir')stat[c].hadir.push(h);else if(h.status_hadir==='sakit')stat[c].sakit.push(h);
-    else if(h.status_hadir==='izin')stat[c].izin.push(h);else stat[c].tidak.push(h);});
+    if(sn==='Menikah'&&jk==='L') return 'bapak';
+    if(sn==='Menikah'&&jk==='P') return 'ibu';
+    if(sn==='Janda / Duda'&&jk==='L') return 'bapak'; // Duda → bapak
+    if(sn==='Janda / Duda'&&jk==='P') return 'ibu';   // Janda → ibu
+    if(sn==='Belum Menikah'&&jk==='L') return 'remaja_l';
+    if(sn==='Belum Menikah'&&jk==='P') return 'remaja_p';
+    return 'lain';};
+  // Urutan: Bapak, Remaja Putra, Ibu, Remaja Putri
+  const CAT=['bapak','remaja_l','ibu','remaja_p'];
+  const LBL={bapak:'Bapak-bapak',ibu:'Ibu-ibu',remaja_l:'Remaja Putra',remaja_p:'Remaja Putri'};
+  const CLR={bapak:'#1d4ed8',ibu:'#be185d',remaja_l:'#c2410c',remaja_p:'#0f766e'};
+  const BG={bapak:'#eff6ff',ibu:'#fdf2f8',remaja_l:'#fff7ed',remaja_p:'#f0fdfa'};
+  // Warna khusus untuk Duda (dalam bapak) & Janda (dalam ibu)
+  const CLR_DUDA='#7c2d12'; // cokelat tua
+  const CLR_JANDA='#4c1d95'; // ungu tua
+  const stat={};CAT.forEach(c=>{stat[c]={total:0,hadir:[],hadir_special:[],sakit:[],izin:[],tidak:[]};});
+  // hadir_special: untuk tandai Duda di bapak & Janda di ibu
+  hadirAll.forEach(h=>{
+    const c=kat(h);if(!stat[c])return;
+    const j=jMap[h.jamaah_did]||{};
+    const isJanda=j.status_nikah==='Janda / Duda'&&(j.jenis_kelamin||'').charAt(0).toUpperCase()==='P';
+    const isDuda=j.status_nikah==='Janda / Duda'&&(j.jenis_kelamin||'').charAt(0).toUpperCase()==='L';
+    stat[c].total++;
+    if(h.status_hadir==='hadir'){
+      stat[c].hadir.push({...h,_isJanda:isJanda,_isDuda:isDuda});
+    }else if(h.status_hadir==='sakit') stat[c].sakit.push(h);
+    else if(h.status_hadir==='izin') stat[c].izin.push(h);
+    else stat[c].tidak.push(h);
+  });
   const tH=hadirAll.filter(h=>h.status_hadir==='hadir').length;
   const tS=hadirAll.filter(h=>h.status_hadir==='sakit').length;
   const tI=hadirAll.filter(h=>h.status_hadir==='izin').length;
@@ -3234,9 +2995,13 @@ function generateLaporanKegiatan(id){
     let h=`<div style="font-size:10px;font-weight:700;color:${color};margin:8px 0 3px;">${title}</div>`;
     if(!rows.length) return h+`<div style="font-size:9px;color:#aaa;padding:4px 8px;">— Tidak ada —</div>`;
     h+=`<table style="width:100%;border-collapse:collapse;font-size:9px;"><thead><tr><th style="background:${color};color:white;padding:3px;width:22px;text-align:center;">No</th><th style="background:${color};color:white;padding:3px;">Nama</th><th style="background:${color};color:white;padding:3px;">KK</th></tr></thead><tbody>`;
-    rows.forEach((r,i)=>{h+=`<tr style="background:${i%2===0?'white':bg};"><td style="padding:2px 3px;border:1px solid #e5e7eb;text-align:center;">${i+1}</td><td style="padding:2px 3px;border:1px solid #e5e7eb;">${r.jamaah_nama||''}</td><td style="padding:2px 3px;border:1px solid #e5e7eb;">${r.jamaah_kk||''}</td></tr>`;});
+    rows.forEach((r,i)=>{
+      const nc=r._isDuda?CLR_DUDA:r._isJanda?CLR_JANDA:'inherit';
+      const fw=(r._isDuda||r._isJanda)?'700':'400';
+      const sfx=r._isDuda?` <span style="font-size:7px;color:${CLR_DUDA};">(Duda)</span>`:r._isJanda?` <span style="font-size:7px;color:${CLR_JANDA};">(Janda)</span>`:'';
+      h+=`<tr style="background:${i%2===0?'white':bg};"><td style="padding:2px 3px;border:1px solid #e5e7eb;text-align:center;">${i+1}</td><td style="padding:2px 3px;border:1px solid #e5e7eb;color:${nc};font-weight:${fw};">${r.jamaah_nama||''}${sfx}</td><td style="padding:2px 3px;border:1px solid #e5e7eb;">${r.jamaah_kk||''}</td></tr>`;});
     return h+'</tbody></table>';};
-  const tblT=(label,lst,color,bg)=>{
+    const tblT=(label,lst,color,bg)=>{
     if(!lst.length)return '';
     const mid=Math.ceil(lst.length/2),c1=lst.slice(0,mid),c2=lst.slice(mid);
     let h=`<div style="font-size:9px;font-weight:700;color:${color};margin:4px 0 2px;">${label}</div><table style="width:100%;border-collapse:collapse;font-size:8px;"><thead><tr><th style="background:${color};color:white;padding:3px;width:18px;text-align:center;">No</th><th style="background:${color};color:white;padding:3px;">Nama</th><th style="background:${color};color:white;padding:3px;width:18px;text-align:center;">No</th><th style="background:${color};color:white;padding:3px;">Nama</th></tr></thead><tbody>`;
