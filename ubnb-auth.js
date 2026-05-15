@@ -1,5 +1,6 @@
 // ============================================================
-// ubnb-auth.js — v2.0 | UBNB Single Sign-On + Idle Timer
+// ubnb-auth.js — v2.1 | UBNB Single Sign-On + Idle Timer
+//                       + Legacy alias startExpiryTimer (backward compat)
 // ============================================================
 // Pasang di SEMUA halaman SEBELUM script utama:
 //   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -328,6 +329,21 @@ function attachActivityDetector(){
   startIdleTimer.activityOnly = true;
 }
 
+// ===== Backward-compat alias =====
+// Modul lama (mis. users.html) memanggil startExpiryTimer(sessionKey, onExpire).
+// Internal-nya kita teruskan ke startIdleTimer; argumen pertama (string sessionKey)
+// kita abaikan karena SSO sudah handle session-key resolution otomatis.
+// Jika argumen pertama adalah supabase client (signature baru), kita lewatkan apa adanya.
+function startExpiryTimer(sessionKeyOrSb, onExpire){
+  if(typeof sessionKeyOrSb === 'string' || sessionKeyOrSb == null){
+    // Legacy mode: tidak ada sb client → rpc call di dalam startIdleTimer
+    // akan di-skip oleh try/catch internal. Idle timer tetap jalan normal.
+    return startIdleTimer(null, onExpire);
+  }
+  // Modern mode: sb client di-passing seperti biasa
+  return startIdleTimer(sessionKeyOrSb, onExpire);
+}
+
 // ===== Export =====
 global.UBNBAuth = {
   // v2 API
@@ -348,6 +364,7 @@ global.UBNBAuth = {
   verifySession: verifySession,
   cekSudahHadir: cekSudahHadir,
   attachActivityDetector: attachActivityDetector,
+  startExpiryTimer: startExpiryTimer,  // backward-compat alias → startIdleTimer
   // Internal helpers
   _touchActivity: _touchActivity
 };
