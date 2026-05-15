@@ -11112,6 +11112,7 @@ async function posKonfirmasiBayar(){
       items:JSON.parse(JSON.stringify(posCart)),
       subtotal,
       diskonNominal,
+      diskonLabel:vKode?`Voucher (${vKode})`:dTipe==='persen'?`Diskon ${dNilaiS}%`:dTipe==='nominal'?'Diskon':'',
       ongkir:posOngkir,
       total,
       bayar:bayarVal,
@@ -11181,18 +11182,44 @@ function posShowStruk(trx){
   ${trx.catatan?`<div style="font-size:10px;font-style:italic">Note: ${trx.catatan}</div>`:''}
   <hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>`;
   trx.items.forEach(it=>{
-    const sub=it.qty*it.harga;
+    const hasLevel=it._levelLabel&&it._qtyPerUnit&&it._qtyPerUnit>1;
+    const qtyReal=hasLevel?it.qty*it._qtyPerUnit:it.qty;
+    const satuan=it._levelLabel||'';
+    const subNormal=it.qty*it.harga;
+    const diskonIt=it.diskon_total||0;
+    const sub=Math.max(0,subNormal-diskonIt);
+    const lvBadge=hasLevel?` [${satuan}]`:'';
+    const qtyBaris=hasLevel
+      ?`${it.qty} ${satuan} (${qtyReal} pcs) × ${(it.harga||0).toLocaleString('id-ID')}`
+      :`${it.qty} × ${(it.harga||0).toLocaleString('id-ID')}`;
+    const subBaris=diskonIt>0
+      ?`<span style="text-decoration:line-through;opacity:0.45;font-weight:400">${subNormal.toLocaleString('id-ID')}</span> <b>${sub.toLocaleString('id-ID')}</b>`
+      :`<b>${sub.toLocaleString('id-ID')}</b>`;
     html+=`<div style="margin-bottom:3px">
-      <div style="font-size:10.5px">${it.nama}</div>
+      <div style="font-size:10.5px">${it.nama}${lvBadge}</div>
       <div style="display:flex;justify-content:space-between;font-size:10.5px">
-        <span>${it.qty} × ${(it.harga||0).toLocaleString('id-ID')}</span>
-        <span style="font-weight:700">${sub.toLocaleString('id-ID')}</span>
+        <span>${qtyBaris}</span>
+        <span>${subBaris}</span>
       </div>
-    </div>`;
+      ${diskonIt>0?`<div style="font-size:9.5px;color:#dc2626;text-align:right">Diskon -${diskonIt.toLocaleString('id-ID')}</div>`:''}</div>`;
   });
-  html+=`<hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>
-  <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${trx.subtotal.toLocaleString('id-ID')}</span></div>`;
-  if(trx.diskonNominal>0)html+=`<div style="display:flex;justify-content:space-between"><span>Diskon</span><span>-${trx.diskonNominal.toLocaleString('id-ID')}</span></div>`;
+  html+=`<hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>`;
+  // Subtotal item (kotor)
+  const _subtotalKotor=trx.items.reduce((s,i)=>s+(i.qty||0)*(i.harga||0),0);
+  const _totalDiskonItem=trx.items.reduce((s,i)=>s+(i.diskon_total||0),0);
+  const _subtotalBersih=_subtotalKotor-_totalDiskonItem;
+  // Tampilkan subtotal
+  if(_totalDiskonItem>0||trx.diskonNominal>0||trx.ongkir>0){
+    html+=`<div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${_subtotalKotor.toLocaleString('id-ID')}</span></div>`;
+    if(_totalDiskonItem>0){
+      const nItem=trx.items.filter(i=>i.diskon_total>0).length;
+      html+=`<div style="display:flex;justify-content:space-between;color:#dc2626"><span>Diskon Item (${nItem})</span><span>-${_totalDiskonItem.toLocaleString('id-ID')}</span></div>`;
+    }
+  }
+  if(trx.diskonNominal>0){
+    const dLbl=trx.diskonLabel||'Diskon';
+    html+=`<div style="display:flex;justify-content:space-between;color:#dc2626"><span>${dLbl}</span><span>-${trx.diskonNominal.toLocaleString('id-ID')}</span></div>`;
+  }
   if(trx.ongkir>0)html+=`<div style="display:flex;justify-content:space-between"><span>Ongkir</span><span>+${trx.ongkir.toLocaleString('id-ID')}</span></div>`;
   html+=`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px dashed #000;padding-top:3px;margin-top:3px">
     <span>TOTAL</span><span>Rp ${trx.total.toLocaleString('id-ID')}</span>
@@ -11394,13 +11421,17 @@ async function posShowStrukFromHistory(txId){
   try{
     const{data:t}=await sb.from('transaksi').select('*').eq('id',txId).single();
     if(!t){toast('Transaksi tidak ditemukan',true);return;}
+    const _itemsSub=(t.items||[]).reduce((s,i)=>s+(i.qty||0)*(i.harga||0),0);
+    const _dNom=t.diskon_nominal||0;
+    const _dLabel=t.voucher_kode?`Voucher (${t.voucher_kode})`:t.diskon_tipe==='persen'?`Diskon ${t.diskon_nilai}%`:t.diskon_tipe==='nominal'?'Diskon':'Diskon';
     const trxSnapshot={
       id:t.id,
       time:new Date(t.waktu).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
       tanggal:t.waktu,
       items:t.items||[],
-      subtotal:(t.items||[]).reduce((s,i)=>s+(i.qty||0)*(i.harga||0),0),
-      diskonNominal:t.diskon_nominal||0,
+      subtotal:_itemsSub,
+      diskonNominal:_dNom,
+      diskonLabel:_dLabel,
       ongkir:t.ongkir||0,
       total:t.total||0,
       bayar:t.bayar||0,
