@@ -37,15 +37,28 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:linear-gradie
 .msg.warn{background:#fef3c7;color:#78350f;}
 .msg.ok{background:#dcfce7;color:#166534;}
 .msg.info{background:var(--blue-light);color:#1e40af;}
-.dropdown-list{background:white;border:1.5px solid var(--green);border-radius:12px;max-height:260px;overflow-y:auto;margin-top:6px;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.12);}
-.dropdown-item{padding:10px 13px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;transition:background 0.1s;}
-.dropdown-item:active{background:var(--green-light);}
-.dropdown-item:last-child{border-bottom:none;}
-.dropdown-item.disabled{color:#9ca3af;cursor:not-allowed;background:#f9fafb;}
-.dropdown-item .sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
-.dropdown-item .match{background:#fef08a;border-radius:3px;padding:0 1px;font-weight:700;}
-.search-wrap{position:relative;}
-.search-wrap .clear-btn{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer;padding:0;line-height:1;display:none;}
+.ac-wrap{position:relative;margin-bottom:6px;}
+.ac-display{position:relative;width:100%;height:48px;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;}
+.ac-display.focused{border-color:var(--green);}
+.ac-ghost{position:absolute;inset:0;padding:13px;font-size:15px;font-family:inherit;color:#bbb;letter-spacing:0.2px;white-space:nowrap;overflow:hidden;pointer-events:none;}
+.ac-typed{position:absolute;inset:0;padding:13px;font-size:15px;font-family:inherit;color:var(--text);letter-spacing:0.2px;white-space:nowrap;overflow:hidden;pointer-events:none;}
+.ac-cursor{display:inline-block;width:2px;height:18px;background:var(--green);vertical-align:middle;margin-left:1px;animation:blink 1s step-end infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+.ac-hint{font-size:10px;color:var(--text-muted);margin-top:4px;min-height:14px;text-align:center;}
+.ac-selected{background:var(--green-light);border-color:var(--green);padding:10px 13px;border-radius:8px;font-size:14px;font-weight:700;color:var(--green-dark);margin-bottom:8px;display:none;}
+
+/* Virtual Keyboard */
+.vkb{background:#e8ecf0;border-radius:10px;padding:8px 4px 10px;margin-top:10px;user-select:none;}
+.vkb-row{display:flex;justify-content:center;gap:4px;margin-bottom:5px;}
+.vkb-key{background:white;border:none;border-radius:6px;font-size:15px;font-weight:600;font-family:inherit;color:#1c1a16;
+  height:42px;min-width:30px;flex:1;max-width:38px;
+  box-shadow:0 2px 0 #b0b8c4;cursor:pointer;transition:transform 0.07s,box-shadow 0.07s;
+  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;}
+.vkb-key:active,.vkb-key.pressed{transform:translateY(2px);box-shadow:0 0 0 #b0b8c4;background:#e0e0e0;}
+.vkb-key.space{max-width:none;flex:4;font-size:12px;color:#666;}
+.vkb-key.backspace{max-width:52px;font-size:18px;background:#f1c0c0;}
+.vkb-key.accept{max-width:none;flex:3;background:var(--green);color:white;font-size:13px;font-weight:700;box-shadow:0 2px 0 #0f4428;}
+.vkb-key.accept:active{background:var(--green-dark);}
 .success-box{background:linear-gradient(135deg,#10b981,#059669);color:white;border-radius:14px;padding:24px;text-align:center;}
 .success-box .ico{font-size:60px;margin-bottom:8px;}
 .success-box h2{font-size:18px;margin-bottom:6px;}
@@ -117,110 +130,143 @@ function renderForm(){
     <div id="msg-area"></div>
     <div class="field">
       <label>Cari nama Anda</label>
-      <div class="search-wrap">
-        <input type="text" id="cari" placeholder="Ketik nama atau nama KK..." 
-               oninput="filterList()" autocomplete="off" autocorrect="off" 
-               autocapitalize="words" spellcheck="false" inputmode="text"
-               style="padding-right:36px;"/>
-        <button class="clear-btn" id="clear-btn" onclick="clearCari()" type="button">×</button>
+      <div id="ac-selected" class="ac-selected"></div>
+      <div class="ac-wrap" id="ac-wrap">
+        <div class="ac-display" id="ac-display">
+          <div class="ac-ghost" id="ac-ghost"></div>
+          <div class="ac-typed" id="ac-typed"></div>
+        </div>
+        <div class="ac-hint" id="ac-hint">Ketik nama menggunakan keyboard di bawah</div>
       </div>
-      <div class="dropdown-list" id="dropdown"></div>
+      <div class="vkb" id="vkb"></div>
     </div>
     <button class="btn" id="btn-submit" onclick="submitHadir()" disabled>Pilih nama dulu</button>
   `;
   show(html);
+  // Inisialisasi virtual keyboard setelah render
+  setTimeout(()=>{ initVKB(); updateACDisplay(); },50);
 }
 
+let _typed='';
 let _selectedHadirId=null;
+let _ghostNama='';
+let _ghostId=null;
+let _ghostKK='';
 
-function highlightMatch(text, q){
-  if(!q) return text;
-  const idx = text.toLowerCase().indexOf(q.toLowerCase());
-  if(idx<0) return text;
-  return text.slice(0,idx)+'<span class="match">'+text.slice(idx,idx+q.length)+'</span>'+text.slice(idx+q.length);
-}
-
+// ===== SCORING: makin banyak karakter cocok = skor lebih tinggi =====
 function scoreMatch(d, q){
   const nama = (d.jamaah_nama||'').toLowerCase();
   const kk   = (d.jamaah_kk||'').toLowerCase();
   const ql   = q.toLowerCase();
-  if(nama.startsWith(ql)) return 0;        // paling relevan: nama mulai dari q
-  if(nama.includes(ql))   return 1;        // nama mengandung q
-  if(kk.startsWith(ql))   return 2;
-  if(kk.includes(ql))     return 3;
-  return 99;
+  let score  = 0;
+  let ni=0, qi=0;
+  while(ni<nama.length && qi<ql.length){ if(nama[ni]===ql[qi]){score++;qi++;} ni++; }
+  if(nama.startsWith(ql)) score+=50;
+  if(nama.split(' ').some(w=>w.startsWith(ql))) score+=20;
+  let ks=0, ki2=0, ki=0;
+  while(ki<kk.length && ki2<ql.length){ if(kk[ki]===ql[ki2]){ks++;ki2++;} ki++; }
+  if(kk.startsWith(ql)) ks+=30;
+  return Math.max(score, ks*0.8);
 }
 
-function filterList(){
-  const rawQ = document.getElementById('cari').value || '';
-  const q = rawQ.trim();
-  const dd = document.getElementById('dropdown');
-  const clearBtn = document.getElementById('clear-btn');
-
-  // Reset pilihan jika user ketik ulang
-  if(_selectedHadirId){
-    _selectedHadirId=null;
-    document.getElementById('btn-submit').disabled=true;
-    document.getElementById('btn-submit').textContent='Pilih nama dulu';
-  }
-
-  if(clearBtn) clearBtn.style.display = rawQ.length>0 ? 'block' : 'none';
-
-  if(!q){ dd.style.display='none'; return; }
-
-  // Filter + sort by relevance
-  const filtered = daftar
-    .filter(d => (d.jamaah_nama||'').toLowerCase().includes(q.toLowerCase()) || 
-                 (d.jamaah_kk||'').toLowerCase().includes(q.toLowerCase()))
-    .sort((a,b) => scoreMatch(a,q) - scoreMatch(b,q));
-
-  if(!filtered.length){
-    dd.innerHTML=`<div class="dropdown-item disabled" style="text-align:center;color:#9ca3af;padding:14px;">
-      Nama "<b>${q}</b>" tidak ada di daftar
-    </div>`;
-    dd.style.display='block';
-    return;
-  }
-
-  dd.innerHTML = filtered.slice(0,10).map(d => {
-    const sudah = d.status_hadir==='hadir';
-    const safeNama = (d.jamaah_nama||'').replace(/'/g,"\'");
-    const safeKK   = (d.jamaah_kk||'').replace(/'/g,"\'");
-    const namaHl   = highlightMatch(d.jamaah_nama||'', q);
-    const kkHl     = highlightMatch(d.jamaah_kk||'', q);
-    return `<div class="dropdown-item ${sudah?'disabled':''}" 
-      ${sudah?'':`onclick="pilihNama(${d.id},'${safeNama}','${safeKK}')"`}>
-      <div style="font-weight:600;">${namaHl} ${sudah?'<span style="color:#10b981;font-size:11px;font-weight:700;">✓ hadir</span>':''}</div>
-      <div class="sub">KK: ${kkHl}</div>
-    </div>`;
-  }).join('');
-
-  // Tampilkan counter jika > 10
-  if(filtered.length > 10){
-    dd.innerHTML += `<div class="dropdown-item disabled" style="text-align:center;font-size:11px;color:#9ca3af;">
-      +${filtered.length-10} nama lainnya — ketik lebih spesifik
-    </div>`;
-  }
-  dd.style.display='block';
+function getBestMatch(q){
+  if(!q||!daftar.length) return null;
+  const ql=q.toLowerCase();
+  let best=null, bestScore=-1;
+  daftar.forEach(d=>{
+    if(d.status_hadir==='hadir') return;
+    const s=scoreMatch(d,ql);
+    if(s>bestScore){ bestScore=s; best=d; }
+  });
+  return bestScore>0?best:null;
 }
 
-function clearCari(){
-  document.getElementById('cari').value='';
-  document.getElementById('cari').focus();
-  document.getElementById('dropdown').style.display='none';
-  document.getElementById('clear-btn').style.display='none';
-  _selectedHadirId=null;
-  document.getElementById('btn-submit').disabled=true;
-  document.getElementById('btn-submit').textContent='Pilih nama dulu';
+function updateACDisplay(){
+  const typedEl  = document.getElementById('ac-typed');
+  const ghostEl  = document.getElementById('ac-ghost');
+  const hintEl   = document.getElementById('ac-hint');
+  if(!typedEl) return;
+  const q = _typed;
+  const best = getBestMatch(q);
+  if(best && q.length>0){
+    _ghostNama=best.jamaah_nama||'';
+    _ghostId=best.id;
+    _ghostKK=best.jamaah_kk||'';
+    ghostEl.textContent=_ghostNama;
+    if(hintEl) hintEl.textContent='KK: '+(_ghostKK||'-')+' — Tekan ✓ Pilih';
+  } else {
+    _ghostNama=''; _ghostId=null; _ghostKK='';
+    ghostEl.textContent=q.length===0?'Ketik nama...':'';
+    if(hintEl) hintEl.textContent=q.length>0?'Nama tidak ditemukan':'Ketik nama menggunakan keyboard di bawah';
+  }
+  typedEl.innerHTML=q
+    ?'<span style="color:var(--text);font-weight:600;">'+q+'</span><span class="ac-cursor"></span>'
+    :'<span class="ac-cursor"></span>';
+}
+
+function acceptGhost(){
+  if(!_ghostId) return;
+  pilihNama(_ghostId,_ghostNama,_ghostKK);
 }
 
 function pilihNama(id,nama,kk){
   _selectedHadirId=id;
-  document.getElementById('cari').value=nama;
-  document.getElementById('dropdown').style.display='none';
-  document.getElementById('clear-btn').style.display='block';
+  _typed='';
+  const sel=document.getElementById('ac-selected');
+  const wrap=document.getElementById('ac-wrap');
+  if(sel){ sel.style.display='block'; sel.textContent='✅ '+nama+' (KK: '+kk+')'; }
+  if(wrap) wrap.style.display='none';
   document.getElementById('btn-submit').disabled=false;
   document.getElementById('btn-submit').textContent='✅ Konfirmasi Hadir: '+nama;
+}
+
+function resetPilihan(){
+  _selectedHadirId=null; _typed=''; _ghostNama=''; _ghostId=null;
+  const sel=document.getElementById('ac-selected');
+  const wrap=document.getElementById('ac-wrap');
+  if(sel) sel.style.display='none';
+  if(wrap) wrap.style.display='block';
+  document.getElementById('btn-submit').disabled=true;
+  document.getElementById('btn-submit').textContent='Pilih nama dulu';
+  updateACDisplay();
+}
+
+function initVKB(){
+  const vkb=document.getElementById('vkb');
+  if(!vkb) return;
+  const rows=[
+    ['Q','W','E','R','T','Y','U','I','O','P'],
+    ['A','S','D','F','G','H','J','K','L'],
+    ['Z','X','C','V','B','N','M'],
+  ];
+  let html='';
+  rows.forEach(row=>{
+    html+='<div class="vkb-row">';
+    row.forEach(k=>{
+      html+=`<button class="vkb-key" onpointerdown="vkbPress('${k}')" type="button">${k}</button>`;
+    });
+    html+='</div>';
+  });
+  html+=`<div class="vkb-row">
+    <button class="vkb-key accept" onpointerdown="vkbPress('ACCEPT')" type="button">✓ Pilih</button>
+    <button class="vkb-key space" onpointerdown="vkbPress(' ')" type="button">SPASI</button>
+    <button class="vkb-key backspace" onpointerdown="vkbPress('BACK')" type="button">⌫</button>
+  </div>`;
+  vkb.innerHTML=html;
+}
+
+function vkbPress(k){
+  if(_selectedHadirId) resetPilihan();
+  if(k==='BACK'){
+    _typed=_typed.slice(0,-1);
+  } else if(k==='ACCEPT'){
+    acceptGhost(); return;
+  } else if(k===' '){
+    if(_typed.length>0) _typed+=k;
+  } else {
+    if(_typed.length<40) _typed+=k;
+  }
+  updateACDisplay();
 }
 
 // ===== GPS WAJIB =====
@@ -304,8 +350,7 @@ function showSuccess(d){
 }
 
 async function absenkanLagi(){
-  // Reset state, refresh data, render form
-  _selectedHadirId=null;
+  _selectedHadirId=null; _typed=''; _ghostNama=''; _ghostId=null;
   currentGps=null;
   show('<div class="msg info">⏳ Memuat ulang daftar...</div>');
   await refreshDaftar();
@@ -314,14 +359,7 @@ async function absenkanLagi(){
 
 init();
 
-// Tutup dropdown saat klik di luar
-document.addEventListener('click', function(e){
-  const dd = document.getElementById('dropdown');
-  const cari = document.getElementById('cari');
-  if(dd && cari && !dd.contains(e.target) && e.target !== cari){
-    dd.style.display='none';
-  }
-});
+
 </script>
 </body>
 </html>
