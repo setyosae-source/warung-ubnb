@@ -2812,9 +2812,31 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box"/>
       <div id="edit-jual-search-result" style="display:none;position:absolute;top:40px;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:var(--radius-sm);z-index:999;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>
     </div>
-    <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--green-light);border-radius:var(--radius-sm);margin-bottom:12px">
-      <span style="font-size:13px;color:var(--green-dark)">Total:</span>
-      <span id="edit-jual-total" style="font-weight:800;color:var(--green-dark);font-family:'Courier New',monospace"></span>
+    <!-- Breakdown harga -->
+    <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px">
+      <div id="ej-row-subtotal" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:3px">
+        <span>Subtotal Item</span><span id="edit-jual-subtotal">Rp 0</span>
+      </div>
+      <div id="ej-row-diskon" style="display:none;justify-content:space-between;font-size:12px;color:#dc2626;margin-bottom:3px">
+        <span id="ej-diskon-lbl">Diskon</span><span id="ej-diskon-val">- Rp 0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--green)">
+        <span style="font-size:13px;color:var(--green-dark)">Total:</span>
+        <span id="edit-jual-total" style="font-weight:800;color:var(--green-dark);font-family:'Courier New',monospace"></span>
+      </div>
+    </div>
+    <!-- Diskon Transaksi -->
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text-muted);font-weight:500;display:block;margin-bottom:6px">🏷️ Diskon Transaksi</label>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center">
+        <select id="ej-diskon-tipe" onchange="ejUpdateDiskon()" style="height:36px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;font-size:13px;font-family:inherit;background:white">
+          <option value="none">Tanpa Diskon</option>
+          <option value="persen">% Persen</option>
+          <option value="nominal">Rp Nominal</option>
+        </select>
+        <input id="ej-diskon-nilai" type="number" min="0" placeholder="0" oninput="ejUpdateDiskon()"
+          style="height:36px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-size:14px;font-weight:600;font-family:inherit;width:100%;box-sizing:border-box"/>
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:var(--text-muted)">
       <span>Kasir: <strong id="edit-jual-kasir" style="color:var(--text)"></strong></span>
@@ -4188,8 +4210,10 @@ function _renderEditItems(){
       `<div style="font-size:11px;color:var(--text-muted);margin-top:3px">${hargaTampil}/unit</div>`}
     </div>`;
   }).join('');
-  const total=_editJualItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
-  document.getElementById('edit-jual-total').textContent=fmt(total);
+  const subtotalItem=_editJualItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
+  const elSub=document.getElementById('edit-jual-subtotal');
+  if(elSub)elSub.textContent=fmt(subtotalItem);
+  ejUpdateDiskon();
 }
 
 function _editItemLevel(i,val){
@@ -4219,6 +4243,29 @@ function _editItemLevel(i,val){
 function _updateEditQty(i,val){_editJualItems[i].qty=parseFloat(val)||0;_renderEditItems();}
 function _hapusEditItem(i){_editJualItems.splice(i,1);_renderEditItems();}
 
+function ejUpdateDiskon(){
+  const subtotal=_editJualItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
+  const tipe=document.getElementById('ej-diskon-tipe')?.value||'none';
+  const nilaiRaw=parseFloat(document.getElementById('ej-diskon-nilai')?.value)||0;
+  let diskonNom=0;
+  if(tipe==='persen'&&nilaiRaw>0) diskonNom=Math.round(subtotal*nilaiRaw/100);
+  else if(tipe==='nominal'&&nilaiRaw>0) diskonNom=Math.min(nilaiRaw,subtotal);
+  const total=Math.max(0,subtotal-diskonNom);
+  // Update row diskon
+  const rowD=document.getElementById('ej-row-diskon');
+  if(rowD){
+    if(diskonNom>0){
+      rowD.style.display='flex';
+      document.getElementById('ej-diskon-lbl').textContent=tipe==='persen'?`Diskon ${nilaiRaw}%`:'Diskon';
+      document.getElementById('ej-diskon-val').textContent='- '+fmt(diskonNom);
+    } else rowD.style.display='none';
+  }
+  document.getElementById('edit-jual-total').textContent=fmt(total);
+  // Sync ke bayar jika belum diisi manual
+  const elBayar=document.getElementById('edit-jual-bayar');
+  if(elBayar&&!elBayar.dataset.manual) elBayar.value=total;
+}
+
 function editJualSearchBarang(q){
   const res=document.getElementById('edit-jual-search-result');
   if(!q||q.length<2){res.style.display='none';return;}
@@ -4244,9 +4291,13 @@ async function editTransaksiJual(id){
   _editJualItems=t.items.map(it=>({...it}));
   document.getElementById('edit-jual-id').value=id;
   document.getElementById('edit-jual-tgl').value=tgl;
-  document.getElementById('edit-jual-bayar').value=t.bayar||t.total;
   document.getElementById('edit-jual-status').value=t.status_bayar||'lunas';
   document.getElementById('edit-jual-kasir').textContent=t.kasir||'-';
+  // Populate diskon
+  const ejTipe=document.getElementById('ej-diskon-tipe');
+  const ejNilai=document.getElementById('ej-diskon-nilai');
+  if(ejTipe) ejTipe.value=t.diskon_tipe&&t.diskon_tipe!==''?t.diskon_tipe:'none';
+  if(ejNilai) ejNilai.value=t.diskon_nilai>0?t.diskon_nilai:'';
   // Populate pelanggan predictive
   document.getElementById('edit-jual-pel').value=t.pelanggan||'Umum';
   document.getElementById('edit-jual-anggota-id').value=t.anggota_id||'';
@@ -4258,6 +4309,10 @@ async function editTransaksiJual(id){
     jamaah_did:t.jamaah_did||null,
     sumber:t.anggota_id?'anggota':t.jamaah_did?'jamaah':t.pelanggan&&t.pelanggan!=='Umum'?'baru':'umum'
   });
+  // Reset flag bayar manual, set dari DB
+  const elBayar=document.getElementById('edit-jual-bayar');
+  if(elBayar){elBayar.dataset.manual='1';elBayar.value=t.bayar||t.total;delete elBayar.dataset.manual;}
+  elBayar&&elBayar.addEventListener('input',()=>{elBayar.dataset.manual='1';},{once:true});
   _renderEditItems();
   openModal('modal-edit-jual');
 }
@@ -4270,8 +4325,15 @@ async function simpanEditJual(){
   const tOld=aT.find(x=>x.id===id);if(!tOld)return;
   const newItems=_editJualItems.filter(it=>it.qty>0);
   if(!newItems.length){toast('Minimal 1 item',true);return;}
-  const newTotal=newItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
+  const subtotalItem=newItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
   const newHpp=newItems.reduce((s,it)=>s+(it.harga_beli||0)*it.qty,0);
+  // Baca diskon
+  const dTipe=document.getElementById('ej-diskon-tipe')?.value||'none';
+  const dNilai=parseFloat(document.getElementById('ej-diskon-nilai')?.value)||0;
+  let diskonNom=0;
+  if(dTipe==='persen'&&dNilai>0) diskonNom=Math.round(subtotalItem*dNilai/100);
+  else if(dTipe==='nominal'&&dNilai>0) diskonNom=Math.min(dNilai,subtotalItem);
+  const newTotal=Math.max(0,subtotalItem-diskonNom);
   const pelBaru=document.getElementById('edit-jual-pel').value.trim()||'Umum';
   const anggotaIdBaru=parseInt(document.getElementById('edit-jual-anggota-id').value)||null;
   const jamaahDidBaru=document.getElementById('edit-jual-jamaah-did').value.trim()||null;
@@ -4281,6 +4343,8 @@ async function simpanEditJual(){
     const{error:errUpd}=await sb.from('transaksi').update({
       tgl_transaksi:tglTs,status_bayar:status,bayar,
       items:newItems,total:newTotal,hpp:newHpp,
+      diskon_tipe:dTipe==='none'?'':dTipe,
+      diskon_nilai:dTipe==='none'?0:dNilai,
       kembali:Math.max(0,bayar-newTotal),pelanggan:pelBaru,
       anggota_id:anggotaIdBaru,jamaah_did:jamaahDidBaru
     }).eq('id',id);
