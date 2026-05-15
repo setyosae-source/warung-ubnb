@@ -41,7 +41,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:linear-gradie
 .ac-display{position:relative;width:100%;height:48px;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;}
 .ac-display.focused{border-color:var(--green);}
 .ac-ghost{position:absolute;inset:0;padding:13px;font-size:15px;font-family:inherit;color:#bbb;letter-spacing:0.2px;white-space:nowrap;overflow:hidden;pointer-events:none;}
-.ac-typed{position:absolute;inset:0;padding:13px;font-size:15px;font-family:inherit;color:var(--text);letter-spacing:0.2px;white-space:nowrap;overflow:hidden;pointer-events:none;}
+.ac-typed{position:absolute;inset:0;padding:13px;font-size:15px;font-family:inherit;color:transparent;letter-spacing:0.2px;white-space:nowrap;overflow:hidden;pointer-events:none;}
 .ac-cursor{display:inline-block;width:2px;height:18px;background:var(--green);vertical-align:middle;margin-left:1px;animation:blink 1s step-end infinite;}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
 .ac-hint{font-size:10px;color:var(--text-muted);margin-top:4px;min-height:14px;text-align:center;}
@@ -192,15 +192,31 @@ function updateACDisplay(){
     _ghostNama=best.jamaah_nama||'';
     _ghostId=best.id;
     _ghostKK=best.jamaah_kk||'';
-    ghostEl.textContent=_ghostNama;
+    // Ghost: bagian yang cocok (diketik) tampil gelap, sisa tampil abu
+    const nama = _ghostNama;
+    const matchLen = q.length;
+    // Cari posisi match di nama (case-insensitive)
+    const matchIdx = nama.toLowerCase().indexOf(q.toLowerCase());
+    if(matchIdx >= 0){
+      const before = nama.slice(0, matchIdx);
+      const matched = nama.slice(matchIdx, matchIdx + matchLen);
+      const after = nama.slice(matchIdx + matchLen);
+      ghostEl.innerHTML =
+        (before ? '<span style="color:#ccc;">'+before+'</span>' : '')
+        + '<span style="color:var(--text);font-weight:700;">'+matched+'</span>'
+        + (after ? '<span style="color:#bbb;">'+after+'</span>' : '');
+    } else {
+      ghostEl.textContent = nama;
+    }
     if(hintEl) hintEl.textContent='KK: '+(_ghostKK||'-')+' — Tekan ✓ Pilih';
   } else {
     _ghostNama=''; _ghostId=null; _ghostKK='';
-    ghostEl.textContent=q.length===0?'Ketik nama...':'';
-    if(hintEl) hintEl.textContent=q.length>0?'Nama tidak ditemukan':'Ketik nama menggunakan keyboard di bawah';
+    ghostEl.innerHTML='<span style="color:#ccc;">'+(q.length===0?'Ketik nama...':'Nama tidak ditemukan')+'</span>';
+    if(hintEl) hintEl.textContent=q.length>0?'':'Ketik nama menggunakan keyboard di bawah';
   }
+  // Typed layer: transparan tapi ada cursor
   typedEl.innerHTML=q
-    ?'<span style="color:var(--text);font-weight:600;">'+q+'</span><span class="ac-cursor"></span>'
+    ?'<span style="opacity:0;">'+q+'</span><span class="ac-cursor"></span>'
     :'<span class="ac-cursor"></span>';
 }
 
