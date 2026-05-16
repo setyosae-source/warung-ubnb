@@ -3098,7 +3098,7 @@ function filterSD(k){
       html+=fa.map(a=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:a.id,jamaah_did:null,label:a.nama,sumber:"anggota"})})'><div><div>${a.nama} <span style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 6px;border-radius:99px">⭐</span></div><div class="opt-sub">${a.no_anggota} · ${a.kelompok}</div></div></div>`).join('');
     }
     // TIER 2: Jamaah Desa
-    const fj=aJamaah.filter(j=>!ql||j.nama.toLowerCase().includes(ql)||(j.kelompok||'').toLowerCase().includes(ql));
+    const fj=aJamaah.filter(j=>!ql||j.nama.toLowerCase().includes(ql)||(j.kelompok||'').toLowerCase().includes(ql)||(j.nama_kk||'').toLowerCase().includes(ql));
     if(fj.length){
       html+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase;letter-spacing:.5px">👤 Jamaah Desa — tidak masuk SHU</div>`;
       html+=fj.slice(0,30).map(j=>`<div class="sd-option" onclick='selSD("pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:j.did,label:j.nama,sumber:"jamaah"})})'><div><div>${j.nama} <span style="font-size:10px;background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:99px">👤</span></div><div class="opt-sub">${j.kelompok?'Kel. '+j.kelompok:''} ${j.nama_kk?'· KK: '+j.nama_kk:''}</div></div></div>`).join('');
@@ -3372,7 +3372,7 @@ async function lPel(){const{data}=await sb.from('pelanggan').select('*').order('
 let aSahamAnggota=[]; // daftar anggota saham UBNB
 let aJamaah=[]; // daftar jamaah desa
 async function lAnggota(){const{data}=await sb.from('ubnb_anggota').select('id,no_anggota,nama,kelompok,jenis,status').eq('status','Aktif').order('nama');aSahamAnggota=data||[];}
-async function lJamaah(){const{data}=await sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok').order('nama').limit(500);aJamaah=data||[];}
+async function lJamaah(){const{data}=await sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok').order('nama').limit(1000);aJamaah=data||[];}
 async function lSup(){const{data}=await sb.from('supplier').select('*').order('nama');aSup=data||[];}
 
 function showPage(id,btn){
@@ -3944,8 +3944,8 @@ async function bayar(){
   const{data,error}=await sb.from('transaksi').insert([payload]).select().single();
   if(error){toast('Gagal simpan: '+error.message,true);return;}
   for(const k of KR){
-    if(k.isPaket){for(const pi of k.paketItems){const b=aB.find(x=>x.id===pi.barang_id);if(b)await sb.from('barang').update({stok:Math.max(0,b.stok-pi.qty*k.qty)}).eq('id',pi.barang_id);}}
-    else{const bid=k.barang_id||k.id;const b=aB.find(x=>x.id===bid);const qtyReal=k.qty*(k._qtyPerUnit||1);if(b&&!['ppob','laundry','service'].includes(b.kategori))await sb.from('barang').update({stok:Math.max(0,b.stok-qtyReal)}).eq('id',bid);}
+    if(k.isPaket){for(const pi of k.paketItems){const b=aB.find(x=>x.id===pi.barang_id);if(b){const newStok=Math.max(0,b.stok-pi.qty*k.qty);await sb.from('barang').update({stok:newStok}).eq('id',pi.barang_id);b.stok=newStok;}}}
+    else{const bid=k.barang_id||k.id;const b=aB.find(x=>x.id===bid);const qtyReal=k.qty*(k._qtyPerUnit||1);if(b&&!['ppob','laundry','service'].includes(b.kategori)){const newStok=Math.max(0,b.stok-qtyReal);await sb.from('barang').update({stok:newStok}).eq('id',bid);b.stok=newStok;}}
   }
   for(const u of allUpd)await sb.from('stok_batch').update({qty_sisa:u.qty_sisa}).eq('id',u.id);
   if(pelId){const p=aPel.find(x=>x.id===pelId);if(p){const poin=Math.floor(total/1000);await sb.from('pelanggan').update({poin:(p.poin||0)+poin,total_belanja:(p.total_belanja||0)+total}).eq('id',pelId);}}
@@ -4359,7 +4359,7 @@ async function simpanEditJual(){
       const selisih=(oldQtyMap[bid]||0)-(newQtyMap[bid]||0);
       if(selisih===0)continue;
       const b=aB.find(x=>x.id===parseInt(bid));
-      if(b)await sb.from('barang').update({stok:Math.max(0,b.stok+selisih)}).eq('id',b.id);
+      if(b){const newStok=Math.max(0,b.stok+selisih);await sb.from('barang').update({stok:newStok}).eq('id',b.id);b.stok=newStok;}
     }
     // Recalc mutasi kas
     const{data:kmList}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','transaksi').eq('ref_id',id);
