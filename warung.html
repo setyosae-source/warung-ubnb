@@ -11203,20 +11203,23 @@ function posShowStruk(trx){
   <hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>`;
   trx.items.forEach(it=>{
     const hasLevel=it._levelLabel&&it._qtyPerUnit&&it._qtyPerUnit>1;
-    const qtyReal=hasLevel?it.qty*it._qtyPerUnit:it.qty;
-    const satuan=it._levelLabel||'';
     const subNormal=it.qty*it.harga;
     const diskonIt=it.diskon_total||0;
     const sub=Math.max(0,subNormal-diskonIt);
-    const lvBadge=hasLevel?` [${satuan}]`:'';
-    const qtyBaris=hasLevel
-      ?`${it.qty} ${satuan} (${qtyReal} pcs) × ${(it.harga||0).toLocaleString('id-ID')}`
-      :`${it.qty} × ${(it.harga||0).toLocaleString('id-ID')}`;
+    // Strip suffix kurung di belakang nama (nested-aware): "Prim-A 220ml (Karton (48 pcs))" -> "Prim-A 220ml"
+    let namaBersih=it.nama||'';
+    if(hasLevel){
+      namaBersih=namaBersih.replace(/\s*\([^()]*\([^)]*\)[^()]*\)\s*$/,'').replace(/\s*\([^)]*\)\s*$/,'').trim();
+    }
+    // Extract nama satuan dari _levelLabel: "Karton (48 pcs)" -> "Karton"
+    const satuanClean=hasLevel?(it._levelLabel.split('(')[0].trim()||it._levelLabel):'';
+    const namaBaris=hasLevel?`${namaBersih} - ${satuanClean} [${it._qtyPerUnit}]`:namaBersih;
+    const qtyBaris=`${it.qty} × ${(it.harga||0).toLocaleString('id-ID')}`;
     const subBaris=diskonIt>0
       ?`<span style="text-decoration:line-through;opacity:0.45;font-weight:400">${subNormal.toLocaleString('id-ID')}</span> <b>${sub.toLocaleString('id-ID')}</b>`
       :`<b>${sub.toLocaleString('id-ID')}</b>`;
     html+=`<div style="margin-bottom:3px">
-      <div style="font-size:10.5px">${it.nama}${lvBadge}</div>
+      <div style="font-size:10.5px">${namaBaris}</div>
       <div style="display:flex;justify-content:space-between;font-size:10.5px">
         <span>${qtyBaris}</span>
         <span>${subBaris}</span>
