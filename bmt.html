@@ -659,8 +659,8 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       </div>
       <div class="tbl-wrap">
         <table class="bmt-tbl" id="dp-tbl-angs">
-          <thead><tr><th>Bln</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead>
-          <tbody id="dp-angs-body"><tr><td colspan="5" style="text-align:center;padding:12px;color:var(--M)">Klik akad untuk lihat angsuran</td></tr></tbody>
+          <thead><tr><th>Bln</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead>
+          <tbody id="dp-angs-body"><tr><td colspan="8" style="text-align:center;padding:12px;color:var(--M)">Klik akad untuk lihat angsuran</td></tr></tbody>
         </table>
       </div>
       <div class="dp-actions">
@@ -1453,8 +1453,12 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 
     <div style="font-size:11px;font-weight:700;color:var(--M);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Ketentuan Keuangan</div>
     <div class="two-col">
-      <div class="fg"><label>Harga Beli / Pokok (Rp)</label><input type="number" id="ea-akad-harga" oninput="hitungEditAkad()"></div>
+      <div class="fg"><label>Harga Beli (Rp)</label><input type="number" id="ea-akad-harga" oninput="hitungEditAkad()"></div>
       <div class="fg"><label>Uang Muka / DP (Rp)</label><input type="number" id="ea-akad-dp" oninput="hitungEditAkad()"></div>
+    </div>
+    <div class="two-col">
+      <div class="fg"><label>Diskon (Rp)</label><input type="number" id="ea-akad-discount" oninput="hitungEditAkad()"></div>
+      <div class="fg"><label>Margin (%/bln)</label><input type="number" id="ea-akad-margin-pct" step="0.01" oninput="hitungEditAkad()"></div>
     </div>
     <div class="two-col">
       <div class="fg"><label>Total Margin (Rp)</label><input type="number" id="ea-akad-margin" oninput="hitungEditAkad()"></div>
@@ -1784,7 +1788,9 @@ function renderDashboard(){
   document.getElementById('sb-int').textContent=fmtRb(mpTotal);
   document.getElementById('sb-ext').textContent=fmtRb(peTotal);
   const aktifAkad=aAkad.filter(a=>a.status==='Belum Lunas');
-  const totalKewAktifDash=aktifAkad.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0)),0);
+  // total_pembiayaan sudah = harga_beli + total_margin - diskon (final).
+  // DP sudah dibayar di awal, jadi outstanding = total_pembiayaan - DP - akumulasi bayar
+  const totalKewAktifDash=aktifAkad.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0)),0);
   const totalByrAktifDash=aAngsuran.filter(an=>aktifAkad.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
   const out=Math.max(0,totalKewAktifDash-totalByrAktifDash);
   document.getElementById('lyr-pmb-akad').textContent=aktifAkad.length;
@@ -1815,8 +1821,9 @@ function renderPmbDash(){
   const aktif=aAkad.filter(a=>a.status==='Belum Lunas');
   document.getElementById('pmb-stat-aktif').textContent=aktif.length;
   document.getElementById('pmb-stat-total').textContent='dari '+aAkad.length+' total';
-  // Outstanding = total kewajiban aktif - total sudah dibayar
-  const totalKewAktif=aktif.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0)),0);
+  // Outstanding = total_pembiayaan - DP - total sudah dibayar
+  // (total_pembiayaan sudah final = harga_beli + total_margin - diskon)
+  const totalKewAktif=aktif.reduce((s,a)=>s+(parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0)),0);
   const totalBayarAktif=aAngsuran.filter(an=>aktif.find(a=>a.id===an.akad_id)).reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
   const sisaKewajiban=Math.max(0,totalKewAktif-totalBayarAktif);
   document.getElementById('pmb-stat-out').textContent=fmtRb(sisaKewajiban);
@@ -1877,7 +1884,8 @@ function renderPmbDash(){
       const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
       const tglTerakhirMs=angsAkad.length?Math.max(...angsAkad.map(x=>new Date(x.tanggal).getTime())):0;
       const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
-      const totalKew=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
+      // Sisa = total_pembiayaan - DP - akumulasi bayar (DP sudah dibayar di awal)
+      const totalKew=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
       const sisa=Math.max(0,totalKew-totalBayar);
       const hariTanpaBayar=tglTerakhirMs?Math.floor((Date.now()-tglTerakhirMs)/86400000):9999;
       const tglTerakhirStr=angsAkad.length?angsAkad.reduce((mx,x)=>x.tanggal>mx?x.tanggal:mx,''):'';
@@ -1978,7 +1986,8 @@ function renderDaftar(){
   tbody.innerHTML=data.map(a=>{
     const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
     const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
-    const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
+    // Sisa = total_pembiayaan - DP - akumulasi bayar
+    const totalKewajiban=parseFloat(a.total_pembiayaan||0)-parseFloat(a.uang_muka||0);
     const sisaAktual=Math.max(0,totalKewajiban-totalBayar);
     const sisaColor=a.status==='Lunas'?'var(--H3)':'var(--R)';
     return`<tr onclick="lihatDetail(${a.id})">
@@ -2012,9 +2021,11 @@ function lihatDetail(id){
     if(isAdmin&&!hasAksi){const th=document.createElement('th');th.className='th-aksi';th.style.width='70px';th.textContent='Aksi';thead.appendChild(th);}
     else if(!isAdmin&&hasAksi){hasAksi.remove();}
   }
-  // Sisa kewajiban running: total_kewajiban - akumulasi bayar
-  const totalKewDB=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
-  let sisaRunning=totalKewDB;
+  // Sisa kewajiban running: total_pembiayaan - DP - akumulasi bayar
+  // (total_pembiayaan sudah = harga_beli + total_margin - diskon)
+  const totalKewDB=parseFloat(a.total_pembiayaan||0);
+  const dp=parseFloat(a.uang_muka||0);
+  let sisaRunning=totalKewDB-dp;
   tbody.innerHTML=angs.length?angs.map((an,i)=>{
     const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i+1);
     const jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
@@ -2026,8 +2037,8 @@ function lihatDetail(id){
       <button onclick="editAngsuran(${an.id})" style="background:none;border:none;cursor:pointer;font-size:14px;padding:3px 5px" title="Edit angsuran">✏️</button>
       <button onclick="hapusAngsuran(${an.id},${id})" style="background:none;border:none;cursor:pointer;font-size:14px;padding:3px 5px" title="Hapus angsuran">🗑️</button>
     </td>`:'';
-    return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(an.tanggal)}</td><td>${rp(an.jumlah)}</td><td style="font-weight:700;color:${sisaColor}">${rp(sisaRunning)}</td><td>${stBadge}</td>${aksiTd}</tr>`;
-  }).join(''):'<tr><td colspan="'+(isAdmin?'7':'6')+'" style="text-align:center;padding:12px;color:var(--M)">Belum ada angsuran</td></tr>';
+    return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--M)">${jtStr}</td><td style="font-size:11px">${fmtTgl(an.tanggal)}</td><td>${rp(an.jumlah)}</td><td style="font-size:11px;color:var(--M)">${rp(an.pokok||0)}</td><td style="font-size:11px;color:var(--M)">${rp(an.margin||0)}</td><td style="font-weight:700;color:${sisaColor}">${rp(sisaRunning)}</td><td>${stBadge}</td>${aksiTd}</tr>`;
+  }).join(''):'<tr><td colspan="'+(isAdmin?'9':'8')+'" style="text-align:center;padding:12px;color:var(--M)">Belum ada angsuran</td></tr>';
   openModal('detail-akad');
   document.getElementById('main-scroll').scrollTo({top:0,behavior:'smooth'});
 }
@@ -2051,6 +2062,8 @@ function editAkad(){
   document.getElementById('ea-akad-tgl-rutin').value=a.tgl_rutin||new Date(a.tanggal_akad).getDate()||1;
   document.getElementById('ea-akad-harga').value=a.harga_beli||'';
   document.getElementById('ea-akad-dp').value=a.uang_muka||0;
+  document.getElementById('ea-akad-discount').value=a.diskon||0;
+  document.getElementById('ea-akad-margin-pct').value=a.margin_pct||0;
   document.getElementById('ea-akad-margin').value=a.total_margin||'';
   document.getElementById('ea-akad-jangka').value=a.jangka||'';
   hitungEditAkad();
@@ -2060,14 +2073,26 @@ function editAkad(){
 function hitungEditAkad(){
   const harga=parseFloat(document.getElementById('ea-akad-harga').value)||0;
   const dp=parseFloat(document.getElementById('ea-akad-dp').value)||0;
-  const margin=parseFloat(document.getElementById('ea-akad-margin').value)||0;
+  const disc=parseFloat(document.getElementById('ea-akad-discount').value)||0;
+  const mPct=parseFloat(document.getElementById('ea-akad-margin-pct').value)||0;
   const jangka=parseFloat(document.getElementById('ea-akad-jangka').value)||0;
-  const totalKew=harga+margin;
+  // Auto-hitung Total Margin dari margin_pct (kalau ada) atau pakai yg user input langsung
+  const marginInput=parseFloat(document.getElementById('ea-akad-margin').value)||0;
+  const pokok=harga-dp;
+  let margin=marginInput;
+  // Jika margin_pct terisi dan margin manual kosong/0, hitung otomatis
+  if(mPct>0 && pokok>0 && jangka>0 && marginInput===0){
+    margin=Math.round(pokok*(mPct/100)*jangka);
+    document.getElementById('ea-akad-margin').value=margin;
+  }
+  // Rumus baru: total_pembiayaan = h + margin - diskon
+  const totalKew=harga+margin-disc;
+  // Angsuran = (total_pembiayaan - DP) / jangka
   const angs=jangka>0?Math.round((totalKew-dp)/jangka):0;
   const prev=document.getElementById('ea-akad-preview');
   if(harga>0&&jangka>0){
     prev.style.display='block';
-    document.getElementById('ea-preview-total').textContent=rp(totalKew)+(dp>0?` (DP ${rp(dp)})` :'');
+    document.getElementById('ea-preview-total').textContent=rp(totalKew)+(dp>0?` (DP ${rp(dp)})` :'')+(disc>0?` (disc ${rp(disc)})`:'');
     document.getElementById('ea-preview-angs').textContent=rp(angs);
   } else {
     prev.style.display='none';
@@ -2086,16 +2111,20 @@ async function simpanEditAkad(){
   const jaminan=document.getElementById('ea-akad-jaminan').value.trim();
   const harga=parseFloat(document.getElementById('ea-akad-harga').value)||0;
   const dp=parseFloat(document.getElementById('ea-akad-dp').value)||0;
+  const disc=parseFloat(document.getElementById('ea-akad-discount').value)||0;
+  const mPct=parseFloat(document.getElementById('ea-akad-margin-pct').value)||0;
   const margin=parseFloat(document.getElementById('ea-akad-margin').value)||0;
   const jangka=parseInt(document.getElementById('ea-akad-jangka').value)||0;
   if(!noAkad||!nama||!tgl||!harga||!jangka){al('ea-akad-alert','No akad, nama, tanggal, harga, dan tenor wajib diisi');return;}
-  const totalPmb=harga+margin;
+  // Rumus baru: total_pembiayaan = h + margin - diskon
+  const totalPmb=harga+margin-disc;
+  // Angsuran = (total_pembiayaan - DP) / jangka
   const angs=jangka>0?Math.round((totalPmb-dp)/jangka):0;
   const{error}=await sb.from('bmt_akad').update({
     no_akad:noAkad, nama_jamaah:nama, kelompok:kel, tanggal_akad:tgl,
     jenis_akad:jenis, status, objek_pembiayaan:objek, jaminan:jaminan||null,
     tgl_rutin:parseInt(document.getElementById('ea-akad-tgl-rutin').value)||null,
-    harga_beli:harga, uang_muka:dp, total_margin:margin,
+    harga_beli:harga, uang_muka:dp, diskon:disc, margin_pct:mPct, total_margin:margin,
     total_pembiayaan:totalPmb, angsuran_perbulan:angs, jangka
   }).eq('id',_detailAkadId);
   if(error){al('ea-akad-alert','Gagal: '+error.message);return;}
@@ -2154,12 +2183,64 @@ function simPilih(kode){
 const sv=k=>{const e=document.getElementById('sf-'+k);return e?Number(e.value)||0:0;};
 function hitungBaru(){
   const ak=simAkad;baruD={};
-  if(ak==='murabahah'){const h=sv('harga'),dp=sv('dp'),disc=sv('discount'),mPct=sv('margin_pct')/100,t=sv('tenor')||12;const pk=h-dp-disc;if(pk<=0)return;const mg=Math.round(pk*mPct*t);const ag=Math.round((pk+mg)/t);baruD={harga_beli:pk,total_margin:mg,total_pembiayaan:pk,angsuran:ag,jangka:t,jenis_akad:'Murabahah'};showPreview([['Pokok',rp(pk)],['Margin',rp(mg)],['Total',rp(pk+mg)],['Angsuran/bln',rp(ag)]]);}
-  else if(ak==='mudharabah'){const m=sv('modal'),nB=sv('nisbah_bmt'),l=sv('proyeksi_laba'),t=sv('tenor')||12;if(!m)return;const bhB=Math.round(l*nB/100),ag=Math.round(m/t);baruD={harga_beli:m,total_margin:Math.round(l*(100-nB)/100*t),total_pembiayaan:m,angsuran:ag,jangka:t,jenis_akad:'Mudharabah'};showPreview([['Modal',rp(m)],['BH BMT/bln',rp(bhB)],['Pokok/bln',rp(ag)],['Total/bln',rp(ag+bhB)]]);}
-  else if(ak==='musyarakah'){const mB=sv('modal_bmt'),nB=sv('nisbah_bmt'),l=sv('proyeksi_laba'),t=sv('tenor')||12;if(!mB)return;const bhB=Math.round(l*nB/100),ag=Math.round(mB/t);baruD={harga_beli:mB,total_margin:Math.round(l*nB/100*t),total_pembiayaan:mB,angsuran:ag,jangka:t,jenis_akad:'Musyarakah'};showPreview([['Modal BMT',rp(mB)],['BH BMT/bln',rp(bhB)],['Pokok/bln',rp(ag)]]);}
-  else if(ak==='ijarah'){const a=sv('nilai_aset'),um=sv('uang_muka'),u=sv('ujroh_pct')/100,t=sv('tenor')||12;const pk=a-um;if(!pk)return;const tu=Math.round(a*u*t);const ag=Math.round((pk+tu)/t);baruD={harga_beli:pk,total_margin:tu,total_pembiayaan:pk,angsuran:ag,jangka:t,jenis_akad:'Ijarah'};showPreview([['Nilai Aset',rp(a)],['Total Ujroh',rp(tu)],['Pokok',rp(pk)],['Angsuran/bln',rp(ag)]]);}
-  else if(ak==='istishna'){const h=sv('harga'),dp=sv('dp'),mPct=sv('margin_pct')/100,t=sv('tenor')||12;const pk=h-dp;if(!pk)return;const mg=Math.round(pk*mPct*t);const ag=Math.round((pk+mg)/t);baruD={harga_beli:pk,total_margin:mg,total_pembiayaan:pk,angsuran:ag,jangka:t,jenis_akad:"Istishna'"};showPreview([['Pokok',rp(pk)],['Margin',rp(mg)],['Angsuran/bln',rp(ag)]]);}
-  else if(ak==='qardh'){const m=sv('modal'),t=sv('tenor')||12;if(!m)return;const ag=Math.round(m/t);baruD={harga_beli:m,total_margin:0,total_pembiayaan:m,angsuran:ag,jangka:t,jenis_akad:'Qardh'};showPreview([['Pinjaman',rp(m)],['Margin',rp(0)],['Angsuran/bln',rp(ag)]]);}
+  // Rumus baru Sotoy:
+  //   pokok        = h - DP
+  //   total_margin = margin_pct × jangka × pokok
+  //   total_pmb    = h + total_margin - disc  (= total kewajiban / harga jual)
+  //   angsuran/bln = (total_pmb - DP) / jangka
+  // harga_beli disimpan = h asli (BUKAN h-DP-disc)
+  if(ak==='murabahah'){
+    const h=sv('harga'),dp=sv('dp'),disc=sv('discount'),mPct=sv('margin_pct')/100,t=sv('tenor')||12;
+    const pokok=h-dp;if(pokok<=0)return;
+    const mg=Math.round(pokok*mPct*t);
+    const tp=h+mg-disc;
+    const ag=Math.round((tp-dp)/t);
+    baruD={harga_beli:h,uang_muka:dp,diskon:disc,margin_pct:mPct*100,total_margin:mg,total_pembiayaan:tp,angsuran:ag,jangka:t,jenis_akad:'Murabahah'};
+    showPreview([['Harga Beli',rp(h)],['Pokok (h-DP)',rp(pokok)],['Margin',rp(mg)],['Diskon',rp(disc)],['Total Kewajiban',rp(tp)],['Angsuran/bln',rp(ag)]]);
+  }
+  else if(ak==='mudharabah'){
+    const m=sv('modal'),nB=sv('nisbah_bmt'),l=sv('proyeksi_laba'),t=sv('tenor')||12;
+    if(!m)return;
+    const bhB=Math.round(l*nB/100),ag=Math.round(m/t);
+    const mg=Math.round(l*(100-nB)/100*t);
+    const tp=m+mg;
+    baruD={harga_beli:m,uang_muka:0,diskon:0,margin_pct:nB,total_margin:mg,total_pembiayaan:tp,angsuran:ag,jangka:t,jenis_akad:'Mudharabah'};
+    showPreview([['Modal',rp(m)],['BH BMT/bln',rp(bhB)],['Total Kewajiban',rp(tp)],['Pokok/bln',rp(ag)]]);
+  }
+  else if(ak==='musyarakah'){
+    const mB=sv('modal_bmt'),nB=sv('nisbah_bmt'),l=sv('proyeksi_laba'),t=sv('tenor')||12;
+    if(!mB)return;
+    const bhB=Math.round(l*nB/100),ag=Math.round(mB/t);
+    const mg=Math.round(l*nB/100*t);
+    const tp=mB+mg;
+    baruD={harga_beli:mB,uang_muka:0,diskon:0,margin_pct:nB,total_margin:mg,total_pembiayaan:tp,angsuran:ag,jangka:t,jenis_akad:'Musyarakah'};
+    showPreview([['Modal BMT',rp(mB)],['BH BMT/bln',rp(bhB)],['Total Kewajiban',rp(tp)],['Pokok/bln',rp(ag)]]);
+  }
+  else if(ak==='ijarah'){
+    const aset=sv('nilai_aset'),um=sv('uang_muka'),u=sv('ujroh_pct')/100,t=sv('tenor')||12;
+    const pokok=aset-um;if(pokok<=0)return;
+    const tu=Math.round(aset*u*t);
+    const tp=aset+tu;
+    const ag=Math.round((tp-um)/t);
+    baruD={harga_beli:aset,uang_muka:um,diskon:0,margin_pct:u*100,total_margin:tu,total_pembiayaan:tp,angsuran:ag,jangka:t,jenis_akad:'Ijarah'};
+    showPreview([['Nilai Aset',rp(aset)],['DP',rp(um)],['Total Ujroh',rp(tu)],['Total Kewajiban',rp(tp)],['Angsuran/bln',rp(ag)]]);
+  }
+  else if(ak==='istishna'){
+    const h=sv('harga'),dp=sv('dp'),mPct=sv('margin_pct')/100,t=sv('tenor')||12;
+    const pokok=h-dp;if(pokok<=0)return;
+    const mg=Math.round(pokok*mPct*t);
+    const tp=h+mg;
+    const ag=Math.round((tp-dp)/t);
+    baruD={harga_beli:h,uang_muka:dp,diskon:0,margin_pct:mPct*100,total_margin:mg,total_pembiayaan:tp,angsuran:ag,jangka:t,jenis_akad:"Istishna'"};
+    showPreview([['Harga Beli',rp(h)],['Pokok (h-DP)',rp(pokok)],['Margin',rp(mg)],['Total Kewajiban',rp(tp)],['Angsuran/bln',rp(ag)]]);
+  }
+  else if(ak==='qardh'){
+    const m=sv('modal'),t=sv('tenor')||12;
+    if(!m)return;
+    const ag=Math.round(m/t);
+    baruD={harga_beli:m,uang_muka:0,diskon:0,margin_pct:0,total_margin:0,total_pembiayaan:m,angsuran:ag,jangka:t,jenis_akad:'Qardh'};
+    showPreview([['Pinjaman',rp(m)],['Margin',rp(0)],['Angsuran/bln',rp(ag)]]);
+  }
   if(Object.keys(baruD).length)document.getElementById('b-preview').classList.add('show');
 }
 function showPreview(rows){document.getElementById('b-preview-grid').innerHTML=rows.map(([l,v])=>`<div><div class="kal-lbl">${l}</div><div class="kal-val">${v}</div></div>`).join('');}
@@ -2176,9 +2257,25 @@ async function simpanBaru(){
   if(!baruD.total_pembiayaan){al('b-alert','Hitung kalkulasi dulu');return;}
   const tglRutinVal=document.getElementById('b-tgl-rutin').value;
   if(!tglRutinVal){al('b-alert','Tanggal kesanggupan bayar wajib diisi');return;}
-  const{data:res,error}=await sb.from('bmt_akad').insert([{no_akad:noAkad,nama_jamaah:nama,kelompok,anggota_id:anggotaId?parseInt(anggotaId):null,tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,harga_beli:baruD.harga_beli,total_pembiayaan:baruD.total_pembiayaan,total_margin:baruD.total_margin,angsuran_perbulan:baruD.angsuran,jangka:baruD.jangka,tgl_rutin:parseInt(document.getElementById('b-tgl-rutin').value)||null,status:'Belum Lunas',operator:CU.username}]).select().single();
+  const{data:res,error}=await sb.from('bmt_akad').insert([{
+    no_akad:noAkad,nama_jamaah:nama,kelompok,
+    anggota_id:anggotaId?parseInt(anggotaId):null,
+    tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,
+    harga_beli:baruD.harga_beli,
+    uang_muka:baruD.uang_muka||0,
+    diskon:baruD.diskon||0,
+    margin_pct:baruD.margin_pct||0,
+    total_margin:baruD.total_margin,
+    total_pembiayaan:baruD.total_pembiayaan,
+    angsuran_perbulan:baruD.angsuran,
+    jangka:baruD.jangka,
+    tgl_rutin:parseInt(document.getElementById('b-tgl-rutin').value)||null,
+    status:'Belum Lunas',operator:CU.username
+  }]).select().single();
   if(error){al('b-alert','Gagal: '+error.message);return;}
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:baruD.total_pembiayaan,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username}]);
+  // Kas keluar = harga beli - diskon (yang BMT bayar ke supplier)
+  const kasKeluar=(parseFloat(baruD.harga_beli)||0)-(parseFloat(baruD.diskon)||0);
+  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:kasKeluar,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username}]);
   toast('✅ Akad '+noAkad+' berhasil disimpan!');
   closeModal('modal-akad-baru');
   await loadAll();renderPmbDash();renderDaftar();renderDashboard();
@@ -2202,9 +2299,15 @@ function pilihPayAkad(id,nama,noAkad){
   document.getElementById('pay-dd').style.display='none';
   const a=aAkad.find(x=>x.id===id);if(!a)return;
   const angs=aAngsuran.filter(x=>x.akad_id===id);
-  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
-  const sisaPokok=angs.reduce((s,x)=>s-parseFloat(x.pokok||0),totalKewajiban*parseFloat(a.total_pembiayaan||0)/(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)));
-  const sisaMargin=angs.reduce((s,x)=>s-parseFloat(x.margin||0),totalKewajiban*parseFloat(a.total_margin||0)/(parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)));
+  // Rumus baru Sotoy:
+  //   pokok akad  = harga_beli - DP
+  //   margin akad = total_margin
+  //   sisa pokok  = pokok akad - akumulasi pokok terbayar
+  //   sisa margin = margin akad - akumulasi margin terbayar
+  const pokokAkad=parseFloat(a.harga_beli||0)-parseFloat(a.uang_muka||0);
+  const marginAkad=parseFloat(a.total_margin||0);
+  const sisaPokok=angs.reduce((s,x)=>s-parseFloat(x.pokok||0),pokokAkad);
+  const sisaMargin=angs.reduce((s,x)=>s-parseFloat(x.margin||0),marginAkad);
   const bulanKe=angs.length+1;
   // Preview info akad
   document.getElementById('pay-preview').style.display='block';
@@ -2240,7 +2343,7 @@ function hitungBreakdownOtomatis(){
   const a=window._payAkad;if(!a)return;
   const jumlah=parseFloat(document.getElementById('pay-jumlah').value)||0;
   if(!jumlah){document.getElementById('pay-breakdown-box').style.display='none';return;}
-  const sisaPokok=window._paySisaPokok||parseFloat(a.total_pembiayaan||0);
+  const sisaPokok=window._paySisaPokok||(parseFloat(a.harga_beli||0)-parseFloat(a.uang_muka||0));
   const sisaMargin=window._paySisaMargin||parseFloat(a.total_margin||0);
   const totalSisa=sisaPokok+sisaMargin;
   const pokok=totalSisa>0?Math.round(jumlah*sisaPokok/totalSisa):jumlah;
@@ -2402,10 +2505,16 @@ function hitungSim(){
   if(ak==='murabahah'){
     const h=svM('harga'),dp=svM('dp'),disc=svM('discount'),mPct=svM('margin_pct')/100;
     const t=svM('tenor')||12;
-    const pk=h-dp-disc;
-    const mg=Math.round(pk*mPct*t);
-    const ag=Math.round((pk+mg)/t);
-    html=mkTbl([['Harga',rp(h),'DP',rp(dp)],['Pokok',rp(pk),'Margin',rp(mg)],['Total',rp(pk+mg),'Angsuran/bln',rp(ag)]]);
+    // Rumus baru Sotoy:
+    //   pokok        = h - DP
+    //   total_margin = mPct × jangka × pokok
+    //   total_pmb    = h + total_margin - disc
+    //   angsuran/bln = (total_pmb - DP) / jangka
+    const pokok=h-dp;
+    const mg=Math.round(pokok*mPct*t);
+    const tp=h+mg-disc;
+    const ag=Math.round((tp-dp)/t);
+    html=mkTbl([['Harga Beli',rp(h),'DP',rp(dp)],['Pokok (h-DP)',rp(pokok),'Margin',rp(mg)],['Diskon',rp(disc),'Total Kewajiban',rp(tp)],['Angsuran/bln',rp(ag),'',''  ]]);
     // Tabel perbandingan tenor — tiap baris punya margin sendiri
     const tenorOptions=[3,6,9,12,18,24,30,36];
     // Cek apakah tabel sudah ada (preserve nilai margin yg sudah diubah user)
@@ -2417,8 +2526,6 @@ function hitungSim(){
       if(inp)savedMargins[inp.dataset.tenor]=parseFloat(inp.value)||0;
     });
     const tenorRows=tenorOptions.map(t2=>{
-      // Pakai margin tersimpan jika ada, atau margin aktif jika tenor sama, atau default
-      // Default margin per tenor: kebijakan UBNB (dari tabel standar)
       const defaultMarginUBNB={3:3,6:2.5,9:2,12:1.5,18:1.4,24:1.25,30:1.12,36:1};
       let mPctT2;
       if(savedMargins[t2]!==undefined){
@@ -2428,9 +2535,10 @@ function hitungSim(){
       } else {
         mPctT2=(defaultMarginUBNB[t2]||mPct*100)/100;
       }
-      const mg2=Math.round(pk*mPctT2*t2);
-      const total2=pk+mg2;
-      const ag2=Math.round(total2/t2);
+      // Rumus baru: margin dihitung dari pokok (h-DP), total = h+margin-disc, angsuran = (total-DP)/jangka
+      const mg2=Math.round(pokok*mPctT2*t2);
+      const total2=h+mg2-disc;
+      const ag2=Math.round((total2-dp)/t2);
       const isActive=t2===t;
       const initVal=savedMargins[t2]!==undefined?savedMargins[t2].toFixed(2):(t2===t?(mPct*100).toFixed(2):(defaultMarginUBNB[t2]||mPct*100).toFixed(2));
       return`<tr style="background:${isActive?'var(--HL)':''}">
@@ -2450,8 +2558,12 @@ function hitungSim(){
       </tr>`;
     }).join('');
     document.getElementById('sim-tenor-tbl').innerHTML=tenorRows;
-    // Simpan pokok ke dataset untuk dipakai updateTenorRow
-    document.getElementById('sim-tenor-tbl').dataset.pokok=pk;
+    // Simpan pokok, h, dp, disc ke dataset untuk dipakai updateTenorRow
+    const tbl=document.getElementById('sim-tenor-tbl');
+    tbl.dataset.pokok=pokok;
+    tbl.dataset.h=h;
+    tbl.dataset.dp=dp;
+    tbl.dataset.disc=disc;
     document.getElementById('sim-tenor-wrap').style.display='block';
   } else {
     if(document.getElementById('sim-tenor-wrap'))document.getElementById('sim-tenor-wrap').style.display='none';
@@ -2463,11 +2575,14 @@ function hitungSim(){
 // Update satu baris tenor saat margin-nya diubah
 function updateTenorRow(inp, t2){
   const tbl=document.getElementById('sim-tenor-tbl');
-  const pk=parseFloat(tbl.dataset.pokok)||0;
+  const pokok=parseFloat(tbl.dataset.pokok)||0;
+  const h=parseFloat(tbl.dataset.h)||0;
+  const dp=parseFloat(tbl.dataset.dp)||0;
+  const disc=parseFloat(tbl.dataset.disc)||0;
   const mPct=parseFloat(inp.value)||0;
-  const mg=Math.round(pk*(mPct/100)*t2);
-  const total=pk+mg;
-  const ag=Math.round(total/t2);
+  const mg=Math.round(pokok*(mPct/100)*t2);
+  const total=h+mg-disc;
+  const ag=Math.round((total-dp)/t2);
   const mgEl=document.getElementById('sim-t'+t2+'-mg');
   const totEl=document.getElementById('sim-t'+t2+'-tot');
   const agEl=document.getElementById('sim-t'+t2+'-ag');
@@ -2514,15 +2629,31 @@ function mkTbl(rows){return rows.map(([l1,v1,l2,v2])=>`<tr><td style="background
 
 // CETAK
 function _buildKartuRows(a, styleMode){
-  const angs=aAngsuran.filter(x=>x.akad_id===a.id);
+  const angs=aAngsuran.filter(x=>x.akad_id===a.id).sort((x,y)=>new Date(x.tanggal)-new Date(y.tanggal));
   const jangka=a.jangka||12;
-  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0)-parseFloat(a.uang_muka||0);
-  let rows='',sisa=totalKewajiban;
+  // Rumus baru Sotoy:
+  //   total_pembiayaan = harga_beli + total_margin - diskon  (SUDAH disimpan di DB)
+  //   pokok akad       = harga_beli - DP
+  //   angsuran/bln     = (total_pembiayaan - DP) / jangka
+  //   % pokok rencana  = pokok / (pokok + margin)
+  //   % margin rencana = margin / (pokok + margin)
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0);
+  const dp=parseFloat(a.uang_muka||0);
+  const pokokAkad=parseFloat(a.harga_beli||0)-dp;
+  const marginAkad=parseFloat(a.total_margin||0);
+  const basis=pokokAkad+marginAkad;
+  const pctPokok=basis>0?pokokAkad/basis:1;
+  const pctMargin=basis>0?marginAkad/basis:0;
+  const angsRencana=Math.round((totalKewajiban-dp)/jangka);
+  const pokokRencana=Math.round(angsRencana*pctPokok);
+  const marginRencana=angsRencana-pokokRencana;
+  // Sisa kewajiban dimulai dari (total_pembiayaan - DP) karena DP sudah dibayar di awal
+  let rows='',sisa=totalKewajiban-dp;
   for(let i=1;i<=jangka;i++){
     const b=angs[i-1];
-    const totalBayarBulan=b?parseFloat(b.jumlah||0):Math.round(totalKewajiban/jangka);
-    const pk=b?parseFloat(b.pokok||0):0;
-    const mg=b?parseFloat(b.margin||0):0;
+    const totalBayarBulan=b?parseFloat(b.jumlah||0):angsRencana;
+    const pk=b?parseFloat(b.pokok||0):pokokRencana;
+    const mg=b?parseFloat(b.margin||0):marginRencana;
     sisa-=totalBayarBulan;
     const lunas=!!b;
     // Hitung JT: tanggal_akad + i bulan
@@ -2548,7 +2679,9 @@ function _buildKartuRows(a, styleMode){
       <td style="text-align:center">${i}</td>
       <td style="text-align:center;font-size:10px;color:#555">${jtStr}</td>
       <td style="text-align:center">${b?fmtTgl(b.tanggal):'—'}</td>
-      <td style="text-align:right;font-weight:${b?'700':'400'}">${rp(b?b.jumlah:Math.round(totalKewajiban/jangka))}</td>
+      <td style="text-align:right;font-weight:${b?'700':'400'}">${rp(totalBayarBulan)}</td>
+      <td style="text-align:right;font-size:10px;color:#555">${rp(pk)}</td>
+      <td style="text-align:right;font-size:10px;color:#555">${rp(mg)}</td>
       <td style="text-align:right">${rp(Math.max(0,sisa))}</td>
       <td style="text-align:center;${statusStyle}">${statusIcon}</td>
     </tr>`;
@@ -2557,30 +2690,36 @@ function _buildKartuRows(a, styleMode){
 }
 function buildKartuPreview(a){
   const {rows,jangka,paid}=_buildKartuRows(a,'preview');
+  const dp=parseFloat(a.uang_muka||0);
+  const diskon=parseFloat(a.diskon||0);
   return `
     <div class="ppr-header"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div></div>
     <div class="ppr-sum">
       <div><div class="s-lbl">Total Kewajiban</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
-      ${parseFloat(a.uang_muka||0)>0?`<div><div class="s-lbl">Uang Muka</div><div class="s-val" style="color:#f0d080">${rp(a.uang_muka)}</div></div>`:''}
+      ${dp>0?`<div><div class="s-lbl">Uang Muka (DP)</div><div class="s-val" style="color:#f0d080">${rp(dp)}</div></div>`:''}
+      ${diskon>0?`<div><div class="s-lbl">Diskon</div><div class="s-val" style="color:#f0d080">${rp(diskon)}</div></div>`:''}
       <div><div class="s-lbl">Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div>
       <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div>
       <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:9pt;margin:8px 0;color:#555"><span>Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span><span>Progress: <strong>${paid}/${jangka} terbayar</strong></span></div>
-    <table class="ppr-angs"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="ppr-angs"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
 function buildKartuPrint(a){
   const {rows,jangka,paid}=_buildKartuRows(a,'print');
+  const dp=parseFloat(a.uang_muka||0);
+  const diskon=parseFloat(a.diskon||0);
   return `<div class="ph"><div><h2>KARTU ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="no">${a.no_akad}</div></div></div>
 <div class="sum-box">
   <div><div class="s-lbl">Total Kewajiban</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
-  ${parseFloat(a.uang_muka||0)>0?`<div><div class="s-lbl">Uang Muka</div><div class="s-val">${rp(a.uang_muka)}</div></div>`:''}
+  ${dp>0?`<div><div class="s-lbl">Uang Muka (DP)</div><div class="s-val">${rp(dp)}</div></div>`:''}
+  ${diskon>0?`<div><div class="s-lbl">Diskon</div><div class="s-val">${rp(diskon)}</div></div>`:''}
   <div><div class="s-lbl">Jenis Akad</div><div class="s-val">${a.jenis_akad||'Murabahah'}</div></div>
   <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bulan</div></div>
   <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div>
 </div>
-<table class="pa"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+<table class="pa"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Tgl Bayar</th><th>Jumlah</th><th>Pokok</th><th>Margin</th><th>Sisa Kewajiban</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="pfooter">Progress: ${paid}/${jangka} terbayar · Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
 function cetakKartu(){
@@ -2589,15 +2728,18 @@ function cetakKartu(){
   bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuPreview(a), ()=>buildKartuPrint(a));
 }
 function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClass, footClass){
-  const totalKewajiban=parseFloat(a.total_pembiayaan||0)+parseFloat(a.total_margin||0);// T Kewajiban = pokok + margin
-  const hargaBeli=parseFloat(a.harga_beli||0)||totalKewajiban-parseFloat(a.total_margin||0);
+  // Rumus baru Sotoy: total_pembiayaan sudah = harga_beli + total_margin - diskon (final)
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0);
+  const hargaBeli=parseFloat(a.harga_beli||0);
+  const dp=parseFloat(a.uang_muka||0);
+  const diskon=parseFloat(a.diskon||0);
   // Narasi per jenis akad
   const narasi={
-    Murabahah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) telah menjual kepada PIHAK KEDUA (${a.nama_jamaah}) suatu barang/aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan harga pokok sebesar <strong>${rp(hargaBeli)}</strong> dan keuntungan (margin) sebesar <strong>${rp(a.total_margin)}</strong>, sehingga harga jual (total kewajiban) adalah <strong>${rp(totalKewajiban)}</strong>${parseFloat(a.uang_muka||0)>0?` setelah uang muka <strong>${rp(a.uang_muka)}</strong>`:''} . PIHAK KEDUA setuju untuk membayar secara angsuran sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
-    Ijarah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) menyewakan kepada PIHAK KEDUA (${a.nama_jamaah}) suatu aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan nilai aset sebesar <strong>${rp(a.total_pembiayaan)}</strong>. Ujroh (biaya sewa) yang disepakati adalah <strong>${rp(a.total_margin)}</strong> untuk masa sewa <strong>${a.jangka} bulan</strong>, dibayar angsuran <strong>${rp(a.angsuran_perbulan)}</strong> per bulan.`,
-    Mudharabah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) sebagai Shahibul Maal menyertakan modal sebesar <strong>${rp(a.total_pembiayaan)}</strong> kepada PIHAK KEDUA (${a.nama_jamaah}) sebagai Mudharib untuk mengelola usaha berupa <strong>${a.objek_pembiayaan||'—'}</strong>. Keuntungan dibagi sesuai nisbah yang telah disepakati, dibayar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
-    Musyarakah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) dan PIHAK KEDUA (${a.nama_jamaah}) bersepakat untuk melakukan kerjasama usaha (Musyarakah) dalam bidang <strong>${a.objek_pembiayaan||'—'}</strong>. Modal PIHAK PERTAMA sebesar <strong>${rp(a.total_pembiayaan)}</strong>. Keuntungan dibagi sesuai nisbah, dibayar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
-    Qardh:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) memberikan pinjaman kebajikan (Qardh) kepada PIHAK KEDUA (${a.nama_jamaah}) sebesar <strong>${rp(a.total_pembiayaan)}</strong> tanpa margin/bunga, untuk keperluan <strong>${a.objek_pembiayaan||'—'}</strong>. PIHAK KEDUA wajib mengembalikan sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+    Murabahah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) telah menjual kepada PIHAK KEDUA (${a.nama_jamaah}) suatu barang/aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan harga pokok sebesar <strong>${rp(hargaBeli)}</strong> dan keuntungan (margin) sebesar <strong>${rp(a.total_margin)}</strong>${diskon>0?`, dengan diskon sebesar <strong>${rp(diskon)}</strong>`:''}, sehingga harga jual (total kewajiban) adalah <strong>${rp(totalKewajiban)}</strong>. ${dp>0?`PIHAK KEDUA telah membayar uang muka sebesar <strong>${rp(dp)}</strong> dan setuju untuk membayar sisa angsuran sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`:`PIHAK KEDUA setuju untuk membayar secara angsuran sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`}`,
+    Ijarah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) menyewakan kepada PIHAK KEDUA (${a.nama_jamaah}) suatu aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan nilai aset sebesar <strong>${rp(hargaBeli)}</strong>. Ujroh (biaya sewa) yang disepakati adalah <strong>${rp(a.total_margin)}</strong> untuk masa sewa <strong>${a.jangka} bulan</strong>, dibayar angsuran <strong>${rp(a.angsuran_perbulan)}</strong> per bulan.`,
+    Mudharabah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) sebagai Shahibul Maal menyertakan modal sebesar <strong>${rp(hargaBeli)}</strong> kepada PIHAK KEDUA (${a.nama_jamaah}) sebagai Mudharib untuk mengelola usaha berupa <strong>${a.objek_pembiayaan||'—'}</strong>. Keuntungan dibagi sesuai nisbah yang telah disepakati, dibayar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+    Musyarakah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) dan PIHAK KEDUA (${a.nama_jamaah}) bersepakat untuk melakukan kerjasama usaha (Musyarakah) dalam bidang <strong>${a.objek_pembiayaan||'—'}</strong>. Modal PIHAK PERTAMA sebesar <strong>${rp(hargaBeli)}</strong>. Keuntungan dibagi sesuai nisbah, dibayar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
+    Qardh:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) memberikan pinjaman kebajikan (Qardh) kepada PIHAK KEDUA (${a.nama_jamaah}) sebesar <strong>${rp(hargaBeli)}</strong> tanpa margin/bunga, untuk keperluan <strong>${a.objek_pembiayaan||'—'}</strong>. PIHAK KEDUA wajib mengembalikan sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`,
   };
   const teksNarasi=narasi[a.jenis_akad]||narasi['Murabahah'];
   return `
@@ -2628,9 +2770,10 @@ function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClas
 <div class="${secClass}">KETENTUAN PEMBIAYAAN</div>
 <table class="${tblClass}">
   <tr><td class="lbl">Jenis Akad</td><td><strong>${a.jenis_akad||'Murabahah'}</strong></td><td class="lbl">Tanggal Akad</td><td>${fmtTgl(a.tanggal_akad)}</td></tr>
-  <tr><td class="lbl">Harga/Jumlah Pembiayaan</td><td class="hl"><strong>${rp(hargaBeli)}</strong></td><td class="lbl">Keuntungan/Ujroh</td><td class="hl"><strong style="color:#c9a84c">${rp(a.total_margin)}</strong></td></tr>
-  ${parseFloat(a.uang_muka||0)>0?`<tr><td class="lbl">Uang Muka (DP)</td><td class="hl">${rp(a.uang_muka)}</td><td class="lbl">Sisa Diangsur</td><td class="hl"><strong>${rp(totalKewajiban-parseFloat(a.uang_muka||0))}</strong></td></tr>`:''}
+  <tr><td class="lbl">Harga Beli / Pokok</td><td class="hl"><strong>${rp(hargaBeli)}</strong></td><td class="lbl">Keuntungan/Ujroh</td><td class="hl"><strong style="color:#c9a84c">${rp(a.total_margin)}</strong></td></tr>
+  ${diskon>0?`<tr><td class="lbl">Diskon</td><td class="hl">${rp(diskon)}</td><td class="lbl"></td><td></td></tr>`:''}
   <tr><td class="lbl">Total Kewajiban</td><td class="hl"><strong style="color:#1a5c3a">${rp(totalKewajiban)}</strong></td><td class="lbl">Angsuran/bln</td><td class="hl"><strong>${rp(a.angsuran_perbulan)}</strong></td></tr>
+  ${dp>0?`<tr><td class="lbl">Uang Muka (DP)</td><td class="hl">${rp(dp)}</td><td class="lbl">Sisa Diangsur</td><td class="hl"><strong>${rp(totalKewajiban-dp)}</strong></td></tr>`:''}
   <tr><td class="lbl">Tenor</td><td>${a.jangka} Bulan</td><td class="lbl">Status</td><td>${a.status}</td></tr>
 </table>
 <div class="${secClass}">NARASI AKAD</div>
