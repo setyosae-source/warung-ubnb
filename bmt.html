@@ -1365,7 +1365,11 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
   <div class="preview-cetak-box">
     <div class="preview-cetak-toolbar">
       <div class="preview-cetak-title" id="preview-cetak-title">Preview Dokumen</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="kartu-tab-toggle" style="display:none;background:rgba(255,255,255,.1);border-radius:var(--rs);padding:2px">
+          <button class="btn sm" id="tab-rencana" onclick="switchKartuMode('rencana')" style="background:var(--E);color:var(--H);border:none;font-weight:700;padding:4px 10px;font-size:11px">📋 Rencana</button>
+          <button class="btn sm" id="tab-aktual" onclick="switchKartuMode('aktual')" style="background:transparent;color:white;border:none;font-weight:600;padding:4px 10px;font-size:11px">📊 Aktual</button>
+        </div>
         <button class="btn emas sm" onclick="executePrint()" style="font-weight:700">🖨️ Cetak</button>
         <button class="btn sm" onclick="tutupPreviewCetak()" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3)">✕ Tutup</button>
       </div>
@@ -2725,7 +2729,211 @@ function buildKartuPrint(a){
 function cetakKartu(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
   if(!a){toast('Buka detail akad dulu dari Daftar',true);return;}
+  // Default mode = rencana, simpan akad untuk toggle
+  window._kartuAkad=a;
+  window._kartuMode='rencana';
   bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuPreview(a), ()=>buildKartuPrint(a));
+  // Tampilkan toggle tab khusus untuk kartu angsuran
+  const tg=document.getElementById('kartu-tab-toggle');
+  if(tg)tg.style.display='flex';
+  syncKartuTabUI();
+}
+function switchKartuMode(mode){
+  window._kartuMode=mode;
+  const a=window._kartuAkad;
+  if(!a)return;
+  if(mode==='rencana'){
+    document.getElementById('preview-cetak-paper').innerHTML=buildKartuPreview(a);
+    _printFn=()=>buildKartuPrint(a);
+  } else {
+    document.getElementById('preview-cetak-paper').innerHTML=buildKartuAktualPreview(a);
+    _printFn=()=>buildKartuAktualPrint(a);
+  }
+  syncKartuTabUI();
+}
+function syncKartuTabUI(){
+  const mode=window._kartuMode||'rencana';
+  const tR=document.getElementById('tab-rencana');
+  const tA=document.getElementById('tab-aktual');
+  if(!tR||!tA)return;
+  if(mode==='rencana'){
+    tR.style.background='var(--E)';tR.style.color='var(--H)';
+    tA.style.background='transparent';tA.style.color='white';
+  } else {
+    tA.style.background='var(--E)';tA.style.color='var(--H)';
+    tR.style.background='transparent';tR.style.color='white';
+  }
+}
+
+// ============================================================
+// KARTU AKTUAL — Logic A: pembayaran ditampilkan di baris terakhir tercover
+// ============================================================
+function _buildKartuAktualRows(a, styleMode){
+  const angs=aAngsuran.filter(x=>x.akad_id===a.id).sort((x,y)=>new Date(x.tanggal)-new Date(y.tanggal));
+  const jangka=a.jangka||12;
+  const totalKewajiban=parseFloat(a.total_pembiayaan||0);
+  const dp=parseFloat(a.uang_muka||0);
+  const angsRencana=Math.round((totalKewajiban-dp)/jangka);
+  // Generate jadwal rencana per bulan: {bulan, jt}
+  const tglAkad=new Date(a.tanggal_akad);
+  const jadwal=[];
+  for(let i=1;i<=jangka;i++){
+    const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i);
+    jadwal.push({bulan:i,jt,jtMs:jt.getTime()});
+  }
+  // Algoritma Logic A:
+  //   Loop pembayaran kronologis. Untuk setiap pembayaran, "alokasikan" dananya
+  //   ke bulan-bulan rencana yang belum tertutup, mulai dari bulan terkecil.
+  //   Bulan yang ter-fully-covered → status ✅ Tercover, kolom "Tgl Bayar" & "Aktual"
+  //     diisi pembayaran yang men-complete-nya (= pembayaran TERAKHIR yang masuk ke bulan ini)
+  //   Bulan partial → status ✅ Partial dengan jumlah tercover di kolom Aktual
+  //   Bulan belum → status ⏳ Belum / ⚠️ Nunggak (kalau JT < hari ini)
+  const baris=jadwal.map(j=>({
+    bulan:j.bulan, jt:j.jt, rencana:angsRencana,
+    terkumpul:0, completedBy:null, partialBy:null, fullyCovered:false
+  }));
+  let sisaPembayaran=angs.map(an=>({
+    id:an.id, tanggal:an.tanggal, sisa:parseFloat(an.jumlah||0)
+  }));
+  // Alokasikan tiap pembayaran ke bulan rencana yg belum penuh, dari bulan terkecil
+  for(let i=0;i<baris.length;i++){
+    const b=baris[i];
+    for(let j=0;j<sisaPembayaran.length && b.terkumpul<b.rencana;j++){
+      const p=sisaPembayaran[j];
+      if(p.sisa<=0)continue;
+      const butuh=b.rencana-b.terkumpul;
+      const alokasi=Math.min(butuh, p.sisa);
+      b.terkumpul+=alokasi;
+      p.sisa-=alokasi;
+      // Catat pembayaran yang berkontribusi terakhir untuk baris ini
+      if(b.terkumpul>=b.rencana){
+        b.fullyCovered=true;
+        b.completedBy=p;
+      } else {
+        b.partialBy=p;
+      }
+    }
+  }
+  // Render baris
+  const today=new Date(); today.setHours(0,0,0,0);
+  let rows='';
+  let sisaAktual=totalKewajiban-dp;
+  // Total terkumpul (untuk hitung sisa)
+  let akumulasiTerbayar=0;
+  for(const b of baris){
+    akumulasiTerbayar+=b.terkumpul;
+    sisaAktual=Math.max(0, totalKewajiban-dp-akumulasiTerbayar);
+    const jtStr=b.jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+    let bg='', statusIcon='', statusStyle='', tglBayarStr='—', aktualStr='—';
+    if(b.fullyCovered){
+      // Status ✅ Tercover (baris terakhir tercover dari pembayaran ini)
+      bg=styleMode==='print'?'background:#e8f5e9':'background:#f0fdf4';
+      statusIcon='✅ Tercover';statusStyle='color:#166534;font-size:9pt';
+      // Tampilkan tgl bayar & jumlah HANYA di baris yang COMPLETED oleh pembayaran tertentu
+      // (yaitu baris yang merupakan target terakhir dari completedBy)
+      // Cek: apakah baris ini adalah baris terakhir yang dicover oleh completedBy?
+      // Kita cek dari daftar baris: cari semua baris yang completedBy = b.completedBy,
+      // ambil yang terbesar nomornya
+      tglBayarStr='';aktualStr='';
+    }else if(b.terkumpul>0){
+      // Partial cover
+      bg=styleMode==='print'?'background:#fff7ed':'background:#fff7ed';
+      statusIcon='✅ Partial';statusStyle='color:#92400e;font-size:9pt';
+      tglBayarStr='';aktualStr=rp(b.terkumpul);
+    }else{
+      // Belum tercover
+      const isOverdue=b.jt<today;
+      if(isOverdue){
+        bg=styleMode==='print'?'background:#fef2f2':'background:#fef2f2';
+        statusIcon='⚠️ Nunggak';statusStyle='color:#991b1b;font-size:9pt';
+      } else {
+        statusIcon='⏳ Belum';statusStyle='color:#6b7280;font-size:9pt';
+      }
+    }
+    rows+=`<tr style="${bg}">
+      <td style="text-align:center">${b.bulan}</td>
+      <td style="text-align:center;font-size:10px;color:#555">${jtStr}</td>
+      <td style="text-align:right;font-size:11px">${rp(b.rencana)}</td>
+      <td style="text-align:center;font-size:10px"><span class="_tb_${b.bulan}">${tglBayarStr}</span></td>
+      <td style="text-align:right;font-weight:${b.fullyCovered?'700':'400'};font-size:11px"><span class="_ak_${b.bulan}">${aktualStr}</span></td>
+      <td style="text-align:right">${rp(sisaAktual)}</td>
+      <td style="text-align:center;${statusStyle}">${statusIcon}</td>
+    </tr>`;
+  }
+  // POST-PROCESS: untuk setiap pembayaran, cari baris TERAKHIR yang ia complete,
+  // lalu isi kolom Tgl Bayar & Aktual di baris itu dengan info pembayaran tsb
+  // (DOM-based via class _tb_N dan _ak_N)
+  // Untuk SSR (HTML string), kita lakukan via mapping & string-replace post-render
+  const completedMap={}; // pembayaran.id -> [array of baris.bulan it completed]
+  baris.forEach(b=>{
+    if(b.fullyCovered && b.completedBy){
+      const pid=b.completedBy.id;
+      if(!completedMap[pid])completedMap[pid]=[];
+      completedMap[pid].push({bulan:b.bulan, partial:false});
+    } else if(b.partialBy){
+      // Partial: pembayaran masuk tapi belum complete baris ini
+      const pid=b.partialBy.id;
+      if(!completedMap[pid])completedMap[pid]=[];
+      completedMap[pid].push({bulan:b.bulan, partial:true, jumlah:b.terkumpul});
+    }
+  });
+  // Untuk tiap pembayaran, isi info hanya di baris TERAKHIR yang ia handle
+  angs.forEach(an=>{
+    const list=completedMap[an.id]||[];
+    if(!list.length)return;
+    // Ambil baris terakhir (bulan terbesar)
+    const last=list.reduce((mx,x)=>x.bulan>mx.bulan?x:mx, list[0]);
+    const tglFmt=fmtTgl(an.tanggal);
+    const jumlahFmt=rp(an.jumlah);
+    // Jika last.partial → kolom aktual sudah berisi sebagian, kita override dengan jumlah pembayaran (visual: "X / rencana")
+    if(last.partial){
+      rows=rows.replace(`<span class="_tb_${last.bulan}"></span>`, `<span class="_tb_${last.bulan}">${tglFmt}</span>`);
+      // Aktual untuk partial: tampilkan jumlah aktual full (yaitu nominal pembayaran), bukan porsi rencana
+      rows=rows.replace(`<span class="_ak_${last.bulan}">${rp(last.jumlah)}</span>`, `<span class="_ak_${last.bulan}">${jumlahFmt}</span>`);
+    } else {
+      rows=rows.replace(`<span class="_tb_${last.bulan}"></span>`, `<span class="_tb_${last.bulan}">${tglFmt}</span>`);
+      rows=rows.replace(`<span class="_ak_${last.bulan}"></span>`, `<span class="_ak_${last.bulan}">${jumlahFmt}</span>`);
+    }
+  });
+  // Statistik
+  const totalBayar=angs.reduce((s,an)=>s+parseFloat(an.jumlah||0),0);
+  const sisaTotal=Math.max(0, totalKewajiban-dp-totalBayar);
+  const tercover=baris.filter(b=>b.fullyCovered).length;
+  return {rows, jangka, totalBayar, sisaTotal, tercover, jumlahPembayaran:angs.length};
+}
+
+function buildKartuAktualPreview(a){
+  const {rows,jangka,totalBayar,sisaTotal,tercover,jumlahPembayaran}=_buildKartuAktualRows(a,'preview');
+  const dp=parseFloat(a.uang_muka||0);
+  const diskon=parseFloat(a.diskon||0);
+  return `
+    <div class="ppr-header"><div><h2>KARTU AKTUAL ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="ppr-no">${a.no_akad}</div></div></div>
+    <div class="ppr-sum">
+      <div><div class="s-lbl">Total Kewajiban</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
+      ${dp>0?`<div><div class="s-lbl">Uang Muka (DP)</div><div class="s-val" style="color:#f0d080">${rp(dp)}</div></div>`:''}
+      <div><div class="s-lbl">Sudah Dibayar</div><div class="s-val" style="color:#a7f3d0">${rp(totalBayar)}</div></div>
+      <div><div class="s-lbl">Sisa</div><div class="s-val" style="color:#fca5a5">${rp(sisaTotal)}</div></div>
+      <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div>
+      <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:9pt;margin:8px 0;color:#555"><span>Akad: <strong>${fmtTgl(a.tanggal_akad)}</strong></span><span>Progress: <strong>${tercover}/${jangka} bulan tercover · ${jumlahPembayaran} transaksi</strong></span></div>
+    <table class="ppr-angs"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Rencana</th><th>Tgl Bayar</th><th>Aktual</th><th>Sisa Aktual</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="ppr-footer">Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
+}
+function buildKartuAktualPrint(a){
+  const {rows,jangka,totalBayar,sisaTotal,tercover,jumlahPembayaran}=_buildKartuAktualRows(a,'print');
+  const dp=parseFloat(a.uang_muka||0);
+  return `<div class="ph"><div><h2>KARTU AKTUAL ANGSURAN</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${a.nama_jamaah}</h3><div class="no">${a.no_akad}</div></div></div>
+<div class="sum-box">
+  <div><div class="s-lbl">Total Kewajiban</div><div class="s-val">${rp(a.total_pembiayaan)}</div></div>
+  ${dp>0?`<div><div class="s-lbl">Uang Muka (DP)</div><div class="s-val">${rp(dp)}</div></div>`:''}
+  <div><div class="s-lbl">Sudah Dibayar</div><div class="s-val">${rp(totalBayar)}</div></div>
+  <div><div class="s-lbl">Sisa</div><div class="s-val">${rp(sisaTotal)}</div></div>
+  <div><div class="s-lbl">Tenor</div><div class="s-val">${jangka} Bln</div></div>
+  <div><div class="s-lbl">Angsuran/bln</div><div class="s-val">${rp(a.angsuran_perbulan)}</div></div>
+</div>
+<table class="pa"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Rencana</th><th>Tgl Bayar</th><th>Aktual</th><th>Sisa Aktual</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="pfooter">Progress: ${tercover}/${jangka} bulan tercover · ${jumlahPembayaran} transaksi · Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
 function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClass, footClass){
   // Rumus baru Sotoy: total_pembiayaan sudah = harga_beli + total_margin - diskon (final)
@@ -2815,7 +3023,14 @@ function bukaPreviewCetak(judul, previewHTML, printFn){
   document.getElementById('preview-cetak-paper').innerHTML=previewHTML;
   openModal('preview-cetak');
 }
-function tutupPreviewCetak(){closeModal('preview-cetak');}
+function tutupPreviewCetak(){
+  closeModal('preview-cetak');
+  // Reset toggle tab untuk preview berikutnya
+  const tg=document.getElementById('kartu-tab-toggle');
+  if(tg)tg.style.display='none';
+  window._kartuAkad=null;
+  window._kartuMode=null;
+}
 function executePrint(){
   if(_printFn){
     const area=document.getElementById('print-area');
