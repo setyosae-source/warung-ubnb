@@ -2124,12 +2124,19 @@ async function simpanEditAkad(){
   const totalPmb=harga+margin-disc;
   // Angsuran = (total_pembiayaan - DP) / jangka
   const angs=jangka>0?Math.round((totalPmb-dp)/jangka):0;
+  // Rumus Sotoy:
+  //   total_angsuran = akumulasi pembayaran existing + DP
+  //   sisa_angsuran  = total_pembiayaan - total_angsuran
+  const akumulasiBayar=aAngsuran.filter(x=>x.akad_id===_detailAkadId).reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
+  const totalAng=akumulasiBayar+dp;
+  const sisaAng=totalPmb-totalAng;
   const{error}=await sb.from('bmt_akad').update({
     no_akad:noAkad, nama_jamaah:nama, kelompok:kel, tanggal_akad:tgl,
     jenis_akad:jenis, status, objek_pembiayaan:objek, jaminan:jaminan||null,
     tgl_rutin:parseInt(document.getElementById('ea-akad-tgl-rutin').value)||null,
     harga_beli:harga, uang_muka:dp, diskon:disc, margin_pct:mPct, total_margin:margin,
-    total_pembiayaan:totalPmb, angsuran_perbulan:angs, jangka
+    total_pembiayaan:totalPmb, angsuran_perbulan:angs, jangka,
+    total_angsuran:totalAng, sisa_angsuran:sisaAng
   }).eq('id',_detailAkadId);
   if(error){al('ea-akad-alert','Gagal: '+error.message);return;}
   toast('✅ Data akad berhasil diperbarui');
@@ -2273,6 +2280,11 @@ async function simpanBaru(){
     total_pembiayaan:baruD.total_pembiayaan,
     angsuran_perbulan:baruD.angsuran,
     jangka:baruD.jangka,
+    // Rumus Sotoy untuk akad baru (belum ada pembayaran):
+    //   total_angsuran = akumulasi terbayar (0) + DP = DP
+    //   sisa_angsuran  = total_pembiayaan - total_angsuran
+    total_angsuran:baruD.uang_muka||0,
+    sisa_angsuran:baruD.total_pembiayaan-(baruD.uang_muka||0),
     tgl_rutin:parseInt(document.getElementById('b-tgl-rutin').value)||null,
     status:'Belum Lunas',operator:CU.username
   }]).select().single();
