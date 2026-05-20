@@ -506,7 +506,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     <div class="main">
 
       <!-- PAGE: DASHBOARD -->
-      <div id="page-dashboard" class="page">
+      <div id="page-dashboard" class="page active">
         <div style="margin-bottom:14px">
           <div id="dash-greeting" style="font-size:18px;font-weight:700;color:#111"></div>
           <div id="dash-date" style="font-size:12px;color:var(--text-muted);margin-top:2px"></div>
@@ -577,7 +577,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       </div>
 
 <!-- =================== POS KASIR (MOBILE) =================== -->
-<div id="page-pos" class="page active" style="padding:0;max-width:none;">
+<div id="page-pos" class="page" style="padding:0;max-width:none;">
   <!-- POS TAB BAR (Kasir / Pending / Riwayat) -->
   <div style="display:flex;background:white;border-bottom:1px solid var(--border);flex-shrink:0;position:sticky;top:0;z-index:10">
     <button class="pos-tab active" data-postab="kasir" onclick="goPosTab('kasir',this)" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:3px solid var(--green);font-weight:700;color:var(--green-dark,#15803d);font-size:13px;cursor:pointer">🛒 Kasir</button>
@@ -2130,6 +2130,22 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
             </div>
           </div>
         </div>
+
+        <!-- Monitoring Setoran Toko → Pusat -->
+        <div class="card">
+          <div class="card-title">💸 Setoran Toko → Pusat</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <select id="mt-setor-filter-toko" onchange="renderSetoran()" style="flex:1;min-width:140px;height:34px;border:1px solid #d1d5db;border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit;background:white">
+              <option value="all">Semua Toko</option>
+            </select>
+            <input type="date" id="mt-setor-dari" onchange="renderSetoran()" style="height:34px;border:1px solid #d1d5db;border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit">
+            <input type="date" id="mt-setor-sampai" onchange="renderSetoran()" style="height:34px;border:1px solid #d1d5db;border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit">
+          </div>
+          <div id="mt-setor-stat" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"></div>
+          <div id="mt-setor-list" style="background:white;border-radius:6px;border:1px solid #e5e7eb;overflow-x:auto">
+            <div style="padding:14px;text-align:center;color:#9ca3af;font-size:13px">Memuat...</div>
+          </div>
+        </div>
       </div>
 
       <!-- Modal Tambah/Edit Toko -->
@@ -3390,8 +3406,114 @@ async function renderManajemenToko(){
 
   // Render matrix
   renderMatrixUserToko();
+  // Render setoran
+  await initSetoranControls();
+  await renderSetoran();
 }
 let _mtDefault={};
+let _setoranCache=[];
+
+async function initSetoranControls(){
+  // Populate filter toko untuk setoran
+  const sel=document.getElementById('mt-setor-filter-toko');
+  if(sel){
+    const curVal=sel.value||'all';
+    sel.innerHTML='<option value="all">Semua Toko</option>';
+    _mtTokoList.filter(t=>t.aktif).forEach(t=>{
+      const opt=document.createElement('option');
+      opt.value=t.id;opt.textContent='📍 '+t.kode+' · '+t.nama;
+      sel.appendChild(opt);
+    });
+    sel.value=curVal;
+  }
+  // Default date range: 30 hari terakhir
+  const dari=document.getElementById('mt-setor-dari');
+  const sampai=document.getElementById('mt-setor-sampai');
+  if(dari && !dari.value){
+    const d=new Date();d.setDate(d.getDate()-30);
+    dari.value=d.toISOString().slice(0,10);
+  }
+  if(sampai && !sampai.value){
+    sampai.value=new Date().toISOString().slice(0,10);
+  }
+}
+
+async function renderSetoran(){
+  const elList=document.getElementById('mt-setor-list');
+  const elStat=document.getElementById('mt-setor-stat');
+  if(!elList)return;
+  elList.innerHTML='<div style="padding:14px;text-align:center;color:#9ca3af;font-size:13px">Memuat...</div>';
+  const filterToko=document.getElementById('mt-setor-filter-toko')?.value||'all';
+  const dari=document.getElementById('mt-setor-dari')?.value;
+  const sampai=document.getElementById('mt-setor-sampai')?.value;
+  try{
+    let q=sb.from('kas_setoran').select('*');
+    if(filterToko!=='all')q=q.eq('toko_id',parseInt(filterToko));
+    if(dari)q=q.gte('tgl_setor',dari);
+    if(sampai)q=q.lte('tgl_setor',sampai);
+    const{data,error}=await q.order('tgl_setor',{ascending:false}).order('created_at',{ascending:false}).limit(500);
+    if(error)throw error;
+    _setoranCache=data||[];
+
+    // Stat ringkas
+    const total=_setoranCache.reduce((s,r)=>s+parseFloat(r.jumlah||0),0);
+    const totalRows=_setoranCache.length;
+    const byToko={};
+    _setoranCache.forEach(r=>{
+      const tid=r.toko_id;
+      if(!byToko[tid])byToko[tid]={jumlah:0,count:0};
+      byToko[tid].jumlah+=parseFloat(r.jumlah||0);
+      byToko[tid].count++;
+    });
+    let statHtml=`<div style="background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:8px 12px;font-size:12px;flex:1;min-width:140px">
+      <div style="color:#15803d;font-weight:600;font-size:11px">Total Setoran (${totalRows}x)</div>
+      <div style="font-weight:800;font-size:15px;color:#15803d">Rp ${fmt(total)}</div>
+    </div>`;
+    Object.keys(byToko).forEach(tid=>{
+      const t=_tokoMap[tid]||{kode:'T'+tid,nama:'Toko '+tid};
+      statHtml+=`<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;font-size:12px;flex:1;min-width:140px">
+        <div style="color:#92400e;font-weight:600;font-size:11px">${t.kode} · ${t.nama} (${byToko[tid].count}x)</div>
+        <div style="font-weight:800;font-size:14px;color:#92400e">Rp ${fmt(byToko[tid].jumlah)}</div>
+      </div>`;
+    });
+    elStat.innerHTML=statHtml;
+
+    // List table
+    if(_setoranCache.length===0){
+      elList.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px">Belum ada setoran</div>';
+      return;
+    }
+    const kasNamaMap={};
+    (aKas||[]).forEach(k=>{kasNamaMap[k.id]=k.nama;});
+    const rows=_setoranCache.map(r=>{
+      const t=_tokoMap[r.toko_id]||{kode:'T'+r.toko_id,nama:'Toko '+r.toko_id};
+      return `<tr style="border-top:1px solid #e5e7eb">
+        <td style="padding:8px 10px;font-size:12px">${r.tgl_setor||''}</td>
+        <td style="padding:8px 10px;font-size:12px"><strong>${t.kode}</strong> · ${t.nama}</td>
+        <td style="padding:8px 10px;font-size:11px;color:#6b7280">${kasNamaMap[r.kas_asal_id]||'Kas #'+r.kas_asal_id} → ${kasNamaMap[r.kas_tujuan_id]||'Kas #'+r.kas_tujuan_id}</td>
+        <td style="padding:8px 10px;font-size:13px;font-weight:700;color:#15803d;text-align:right;font-family:'Courier New',monospace">Rp ${fmt(r.jumlah)}</td>
+        <td style="padding:8px 10px;font-size:11px;color:#6b7280">${r.operator||'-'}</td>
+        <td style="padding:8px 10px;font-size:11px">${r.keterangan||''}</td>
+      </tr>`;
+    }).join('');
+    elList.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px">
+      <thead style="background:#f9fafb">
+        <tr>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:700">Tgl</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:700">Toko</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:700">Kas Asal → Tujuan</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:700">Jumlah</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:700">Operator</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:700">Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }catch(e){
+    console.error('renderSetoran:',e);
+    elList.innerHTML='<div style="padding:14px;text-align:center;color:#ef4444;font-size:13px">Gagal load: '+(e.message||e)+'</div>';
+  }
+}
 
 function renderMatrixUserToko(){
   const headTr=document.getElementById('mt-matrix-head');
@@ -3718,7 +3840,7 @@ window.addEventListener('load',async()=>{
 });
 
 async function loadAll(){
-  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB(),lLaundry(),lService(),lAnggota(),lJamaah()]);
+  await Promise.all([lB(),lT(),lH(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lKas(),lPPOB(),lLaundry(),lService(),lAnggota(),lJamaah(),lBST()]);
   filterSD('pel');filterSD('prod');filterSD('sup');filterSD('bprod');
   renderKeranjang();renderStok();renderPaketBuilder();renderPaketList();renderJualPaketGrid();renderVoucherList();renderPel();renderSup();renderHutang();
   loadPesanan(); // Load pesanan count for badge
@@ -3728,6 +3850,50 @@ async function loadAll(){
     const btn=Array.from(document.querySelectorAll(".nav-item")).find(b=>b.onclick&&String(b.onclick).includes("dashboard"));
     if(btn)showPage('dashboard',btn);
   }
+}
+
+// ===== STOK PER TOKO HELPERS =====
+let aBST_byToko={}; // {toko_id: {barang_id: stok}}
+async function lBST(){
+  // Load semua stok per-toko (untuk semua toko aktif kecuali T1 yg pakai barang.stok)
+  try{
+    const{data}=await sb.from('barang_stok_toko').select('barang_id,toko_id,stok');
+    aBST_byToko={};
+    (data||[]).forEach(r=>{
+      if(!aBST_byToko[r.toko_id])aBST_byToko[r.toko_id]={};
+      aBST_byToko[r.toko_id][r.barang_id]=parseFloat(r.stok)||0;
+    });
+  }catch(e){console.error('lBST:',e);aBST_byToko={};}
+}
+function getStokToko(barangId, tokoId){
+  // T1 → pakai barang.stok (master)
+  if(tokoId===1 || !tokoId){
+    const b=aB.find(x=>x.id===barangId);
+    return parseFloat(b?.stok)||0;
+  }
+  return (aBST_byToko[tokoId]?.[barangId])||0;
+}
+function getStokTotal(barangId){
+  // T1 (barang.stok) + T2,T3,... (barang_stok_toko)
+  const b=aB.find(x=>x.id===barangId);
+  let total=parseFloat(b?.stok)||0; // T1
+  for(const tid of Object.keys(aBST_byToko)){
+    if(parseInt(tid)===1)continue; // skip T1 (sudah di barang.stok)
+    total+=(aBST_byToko[tid][barangId])||0;
+  }
+  return total;
+}
+// Helper: build breakdown HTML untuk row stok
+function buildStokBreakdownHtml(barangId, satuan){
+  const tokoIds=Object.keys(_tokoMap).sort((a,b)=>parseInt(a)-parseInt(b));
+  if(tokoIds.length<=1)return '';
+  const parts=tokoIds.map(tid=>{
+    const t=_tokoMap[tid];
+    const s=getStokToko(barangId, parseInt(tid));
+    const color=s===0?'#9ca3af':(s<=5?'#d97706':'#15803d');
+    return `<span style="color:${color}" title="${t.nama}">${t.kode}: <b>${s.toLocaleString('id-ID')}</b></span>`;
+  });
+  return `<div style="font-size:9px;color:#6b7280;margin-top:2px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">${parts.join(' · ')}</div>`;
 }
 // Helper: apply filter toko global ke query builder
 function withFilterToko(q){
@@ -4367,6 +4533,7 @@ async function bayar(){
   // Simpan laundry/service items jika ada
   const txId = data?.id;
   if(txId){
+    const _tid=(_filterTokoGlobal!=='all'&&_filterTokoGlobal)?_filterTokoGlobal:1;
     for(let i = 0; i < KR.length; i++){
       const k = KR[i];
       if(k._kategori === 'laundry' && k._laundryData){
@@ -4382,7 +4549,8 @@ async function bayar(){
           catatan: ld.catatan || null,
           nama_pelanggan: pelNama !== 'Umum' ? pelNama : null,
           telp_pelanggan: ps?.telp || null,
-          total_harga: k.hE * k.qty
+          total_harga: k.hE * k.qty,
+          toko_id: _tid
         }]);
       }
       if(k._kategori === 'service' && k._serviceData){
@@ -4402,7 +4570,8 @@ async function bayar(){
           nama_pelanggan: pelNama !== 'Umum' ? pelNama : null,
           telp_pelanggan: ps?.telp || null,
           total_harga: k.hE * k.qty,
-          biaya_jasa: k.hE * k.qty
+          biaya_jasa: k.hE * k.qty,
+          toko_id: _tid
         }]);
       }
     }
@@ -5816,11 +5985,12 @@ function renderStok(){
   if(q)list=list.filter(b=>b.nama.toLowerCase().includes(q)||(b.barcode||'').toLowerCase().includes(q));
   // Caption filter toko aktif
   let filterCaption='';
+  const jmlToko=Object.keys(_tokoMap||{}).length;
   if(_filterTokoGlobal && _filterTokoGlobal!=='all'){
     const t=_tokoMap[_filterTokoGlobal];
     filterCaption=`<div style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:10px">📍 Stok untuk: ${t?(t.kode+' · '+t.nama):'Toko '+_filterTokoGlobal} <span style="font-weight:400">(filter aktif — pilih "Semua Toko" di topbar untuk lihat master)</span></div>`;
-  }else if(_tokoMap && Object.keys(_tokoMap).length>1){
-    filterCaption=`<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:10px">📍 Menampilkan stok master (Toko 1 / PW4). Filter toko di topbar untuk lihat toko lain.</div>`;
+  }else if(jmlToko>1){
+    filterCaption=`<div style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:10px">📍 <b>Kolom Stok</b> = total semua toko. Breakdown per toko di bawah angka. Filter toko di topbar untuk fokus 1 toko.</div>`;
   }
   list.sort((a,b)=>{
     let va,vb;
@@ -5867,25 +6037,32 @@ function renderStok(){
           ${list.map((b,i)=>{
             const rowBg = i%2===0 ? 'white' : '#fafafa';
             const bat = aBatch.filter(x=>x.barang_id===b.id&&x.qty_sisa>0);
-            const stokColor = b.stok===0 ? 'var(--red)' : b.stok<=5 ? 'var(--amber)' : 'var(--green-dark)';
+            // Hitung stok yang ditampilkan berdasarkan filter toko
+            let stokTampil;
+            if(_filterTokoGlobal==='all'){
+              stokTampil=getStokTotal(b.id); // total semua toko
+            }else{
+              stokTampil=getStokToko(b.id, _filterTokoGlobal);
+            }
+            const stokColor = stokTampil===0 ? 'var(--red)' : stokTampil<=5 ? 'var(--amber)' : 'var(--green-dark)';
             const margin = b.harga_beli>0 ? Math.round((b.harga-b.harga_beli)/b.harga_beli*100) : 0;
             const marginColor = margin<0 ? 'var(--red)' : margin<10 ? 'var(--amber)' : 'var(--green-dark)';
             // Smart format stok untuk multi-satuan
             let stokDisplay, satuanDisplay;
-            if(b.multi_satuan && b.satuan_stok==='gr' && b.stok>=1000){
-              stokDisplay = (b.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2});
+            if(b.multi_satuan && b.satuan_stok==='gr' && stokTampil>=1000){
+              stokDisplay = (stokTampil/1000).toLocaleString('id-ID',{maximumFractionDigits:2});
               satuanDisplay = 'Kg';
-            } else if(b.multi_satuan && b.satuan_stok==='ml' && b.stok>=1000){
-              stokDisplay = (b.stok/1000).toLocaleString('id-ID',{maximumFractionDigits:2});
+            } else if(b.multi_satuan && b.satuan_stok==='ml' && stokTampil>=1000){
+              stokDisplay = (stokTampil/1000).toLocaleString('id-ID',{maximumFractionDigits:2});
               satuanDisplay = 'L';
             } else {
-              stokDisplay = (b.stok||0).toLocaleString('id-ID');
+              stokDisplay = (stokTampil||0).toLocaleString('id-ID');
               satuanDisplay = b.satuan||'pcs';
             }
             // Badge expired/low stock
             let badge = '';
-            if(b.stok===0) badge = '<span style="background:#fee2e2;color:#b91c1c;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:4px">habis</span>';
-            else if(b.stok<=5) badge = '<span style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:4px">low</span>';
+            if(stokTampil===0) badge = '<span style="background:#fee2e2;color:#b91c1c;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:4px">habis</span>';
+            else if(stokTampil<=5) badge = '<span style="background:#fef3c7;color:#92400e;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:4px">low</span>';
             if(b.expired){
               const today=new Date(); today.setHours(0,0,0,0);
               const exp=new Date(b.expired); exp.setHours(0,0,0,0);
@@ -5907,6 +6084,7 @@ function renderStok(){
               <td style="padding:10px 6px;text-align:right;white-space:nowrap">
                 <div style="font-size:14px;font-weight:700;color:${stokColor};font-family:'SF Mono',Monaco,monospace">${stokDisplay}</div>
                 <div style="font-size:9px;color:var(--text-muted)">${satuanDisplay}</div>
+                ${buildStokBreakdownHtml(b.id, satuanDisplay)}
               </td>
               <td style="padding:10px 6px;text-align:right;font-family:'SF Mono',Monaco,monospace;font-weight:600;color:var(--green-dark);font-size:12px;white-space:nowrap">${fmt(b.harga||0)}</td>
               <td style="padding:10px 6px;text-align:right;font-weight:700;color:${marginColor};font-size:12px;white-space:nowrap">${margin}%</td>
@@ -5963,10 +6141,84 @@ function renderStokRowDetail(id){
       <div style="font-size:13px;font-weight:700;color:var(--green-dark)">${bat.length}</div>
     </div>
   </div>`;
+  // Card: Stok per Toko (kalau >1 toko)
+  const tokoIds=Object.keys(_tokoMap||{}).sort((a,b)=>parseInt(a)-parseInt(b));
+  if(tokoIds.length>1){
+    h+=`<div style="background:white;padding:10px 12px;border-radius:8px;border:1px solid var(--border);margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px">📍 Stok per Toko</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">`;
+    tokoIds.forEach(tid=>{
+      const t=_tokoMap[tid];
+      const tidInt=parseInt(tid);
+      const s=getStokToko(id, tidInt);
+      const color=s===0?'#9ca3af':(s<=5?'#d97706':'#15803d');
+      const note=tidInt===1?'<span style="font-size:9px;color:#6b7280">(master)</span>':'';
+      h+=`<div style="background:#f9fafb;padding:8px 10px;border-radius:6px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#1f2937">${t.kode} · ${t.nama} ${note}</div>
+          <div style="font-size:16px;font-weight:800;color:${color};font-family:'SF Mono',Monaco,monospace">${s.toLocaleString('id-ID')} <span style="font-size:10px;color:#6b7280;font-weight:500">${b.satuan||'pcs'}</span></div>
+        </div>
+        <button onclick="event.stopPropagation();editStokToko(${id},${tidInt})" style="background:#dbeafe;border:none;color:#1e40af;font-size:10px;font-weight:700;padding:5px 10px;border-radius:6px;cursor:pointer">✏️ Set</button>
+      </div>`;
+    });
+    h+=`</div></div>`;
+  }
   // Riwayat: panggil fungsi existing
   h += `<div id="riwayat-barang-${id}"></div>`;
   el.innerHTML = h;
   if(typeof renderRiwayatBarang==='function') renderRiwayatBarang(id);
+}
+
+async function editStokToko(barangId, tokoId){
+  const b=aB.find(x=>x.id===barangId);
+  if(!b)return;
+  const t=_tokoMap[tokoId];
+  const curStok=getStokToko(barangId, tokoId);
+  const input=prompt('Set stok ' + b.nama + '\nDi: ' + (t?t.kode+' · '+t.nama:'Toko '+tokoId) + '\n\nStok saat ini: ' + curStok + ' ' + (b.satuan||'pcs') + '\n\nMasukkan stok baru:', curStok);
+  if(input===null)return;
+  const newStok=parseFloat(input);
+  if(isNaN(newStok)||newStok<0){toast('Stok tidak valid',true);return;}
+  try{
+    if(tokoId===1){
+      // T1 → update barang.stok
+      await sb.from('barang').update({stok:newStok}).eq('id',barangId);
+      b.stok=newStok;
+    }else{
+      // T2+ → upsert barang_stok_toko
+      const{data:cur}=await sb.from('barang_stok_toko').select('id').eq('barang_id',barangId).eq('toko_id',tokoId).maybeSingle();
+      if(cur){
+        await sb.from('barang_stok_toko').update({stok:newStok,updated_at:new Date().toISOString()}).eq('id',cur.id);
+      }else{
+        await sb.from('barang_stok_toko').insert([{barang_id:barangId,toko_id:tokoId,stok:newStok}]);
+      }
+      if(!aBST_byToko[tokoId])aBST_byToko[tokoId]={};
+      aBST_byToko[tokoId][barangId]=newStok;
+    }
+    // Log opname (catatan: ini set manual, beda dari opname formal)
+    const diff=newStok-curStok;
+    await sb.from('stock_opname').insert([{
+      barang_id:barangId,
+      nama_barang:b.nama,
+      stok_sistem:curStok,
+      stok_fisik:newStok,
+      selisih:diff,
+      alasan:'Set manual via Manajemen Stok ('+(t?t.kode:'T'+tokoId)+')',
+      operator:CU?.username||'admin',
+      toko_id:tokoId
+    }]);
+    toast('✅ Stok '+(t?t.kode:'T'+tokoId)+' diperbarui: '+newStok);
+    // Refresh display
+    await lBST();
+    renderStok();
+    // Re-open detail row
+    const detailRow=document.getElementById('sd-'+barangId);
+    if(detailRow && detailRow.style.display!=='none'){
+      renderStokRowDetail(barangId);
+    }
+  }catch(e){
+    console.error('editStokToko:',e);
+    toast('Gagal: '+(e.message||e),true);
+  }
 }
 function renderRiwayatBarang(id){
   const el=document.getElementById('riwayat-barang-'+id);if(!el)return;
@@ -9718,12 +9970,12 @@ let _serviceFilter = 'all';
 
 // Load data tracking
 async function lLaundry(){
-  const {data} = await sb.from('laundry_items').select('*').order('tgl_masuk', {ascending: false});
+  const {data} = await withFilterToko(sb.from('laundry_items').select('*')).order('tgl_masuk', {ascending: false});
   aLaundry = data || [];
 }
 
 async function lService(){
-  const {data} = await sb.from('service_items').select('*').order('tgl_masuk', {ascending: false});
+  const {data} = await withFilterToko(sb.from('service_items').select('*')).order('tgl_masuk', {ascending: false});
   aService = data || [];
 }
 
