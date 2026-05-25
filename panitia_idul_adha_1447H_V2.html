@@ -118,6 +118,45 @@
     display:none;
   }
 
+  /* Utama view: vertical chip layout, gender-grouped */
+  body.view-utama .pos-assigned{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:6px;
+    margin-top:6px;
+  }
+  body.view-utama .gender-group{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    width:100%;
+  }
+  body.view-utama .gender-group + .gender-group{
+    margin-top:4px;
+    padding-top:6px;
+    border-top:1px dashed var(--line);
+  }
+  body.view-utama .gender-label{
+    font-size:10px;
+    font-weight:600;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:1px;
+    margin-bottom:2px;
+  }
+  body.view-utama .pos-assigned .chip{
+    background:var(--gold-soft);
+    color:var(--emerald);
+    padding:3px 11px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+    display:inline-block;
+    width:fit-content;
+    max-width:100%;
+  }
+  body.view-utama .pos-assigned .chip.manual{background:#dcc596}
+
   /* Utama view: clickable headers but no edit hint */
   body.view-utama .pos-meta .edit-hint{display:none}
 
@@ -886,6 +925,10 @@ function applyMode(){
     btn.textContent = '👁️ View Mode';
     btn.classList.add('editing');
   }
+  // Re-render chips because format differs between modes
+  if(typeof renderAllChips === 'function' && Object.keys(ASSIGNMENTS).length > 0){
+    renderAllChips();
+  }
 }
 
 // ============ PRINT (TABLE STYLE) ============
@@ -1076,12 +1119,8 @@ function renderChips(posId){
     headEl.innerHTML = '<span class="empty">belum ditentukan</span>';
     if(listEl) listEl.innerHTML = '<div class="pic-empty">Belum ada PIC dipilih</div>';
   } else {
-    // Header: SEMUA chip tampil
-    headEl.innerHTML = list.map(a=>{
-      const name = a.nama_manual || jamaahName(a.jamaah_did);
-      const cls = a.nama_manual ? 'chip manual' : 'chip';
-      return `<span class="${cls}">${escapeHtml(name)}</span>`;
-    }).join('');
+    // Header: render based on mode
+    headEl.innerHTML = buildChipsHtml(list);
 
     // Editor: draggable cards
     if(listEl){
@@ -1102,6 +1141,53 @@ function renderChips(posId){
     const notes = list.map(a=>a.catatan).filter(Boolean);
     const noteEl = $('note-'+posId);
     if(noteEl) noteEl.value = notes.join(' · ');
+  }
+}
+
+function jamaahGender(did){
+  const j = JAMAAH.find(x=>x.did===did);
+  return j ? j.jenis_kelamin : null;
+}
+
+function buildChipsHtml(list){
+  // In view-utama: group by gender (Laki-laki vs Perempuan)
+  // In editor: flat horizontal chips
+  if(currentMode === 'utama'){
+    const laki = [];
+    const perempuan = [];
+    const lainnya = []; // manual names or unknown gender
+    for(const a of list){
+      if(a.nama_manual){
+        lainnya.push(a);
+      } else {
+        const g = jamaahGender(a.jamaah_did);
+        if(g === 'Laki-laki') laki.push(a);
+        else if(g === 'Perempuan') perempuan.push(a);
+        else lainnya.push(a);
+      }
+    }
+    const groups = [];
+    const hasMultiGender = (laki.length>0 && perempuan.length>0) ||
+                          (laki.length>0 && lainnya.length>0) ||
+                          (perempuan.length>0 && lainnya.length>0);
+    const renderGroup = (label, items) => {
+      if(items.length===0) return '';
+      const chips = items.map(a=>{
+        const name = a.nama_manual || jamaahName(a.jamaah_did);
+        const cls = a.nama_manual ? 'chip manual' : 'chip';
+        return `<span class="${cls}">${escapeHtml(name)}</span>`;
+      }).join('');
+      const header = hasMultiGender ? `<div class="gender-label">${label}</div>` : '';
+      return `<div class="gender-group">${header}${chips}</div>`;
+    };
+    return renderGroup('Laki-laki', laki) + renderGroup('Perempuan', perempuan) + renderGroup('Lainnya', lainnya);
+  } else {
+    // Editor mode: flat
+    return list.map(a=>{
+      const name = a.nama_manual || jamaahName(a.jamaah_did);
+      const cls = a.nama_manual ? 'chip manual' : 'chip';
+      return `<span class="${cls}">${escapeHtml(name)}</span>`;
+    }).join('');
   }
 }
 
@@ -1208,11 +1294,7 @@ async function persistOrder(posId){
     setStatus(`Terhubung · ${JAMAAH.length} jamaah dimuat`, 'ok');
     // Re-render header chips for this position
     const headEl = $('chips-'+posId);
-    headEl.innerHTML = newOrder.map(a=>{
-      const name = a.nama_manual || jamaahName(a.jamaah_did);
-      const cls = a.nama_manual ? 'chip manual' : 'chip';
-      return `<span class="${cls}">${escapeHtml(name)}</span>`;
-    }).join('');
+    headEl.innerHTML = buildChipsHtml(newOrder);
     toast('Urutan tersimpan');
   } else {
     setStatus('Gagal simpan urutan', 'err');
