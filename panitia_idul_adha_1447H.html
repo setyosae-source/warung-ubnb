@@ -85,6 +85,27 @@
     font-size:12px;font-weight:600;
     cursor:pointer;
   }
+  .print-menu{position:relative}
+  .print-dropdown{
+    position:absolute;top:100%;right:0;margin-top:4px;
+    background:var(--cream);
+    border:1px solid var(--line);
+    border-radius:8px;
+    box-shadow:0 8px 24px rgba(13,59,47,0.15);
+    min-width:240px;
+    display:none;z-index:60;
+    overflow:hidden;
+  }
+  .print-dropdown.show{display:block}
+  .print-dropdown button{
+    display:block;width:100%;text-align:left;
+    padding:10px 14px;
+    border:none;background:transparent;
+    font-family:inherit;font-size:13px;color:var(--emerald);
+    cursor:pointer;
+  }
+  .print-dropdown button:hover{background:var(--gold-soft)}
+  .print-dropdown button+button{border-top:1px solid var(--line)}
 
   /* Section */
   .section{margin-top:32px}
@@ -320,13 +341,31 @@
 
   /* Print */
   @media print{
-    .status-bar, .modal-backdrop, .pic-actions, .toast, .pos-chev{display:none !important}
+    .status-bar, .modal-backdrop, .pic-actions, .toast, .pos-chev, .note-input{display:none !important}
     .pos-body{max-height:none !important}
-    .pos{break-inside:avoid;page-break-inside:avoid}
+    .pos{break-inside:avoid;page-break-inside:avoid;border:1px solid #999 !important;box-shadow:none !important;margin-bottom:6px !important}
     body{background:#fff;background-image:none}
-    .hero{background:#fff;color:#000;border-bottom:2px solid #000}
-    .hero h1, .hero h2, .hero-sub{color:#000}
+    .hero{background:#fff;color:#000;border-bottom:2px solid #000;padding:20px 12px !important}
+    .hero h1, .hero h2, .hero-sub, .hero-orn{color:#000 !important}
+    .pos-icon{background:#333 !important;color:#fff !important}
+    .section-num{background:#fff !important}
+    .pic-card{background:#444 !important;color:#fff !important;break-inside:avoid}
+    .pic-card.manual{background:#666 !important}
+    .pic-card .handle, .pic-card .rm{display:none !important}
+    .pic-area{background:#fff !important;border:none !important;padding:4px 0 !important}
+    .label{margin-top:6px !important;margin-bottom:4px !important}
   }
+  /* Print: STRUKTUR ONLY (no jobdesc, no pic-list, only header chips) */
+  body.print-struktur .pos-body{display:none !important}
+  body.print-struktur .pos{break-inside:avoid}
+  body.print-struktur .pos-assigned{margin-top:6px}
+  @media print{
+    body.print-struktur .pos-head{padding:10px 14px !important}
+  }
+  /* Print: LENGKAP — show jobdesc but hide pic editor controls (already covered by @media print) */
+  body.print-lengkap .pos{break-inside:avoid}
+  body.print-lengkap .pos-body{max-height:none !important}
+  body.print-lengkap .pic-actions, body.print-lengkap .note-input{display:none !important}
 </style>
 </head>
 <body>
@@ -342,7 +381,13 @@
 <div class="status-bar">
   <div class="status-dot" id="statusDot"></div>
   <div class="status-text" id="statusText">Menyambungkan ke database…</div>
-  <button class="btn-print" onclick="window.print()">🖨️ Print</button>
+  <div class="print-menu">
+    <button class="btn-print" onclick="togglePrintMenu(event)">🖨️ Print ▾</button>
+    <div class="print-dropdown" id="printDropdown">
+      <button onclick="doPrint('struktur')">📋 Struktur saja (tanpa jobdesc)</button>
+      <button onclick="doPrint('lengkap')">📄 Lengkap (dengan jobdesc)</button>
+    </div>
+  </div>
 </div>
 
 <main class="container" id="mainContent">
@@ -597,6 +642,15 @@ const STRUCTURE = {
         'Berkoordinasi dengan SENKOM dalam pengamanan kendaraan.',
         'Memastikan akses jalan tidak terganggu parkir liar.'
       ]},
+      { id:'mobilisasi', icon:'🚐', title:'Sie. Mobilisasi & Transportasi', def:'—', jd:[
+        'Mengangkut perlengkapan dari masjid ke lapangan Travina Prima (karpet, mimbar, sound system, tanaman) di malam H-1 atau pagi hari H.',
+        'Mengembalikan seluruh perlengkapan ke masjid setelah acara selesai.',
+        'Menjemput & mengantar Imam/Khotib jika diperlukan.',
+        'Menjemput & mengantar tamu VIP / undangan luar.',
+        'Menyiagakan kendaraan untuk antar-jemput jamaah lansia atau yang membutuhkan.',
+        'Menyiagakan kendaraan untuk keperluan darurat (mendukung Koord. Medis jika perlu rujukan & ambulans belum tersedia).',
+        'Berkoordinasi dengan Sie. Perlengkapan, Sie. Konsumsi, dan Koord. Medis terkait jadwal pengangkutan.'
+      ]},
       { id:'distribusi', icon:'⌘', title:'Sie. Distribusi Daging Qurban', def:'—', jd:[
         'Menyiapkan thinwall (food grade) & totebag sebagai wadah daging.',
         'Membagikan daging qurban ke penerima (mustahiq) sesuai arahan Ketua Panitia Inti.',
@@ -627,6 +681,32 @@ function toast(msg, isErr){
   t.textContent = msg;
   t.className = 'toast' + (isErr?' err':'') + ' show';
   setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+// ============ PRINT ============
+function togglePrintMenu(e){
+  e.stopPropagation();
+  $('printDropdown').classList.toggle('show');
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.print-menu')) $('printDropdown').classList.remove('show');
+});
+
+function doPrint(mode){
+  $('printDropdown').classList.remove('show');
+  // Expand all positions so jobdesc visible for "lengkap" mode
+  if(mode === 'lengkap'){
+    document.querySelectorAll('.pos').forEach(el=>el.classList.add('is-open'));
+  }
+  document.body.classList.add('print-'+mode);
+  // Give browser a tick to apply styles
+  setTimeout(()=>{
+    window.print();
+    // Cleanup after print dialog closes
+    setTimeout(()=>{
+      document.body.classList.remove('print-struktur','print-lengkap');
+    }, 500);
+  }, 100);
 }
 
 // ============ RENDER STRUCTURE ============
