@@ -871,20 +871,43 @@ document.addEventListener('click', e=>{
 
 function doPrint(mode){
   $('printDropdown').classList.remove('show');
+
+  // Store hidden elements to restore later
+  const hiddenElements = [];
+
   if(mode === 'lengkap'){
     // Expand all positions
     document.querySelectorAll('.pos').forEach(el=>el.classList.add('is-open'));
   } else if(mode === 'struktur'){
-    // Collapse all positions
+    // Collapse all + HIDE pos-body via inline style (more reliable on mobile browsers)
     document.querySelectorAll('.pos').forEach(el=>el.classList.remove('is-open'));
+    document.querySelectorAll('.pos-body').forEach(el=>{
+      hiddenElements.push({el, prevDisplay: el.style.display});
+      el.style.display = 'none';
+    });
   }
+
   document.body.classList.add('print-'+mode);
+
+  const restore = ()=>{
+    document.body.classList.remove('print-struktur','print-lengkap');
+    hiddenElements.forEach(({el, prevDisplay})=>{
+      el.style.display = prevDisplay || '';
+    });
+  };
+
+  // Listen for after-print to restore
+  const onAfter = ()=>{
+    restore();
+    window.removeEventListener('afterprint', onAfter);
+  };
+  window.addEventListener('afterprint', onAfter);
+
   setTimeout(()=>{
     window.print();
-    setTimeout(()=>{
-      document.body.classList.remove('print-struktur','print-lengkap');
-    }, 500);
-  }, 150);
+    // Fallback restore (in case afterprint doesn't fire on some mobile browsers)
+    setTimeout(restore, 2000);
+  }, 200);
 }
 
 // ============ RENDER STRUCTURE ============
