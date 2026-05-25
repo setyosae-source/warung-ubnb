@@ -128,33 +128,60 @@
     border-radius:999px;
     font-size:12px;font-weight:600;
   }
+  .pos-assigned .chip.manual{background:#dcc596;color:var(--emerald)}
   .pos-assigned .empty{color:#aaa;font-style:italic;font-weight:400}
-  .pos-chev{color:var(--gold);font-size:14px;transition:transform .3s;flex-shrink:0}
+  .pos-chev{color:var(--gold);font-size:14px;transition:transform .3s;flex-shrink:0;align-self:flex-start;margin-top:6px}
   .pos.is-open .pos-chev{transform:rotate(180deg)}
 
   .pos-body{max-height:0;overflow:hidden;transition:max-height .4s ease}
-  .pos.is-open .pos-body{max-height:3000px}
+  .pos.is-open .pos-body{max-height:4000px}
   .pos-body-inner{padding:6px 18px 16px;border-top:1px dashed var(--line)}
 
   .label{font-size:11px;text-transform:uppercase;letter-spacing:1.4px;color:var(--gold-2);font-weight:600;margin:12px 0 8px}
 
   /* PIC selector */
   .pic-area{background:rgba(201,169,110,0.06);border:1px dashed var(--gold-soft);border-radius:8px;padding:10px}
-  .pic-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:24px;margin-bottom:8px}
-  .pic-chip{
-    background:var(--emerald);color:var(--gold-soft);
-    padding:4px 8px 4px 12px;border-radius:999px;font-size:13px;
-    display:inline-flex;align-items:center;gap:6px;
+
+  /* Draggable cards (vertical list inside editor) */
+  .pic-list{display:flex;flex-direction:column;gap:6px;min-height:6px;margin-bottom:10px}
+  .pic-card{
+    background:var(--emerald);
+    color:var(--gold-soft);
+    border-radius:10px;
+    padding:8px 10px 8px 6px;
+    display:flex;align-items:center;gap:8px;
+    font-size:14px;font-weight:500;
+    cursor:grab;
+    user-select:none;
+    transition:transform .15s, box-shadow .15s;
   }
-  .pic-chip .x{
-    width:18px;height:18px;border-radius:50%;
+  .pic-card:active{cursor:grabbing}
+  .pic-card.manual{background:var(--gold-2)}
+  .pic-card.dragging{opacity:0.4;transform:scale(0.98)}
+  .pic-card.drag-over{box-shadow:0 0 0 2px var(--gold);transform:translateY(2px)}
+  .pic-card .handle{
+    color:rgba(233,217,179,0.6);
+    font-size:18px;line-height:1;
+    padding:0 4px;
+    cursor:grab;
+    flex-shrink:0;
+  }
+  .pic-card.manual .handle{color:rgba(255,255,255,0.5)}
+  .pic-card .num{
+    background:rgba(255,255,255,0.15);
+    width:22px;height:22px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;flex-shrink:0;
+  }
+  .pic-card .nm{flex:1;min-width:0;word-break:break-word}
+  .pic-card .rm{
+    width:22px;height:22px;border-radius:50%;
     background:rgba(255,255,255,0.18);
-    display:inline-flex;align-items:center;justify-content:center;
-    cursor:pointer;font-size:12px;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-size:13px;line-height:1;flex-shrink:0;
   }
-  .pic-chip .x:hover{background:rgba(255,255,255,0.32)}
-  .pic-chip.manual{background:var(--gold-2)}
-  .pic-empty{color:#999;font-size:13px;font-style:italic;padding:6px 0}
+  .pic-card .rm:hover{background:rgba(255,255,255,0.32)}
+  .pic-empty{color:#999;font-size:13px;font-style:italic;padding:6px 0;text-align:center}
 
   .pic-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .btn{
@@ -621,15 +648,14 @@ function renderStructure(){
           <div class="pos-icon">${p.icon}</div>
           <div class="pos-meta">
             <div class="pos-title">${p.title}</div>
-            <div class="pos-default">Default: ${p.def}</div>
             <div class="pos-assigned" id="chips-${p.id}"><span class="empty">belum ditentukan</span></div>
           </div>
           <div class="pos-chev">▾</div>
         </button>
         <div class="pos-body"><div class="pos-body-inner">
-          <div class="label">PIC / Petugas</div>
+          <div class="label">PIC / Petugas <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:11px;font-style:italic">· tahan & geser untuk atur urutan</span></div>
           <div class="pic-area">
-            <div class="pic-chips" id="chipsFull-${p.id}"></div>
+            <div class="pic-list" id="list-${p.id}" data-pos="${p.id}"></div>
             <div class="pic-actions">
               <button class="btn btn-sm btn-primary" onclick="openPicker('${p.id}','${p.title.replace(/'/g,"\\'")}')">＋ Pilih PIC</button>
               <button class="btn btn-sm" onclick="clearPos('${p.id}')">Kosongkan</button>
@@ -667,7 +693,9 @@ async function loadAssignments(){
   const {data, error} = await supa
     .from('panitia_idul_adha_1447h')
     .select('*')
-    .order('created_at');
+    .order('posisi_id')
+    .order('urutan')
+    .order('id');
   if(error){ console.error(error); return; }
   ASSIGNMENTS = {};
   for(const row of (data||[])){
@@ -686,30 +714,156 @@ function renderAllChips(){
 }
 
 function renderChips(posId){
-  const list = ASSIGNMENTS[posId] || [];
+  const list = (ASSIGNMENTS[posId] || []).slice().sort((a,b)=>(a.urutan||0)-(b.urutan||0));
+  ASSIGNMENTS[posId] = list; // keep sorted
   const headEl = $('chips-'+posId);
-  const fullEl = $('chipsFull-'+posId);
+  const listEl = $('list-'+posId);
 
   if(list.length===0){
     headEl.innerHTML = '<span class="empty">belum ditentukan</span>';
-    fullEl.innerHTML = '<div class="pic-empty">Belum ada PIC dipilih</div>';
+    if(listEl) listEl.innerHTML = '<div class="pic-empty">Belum ada PIC dipilih</div>';
   } else {
-    // Header: tampilkan max 3 chip ringkas
-    const top = list.slice(0,3).map(a=>`<span class="chip">${escapeHtml(a.nama_manual || jamaahName(a.jamaah_did))}</span>`).join('');
-    const extra = list.length>3 ? `<span class="chip">+${list.length-3}</span>` : '';
-    headEl.innerHTML = top + extra;
-
-    // Full view: semua chip dengan tombol X
-    fullEl.innerHTML = list.map(a=>{
+    // Header: SEMUA chip tampil
+    headEl.innerHTML = list.map(a=>{
       const name = a.nama_manual || jamaahName(a.jamaah_did);
-      const cls = a.nama_manual ? 'pic-chip manual' : 'pic-chip';
-      return `<span class="${cls}">${escapeHtml(name)}<span class="x" onclick="removePic(${a.id})">×</span></span>`;
+      const cls = a.nama_manual ? 'chip manual' : 'chip';
+      return `<span class="${cls}">${escapeHtml(name)}</span>`;
     }).join('');
 
-    // Catatan: ambil yang pertama (atau gabungan)
+    // Editor: draggable cards
+    if(listEl){
+      listEl.innerHTML = list.map((a,i)=>{
+        const name = a.nama_manual || jamaahName(a.jamaah_did);
+        const cls = a.nama_manual ? 'pic-card manual' : 'pic-card';
+        return `<div class="${cls}" draggable="true" data-id="${a.id}" data-pos="${posId}">
+          <span class="handle">≡</span>
+          <span class="num">${i+1}</span>
+          <span class="nm">${escapeHtml(name)}</span>
+          <span class="rm" onclick="event.stopPropagation();removePic(${a.id})">×</span>
+        </div>`;
+      }).join('');
+      attachDragHandlers(listEl);
+    }
+
+    // Catatan: ambil yang pertama
     const notes = list.map(a=>a.catatan).filter(Boolean);
     const noteEl = $('note-'+posId);
     if(noteEl) noteEl.value = notes.join(' · ');
+  }
+}
+
+// ============ DRAG & DROP ============
+let dragSrc = null;
+
+function attachDragHandlers(container){
+  const cards = container.querySelectorAll('.pic-card');
+  cards.forEach(card=>{
+    card.addEventListener('dragstart', e=>{
+      dragSrc = card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.id);
+    });
+    card.addEventListener('dragend', ()=>{
+      card.classList.remove('dragging');
+      container.querySelectorAll('.pic-card').forEach(c=>c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if(dragSrc && dragSrc !== card) card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave', ()=>card.classList.remove('drag-over'));
+    card.addEventListener('drop', async e=>{
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if(!dragSrc || dragSrc === card) return;
+      const posId = container.dataset.pos;
+      // Determine insertion: before or after target based on Y position
+      const rect = card.getBoundingClientRect();
+      const midpoint = rect.top + rect.height/2;
+      const after = e.clientY > midpoint;
+      if(after) card.after(dragSrc);
+      else card.before(dragSrc);
+      await persistOrder(posId);
+    });
+
+    // Touch support
+    let touchSrc = null, touchClone = null, touchStartY = 0;
+    card.addEventListener('touchstart', e=>{
+      if(e.target.classList.contains('rm')) return;
+      touchSrc = card;
+      touchStartY = e.touches[0].clientY;
+      card.classList.add('dragging');
+    }, {passive:true});
+    card.addEventListener('touchmove', e=>{
+      if(!touchSrc) return;
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const el = document.elementFromPoint(e.touches[0].clientX, y);
+      const target = el && el.closest('.pic-card');
+      container.querySelectorAll('.pic-card').forEach(c=>{
+        if(c!==touchSrc) c.classList.remove('drag-over');
+      });
+      if(target && target !== touchSrc && target.parentElement === container){
+        target.classList.add('drag-over');
+      }
+    }, {passive:false});
+    card.addEventListener('touchend', async e=>{
+      if(!touchSrc) return;
+      const y = e.changedTouches[0].clientY;
+      const el = document.elementFromPoint(e.changedTouches[0].clientX, y);
+      const target = el && el.closest('.pic-card');
+      container.querySelectorAll('.pic-card').forEach(c=>c.classList.remove('drag-over'));
+      touchSrc.classList.remove('dragging');
+      if(target && target !== touchSrc && target.parentElement === container){
+        const rect = target.getBoundingClientRect();
+        const after = y > rect.top + rect.height/2;
+        if(after) target.after(touchSrc);
+        else target.before(touchSrc);
+        const posId = container.dataset.pos;
+        await persistOrder(posId);
+      }
+      touchSrc = null;
+    });
+  });
+}
+
+async function persistOrder(posId){
+  const container = $('list-'+posId);
+  const cards = Array.from(container.querySelectorAll('.pic-card'));
+  // Update local order first
+  const newOrder = [];
+  for(let i=0; i<cards.length; i++){
+    const id = parseInt(cards[i].dataset.id);
+    const row = ASSIGNMENTS[posId].find(a=>a.id===id);
+    if(row){ row.urutan = i; newOrder.push(row); }
+  }
+  ASSIGNMENTS[posId] = newOrder;
+
+  // Update num badges immediately
+  cards.forEach((c,i)=>{ const n = c.querySelector('.num'); if(n) n.textContent = i+1; });
+
+  // Save to DB
+  setStatus('Menyimpan urutan…');
+  let allOk = true;
+  for(let i=0; i<newOrder.length; i++){
+    const {error} = await supa.from('panitia_idul_adha_1447h').update({urutan:i}).eq('id', newOrder[i].id);
+    if(error){ allOk=false; console.error(error); }
+  }
+  if(allOk){
+    setStatus(`Terhubung · ${JAMAAH.length} jamaah dimuat`, 'ok');
+    // Re-render header chips for this position
+    const headEl = $('chips-'+posId);
+    headEl.innerHTML = newOrder.map(a=>{
+      const name = a.nama_manual || jamaahName(a.jamaah_did);
+      const cls = a.nama_manual ? 'chip manual' : 'chip';
+      return `<span class="${cls}">${escapeHtml(name)}</span>`;
+    }).join('');
+    toast('Urutan tersimpan');
+  } else {
+    setStatus('Gagal simpan urutan', 'err');
+    toast('Gagal simpan urutan', true);
   }
 }
 
@@ -824,24 +978,55 @@ async function savePicker(){
   const removedManual = existingManual.filter(m => !pendingManual.includes(m));
   const hasRemoval = removedDids.length > 0 || removedManual.length > 0;
 
+  let auth = null;
   if(hasRemoval){
-    const k = prompt('Kode:');
-    if(k !== 'pw354'){ if(k!==null) toast('Operasi dibatalkan', true); return; }
+    auth = await askDeleteAuth();
+    if(!auth.ok) return;
   }
 
   setStatus('Menyimpan…');
+
+  // Build list of removed items for audit
+  const removedItems = [];
+  for(const d of removedDids) removedItems.push({nama: jamaahName(d), did: d});
+  for(const m of removedManual) removedItems.push({nama: m, did: null});
 
   // Delete existing for this position
   const {error:delErr} = await supa.from('panitia_idul_adha_1447h').delete().eq('posisi_id', posId);
   if(delErr){ setStatus('Gagal hapus lama: '+delErr.message, 'err'); toast('Gagal simpan', true); return; }
 
-  // Insert new
-  const rows = [];
-  for(const did of Object.keys(pickerSelection)){
-    rows.push({ posisi_id: posId, jamaah_did: did, nama_manual: null });
+  // Log audit if there was removal
+  if(hasRemoval && auth){
+    await logAudit('edit_remove', posId, removedItems, auth);
   }
+
+  // Insert new with urutan
+  // Preserve existing order for items still selected; new items get appended
+  const existingOrdered = (existing||[]).slice().sort((a,b)=>(a.urutan||0)-(b.urutan||0));
+  const rows = [];
+  let urutanCounter = 0;
+
+  // 1. Existing jamaah_did yang masih dipilih, urutan dipertahankan
+  for(const a of existingOrdered){
+    if(a.jamaah_did && pickerSelection[a.jamaah_did]){
+      rows.push({ posisi_id: posId, jamaah_did: a.jamaah_did, nama_manual: null, urutan: urutanCounter++ });
+    } else if(a.nama_manual && pendingManual.includes(a.nama_manual)){
+      rows.push({ posisi_id: posId, jamaah_did: null, nama_manual: a.nama_manual, urutan: urutanCounter++ });
+    }
+  }
+  // 2. Jamaah baru (belum di existing)
+  const existingDidsSet = new Set(existingOrdered.filter(a=>a.jamaah_did).map(a=>a.jamaah_did));
+  for(const did of Object.keys(pickerSelection)){
+    if(!existingDidsSet.has(did)){
+      rows.push({ posisi_id: posId, jamaah_did: did, nama_manual: null, urutan: urutanCounter++ });
+    }
+  }
+  // 3. Manual baru
+  const existingManualSet = new Set(existingOrdered.filter(a=>a.nama_manual).map(a=>a.nama_manual));
   for(const m of pendingManual){
-    rows.push({ posisi_id: posId, jamaah_did: null, nama_manual: m });
+    if(!existingManualSet.has(m)){
+      rows.push({ posisi_id: posId, jamaah_did: null, nama_manual: m, urutan: urutanCounter++ });
+    }
   }
 
   if(rows.length>0){
@@ -859,23 +1044,101 @@ async function savePicker(){
   closePicker();
 }
 
-async function removePic(rowId){
+// ============ AUDIT HELPERS ============
+let cachedIP = null;
+async function getIP(){
+  if(cachedIP) return cachedIP;
+  try{
+    const r = await fetch('https://api.ipify.org?format=json');
+    const j = await r.json();
+    cachedIP = j.ip || 'unknown';
+  }catch(e){ cachedIP = 'unknown'; }
+  return cachedIP;
+}
+
+// Returns {ok, nama, ip} after asking for name+code. ok=false means cancelled or wrong code.
+async function askDeleteAuth(){
+  const nama = prompt('Nama:');
+  if(nama===null) return {ok:false};
+  if(!nama.trim()){ toast('Operasi dibatalkan', true); return {ok:false}; }
   const k = prompt('Kode:');
-  if(k !== 'pw354'){ if(k!==null) toast('Operasi dibatalkan', true); return; }
+  if(k===null) return {ok:false};
+  if(k !== 'pw354'){ toast('Operasi dibatalkan', true); return {ok:false}; }
+  const ip = await getIP();
+  return {ok:true, nama:nama.trim(), ip};
+}
+
+async function logAudit(action, posId, items, pelaku){
+  // items: array of {nama, did} or null for clear
+  try{
+    const rows = [];
+    if(!items || items.length===0){
+      rows.push({
+        action, posisi_id: posId,
+        nama_dihapus: null, jamaah_did_dihapus: null,
+        pelaku_nama: pelaku.nama, pelaku_ip: pelaku.ip,
+        pelaku_ua: (navigator.userAgent||'').slice(0,200)
+      });
+    } else {
+      for(const it of items){
+        rows.push({
+          action, posisi_id: posId,
+          nama_dihapus: it.nama || null,
+          jamaah_did_dihapus: it.did || null,
+          pelaku_nama: pelaku.nama, pelaku_ip: pelaku.ip,
+          pelaku_ua: (navigator.userAgent||'').slice(0,200)
+        });
+      }
+    }
+    await supa.from('panitia_audit_log').insert(rows);
+  }catch(e){ console.error('audit log failed', e); }
+}
+
+async function removePic(rowId){
+  const auth = await askDeleteAuth();
+  if(!auth.ok) return;
+
+  // Find item info before delete
+  let item = null, posId = null;
+  for(const pid of Object.keys(ASSIGNMENTS)){
+    const found = ASSIGNMENTS[pid].find(a=>a.id===rowId);
+    if(found){
+      item = {
+        nama: found.nama_manual || jamaahName(found.jamaah_did),
+        did: found.jamaah_did
+      };
+      posId = pid;
+      break;
+    }
+  }
+
   const {error} = await supa.from('panitia_idul_adha_1447h').delete().eq('id', rowId);
   if(error){ toast('Gagal hapus: '+error.message, true); return; }
-  for(const posId of Object.keys(ASSIGNMENTS)){
-    ASSIGNMENTS[posId] = ASSIGNMENTS[posId].filter(a=>a.id!==rowId);
-    renderChips(posId);
+
+  await logAudit('remove_pic', posId, item?[item]:null, auth);
+
+  for(const pid of Object.keys(ASSIGNMENTS)){
+    ASSIGNMENTS[pid] = ASSIGNMENTS[pid].filter(a=>a.id!==rowId);
+    renderChips(pid);
   }
   toast('Dihapus');
 }
 
 async function clearPos(posId){
-  const k = prompt('Kode:');
-  if(k !== 'pw354'){ if(k!==null) toast('Operasi dibatalkan', true); return; }
+  const auth = await askDeleteAuth();
+  if(!auth.ok) return;
+
+  // Capture items before delete
+  const items = (ASSIGNMENTS[posId]||[]).map(a=>({
+    nama: a.nama_manual || jamaahName(a.jamaah_did),
+    did: a.jamaah_did
+  }));
+
   const {error} = await supa.from('panitia_idul_adha_1447h').delete().eq('posisi_id', posId);
   if(error){ toast('Gagal: '+error.message, true); return; }
+
+  await logAudit('clear_pos', posId, items, auth);
+
   ASSIGNMENTS[posId] = [];
   renderChips(posId);
   toast('Dikosongkan');
