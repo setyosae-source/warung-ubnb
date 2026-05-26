@@ -4609,6 +4609,18 @@ async function hapusTransaksiJual(id){
     await sb.from('service_items').delete().eq('transaksi_id',id);
     // === 7b. Hapus log SHU yang refer ke transaksi ini (defense in depth — DB trigger juga handle ini) ===
     await sb.from('ubnb_shu_trx_log').delete().eq('ref_tabel','transaksi').eq('ref_id',id);
+    
+    // === 7c. ROLLBACK jurnal terkait (penjualan + HPP) ===
+    try{
+      const{data:juLama}=await sb.from('jurnal_umum').select('id')
+        .or(`referensi.eq.TRANSAKSI-${id},referensi.eq.TRX-${id}`);
+      if(juLama&&juLama.length){
+        const idsLama=juLama.map(j=>j.id);
+        await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
+        await sb.from('jurnal_umum').delete().in('id',idsLama);
+      }
+    }catch(eRb){console.warn('Rollback jurnal TRX-'+id+' skip:',eRb);}
+    
     // === 8. Hapus transaksi (TERAKHIR) ===
     const{error}=await sb.from('transaksi').delete().eq('id',id);
     if(error)throw error;
@@ -8805,6 +8817,17 @@ async function hapusPPOB(id){
     // Hapus hutang/piutang terkait PPOB
     const ketHutang='PPOB: '+p.produk+(p.nama?' - '+p.nama:'');
     await sb.from('hutang').delete().eq('ref_type','ppob').eq('ket',ketHutang);
+    
+    // === ROLLBACK jurnal PPOB-{id} (modal + bayar) ===
+    try{
+      const{data:juLama}=await sb.from('jurnal_umum').select('id').eq('referensi','PPOB-'+id);
+      if(juLama&&juLama.length){
+        const idsLama=juLama.map(j=>j.id);
+        await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
+        await sb.from('jurnal_umum').delete().in('id',idsLama);
+      }
+    }catch(eRb){console.warn('Rollback jurnal PPOB-'+id+' skip:',eRb);}
+    
     // Hapus transaksi
     const{error:errDel}=await sb.from('ppob').delete().eq('id',id);
     if(errDel)throw errDel;
@@ -8979,6 +9002,8 @@ async function simpanEditMutasi(){
   const tgl=document.getElementById('edit-mutasi-tgl').value;
   if(!jumlah){toast('Masukkan jumlah',true);return;}
   const isMasuk=tipe==='masuk'||tipe==='komisi';
+  // Cek refType untuk decide apakah ini mutasi manual atau terkait transaksi induk
+  const{data:mOld}=await sb.from('kas_mutasi').select('ref_type,ref_id').eq('id',id).single();
   // Update mutasi - termasuk pindah kas jika berubah
   await sb.from('kas_mutasi').update({
     kas_id:newKasId,
@@ -8986,6 +9011,42 @@ async function simpanEditMutasi(){
     kategori:tipe,
     jumlah,keterangan:ket,tanggal:tgl
   }).eq('id',id);
+  
+  // === ROLLBACK + REPOST jurnal HANYA untuk kas_manual ===
+  // Jika mutasi terkait pembelian/penjualan/ppob, jangan utak-atik jurnal (induk yg ngatur)
+  if(mOld?.ref_type==='kas_manual'){
+    try{
+      // Hapus jurnal lama KAS-MAN-{id}
+      const{data:juLama}=await sb.from('jurnal_umum').select('id').eq('referensi','KAS-MAN-'+id);
+      if(juLama&&juLama.length){
+        const idsLama=juLama.map(j=>j.id);
+        await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
+        await sb.from('jurnal_umum').delete().in('id',idsLama);
+      }
+      // Repost
+      const kasCoa=_coaFromKas(newKasId);
+      let detailJ;
+      if(tipe==='komisi'){
+        detailJ=[
+          {coa_id:kasCoa.id,kode_akun:kasCoa.kode,nama_akun:kasCoa.nama,debit:jumlah,kredit:0},
+          {coa_id:_COA.KOMISI_PPOB.id,kode_akun:_COA.KOMISI_PPOB.kode,nama_akun:_COA.KOMISI_PPOB.nama,debit:0,kredit:jumlah}
+        ];
+      } else if(isMasuk){
+        detailJ=[
+          {coa_id:kasCoa.id,kode_akun:kasCoa.kode,nama_akun:kasCoa.nama,debit:jumlah,kredit:0},
+          {coa_id:_COA.HUTANG_LAIN.id,kode_akun:_COA.HUTANG_LAIN.kode,nama_akun:_COA.HUTANG_LAIN.nama,debit:0,kredit:jumlah}
+        ];
+      } else {
+        detailJ=[
+          {coa_id:32,kode_akun:'6-101',nama_akun:'Biaya Operasional Warung',debit:jumlah,kredit:0},
+          {coa_id:kasCoa.id,kode_akun:kasCoa.kode,nama_akun:kasCoa.nama,debit:0,kredit:jumlah}
+        ];
+      }
+      const noJ=await _nextNoJurnal();
+      await _insertJurnal(noJ,tgl,ket||'Edit Mutasi Manual','KAS-MAN-'+id,detailJ);
+    }catch(eRb){console.warn('Edit jurnal mutasi manual gagal:',eRb);toast('⚠ Edit jurnal gagal: '+eRb.message,true);}
+  }
+  
   // Recalc saldo semua kas terdampak
   const kasIds=[...new Set([oldKasId,newKasId].filter(Boolean))];
   for(const kid of kasIds) await recalcSaldo(kid);
@@ -8995,10 +9056,23 @@ async function simpanEditMutasi(){
 }
 
 async function hapusMutasi(id){
-  if(!confirm('Hapus mutasi ini? Saldo kas akan disesuaikan.'))return;
+  if(!confirm('Hapus mutasi ini? Saldo kas akan disesuaikan.\n\n⚠️ Jika mutasi ini terkait pembelian/penjualan/PPOB, sebaiknya hapus transaksi induknya, bukan mutasi-nya.'))return;
   const{data:m}=await sb.from('kas_mutasi').select('*').eq('id',id).single();
   if(!m){toast('Data tidak ditemukan',true);return;}
   const kasId=m.kas_id;
+  
+  // === ROLLBACK jurnal HANYA untuk kas_manual ===
+  if(m.ref_type==='kas_manual'){
+    try{
+      const{data:juLama}=await sb.from('jurnal_umum').select('id').eq('referensi','KAS-MAN-'+id);
+      if(juLama&&juLama.length){
+        const idsLama=juLama.map(j=>j.id);
+        await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
+        await sb.from('jurnal_umum').delete().in('id',idsLama);
+      }
+    }catch(eRb){console.warn('Rollback jurnal kas-manual skip:',eRb);}
+  }
+  
   await sb.from('kas_mutasi').delete().eq('id',id);
   // Recalc saldo dari semua mutasi
   await recalcSaldo(kasId);
@@ -12831,6 +12905,18 @@ async function _posbDoHapus(p){
     await sb.from('hutang').delete().eq('ref_type','pembelian').eq('ref_id',id);
     // === 5b. Hapus log SHU yang refer ke pembelian ini (defense in depth) ===
     await sb.from('ubnb_shu_trx_log').delete().eq('ref_tabel','pembelian').eq('ref_id',id);
+    
+    // === 5c. ROLLBACK jurnal BELI-{id} / PEMBELIAN-{id} ===
+    try{
+      const{data:juLama}=await sb.from('jurnal_umum').select('id')
+        .or(`referensi.eq.BELI-${id},referensi.eq.PEMBELIAN-${id}`);
+      if(juLama&&juLama.length){
+        const idsLama=juLama.map(j=>j.id);
+        await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
+        await sb.from('jurnal_umum').delete().in('id',idsLama);
+      }
+    }catch(eRb){console.warn('Rollback jurnal BELI-'+id+' skip:',eRb);}
+    
     // === 6. Hapus pembelian (TERAKHIR — kalau gagal, rollback by retry) ===
     const{error}=await sb.from('pembelian').delete().eq('id',id);
     if(error)throw error;
