@@ -4449,61 +4449,10 @@ async function simpanEditJual(){
       const b=aB.find(x=>x.id===parseInt(bid));
       if(b){const newStok=Math.max(0,b.stok+selisih);await sb.from('barang').update({stok:newStok}).eq('id',b.id);b.stok=newStok;}
     }
-    // Recalc mutasi kas
-    const{data:kmList}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','transaksi').eq('ref_id',id);
-    const oldKasIds=[...new Set((kmList||[]).map(k=>k.kas_id).filter(Boolean))];
-    await sb.from('kas_mutasi').delete().eq('ref_type','transaksi').eq('ref_id',id);
     
-    // === ROLLBACK jurnal lama ref TRX-{id} dan HPP TRX-{id} ===
-    try{
-      const{data:juLama}=await sb.from('jurnal_umum').select('id').or(`referensi.eq.TRANSAKSI-${id},referensi.eq.TRX-${id}`);
-      if(juLama&&juLama.length){
-        const idsLama=juLama.map(j=>j.id);
-        await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
-        await sb.from('jurnal_umum').delete().in('id',idsLama);
-      }
-    }catch(eRb){console.warn('Rollback jurnal lama skip:',eRb);}
-    
-    // === REPOST kas_mutasi + jurnal sesuai status baru ===
-    try{
-      const kasUtama=_getKasWarungDefault();
-      const tglRefEdit=tglRaw||new Date().toISOString().slice(0,10);
-      const ketEdit='Edit Penjualan #'+id+': '+(pelBaru||'Umum');
-      if(status==='lunas'&&kasUtama){
-        const kuCoa=_coaFromKas(kasUtama.id);
-        await _postTransaksi({
-          kasId:kasUtama.id, tipe:'masuk', jumlah:newTotal, kategori:'penjualan',
-          refType:'transaksi', refId:id, tanggal:tglRefEdit, keterangan:ketEdit,
-          jurnalDetails:[
-            {coa_id:kuCoa.id,kode_akun:kuCoa.kode,nama_akun:kuCoa.nama,debit:newTotal,kredit:0},
-            {coa_id:_COA.PENJUALAN.id,kode_akun:_COA.PENJUALAN.kode,nama_akun:_COA.PENJUALAN.nama,debit:0,kredit:newTotal}
-          ]
-        });
-      } else if(status==='belum'){
-        await _postTransaksi({
-          kasId:null, tipe:null, jumlah:0, kategori:'penjualan',
-          refType:'transaksi', refId:id, tanggal:tglRefEdit,
-          keterangan:ketEdit+' (kredit)', skipKasMutasi:true,
-          jurnalDetails:[
-            {coa_id:_COA.PIUTANG_USAHA.id,kode_akun:_COA.PIUTANG_USAHA.kode,nama_akun:_COA.PIUTANG_USAHA.nama,debit:newTotal,kredit:0},
-            {coa_id:_COA.PENJUALAN.id,kode_akun:_COA.PENJUALAN.kode,nama_akun:_COA.PENJUALAN.nama,debit:0,kredit:newTotal}
-          ]
-        });
-      }
-      if(newHpp>0){
-        await _postTransaksi({
-          kasId:null, tipe:null, jumlah:0, kategori:'hpp',
-          refType:'transaksi', refId:id, tanggal:tglRefEdit,
-          keterangan:'HPP '+ketEdit, skipKasMutasi:true,
-          jurnalDetails:[
-            {coa_id:_COA.HPP.id,kode_akun:_COA.HPP.kode,nama_akun:_COA.HPP.nama,debit:newHpp,kredit:0},
-            {coa_id:_COA.PERSEDIAAN.id,kode_akun:_COA.PERSEDIAAN.kode,nama_akun:_COA.PERSEDIAAN.nama,debit:0,kredit:newHpp}
-          ]
-        });
-      }
-      // recalc kas
-      for(const kid of [...new Set([...oldKasIds,kasUtama?.id].filter(Boolean))])await recalcSaldo(kid);
-    }catch(e){console.error('Repost jurnal edit jual gagal:',e);toast('⚠ Jurnal gagal: '+e.message,true);}
+    // === JURNAL + KAS_MUTASI + SALDO sudah dihandle trigger DB v3 saat UPDATE di atas ===
+    // Tidak perlu rollback manual atau post manual.
+    // Reload data untuk refresh UI
     
     await lT();await lH();await lB();await lKas();
     renderRiwayatJual();renderHutang();renderStok();
@@ -13201,13 +13150,16 @@ async function tagihanLunasSebagiankonfirm(namaEnc,idx){
 /* ---- Helper: generate no_jurnal berikutnya ---- */
 async function _nextNoJurnal(){
   const thn=new Date().getFullYear();
+  // Race-safe: ambil MAX nomor (bukan order by id) supaya tetap urut walau ada delete
   const{data}=await sb.from('jurnal_umum').select('no_jurnal')
-    .ilike('no_jurnal','JU-'+thn+'-%')
-    .order('id',{ascending:false}).limit(1);
+    .ilike('no_jurnal','JU-'+thn+'-%');
   if(!data||!data.length)return 'JU-'+thn+'-1';
-  const last=data[0].no_jurnal;
-  const num=parseInt(last.split('-').pop())||0;
-  return 'JU-'+thn+'-'+(num+1);
+  let maxNum=0;
+  data.forEach(r=>{
+    const n=parseInt((r.no_jurnal||'').split('-').pop())||0;
+    if(n>maxNum)maxNum=n;
+  });
+  return 'JU-'+thn+'-'+(maxNum+1);
 }
 
 /* ---- Helper: insert jurnal_umum + jurnal_detail ---- */
@@ -13258,6 +13210,17 @@ async function _insertJurnal(noJurnal,tgl,keterangan,referensi,details){
    ============================================================ */
 async function _postTransaksi(params){
   const{kasId,tipe,jumlah,kategori,refType,refId,tanggal,keterangan,jurnalDetails,skipKasMutasi=false}=params;
+  
+  // === EARLY RETURN: refType='transaksi' sudah dihandle trigger DB v3 ===
+  // Trigger fn_jurnal_transaksi_warung otomatis create jurnal + kas_mutasi + update saldo
+  // saat INSERT/UPDATE pada tabel transaksi. Untuk hindari dobel posting, skip di app.
+  if(refType==='transaksi'){
+    if(typeof console!=='undefined' && console.debug){
+      console.debug('[_postTransaksi] skip refType=transaksi (handled by DB trigger v3)', {refId,kategori});
+    }
+    return{kasMutasiId:null,jurnalId:null,noJurnal:null,skipped:'trigger_db_v3'};
+  }
+  
   // Validasi balance jurnal
   const totalDebit=jurnalDetails.reduce((s,d)=>s+(d.debit||0),0);
   const totalKredit=jurnalDetails.reduce((s,d)=>s+(d.kredit||0),0);
@@ -13277,8 +13240,16 @@ async function _postTransaksi(params){
   }
   // STEP 2: Insert jurnal
   const noJurnal=await _nextNoJurnal();
+  // Mapping refType ke prefix referensi (konsisten dgn pattern app)
+  const _refPrefix={
+    'transaksi':'TRX',
+    'pembelian':'BELI',
+    'ppob':'PPOB',
+    'bmt':'BMT',
+    'kas_manual':'KAS-MAN',
+  }[refType]||(refType?refType.toUpperCase():'TRX');
   const jurnalId=await _insertJurnal(noJurnal, tglDate, keterangan,
-    (refType?refType.toUpperCase():'TRX')+'-'+refId, jurnalDetails);
+    _refPrefix+'-'+refId, jurnalDetails);
   // STEP 3: Update saldo kas
   if(!skipKasMutasi && kasId && jumlah>0){
     if(typeof recalcSaldo==='function'){
