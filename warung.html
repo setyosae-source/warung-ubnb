@@ -12394,7 +12394,29 @@ function posbSupSearch(q){
   } else {
     html+=`<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:12px">${q?'Supplier tidak ditemukan':'Belum ada supplier terdaftar'}</div>`;
   }
+  // Tombol tambah supplier baru — muncul jika ada ketikan & tidak ada nama yang sama persis
+  if(q){
+    const exact=supList.some(s=>(s.nama||'').trim().toLowerCase()===q.toLowerCase());
+    if(!exact){
+      const arg=JSON.stringify(q).replace(/'/g,"&#39;");
+      const safe=q.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      html+=`<div onclick='posbAddSup(${arg})' style="margin-top:8px;padding:12px;border:1.5px dashed var(--amber, #f59e0b);background:#fef3c7;color:#92400e;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">＋ Tambah supplier "${safe}"</div>`;
+    }
+  }
   el.innerHTML=html;
+}
+
+async function posbAddSup(nama){
+  nama=(nama||'').trim();
+  if(!nama){toast('Nama supplier kosong',true);return;}
+  const supList=(typeof aSup!=='undefined'?aSup:[]);
+  const ada=supList.find(s=>(s.nama||'').trim().toLowerCase()===nama.toLowerCase());
+  if(ada){posbSetSup({id:ada.id,label:ada.nama,sumber:'supplier'});return;}
+  const{data,error}=await sb.from('supplier').insert([{nama}]).select().single();
+  if(error){toast('Gagal tambah supplier: '+error.message,true);return;}
+  await lSup();
+  if(typeof renderSup==='function')renderSup();
+  posbSetSup({id:data.id,label:data.nama,sumber:'supplier'});
 }
 
 function posbSetSup(s){
