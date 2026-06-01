@@ -3919,7 +3919,7 @@ function hitungDiskon(){
   else if(dMode==='nominal'){dNominal=parseInt(document.getElementById('dv-nominal').value)||0;if(dNominal>0){res.style.display='block';res.textContent=`Diskon = -${fmt(dNominal)}`;}else res.style.display='none';}
   else if(dMode==='voucher'&&aVoucher_sel){const v=aVoucher_sel;dNominal=v.tipe==='persen'?Math.round(sub*v.nilai/100):v.nilai;res.style.display='block';res.textContent=`Voucher ${v.kode} = -${fmt(dNominal)}`;}
   else res.style.display='none';
-  dNominal=Math.min(dNominal,sub);
+  dNominal=Math.round(Math.min(dNominal,sub));
   const total=Math.max(0,sub-dNominal+ongkir);
   document.getElementById('jual-total').textContent=fmt(total);
   renderBayarCepat(total);hitungKembali();
@@ -3967,7 +3967,7 @@ async function fifoHPP(barangId,qty){
 }
 async function bayar(){
   if(!KR.length){toast('Keranjang kosong',true);return;}
-  const sub=KR.reduce((a,k)=>a+k.hE*k.qty,0);const ongkir=parseInt(document.getElementById('jual-ongkir').value)||0;const total=Math.max(0,sub-dNominal+ongkir);
+  const sub=KR.reduce((a,k)=>a+k.hE*k.qty,0);const ongkir=parseInt(document.getElementById('jual-ongkir').value)||0;const total=Math.round(Math.max(0,sub-dNominal+ongkir));
   const bayarVal=metodeBayar==='belum'?0:parseInt(document.getElementById('jual-bayar').value)||0;
   if(metodeBayar!=='belum'&&bayarVal<total){toast('Uang kurang!',true);return;}
   const ps=sdSel['pel'];const pelId=ps?.id||null;const anggotaId=ps?.anggota_id||null;const pelNama=ps?.label||'Umum';
@@ -4414,14 +4414,14 @@ async function simpanEditJual(){
   const newItems=_editJualItems.filter(it=>it.qty>0);
   if(!newItems.length){toast('Minimal 1 item',true);return;}
   const subtotalItem=newItems.reduce((s,it)=>s+(it.harga||it.hE||0)*it.qty,0);
-  const newHpp=newItems.reduce((s,it)=>s+(it.harga_beli||0)*it.qty,0);
+  const newHpp=Math.round(newItems.reduce((s,it)=>s+(it.harga_beli||0)*it.qty,0));
   // Baca diskon
   const dTipe=document.getElementById('ej-diskon-tipe')?.value||'none';
   const dNilai=parseFloat(document.getElementById('ej-diskon-nilai')?.value)||0;
   let diskonNom=0;
   if(dTipe==='persen'&&dNilai>0) diskonNom=Math.round(subtotalItem*dNilai/100);
-  else if(dTipe==='nominal'&&dNilai>0) diskonNom=Math.min(dNilai,subtotalItem);
-  const newTotal=Math.max(0,subtotalItem-diskonNom);
+  else if(dTipe==='nominal'&&dNilai>0) diskonNom=Math.round(Math.min(dNilai,subtotalItem));
+  const newTotal=Math.round(Math.max(0,subtotalItem-diskonNom));
   const pelBaru=document.getElementById('edit-jual-pel').value.trim()||'Umum';
   const anggotaIdBaru=parseInt(document.getElementById('edit-jual-anggota-id').value)||null;
   const jamaahDidBaru=document.getElementById('edit-jual-jamaah-did').value.trim()||null;
@@ -4429,11 +4429,11 @@ async function simpanEditJual(){
   const tglTs=tglRaw ? new Date(tglRaw+'T00:00:00').toISOString() : (tOld.tgl_transaksi||new Date().toISOString());
   try{
     const{error:errUpd}=await sb.from('transaksi').update({
-      tgl_transaksi:tglTs,status_bayar:status,bayar,
+      tgl_transaksi:tglTs,status_bayar:status,bayar:Math.round(bayar),
       items:newItems,total:newTotal,hpp:newHpp,
       diskon_tipe:dTipe==='none'?'':dTipe,
       diskon_nilai:dTipe==='none'?0:dNilai,
-      kembali:Math.max(0,bayar-newTotal),pelanggan:pelBaru,
+      kembali:Math.round(Math.max(0,bayar-newTotal)),pelanggan:pelBaru,
       anggota_id:anggotaIdBaru,jamaah_did:jamaahDidBaru
     }).eq('id',id);
     if(errUpd)throw errUpd;
