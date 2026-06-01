@@ -168,6 +168,35 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   .modal-overlay{display:none !important;}
   body{background:white !important;}
 }
+/* SUB-TAB */
+.subtab-bar{display:flex;gap:6px;margin-bottom:12px;background:var(--surface2);padding:4px;border-radius:10px;border:1px solid var(--border);}
+.subtab{flex:1;padding:8px 10px;border:none;background:transparent;color:var(--text-2);font-weight:700;font-size:12px;border-radius:7px;cursor:pointer;font-family:inherit;}
+.subtab.active{background:var(--green);color:#fff;}
+/* PENGURUS */
+.peng-section{background:white;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;overflow:hidden;}
+.peng-section-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--green-light);border-bottom:1px solid var(--border);gap:8px;}
+.peng-section-head .ttl{font-weight:800;font-size:13px;color:var(--green-dark);}
+.peng-kel-group{padding:4px 0;}
+.peng-kel-label{font-weight:700;font-size:11px;color:var(--gold-dark);text-transform:uppercase;letter-spacing:0.5px;padding:8px 14px 3px;}
+.peng-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border-light);}
+.peng-row:last-child{border-bottom:none;}
+.peng-dapukan{font-weight:800;font-size:12px;color:var(--green-dark);min-width:110px;}
+.peng-nama{flex:1;font-size:13px;font-weight:600;line-height:1.3;}
+.peng-meta{font-size:10px;color:var(--text-muted);font-weight:500;}
+.peng-actions{display:flex;gap:6px;}
+.peng-btn{border:none;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.peng-btn.edit{background:var(--blue-light);color:var(--blue);}
+.peng-btn.del{background:var(--red-light);color:var(--red);}
+.peng-add{background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.peng-empty{padding:16px 14px;text-align:center;color:var(--text-muted);font-size:12px;}
+.peng-nonaktif{opacity:0.5;}
+/* AUTOCOMPLETE */
+.ac-wrap{position:relative;flex:1;}
+.ac-results{position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow:auto;z-index:50;box-shadow:var(--shadow);}
+.ac-item{padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border-light);}
+.ac-item:hover{background:var(--green-light);}
+.ac-item .ac-nm{font-weight:700;font-size:12px;}
+.ac-item .ac-sub{font-size:10px;color:var(--text-muted);}
 </style>
 </head>
 <body>
@@ -249,6 +278,14 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   <!-- PAGE JAMAAH -->
   <div class="page active" id="page-jamaah">
     <div id="scope-notice"></div>
+
+    <!-- SUB-TAB JAMAAH -->
+    <div class="subtab-bar">
+      <button class="subtab active" id="subtab-btn-data" onclick="showJamaahSub('data',this)">👥 Data Jamaah</button>
+      <button class="subtab" id="subtab-btn-pengurus" onclick="showJamaahSub('pengurus',this)">🛡️ Pengurus</button>
+    </div>
+
+    <div id="subview-jamaah-data">
     <div class="stats-pill" id="jamaah-stats"></div>
 
     <!-- MULTI-FILTER PANEL -->
@@ -325,6 +362,12 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
 
     <div id="jamaah-list-wrap" class="tbl-wrap"><div class="loading">Memuat data...</div></div>
     <div class="tbl-toolbar"><span id="tbl-info">—</span><span style="font-size:10px;">💡 Klik baris untuk edit</span></div>
+    </div><!-- /subview-jamaah-data -->
+
+    <!-- SUBVIEW PENGURUS -->
+    <div id="subview-pengurus" style="display:none;">
+      <div id="pengurus-wrap"><div class="loading">Memuat data pengurus...</div></div>
+    </div>
   </div>
 
   <!-- PAGE LAPORAN SENSUS -->
@@ -491,6 +534,21 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeMod('modal-tambah')">Batal</button>
       <button class="btn-save" onclick="simpanJamaahBaru()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PENGURUS (DAPUKAN) -->
+<div class="modal-overlay" id="modal-pengurus">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="modal-pengurus-title" style="font-size:14px;">＋ Tambah Dapukan</strong>
+    </div>
+    <div id="modal-pengurus-body"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-pengurus')">Batal</button>
+      <button class="btn-save" onclick="simpanPengurus()">💾 Simpan</button>
     </div>
   </div>
 </div>
@@ -1076,6 +1134,7 @@ async function loadAll(){
   let qIsrunKat = sb.from('ubnb_isrun_kategori').select('*').order('urutan');
   let qIsrunPbyr = sb.from('ubnb_isrun_pembayar').select('*').eq('aktif',true).order('nama');
   let qIsrunPbyrn = sb.from('ubnb_isrun_pembayaran').select('*');
+  let qPengurus = sb.from('ubnb_pengurus').select('*, jamaah_desa(nama,nama_kk,kelompok_nama)').order('urutan');
 
   if(scope){
     qAcara = qAcara.eq('kelompok',scope);
@@ -1084,7 +1143,7 @@ async function loadAll(){
     qIsrunPbyr = qIsrunPbyr.eq('kelompok',scope);
   }
 
-  const [j,s,am,kg,hd,ikt,ipb,ipy]=await Promise.all([qJamaah,qSensus,qAcara,qKegiatan,qHadir,qIsrunKat,qIsrunPbyr,qIsrunPbyrn]);
+  const [j,s,am,kg,hd,ikt,ipb,ipy,pg]=await Promise.all([qJamaah,qSensus,qAcara,qKegiatan,qHadir,qIsrunKat,qIsrunPbyr,qIsrunPbyrn,qPengurus]);
 
   let allJamaah=j.data||[];
   if(scope){aJamaah=allJamaah.filter(x=>x.kelompok_nama===scope);}
@@ -1099,6 +1158,7 @@ async function loadAll(){
   // Filter ISRUN pembayaran by pembayar yang ke-load
   const pids=new Set(aIsrunPembayar.map(p=>p.id));
   aIsrunPembayaran=(ipy.data||[]).filter(x=>pids.has(x.pembayar_id));
+  aPengurus=pg.data||[];
 
   renderScopeNotice();
   renderStats();
@@ -1106,6 +1166,7 @@ async function loadAll(){
   renderSensus();
   renderAbsenStats();
   renderKegiatanList();
+  renderPengurus();
   // ISRUN: render hanya kalau sudah unlocked
   if(isIsrunUnlocked()) renderIsrunAll();
 }
@@ -1150,6 +1211,226 @@ function showTab(tab,btn){
     checkIsrunUnlock();
   }
 }
+
+// ===== SUB-TAB JAMAAH: DATA vs PENGURUS =====
+function showJamaahSub(sub,btn){
+  document.querySelectorAll('.subtab').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('subview-jamaah-data').style.display=(sub==='data')?'':'none';
+  document.getElementById('subview-pengurus').style.display=(sub==='pengurus')?'':'none';
+  if(sub==='pengurus') renderPengurus();
+}
+
+// ===== PENGURUS / DAPUKAN =====
+let aPengurus=[];
+let _pgEditId=null;
+let _pgNameResults=[];
+let _pgChosen=null; // {did,nama,kelompok_nama}
+
+function escH(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function canManageDesa(){return canEdit() && !CU.kelompok_scope;}
+function canManageKelompok(kel){return canEdit() && (!CU.kelompok_scope || CU.kelompok_scope===kel);}
+function pgJamaahNama(did){const j=aJamaah.find(x=>x.did===did);return j?j.nama:did;}
+
+function renderPengurus(){
+  const wrap=document.getElementById('pengurus-wrap');
+  if(!wrap) return;
+  const scope=CU.kelompok_scope;
+  const srt=(a,b)=>((a.urutan||0)-(b.urutan||0))||((a.dapukan||'').localeCompare(b.dapukan||''));
+  const desa=aPengurus.filter(p=>p.level==='desa').sort(srt);
+  let kelompok=aPengurus.filter(p=>p.level==='kelompok');
+  if(scope) kelompok=kelompok.filter(p=>p.kelompok_nama===scope);
+
+  let html='';
+  // SECTION DESA
+  html+=`<div class="peng-section"><div class="peng-section-head">
+    <span class="ttl">🏛️ Pengurus Desa</span>
+    ${canManageDesa()?`<button class="peng-add" onclick="bukaModalPengurus('desa')">＋ Tambah Dapukan</button>`:''}
+  </div>`;
+  if(!desa.length){ html+=`<div class="peng-empty">Belum ada pengurus desa.</div>`; }
+  else{ desa.forEach(p=>{ html+=pengRowHtml(p,canManageDesa()); }); }
+  html+=`</div>`;
+  // SECTION KELOMPOK
+  html+=`<div class="peng-section"><div class="peng-section-head">
+    <span class="ttl">👥 Pengurus Kelompok${scope?(' — '+scope):''}</span>
+    ${canEdit()?`<button class="peng-add" onclick="bukaModalPengurus('kelompok')">＋ Tambah Dapukan</button>`:''}
+  </div>`;
+  if(!kelompok.length){ html+=`<div class="peng-empty">Belum ada pengurus kelompok.</div>`; }
+  else{
+    const groups={};
+    kelompok.forEach(p=>{(groups[p.kelompok_nama]=groups[p.kelompok_nama]||[]).push(p);});
+    const kelOrder=KELOMPOK_LIST.map(k=>k.singkat);
+    Object.keys(groups).sort((a,b)=>kelOrder.indexOf(a)-kelOrder.indexOf(b)).forEach(kel=>{
+      const arr=groups[kel].sort(srt);
+      const kl=KELOMPOK_LIST.find(k=>k.singkat===kel);
+      html+=`<div class="peng-kel-group"><div class="peng-kel-label">${escH(kel)}${kl?(' · '+escH(kl.lengkap)):''}</div>`;
+      arr.forEach(p=>{ html+=pengRowHtml(p,canManageKelompok(kel)); });
+      html+=`</div>`;
+    });
+  }
+  html+=`</div>`;
+  wrap.innerHTML=html;
+}
+
+function pengRowHtml(p,canManage){
+  const nm=(p.jamaah_desa&&p.jamaah_desa.nama)||pgJamaahNama(p.did);
+  const kk=(p.jamaah_desa&&p.jamaah_desa.nama_kk)||'';
+  const nonaktif=p.aktif===false;
+  return `<div class="peng-row${nonaktif?' peng-nonaktif':''}">
+    <span class="peng-dapukan">${escH(p.dapukan)}</span>
+    <span class="peng-nama">${escH(nm)}${nonaktif?' <span class="peng-meta">(nonaktif)</span>':''}${kk?`<div class="peng-meta">KK: ${escH(kk)}</div>`:''}</span>
+    ${canManage?`<span class="peng-actions">
+      <button class="peng-btn edit" onclick="bukaModalPengurus('${p.level}',${p.id})">Edit</button>
+      <button class="peng-btn del" onclick="hapusPengurus(${p.id})">Hapus</button>
+    </span>`:''}
+  </div>`;
+}
+
+function bukaModalPengurus(level,editId){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
+  _pgEditId=editId||null; _pgChosen=null; _pgNameResults=[];
+  const editing=!!editId; let row=null;
+  if(editing){ row=aPengurus.find(x=>x.id===editId); if(!row){toast('Data tidak ditemukan',true);return;} level=row.level; }
+  const scope=CU.kelompok_scope;
+  const lockLevel=!!scope;
+  const effLevel=scope?'kelompok':level;
+  if(effLevel==='desa' && !canManageDesa()){toast('Hanya pengurus desa yang bisa kelola pengurus desa',true);return;}
+  document.getElementById('modal-pengurus-title').textContent=editing?'✏️ Edit Dapukan':'＋ Tambah Dapukan';
+  const kelOptions=KELOMPOK_LIST.map(k=>{
+    const sel=editing?(row.kelompok_nama===k.singkat):(scope===k.singkat);
+    return `<option value="${k.singkat}" ${sel?'selected':''}>${k.singkat} - ${k.lengkap}</option>`;
+  }).join('');
+  if(editing){
+    const nm=(row.jamaah_desa&&row.jamaah_desa.nama)||pgJamaahNama(row.did);
+    _pgChosen={did:row.did,nama:nm,kelompok_nama:(row.jamaah_desa&&row.jamaah_desa.kelompok_nama)||row.kelompok_nama};
+  }
+  document.getElementById('modal-pengurus-body').innerHTML=`
+    <div class="modal-row"><label>Level</label>
+      <select id="pg-level" ${lockLevel?'disabled':''} onchange="onPgLevelChange()">
+        <option value="desa" ${effLevel==='desa'?'selected':''}>🏛️ Pengurus Desa</option>
+        <option value="kelompok" ${effLevel==='kelompok'?'selected':''}>👥 Pengurus Kelompok</option>
+      </select>
+    </div>
+    <div class="modal-row" id="pg-kelompok-row" style="${effLevel==='kelompok'?'':'display:none;'}"><label>Kelompok</label>
+      <select id="pg-kelompok" ${scope?'disabled':''} onchange="renderPgNameResults()">${kelOptions}</select>
+    </div>
+    <div class="modal-row"><label>Dapukan</label>
+      <input type="text" id="pg-dapukan" placeholder="mis. Ketua, Sekretaris, Bendahara" value="${editing?escH(row.dapukan):''}">
+    </div>
+    <div class="modal-row" style="align-items:flex-start;"><label>Nama Jamaah</label>
+      <div class="ac-wrap">
+        <input type="text" id="pg-nama-search" placeholder="Ketik nama jamaah..." autocomplete="off" oninput="renderPgNameResults()" onfocus="renderPgNameResults()" value="${editing&&_pgChosen?escH(_pgChosen.nama):''}">
+        <div id="pg-nama-results" class="ac-results" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="modal-row"><label>Urutan</label>
+      <input type="number" id="pg-urutan" value="${editing?(row.urutan||0):0}" style="max-width:90px;flex:0 0 auto;">
+    </div>
+    <div class="modal-row"><label>Status</label>
+      <select id="pg-aktif">
+        <option value="true" ${(!editing||row.aktif!==false)?'selected':''}>✓ Aktif</option>
+        <option value="false" ${(editing&&row.aktif===false)?'selected':''}>✗ Nonaktif</option>
+      </select>
+    </div>
+    <div style="padding:8px 16px;font-size:10px;color:var(--text-muted);background:var(--bg);">Nama dicari dari data jamaah${scope?(' kelompok '+scope):''}. Pilih dari daftar agar did tersimpan benar.</div>
+  `;
+  openMod('modal-pengurus');
+}
+
+function onPgLevelChange(){
+  const lvl=document.getElementById('pg-level').value;
+  document.getElementById('pg-kelompok-row').style.display=(lvl==='kelompok')?'':'none';
+  _pgChosen=null;
+  const inp=document.getElementById('pg-nama-search'); if(inp) inp.value='';
+  renderPgNameResults();
+}
+
+function pgNameSource(){
+  let src=aJamaah.slice();
+  const lvlEl=document.getElementById('pg-level');
+  const lvl=lvlEl?lvlEl.value:'desa';
+  if(lvl==='kelompok'){
+    const kelEl=document.getElementById('pg-kelompok');
+    const kel=CU.kelompok_scope||(kelEl?kelEl.value:'');
+    if(kel) src=src.filter(x=>x.kelompok_nama===kel);
+  }
+  return src;
+}
+
+function renderPgNameResults(){
+  const box=document.getElementById('pg-nama-results');
+  const inp=document.getElementById('pg-nama-search');
+  if(!box||!inp) return;
+  const q=(inp.value||'').trim().toLowerCase();
+  const src=pgNameSource();
+  let res=q?src.filter(j=>(j.nama||'').toLowerCase().includes(q)||(j.nama_kk||'').toLowerCase().includes(q)):src;
+  res=res.slice(0,15);
+  _pgNameResults=res;
+  if(!res.length){ box.innerHTML=`<div class="ac-item" style="color:var(--text-muted);cursor:default;">Tidak ada jamaah cocok</div>`; box.style.display=''; return; }
+  box.innerHTML=res.map((j,i)=>`<div class="ac-item" onclick="pilihPgNama(${i})">
+      <div class="ac-nm">${escH(j.nama)}</div>
+      <div class="ac-sub">${escH(j.kelompok_nama||'-')}${j.nama_kk?(' · KK: '+escH(j.nama_kk)):''}</div>
+    </div>`).join('');
+  box.style.display='';
+}
+
+function pilihPgNama(i){
+  const j=_pgNameResults[i]; if(!j) return;
+  _pgChosen={did:j.did,nama:j.nama,kelompok_nama:j.kelompok_nama};
+  document.getElementById('pg-nama-search').value=j.nama;
+  document.getElementById('pg-nama-results').style.display='none';
+}
+
+async function simpanPengurus(){
+  if(!canEdit()){toast('Akses ditolak',true);return;}
+  const level=document.getElementById('pg-level').value;
+  const dapukan=document.getElementById('pg-dapukan').value.trim();
+  const urutan=parseInt(document.getElementById('pg-urutan').value,10)||0;
+  const aktif=document.getElementById('pg-aktif').value==='true';
+  let kelompok_nama=null;
+  if(level==='kelompok'){
+    kelompok_nama=CU.kelompok_scope||document.getElementById('pg-kelompok').value||null;
+    if(!kelompok_nama){toast('Pilih kelompok',true);return;}
+  }
+  if(!dapukan){toast('Dapukan wajib diisi',true);return;}
+  if(!_pgChosen||!_pgChosen.did){toast('Pilih nama jamaah dari daftar',true);return;}
+  if(level==='desa' && !canManageDesa()){toast('Tidak boleh kelola pengurus desa',true);return;}
+  if(level==='kelompok' && !canManageKelompok(kelompok_nama)){toast('Tidak boleh kelola pengurus kelompok lain',true);return;}
+  const payload={did:_pgChosen.did,dapukan,level,kelompok_nama,urutan,aktif};
+  let res;
+  if(_pgEditId){ res=await sb.from('ubnb_pengurus').update(payload).eq('id',_pgEditId); }
+  else{ res=await sb.from('ubnb_pengurus').insert([payload]); }
+  if(res.error){toast('Gagal simpan: '+res.error.message,true);return;}
+  toast('✅ Dapukan tersimpan');
+  closeMod('modal-pengurus');
+  await reloadPengurus();
+}
+
+async function hapusPengurus(id){
+  const p=aPengurus.find(x=>x.id===id); if(!p) return;
+  if(p.level==='desa' && !canManageDesa()){toast('Tidak boleh hapus pengurus desa',true);return;}
+  if(p.level==='kelompok' && !canManageKelompok(p.kelompok_nama)){toast('Tidak boleh hapus pengurus kelompok lain',true);return;}
+  const nm=(p.jamaah_desa&&p.jamaah_desa.nama)||pgJamaahNama(p.did);
+  if(!confirm(`Hapus dapukan "${p.dapukan}" — ${nm}?`)) return;
+  const res=await sb.from('ubnb_pengurus').delete().eq('id',id);
+  if(res.error){toast('Gagal hapus: '+res.error.message,true);return;}
+  toast('🗑️ Dapukan dihapus');
+  await reloadPengurus();
+}
+
+async function reloadPengurus(){
+  const {data,error}=await sb.from('ubnb_pengurus').select('*, jamaah_desa(nama,nama_kk,kelompok_nama)').order('urutan');
+  if(!error) aPengurus=data||[];
+  renderPengurus();
+  renderJamaah();
+}
+
+// Tutup dropdown autocomplete saat klik di luar
+document.addEventListener('click',e=>{
+  const box=document.getElementById('pg-nama-results');
+  if(!box) return;
+  if(!e.target.closest('.ac-wrap')) box.style.display='none';
+});
 
 // ===== MULTI-FILTER STATE =====
 const FILTER_STATE={};
@@ -1367,6 +1648,7 @@ function renderJamaah(){
   list.sort(cmp);
 
   const el=document.getElementById('jamaah-list-wrap');
+  const pengSet=new Set((aPengurus||[]).filter(p=>p.aktif!==false).map(p=>p.did));
   const info=document.getElementById('tbl-info');
   if(info) info.textContent='Menampilkan '+list.length+' dari '+aJamaah.length+' jamaah';
 
@@ -1397,7 +1679,7 @@ function renderJamaah(){
     html+=`<tr ${isKK?'class="row-iskk"':''} onclick="bukaModalEdit('${j.did}')">
       <td class="tc-num">${idx+1}</td>
       <td>${j.nama_kk||'<span style="color:var(--text-muted);">—</span>'}</td>
-      <td class="tc-nama">${j.nama||''}</td>
+      <td class="tc-nama">${pengSet.has(j.did)?'🛡️ ':''}${j.nama||''}</td>
       <td class="tc-jk">${jkIcon}</td>
       <td class="tc-umur">${umurStr}</td>
       <td>${j.status_nikah||'<span style="color:var(--text-muted);">—</span>'}</td>
@@ -2323,7 +2605,7 @@ function renderKegiatanList(){
     return `<div class="sensus-card">
       <div class="sensus-card-head">
         <div style="flex:1;min-width:0;">
-          <div class="sensus-card-title">${k.acara_nama}</div>
+          <div class="sensus-card-title">${k.acara_nama}${(k.filter_peserta&&k.filter_peserta.sumber==='pengurus')?' <span class="badge" style="background:var(--gold-light);color:var(--gold-dark);">🛡️ Pengurus</span>':''}</div>
           <div class="sensus-card-meta">${tgl}${k.waktu?' · '+k.waktu.substring(0,5):''}${k.lokasi?' · '+k.lokasi:''}</div>
         </div>
         ${statusBadge}
@@ -2368,7 +2650,7 @@ function editKegiatan(id){
     ${(()=>{
       if(!CU||CU.role!=='pengurus_desa') return '';
       const sD=k&&!k.kelompok?'selected':'',s1=k&&k.kelompok==='PW1'?'selected':'',s2=k&&k.kelompok==='PW2'?'selected':'',s3=k&&k.kelompok==='PW3'?'selected':'',s4=k&&k.kelompok==='PW4'?'selected':'';
-      return '<div class="modal-row"><label>Scope Kegiatan</label><select id="kg-scope" style="flex:1;"><option value="" '+sD+'>🏛️ Kegiatan Desa</option><option value="PW1" '+s1+'>🟢 PW1</option><option value="PW2" '+s2+'>🔵 PW2</option><option value="PW3" '+s3+'>🟠 PW3</option><option value="PW4" '+s4+'>🟣 PW4</option></select></div>';
+      return '<div class="modal-row"><label>Scope Kegiatan</label><select id="kg-scope" style="flex:1;" onchange="onKgScopeChange()"><option value="" '+sD+'>🏛️ Kegiatan Desa</option><option value="PW1" '+s1+'>🟢 PW1</option><option value="PW2" '+s2+'>🔵 PW2</option><option value="PW3" '+s3+'>🟠 PW3</option><option value="PW4" '+s4+'>🟣 PW4</option></select></div>';
     })()}
     <div class="modal-row"><label>Tanggal *</label><input type="date" id="kg-tgl" value="${k?k.tanggal:today}"/></div>
     <div class="modal-row"><label>Waktu</label><input type="time" id="kg-waktu" value="${k&&k.waktu?k.waktu.substring(0,5):''}"/></div>
@@ -2388,7 +2670,14 @@ function editKegiatan(id){
         </label>
       </div>
     </div>
+    <div class="modal-row"><label>Sumber Peserta</label>
+      <select id="kg-sumber" onchange="onSumberChange()">
+        <option value="jamaah">👥 Jamaah Tetap</option>
+        <option value="pengurus">🛡️ Pengurus (sesuai label)</option>
+      </select>
+    </div>
     <div style="padding:10px 16px;background:var(--green-light);font-size:11px;color:var(--green);font-weight:600;">📌 FILTER PESERTA WAJIB</div>
+    <div id="kg-filter-jamaah">
     <div class="modal-row"><label>Gender</label>
       <select id="kg-flt-gender">
         <option value="">— Semua —</option>
@@ -2411,6 +2700,17 @@ function editKegiatan(id){
     </div>
     <div class="modal-row"><label>Usia Minimum</label><input type="number" id="kg-flt-umur-min" min="0" value="${k&&k.filter_peserta&&k.filter_peserta.usia_min?k.filter_peserta.usia_min:''}" placeholder="Kosongkan = tidak filter"/></div>
     <div class="modal-row"><label>Usia Maximum</label><input type="number" id="kg-flt-umur-max" min="0" value="${k&&k.filter_peserta&&k.filter_peserta.usia_max?k.filter_peserta.usia_max:''}" placeholder="Kosongkan = tidak filter"/></div>
+    </div><!-- /kg-filter-jamaah -->
+    <div id="kg-filter-pengurus" style="display:none;">
+      <div class="modal-row" id="kg-cakupan-row"><label>Cakupan</label>
+        <select id="kg-pengurus-cakupan" onchange="rebuildDapukanList();previewPeserta();">
+          <option value="desa">🏛️ Pengurus Desa saja</option>
+          <option value="desa_kelompok">🏛️+👥 Desa + Semua Kelompok</option>
+        </select>
+      </div>
+      <div style="padding:6px 16px 2px;font-size:10px;color:var(--text-muted);">Centang jenis dapukan (kosong = semua dapukan masuk):</div>
+      <div id="kg-dapukan-list" style="padding:4px 16px 10px;display:flex;flex-wrap:wrap;gap:8px 14px;"></div>
+    </div>
     <div class="modal-row"><label>Catatan</label><input type="text" id="kg-catatan" value="${k&&k.catatan?k.catatan.replace(/"/g,'&quot;'):''}"/></div>
     ${k?`<div class="modal-row"><label>Status</label>
       <select id="kg-status">
@@ -2429,7 +2729,7 @@ function editKegiatan(id){
       el.addEventListener('input',previewPeserta);
     }
   });
-  setTimeout(previewPeserta,100);
+  setTimeout(()=>{ initKegiatanSumber(k); },100);
   openMod('modal-kegiatan');
 }
 
@@ -2564,12 +2864,103 @@ function getPesertaWajib(filter,kelompok){
 }
 
 function previewPeserta(){
+  const el=document.getElementById('kg-preview');
+  if(!el) return;
+  const sEl=document.getElementById('kg-sumber');
+  const sumber=sEl?sEl.value:'jamaah';
+  if(sumber==='pengurus'){
+    const list=getPesertaPengurus();
+    const kelScope=currentKegKelScope();
+    const cakEl=document.getElementById('kg-pengurus-cakupan');
+    const cakLabel=kelScope?('pengurus '+kelScope):((cakEl&&cakEl.value==='desa_kelompok')?'pengurus desa + semua kelompok':'pengurus desa');
+    const chk=getCheckedDapukan();
+    el.innerHTML=`📊 <b>${list.length} pengurus</b> akan masuk daftar wajib hadir (sumber: ${cakLabel}${chk.length?(' · dapukan: '+chk.map(escH).join(', ')):''})`;
+    return;
+  }
   const f=buildFilterPeserta();
   const _sc=document.getElementById('kg-scope');
   const list=getPesertaWajib(f,_sc?(_sc.value||null):CU.kelompok_scope||null);
-  const el=document.getElementById('kg-preview');
-  if(!el) return;
   el.innerHTML=`📊 <b>${list.length} peserta</b> akan masuk daftar wajib hadir (sumber: jamaah Tetap${CU.kelompok_scope?' di '+CU.kelompok_scope:''})`;
+}
+
+// ===== SUMBER PESERTA: PENGURUS =====
+function currentKegKelScope(){
+  let kelScope=CU.kelompok_scope||null;
+  const scEl=document.getElementById('kg-scope');
+  if(CU.role==='pengurus_desa' && scEl){ kelScope=scEl.value||null; }
+  return kelScope;
+}
+function onSumberChange(){
+  const sEl=document.getElementById('kg-sumber'); if(!sEl) return;
+  const isPeng=sEl.value==='pengurus';
+  const fj=document.getElementById('kg-filter-jamaah');
+  const fp=document.getElementById('kg-filter-pengurus');
+  if(fj) fj.style.display=isPeng?'none':'';
+  if(fp) fp.style.display=isPeng?'':'none';
+  if(isPeng){ toggleCakupanRow(); rebuildDapukanList(); }
+  previewPeserta();
+}
+function onKgScopeChange(){
+  const sEl=document.getElementById('kg-sumber');
+  if(sEl && sEl.value==='pengurus'){ toggleCakupanRow(); rebuildDapukanList(); }
+  previewPeserta();
+}
+function toggleCakupanRow(){
+  const row=document.getElementById('kg-cakupan-row');
+  if(!row) return;
+  row.style.display=currentKegKelScope()?'none':'';
+}
+function pengurusPoolForKegiatan(){
+  let pool=(aPengurus||[]).filter(p=>p.aktif!==false);
+  const kelScope=currentKegKelScope();
+  if(kelScope) return pool.filter(p=>p.level==='kelompok'&&p.kelompok_nama===kelScope);
+  const cakEl=document.getElementById('kg-pengurus-cakupan');
+  const cak=cakEl?cakEl.value:'desa';
+  if(cak==='desa_kelompok') return pool.filter(p=>p.level==='desa'||p.level==='kelompok');
+  return pool.filter(p=>p.level==='desa');
+}
+function rebuildDapukanList(){
+  const box=document.getElementById('kg-dapukan-list');
+  if(!box) return;
+  const prev=new Set(Array.from(box.querySelectorAll('input:checked')).map(i=>i.value));
+  const names=[...new Set(pengurusPoolForKegiatan().map(p=>p.dapukan))].sort((a,b)=>(a||'').localeCompare(b||''));
+  if(!names.length){ box.innerHTML='<span style="font-size:11px;color:var(--text-muted);">Tidak ada pengurus pada cakupan ini.</span>'; return; }
+  box.innerHTML=names.map(n=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+    <input type="checkbox" class="kg-dapukan-cb" value="${escH(n)}" ${prev.has(n)?'checked':''} onchange="previewPeserta()"/> ${escH(n)}
+  </label>`).join('');
+}
+function getCheckedDapukan(){
+  return Array.from(document.querySelectorAll('.kg-dapukan-cb:checked')).map(i=>i.value);
+}
+function getPesertaPengurus(){
+  let pool=pengurusPoolForKegiatan();
+  const checked=getCheckedDapukan();
+  if(checked.length) pool=pool.filter(p=>checked.includes(p.dapukan));
+  const seen=new Set(); const out=[];
+  pool.forEach(p=>{
+    if(seen.has(p.did)) return; seen.add(p.did);
+    const nm=(p.jamaah_desa&&p.jamaah_desa.nama)||pgJamaahNama(p.did);
+    const kk=(p.jamaah_desa&&p.jamaah_desa.nama_kk)||null;
+    out.push({did:p.did,nama:nm,nama_kk:kk});
+  });
+  return out;
+}
+function initKegiatanSumber(k){
+  const fp=k&&k.filter_peserta?k.filter_peserta:null;
+  const sEl=document.getElementById('kg-sumber');
+  if(sEl) sEl.value=(fp&&fp.sumber==='pengurus')?'pengurus':'jamaah';
+  onSumberChange();
+  if(fp&&fp.sumber==='pengurus'){
+    const cakEl=document.getElementById('kg-pengurus-cakupan');
+    if(cakEl && fp.cakupan && fp.cakupan!=='kelompok') cakEl.value=fp.cakupan;
+    toggleCakupanRow();
+    rebuildDapukanList();
+    if(Array.isArray(fp.dapukan)&&fp.dapukan.length){
+      const set=new Set(fp.dapukan);
+      document.querySelectorAll('.kg-dapukan-cb').forEach(cb=>{ cb.checked=set.has(cb.value); });
+    }
+    previewPeserta();
+  }
 }
 
 async function simpanKegiatan(){
@@ -2594,8 +2985,18 @@ async function simpanKegiatan(){
   if(document.getElementById('kg-mode-manual').checked) modes.push('manual');
   if(document.getElementById('kg-mode-online').checked) modes.push('online');
   if(!modes.length){toast('Pilih minimal 1 mode',true);return;}
-  const filter=buildFilterPeserta();
-  const peserta=getPesertaWajib(filter,CU.kelompok_scope);
+  const sumberEl=document.getElementById('kg-sumber');
+  const sumber=sumberEl?sumberEl.value:'jamaah';
+  let filter, peserta;
+  if(sumber==='pengurus'){
+    peserta=getPesertaPengurus();
+    const kelScope=currentKegKelScope();
+    const cakEl=document.getElementById('kg-pengurus-cakupan');
+    filter={sumber:'pengurus', cakupan: kelScope?'kelompok':(cakEl?cakEl.value:'desa'), dapukan:getCheckedDapukan()};
+  }else{
+    filter=buildFilterPeserta();
+    peserta=getPesertaWajib(filter,CU.kelompok_scope);
+  }
 
   const payload={
     acara_id,
