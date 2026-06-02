@@ -155,6 +155,15 @@
     padding:12px 20px;border-radius:99px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px -8px #000;opacity:0;transition:.3s;z-index:60;border:1px solid var(--gold)}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   footer{text-align:center;color:#9bbab0;font-size:11px;padding:18px 10px 0;letter-spacing:.5px}
+  .sync-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#6b8a80;vertical-align:middle;margin-left:5px;transition:background .3s}
+  .sync-dot.ok{background:#2f9e6f}
+  .sync-dot.saving{background:var(--gold);animation:sbpulse .7s infinite}
+  .sync-dot.error{background:var(--red)}
+  @keyframes sbpulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .loading-overlay{position:fixed;inset:0;background:#072a22f0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+  .loading-overlay.hide{display:none}
+  .spinner{width:38px;height:38px;border:3px solid #ffffff25;border-top-color:var(--gold);border-radius:50%;animation:spin .75s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 </head>
@@ -164,7 +173,7 @@
   <header>
     <div class="ar">Lelang Shodaqoh Jariyah</div>
     <h1>PEMBANGUNAN MASJID</h1>
-    <div class="sub">Jamaah Kelompok 4</div>
+    <div class="sub">Jamaah Kelompok 4 <span class="sync-dot" id="syncDot" title="Menghubungkan..."></span></div>
   </header>
 
   <!-- OVERVIEW -->
@@ -269,6 +278,10 @@
     <button class="btn btn-ghost" id="mClose">Tutup</button>
   </div>
 </div>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="font-family:'Marcellus',serif;font-size:15px;color:var(--gold-lt)">Memuat data...</div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -307,21 +320,82 @@ _Pos ongkos & plester (No. 3, 9, 10) boleh patungan / nominal bebas._
 {konfirmasi}Jazakumullahu khairan atas keikhlasannya.
 Wassalamu\u2019alaikum Warahmatullahi Wabarakatuh.`;
 
-/* ---------- storage (with in-memory fallback) ---------- */
-const KEY='lelang_masjid_k4_v1';
-let MEM=null;
-function load(){
-  try{ const r=localStorage.getItem(KEY); return r?JSON.parse(r):null; }
-  catch(e){ return MEM; }
+/* ---------- supabase ---------- */
+const SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const SBH={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+
+function setSync(s){
+  const d=$('#syncDot');
+  if(!d)return;
+  d.className='sync-dot'+(s==='saving'?' saving':s==='error'?' error':'');
+  d.title=s==='ok'?'Data tersimpan di cloud':s==='saving'?'Menyimpan...':'Gagal terhubung';
 }
-function save(st){
-  MEM=st;
-  try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){}
+async function sbFetch(path,opts={}){
+  const res=await fetch(SB_URL+path,{...opts,headers:{...SBH,...(opts.headers||{})}});
+  if(!res.ok) throw new Error(res.status);
+  const t=await res.text(); return t?JSON.parse(t):null;
 }
-let state = load() || {entries:[], seq:1, panitia:{nama:'',wa:'',rek:''}};
-if(!state.panitia) state.panitia={nama:'',wa:'',rek:''};
-if(!state.narasi) state.narasi={pembuka:DEFAULT_PEMBUKA, penutup:DEFAULT_PENUTUP};
-if(!state.jamaah) state.jamaah=[];
+
+let state={entries:[],seq:1,panitia:{nama:'',wa:'',rek:''},
+  narasi:{pembuka:DEFAULT_PEMBUKA,penutup:DEFAULT_PENUTUP},jamaah:[]};
+
+async function loadFromDB(){
+  const [rows,settings]=await Promise.all([
+    sbFetch('/rest/v1/lelang_entries?select=*&order=seq'),
+    sbFetch('/rest/v1/lelang_settings?select=*'),
+  ]);
+  state.entries=(rows||[]).map(r=>({_id:r.id,itemId:r.item_id,nama:r.nama,qty:+r.qty,ts:r.ts}));
+  state.seq=(rows||[]).reduce((m,r)=>Math.max(m,r.seq),0)+1;
+  (settings||[]).forEach(s=>{try{
+    if(s.key==='panitia') state.panitia=JSON.parse(s.value);
+    else if(s.key==='jamaah') state.jamaah=JSON.parse(s.value);
+    else if(s.key==='narasi') state.narasi=JSON.parse(s.value);
+  }catch(e){}});
+}
+async function saveSettings(){
+  setSync('saving');
+  try{
+    await sbFetch('/rest/v1/lelang_settings',{method:'POST',
+      headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify([
+        {key:'panitia',value:JSON.stringify(state.panitia),updated_at:new Date().toISOString()},
+        {key:'jamaah', value:JSON.stringify(state.jamaah), updated_at:new Date().toISOString()},
+        {key:'narasi', value:JSON.stringify(state.narasi), updated_at:new Date().toISOString()},
+      ])
+    });
+    setSync('ok');
+  }catch(e){setSync('error');}
+}
+let _stmr; function queueSaveSettings(){clearTimeout(_stmr);_stmr=setTimeout(saveSettings,700);}
+
+async function addEntryDB(entry){
+  setSync('saving');
+  try{
+    const res=await sbFetch('/rest/v1/lelang_entries',{method:'POST',
+      body:JSON.stringify({seq:state.seq++,item_id:entry.itemId,nama:entry.nama,qty:entry.qty,ts:entry.ts})
+    });
+    entry._id=res[0].id;
+    setSync('ok');
+  }catch(e){setSync('error'); toast('Gagal simpan, coba lagi');}
+  state.entries.push(entry); render();
+}
+async function deleteEntryDB(sbId){
+  setSync('saving');
+  state.entries=state.entries.filter(e=>e._id!==sbId); render();
+  try{
+    await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'DELETE',headers:{'Prefer':''}});
+    setSync('ok');
+  }catch(e){setSync('error');}
+}
+async function resetDB(){
+  setSync('saving');
+  try{
+    await sbFetch('/rest/v1/lelang_entries?seq=gte.0',{method:'DELETE',headers:{'Prefer':''}});
+    setSync('ok');
+  }catch(e){setSync('error');}
+  state.entries=[]; state.seq=1; render();
+}
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -376,7 +450,6 @@ $('#cselPanel').addEventListener('click',e=>{
   $('#cselItem').classList.remove('open'); onItemChange(+opt.dataset.id);
 });
 document.addEventListener('click',e=>{ if(!e.target.closest('#cselItem')) $('#cselItem').classList.remove('open'); });
-buildCsel();
 
 /* ---------- render ---------- */
 function render(){
@@ -453,15 +526,16 @@ function render(){
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 /* ---------- actions ---------- */
-$('#btnAdd').addEventListener('click',()=>{
+$('#btnAdd').addEventListener('click',async()=>{
   const id=currentItemId;
   const nama=$('#inNama').value.trim();
   let val=parseFloat($('#inJumlah').value);
   if(!nama){ toast('Isi nama jamaah dulu'); $('#inNama').focus(); return; }
   if(!val||val<=0){ toast('Jumlah belum benar'); $('#inJumlah').focus(); return; }
   if(id!==0) val=Math.round(val);
-  state.entries.push({_id:state.seq++, itemId:id, nama, qty:val, ts:Date.now()});
-  save(state); render();
+  $('#btnAdd').disabled=true;
+  await addEntryDB({_id:null,itemId:id,nama,qty:val,ts:Date.now()});
+  $('#btnAdd').disabled=false;
   $('#inNama').value=''; if(id!==0)$('#inJumlah').value=1; else $('#inJumlah').value='';
   $('#inNama').focus();
   toast('Tercatat. Jazakumullah khairan');
@@ -470,7 +544,7 @@ $('#btnAdd').addEventListener('click',()=>{
 $('#logList').addEventListener('click',e=>{
   const b=e.target.closest('.gdel'); if(!b)return;
   const id=+b.dataset.id;
-  if(confirm('Hapus entri ini?')){ state.entries=state.entries.filter(x=>x._id!==id); save(state); render(); }
+  if(confirm('Hapus entri ini?')) deleteEntryDB(id);
 });
 
 ['setNama','setWa','setRek'].forEach(k=>{
@@ -478,32 +552,31 @@ $('#logList').addEventListener('click',e=>{
     state.panitia.nama=$('#setNama').value;
     state.panitia.wa=$('#setWa').value;
     state.panitia.rek=$('#setRek').value;
-    save(state);
+    queueSaveSettings();
   });
 });
 
-$('#naPembuka').addEventListener('input',()=>{ state.narasi.pembuka=$('#naPembuka').value; save(state); });
-$('#naPenutup').addEventListener('input',()=>{ state.narasi.penutup=$('#naPenutup').value; save(state); });
+$('#naPembuka').addEventListener('input',()=>{ state.narasi.pembuka=$('#naPembuka').value; queueSaveSettings(); });
+$('#naPenutup').addEventListener('input',()=>{ state.narasi.penutup=$('#naPenutup').value; queueSaveSettings(); });
 $('#btnNaReset').addEventListener('click',()=>{
   if(confirm('Kembalikan narasi pembuka & penutup ke default?')){
-    state.narasi={pembuka:DEFAULT_PEMBUKA, penutup:DEFAULT_PENUTUP}; save(state); render(); toast('Narasi dikembalikan ke default');
+    state.narasi={pembuka:DEFAULT_PEMBUKA,penutup:DEFAULT_PENUTUP}; saveSettings(); render(); toast('Narasi dikembalikan ke default');
   }
 });
 $('#setJamaah').addEventListener('input',()=>{
   state.jamaah=$('#setJamaah').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  save(state);
   $('#jamaahList').innerHTML=state.jamaah.map(n=>`<option value="${esc(n)}">`).join('');
+  queueSaveSettings();
 });
 
-$('#btnReset').addEventListener('click',()=>{
+$('#btnReset').addEventListener('click',async()=>{
   const k1=prompt('Masukkan kode akses pertama:');
   if(k1===null) return;
   if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
   const k2=prompt('Masukkan kode akses kedua:');
   if(k2===null) return;
   if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-  state={entries:[],seq:1,panitia:state.panitia,narasi:state.narasi,jamaah:state.jamaah};
-  save(state); render(); toast('Data berhasil dikosongkan');
+  await resetDB(); toast('Data berhasil dikosongkan');
 });
 
 /* ---------- broadcast text ---------- */
@@ -704,7 +777,16 @@ ${itemRows}</table>
 $('#btnExcel').addEventListener('click',exportExcel);
 $('#btnPdf').addEventListener('click',exportPDF);
 
-render();
+async function init(){
+  try{
+    await loadFromDB(); setSync('ok');
+  }catch(e){
+    setSync('error'); toast('Gagal konek ke server — periksa koneksi internet');
+  }
+  buildCsel(); render();
+  $('#loadingOverlay').classList.add('hide');
+}
+init();
 
 </script>
 </body>
