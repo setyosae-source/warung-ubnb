@@ -321,8 +321,8 @@ const ITEMS = [
   {id:4, kat:'DAK TERAS',   nama:'Besi ulir 13 mm',     sat:'batang', harga:110000, butuh:20},
   {id:5, kat:'DAK TERAS',   nama:'Besi ulir 10 mm',     sat:'batang', harga:68000,  butuh:20},
   {id:6, kat:'DAK TERAS',   nama:'Semen',               sat:'sak',    harga:62000,  butuh:30},
-  {id:7, kat:'DAK TERAS',   nama:'Pasir cor',           sat:'kijang', harga:550000, butuh:4},
-  {id:8, kat:'DAK TERAS',   nama:'Split / koral',       sat:'kijang', harga:530000, butuh:2},
+  {id:7, kat:'DAK TERAS',   nama:'Pasir cor',           sat:'kujang', harga:550000, butuh:4},
+  {id:8, kat:'DAK TERAS',   nama:'Split / koral',       sat:'kujang', harga:530000, butuh:2},
   {id:9, kat:'DAK TERAS',   nama:'Ongkos kerja dak',    sat:'paket',  harga:500000, butuh:35},
   {id:10,kat:'PLESTER',     nama:'Plester dinding luar–dalam', sat:'paket', harga:500000, butuh:30},
 ];
@@ -805,91 +805,62 @@ function exportPDF(){
     else belumLunas.push({nama,ents,subtag,subbay,sisa});
   });
 
-  function itemLines(ents){
-    return ents.map(e=>{
-      const it=itemById(e.itemId);
-      const d=e.itemId===0?'Infaq bebas':`${e.qty} ${it.sat} ${it.nama}`;
-      const badge=e.paid?`<span class="bok">\u2705 LUNAS ${rp(e.nilayBayar)}</span>`:`<span class="bno">\u23f3</span>`;
-      return `<div class="iline"><span class="idesc">${d}</span><span class="inom">${rp(entryNominal(e))} ${badge}</span></div>`;
+  function rows(list,valFn,colorClass){
+    if(!list.length) return `<tr><td colspan="3" style="color:#999;font-style:italic;text-align:center;padding:10px">—</td></tr>`;
+    return list.map((x,i)=>{
+      const itemStr=x.ents.map(e=>{
+        const it=itemById(e.itemId);
+        return e.itemId===0?'Infaq bebas':`${e.qty} ${it.sat} ${it.nama}`;
+      }).join(', ');
+      return `<tr class="${i%2?'alt':''}">
+        <td class="no">${i+1}</td>
+        <td><b>${x.nama}</b><div class="sub">${itemStr}</div></td>
+        <td class="amt ${colorClass}">${valFn(x)}</td>
+      </tr>`;
     }).join('');
-  }
-
-  function personCard(x,no){
-    const sisaHtml=x.sisa>0?` | <b style="color:#c0563f">Sisa ${rp(x.sisa)}</b>`:'';
-    return `<div class="person">
-      <div class="phead">
-        <span class="pno">${no}.</span>
-        <span class="pname">${x.nama}</span>
-        <span class="pval ${x.sisa>0?'unpaid':'paid'}">${x.sisa>0?rp(x.sisa)+' sisa':rp(x.subbay)}</span>
-      </div>
-      <div class="pitems">${itemLines(x.ents)}</div>
-      <div class="psub">Tagihan ${rp(x.subtag)} | Bayar ${rp(x.subbay)}${sisaHtml}</div>
-    </div>`;
   }
 
   const namaSudah=sudahLunas.map(x=>x.nama).join(', ')||'\u2014';
   const namaBelum=belumLunas.map(x=>x.nama).join(', ')||'\u2014';
 
-  const css=`
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,Helvetica,sans-serif;font-size:28px;color:#1a2e26;padding:24px;line-height:1.5}
-    h1{font-size:44px;color:#0c3b30;font-weight:900;margin-bottom:4px}
-    .meta{font-size:22px;color:#666;margin-bottom:18px}
-    .boxes{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
-    .box{flex:1;min-width:130px;border-radius:10px;padding:12px 14px}
-    .box.gold{background:#fef9ee;border:2px solid #d9b25b}
-    .box.green{background:#e4f4ec;border:2px solid #2f9e6f}
-    .box.red{background:#fdeee9;border:2px solid #c0563f}
-    .box.blue{background:#edf3ff;border:2px solid #5b80d9}
-    .lbl{font-size:17px;text-transform:uppercase;letter-spacing:1px;color:#777;font-weight:700}
-    .val{font-size:34px;font-weight:900;color:#0c3b30;line-height:1.1;margin-top:4px}
-    .pbar{height:16px;background:#ddd;border-radius:99px;margin:4px 0 22px;overflow:hidden}
-    .pfill{height:100%;background:#d9b25b;border-radius:99px;width:PCTPCT%}
-    .rekap{border-radius:12px;padding:18px 20px;margin-bottom:26px;border:2.5px solid #d9b25b;background:#fffdf5}
-    .rekap h2{font-size:30px;font-weight:900;margin-bottom:12px;color:#0c3b30;border-bottom:2px solid #e8dfc8;padding-bottom:8px}
-    .rekap-row{display:flex;gap:12px;align-items:baseline;margin-bottom:10px;flex-wrap:wrap}
-    .rekap-lbl{font-size:24px;font-weight:700;min-width:240px;flex:0 0 auto}
-    .rekap-names{font-size:24px;color:#1a2e26}
-    .rekap-row.ok .rekap-lbl{color:#2f9e6f}
-    .rekap-row.no .rekap-lbl{color:#c0563f}
-    .sec-head{font-size:32px;font-weight:900;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;margin-top:28px;display:flex;align-items:center;gap:12px}
-    .sec-cnt{font-size:22px;font-weight:400;opacity:.85}
-    .person{border:2px solid #e0dbd0;border-top:none;padding:16px 20px;background:#fdfaf3}
-    .person:last-child{border-radius:0 0 10px 10px}
-    .phead{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
-    .pno{font-size:22px;color:#888;flex:0 0 auto}
-    .pname{font-size:34px;font-weight:900;color:#0c3b30;flex:1}
-    .pval{font-size:30px;font-weight:700;white-space:nowrap}
-    .pval.paid{color:#2f9e6f}.pval.unpaid{color:#c0563f}
-    .pitems{margin-left:32px;margin-bottom:6px}
-    .iline{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px dashed #ddd;flex-wrap:wrap}
-    .idesc{font-size:24px;color:#5c6b62;flex:1}
-    .inom{font-size:24px;color:#1a2e26;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-    .bok{font-size:19px;font-weight:700;background:#e4f4ec;color:#2f9e6f;padding:2px 10px;border-radius:99px}
-    .bno{font-size:22px}
-    .psub{margin-left:32px;font-size:22px;color:#666;padding-top:4px}
-    .divider{border:none;border-top:3px solid #d9b25b;margin:30px 0 12px}
-    .footer-box{font-size:26px;padding:16px 20px;background:#f0f8f4;border-radius:10px;border:2px solid #c5e0d5}
-    @media print{body{padding:10px};.sec-head,.rekap{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  `.replace('PCTPCT', String(Math.min(100,+pct)));
-
-  const footerHtml=(p.nama||p.wa||p.rek)
-    ?`<div class="footer-box">Konfirmasi: <b>${p.nama||'Panitia'}${p.wa?' \u2014 WA '+p.wa:''}</b>${p.rek?'<br>Rekening: <b>'+p.rek+'</b>':''}</div>`:'';
-
-  const sudahSection=sudahLunas.length
-    ?sudahLunas.map((x,i)=>personCard(x,i+1)).join('')
-    :'<div class="person" style="border-radius:0 0 10px 10px;color:#777">Belum ada yang lunas.</div>';
-
-  const belumSection=belumLunas.length
-    ?belumLunas.map((x,i)=>personCard(x,i+1)).join('')
-    :'<div class="person" style="border-radius:0 0 10px 10px;color:#2f9e6f">Semua sudah lunas. Alhamdulillah!</div>';
-
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Laporan Pembayaran Shodaqoh Masjid K4</title>
-<style>${css}</style></head><body>
+<style>
+  html,body{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a2e26;padding:16px}
+  h1{font-size:17px;color:#0c3b30;font-weight:900;margin-bottom:2px}
+  .meta{font-size:10px;color:#888;margin-bottom:12px}
+  .boxes{display:flex;gap:8px;margin-bottom:10px}
+  .box{flex:1;border-radius:6px;padding:7px 10px}
+  .box.gold{background:#fef9ee;border:1.5px solid #d9b25b}
+  .box.green{background:#e4f4ec;border:1.5px solid #2f9e6f}
+  .box.red{background:#fdeee9;border:1.5px solid #c0563f}
+  .box.blue{background:#edf3ff;border:1.5px solid #5b80d9}
+  .lbl{font-size:8.5px;text-transform:uppercase;letter-spacing:.8px;color:#777;font-weight:700}
+  .val{font-size:15px;font-weight:900;color:#0c3b30;margin-top:2px}
+  .pbar{height:8px;background:#ddd;border-radius:99px;margin:4px 0 12px;overflow:hidden}
+  .pfill{height:100%;background:#d9b25b;border-radius:99px;width:${Math.min(100,+pct)}%}
+  .rekap{background:#fffdf5;border:1.5px solid #e8dfc8;border-radius:7px;padding:8px 12px;margin-bottom:14px;font-size:11px}
+  .rekap b{font-size:11.5px}
+  .rekap .ok{color:#2f9e6f}.rekap .no{color:#c0563f}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .col-head{font-size:12px;font-weight:900;color:#fff;padding:7px 10px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:6px}
+  table{width:100%;border-collapse:collapse;border:1.5px solid #e0dbd0;border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
+  th{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:6px 8px;background:#f7f2e6;color:#5c6b62;text-align:left;border-bottom:1.5px solid #ddd}
+  td{padding:7px 8px;vertical-align:top;border-bottom:1px solid #f0ebe0;font-size:11px}
+  tr.alt td{background:#fdfaf3}
+  tr:last-child td{border-bottom:none}
+  .no{width:20px;color:#aaa;text-align:center;font-size:10px}
+  .sub{font-size:10px;color:#8a978d;margin-top:2px}
+  .amt{text-align:right;font-weight:700;white-space:nowrap;font-size:12px}
+  .amt.ok{color:#2f9e6f}.amt.no{color:#c0563f}
+  .divider{border:none;border-top:2px solid #d9b25b;margin:14px 0 8px}
+  .footer{font-size:11px;padding:8px 12px;background:#f0f8f4;border-radius:6px;border:1.5px solid #c5e0d5;color:#1a2e26}
+  @media print{body{padding:8px}}
+</style></head><body>
 <h1>LAPORAN PEMBAYARAN SHODAQOH</h1>
 <div class="meta">Pembangunan Masjid Kelompok 4 &nbsp;|&nbsp; ${nowStr()}</div>
+
 <div class="boxes">
   <div class="box gold"><div class="lbl">Total Tagihan</div><div class="val">${rp(tk)}</div></div>
   <div class="box green"><div class="lbl">Sudah Lunas</div><div class="val">${rp(totalBayar)}</div></div>
@@ -897,17 +868,31 @@ function exportPDF(){
   <div class="box blue"><div class="lbl">Donatur</div><div class="val">${names.length} org</div></div>
 </div>
 <div class="pbar"><div class="pfill"></div></div>
+
 <div class="rekap">
-  <h2>REKAP SINGKAT</h2>
-  <div class="rekap-row ok"><span class="rekap-lbl">\u2705 Sudah Lunas (${sudahLunas.length}):</span><span class="rekap-names">${namaSudah}</span></div>
-  <div class="rekap-row no"><span class="rekap-lbl">\u23f3 Belum Lunas (${belumLunas.length}):</span><span class="rekap-names">${namaBelum}</span></div>
+  <span class="ok"><b>\u2705 Sudah Lunas (${sudahLunas.length}):</b> ${namaSudah}</span><br>
+  <span class="no"><b>\u23f3 Belum Lunas (${belumLunas.length}):</b> ${namaBelum}</span>
 </div>
-<div class="sec-head" style="background:#2f9e6f">\u2705 SUDAH LUNAS <span class="sec-cnt">${sudahLunas.length} jamaah</span></div>
-${sudahSection}
-<div class="sec-head" style="background:#c0563f">\u23f3 BELUM LUNAS <span class="sec-cnt">${belumLunas.length} jamaah</span></div>
-${belumSection}
+
+<div class="cols">
+  <div>
+    <div class="col-head" style="background:#2f9e6f">\u2705 SUDAH LUNAS &nbsp;(${sudahLunas.length})</div>
+    <table>
+      <tr><th>No</th><th>Nama / Item</th><th style="text-align:right">Bayar</th></tr>
+      ${rows(sudahLunas,x=>rp(x.subbay),'ok')}
+    </table>
+  </div>
+  <div>
+    <div class="col-head" style="background:#c0563f">\u23f3 BELUM LUNAS &nbsp;(${belumLunas.length})</div>
+    <table>
+      <tr><th>No</th><th>Nama / Item</th><th style="text-align:right">Sisa</th></tr>
+      ${rows(belumLunas,x=>rp(x.sisa),'no')}
+    </table>
+  </div>
+</div>
+
 <hr class="divider">
-${footerHtml}
+${(p.nama||p.wa||p.rek)?`<div class="footer">Konfirmasi: <b>${p.nama||'Panitia'}${p.wa?' \u2014 WA '+p.wa:''}</b>${p.rek?` | Rekening: <b>${p.rek}</b>`:''}</div>`:''}
 </body></html>`;
 
   const w=window.open('','_blank');
