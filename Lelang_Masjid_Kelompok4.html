@@ -123,12 +123,23 @@
   /* grouped list shodaqoh */
   .log{max-height:none;overflow:visible}
   .group{margin-bottom:10px;border:1.5px solid #e8e1cf;border-radius:12px;overflow:hidden}
-  .ghead{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7f2e6}
-  .gname{font-size:14px;font-weight:700;color:#1d2b25}
-  .gtotal{font-family:'Marcellus',serif;font-size:13px;color:var(--green-dk);white-space:nowrap;margin-left:8px}
-  .gentry{display:flex;align-items:center;gap:8px;padding:7px 12px;border-top:1px solid #ede7d6}
-  .gdesc{flex:1;font-size:12.5px;color:#5c6b62}
-  .gnom{font-family:'Marcellus',serif;font-size:13px;color:var(--green-dk);white-space:nowrap}
+  .ghead{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7f2e6;gap:8px}
+  .gname{font-size:14px;font-weight:700;color:#1d2b25;flex:1;min-width:0}
+  .ghead-right{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+  .gtotal{font-family:'Marcellus',serif;font-size:13px;color:var(--green-dk);white-space:nowrap}
+  .gbadge-grp{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.4px;white-space:nowrap}
+  .gbadge-grp.all{background:#e4f4ec;color:var(--ok)}
+  .gbadge-grp.part{background:#fef5e7;color:#b07a20}
+  .gentry{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #ede7d6}
+  .gdesc{flex:1;font-size:12.5px;color:#5c6b62;min-width:0}
+  .gpay-wrap{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+  .gtagihan{font-family:'Marcellus',serif;font-size:12px;color:#9aa89f;white-space:nowrap}
+  .gpay{background:none;border:1.4px solid var(--gold);color:var(--green-dk);border-radius:99px;
+    padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;font-family:inherit;font-weight:600}
+  .gpay:active{background:#f2dca055}
+  .gbadge-lunas{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;letter-spacing:.4px;background:#e4f4ec;color:var(--ok)}
+  .gpaid-val{font-family:'Marcellus',serif;font-size:12px;color:var(--ok);white-space:nowrap}
+  .gunpay{background:none;border:none;color:#c5cfc9;font-size:13px;cursor:pointer;padding:0 2px;line-height:1}
   .gdel{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:2px 6px;line-height:1}
   .empty{text-align:center;color:#9aa89f;font-size:13px;padding:18px 0}
 
@@ -251,6 +262,20 @@
   </div>
 </div>
 
+<!-- MODAL PEMBAYARAN -->
+<div class="modal" id="bayarModal">
+  <div class="sheet">
+    <h3>Update Pembayaran</h3>
+    <p class="note" id="bayarDesc">—</p>
+    <label>Nilai pembayaran (Rp)</label>
+    <input type="number" id="bayarInput" inputmode="numeric" style="margin-bottom:4px">
+    <p class="hint">Default = harga item. Bisa diisi lebih atau kurang sesuai kesepakatan.</p>
+    <button class="btn btn-gold" id="bayarSave" style="margin-top:14px">✓ Tandai Sudah Bayar</button>
+    <button class="btn btn-ghost" id="bayarReset" style="color:var(--red)">✕ Hapus / Belum Bayar</button>
+    <button class="btn btn-ghost" id="bayarClose">Batal</button>
+  </div>
+</div>
+
 <!-- MODAL SETTINGS -->
 <div class="modal" id="settingModal">
   <div class="sheet">
@@ -346,7 +371,7 @@ async function loadFromDB(){
     sbFetch('/rest/v1/lelang_entries?select=*&order=seq'),
     sbFetch('/rest/v1/lelang_settings?select=*'),
   ]);
-  state.entries=(rows||[]).map(r=>({_id:r.id,itemId:r.item_id,nama:r.nama,qty:+r.qty,ts:r.ts}));
+  state.entries=(rows||[]).map(r=>({_id:r.id,itemId:r.item_id,nama:r.nama,qty:+r.qty,ts:r.ts,paid:!!r.paid,nilayBayar:+r.nilai_bayar||0}));
   state.seq=(rows||[]).reduce((m,r)=>Math.max(m,r.seq),0)+1;
   (settings||[]).forEach(s=>{try{
     if(s.key==='panitia') state.panitia=JSON.parse(s.value);
@@ -374,11 +399,12 @@ async function addEntryDB(entry){
   setSync('saving');
   try{
     const res=await sbFetch('/rest/v1/lelang_entries',{method:'POST',
-      body:JSON.stringify({seq:state.seq++,item_id:entry.itemId,nama:entry.nama,qty:entry.qty,ts:entry.ts})
+      body:JSON.stringify({seq:state.seq++,item_id:entry.itemId,nama:entry.nama,qty:entry.qty,ts:entry.ts,paid:false,nilai_bayar:0})
     });
     entry._id=res[0].id;
     setSync('ok');
   }catch(e){setSync('error'); toast('Gagal simpan, coba lagi');}
+  entry.paid=false; entry.nilayBayar=0;
   state.entries.push(entry); render();
 }
 async function deleteEntryDB(sbId){
@@ -386,6 +412,24 @@ async function deleteEntryDB(sbId){
   state.entries=state.entries.filter(e=>e._id!==sbId); render();
   try{
     await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'DELETE',headers:{'Prefer':''}});
+    setSync('ok');
+  }catch(e){setSync('error');}
+}
+async function markPaymentDB(sbId, nilai){
+  const e=state.entries.find(x=>x._id===sbId); if(!e) return;
+  e.paid=true; e.nilayBayar=nilai; setSync('saving'); render();
+  try{
+    await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'PATCH',
+      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:true,nilai_bayar:nilai})});
+    setSync('ok');
+  }catch(e){setSync('error');}
+}
+async function cancelPaymentDB(sbId){
+  const e=state.entries.find(x=>x._id===sbId); if(!e) return;
+  e.paid=false; e.nilayBayar=0; setSync('saving'); render();
+  try{
+    await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'PATCH',
+      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:false,nilai_bayar:0})});
     setSync('ok');
   }catch(e){setSync('error');}
 }
@@ -498,17 +542,27 @@ function render(){
     ll.innerHTML=names.map(nama=>{
       const ents=groups[nama];
       const totNama=ents.reduce((s,e)=>s+entryNominal(e),0);
+      const paidCount=ents.filter(e=>e.paid).length;
+      let badge='';
+      if(paidCount>0&&paidCount===ents.length) badge='<span class="gbadge-grp all">SEMUA LUNAS</span>';
+      else if(paidCount>0) badge=`<span class="gbadge-grp part">${paidCount}/${ents.length} lunas</span>`;
       const rows=ents.map(e=>{
         const it=itemById(e.itemId);
         const desc=e.itemId===0?'Infaq bebas':`${e.qty} ${it.sat} · ${it.nama}`;
+        const defaultVal=entryNominal(e);
+        const payArea=e.paid
+          ?`<div class="gpay-wrap"><span class="gbadge-lunas">LUNAS</span><span class="gpaid-val">${rp(e.nilayBayar)}</span><button class="gunpay" data-id="${e._id}" title="Batal bayar">↩</button></div>`
+          :`<div class="gpay-wrap"><span class="gtagihan">${rp(defaultVal)}</span><button class="gpay" data-id="${e._id}" data-default="${defaultVal}">Bayar</button></div>`;
         return `<div class="gentry">
           <span class="gdesc">${desc}</span>
-          <span class="gnom">${rp(entryNominal(e))}</span>
+          ${payArea}
           <button class="gdel" data-id="${e._id}">×</button>
         </div>`;
       }).join('');
       return `<div class="group">
-        <div class="ghead"><span class="gname">${esc(nama)}</span><span class="gtotal">${rp(totNama)}</span></div>
+        <div class="ghead"><span class="gname">${esc(nama)}</span>
+          <div class="ghead-right">${badge}<span class="gtotal">${rp(totNama)}</span></div>
+        </div>
         ${rows}
       </div>`;
     }).join('');
@@ -543,9 +597,21 @@ $('#btnAdd').addEventListener('click',async()=>{
 });
 
 $('#logList').addEventListener('click',e=>{
-  const b=e.target.closest('.gdel'); if(!b)return;
-  const id=+b.dataset.id;
-  if(confirm('Hapus entri ini?')) deleteEntryDB(id);
+  const del=e.target.closest('.gdel');
+  if(del){ if(confirm('Hapus entri ini?')) deleteEntryDB(+del.dataset.id); return; }
+  const pay=e.target.closest('.gpay');
+  if(pay){
+    const sbId=+pay.dataset.id;
+    const defVal=+pay.dataset.default||0;
+    const input=prompt(`Nilai pembayaran:\n(default tagihan: ${rp(defVal)})`, defVal);
+    if(input===null) return;
+    const val=parseFloat(String(input).replace(/[^0-9]/g,''));
+    if(!val||val<=0){ toast('Nilai tidak valid'); return; }
+    markPaymentDB(sbId, val);
+    return;
+  }
+  const unpay=e.target.closest('.gunpay');
+  if(unpay){ cancelPaymentDB(+unpay.dataset.id); return; }
 });
 
 ['setNama','setWa','setRek'].forEach(k=>{
@@ -620,17 +686,36 @@ function buildBroadcast(){
 }
 function buildRekap(){
   if(!state.entries.length) return 'Belum ada donatur.';
-  let L=['*REKAP DONATUR LELANG — KELOMPOK 4*','('+nowStr()+')',''];
-  let n=1;
-  state.entries.forEach(e=>{
-    const it=itemById(e.itemId);
-    const d = e.itemId===0 ? 'Infaq bebas' : e.qty+' '+it.sat+' '+it.nama;
-    L.push(n+'. '+(e.nama||'(tanpa nama)')+' — '+d+' = '+rp(entryNominal(e)));
-    n++;
+  const g=grouped();
+  const totalTagihan=totalTerkumpul();
+  const totalBayar=state.entries.filter(e=>e.paid).reduce((s,e)=>s+e.nilayBayar,0);
+  let L=['*REKAP SHODAQOH LELANG — MASJID KELOMPOK 4*','('+nowStr()+')',''];
+  let no=1;
+  Object.keys(g).forEach(nama=>{
+    const ents=g[nama];
+    const subtotal=ents.reduce((s,e)=>s+entryNominal(e),0);
+    const subBayar=ents.filter(e=>e.paid).reduce((s,e)=>s+e.nilayBayar,0);
+    L.push(`*${no++}. ${nama}*`);
+    ents.forEach(e=>{
+      const it=itemById(e.itemId);
+      const d=e.itemId===0?'Infaq bebas':e.qty+' '+it.sat+' '+it.nama;
+      const badge=e.paid?` — *LUNAS ${rp(e.nilayBayar)}*`:' — (belum bayar)';
+      L.push(`   ${d} = ${rp(entryNominal(e))}${badge}`);
+    });
+    const sisaNama=subtotal-subBayar;
+    L.push(`   Tagihan: ${rp(subtotal)} | Bayar: ${rp(subBayar)}${sisaNama>0?' | Sisa: '+rp(sisaNama):''}`)
+    L.push('');
   });
-  L.push('');
-  L.push('*TOTAL TERKUMPUL: '+rp(totalTerkumpul())+'*');
-  L.push('Sisa kebutuhan: '+rp(Math.max(0,TARGET-totalTerkumpul())));
+  L.push('─'.repeat(30));
+  L.push('*TOTAL TAGIHAN: '+rp(totalTagihan)+'*');
+  L.push('*Total terbayar: '+rp(totalBayar)+'*');
+  L.push('Sisa belum bayar: '+rp(Math.max(0,totalTagihan-totalBayar)));
+  const p=state.panitia;
+  if(p.nama||p.wa||p.rek){
+    L.push('');
+    if(p.nama||p.wa) L.push('Konfirmasi: *'+(p.nama||'Panitia')+(p.wa?' – WA '+p.wa:'')+'*');
+    if(p.rek) L.push('Rekening: *'+p.rek+'*');
+  }
   return L.join('\n');
 }
 
