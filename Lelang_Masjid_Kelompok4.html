@@ -74,6 +74,35 @@
   .btn-ghost{background:#fff;border:1.4px solid var(--line);color:var(--green-dk)}
   .btn-sm{padding:9px;font-size:13px;margin-top:0}
 
+  /* custom dropdown */
+  .csel{position:relative;-webkit-user-select:none;user-select:none}
+  .csel-val{
+    display:flex;align-items:center;gap:8px;
+    padding:11px 12px;border:1.4px solid var(--line);border-radius:10px;
+    font-size:13.5px;color:var(--ink);background:#fcfaf3;cursor:pointer;
+  }
+  .csel-val .cv-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .csel-val .cv-arr{font-size:11px;color:#7b8a81;transition:transform .2s;flex:0 0 auto}
+  .csel.open .csel-val{border-color:var(--gold);border-radius:10px 10px 0 0}
+  .csel.open .cv-arr{transform:rotate(180deg)}
+  .csel-panel{
+    display:none;position:absolute;top:100%;left:0;right:0;z-index:100;
+    background:#fff;border:1.4px solid var(--gold);border-top:none;
+    border-radius:0 0 12px 12px;max-height:280px;overflow-y:auto;
+    box-shadow:0 16px 32px -12px #0009;
+  }
+  .csel.open .csel-panel{display:block}
+  .cgl{font-family:'Marcellus',serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--green);padding:7px 14px 3px;background:#f7f2e8;border-bottom:1px solid #ede7d6;font-weight:700}
+  .copt{display:flex;align-items:center;padding:11px 14px;font-size:13.5px;color:var(--ink);
+    cursor:pointer;border-bottom:1px solid #f5f0ea;gap:10px;line-height:1.3}
+  .copt:last-child{border-bottom:none}
+  .copt:hover,.copt:active{background:#f0ebe0}
+  .copt.sel{background:#edf7f2;color:var(--green-dk);font-weight:600}
+  .copt .cn{font-size:11.5px;color:#9aa89f;font-family:'Marcellus',serif;flex:0 0 18px;text-align:right}
+  .copt .ct{flex:1}
+  .copt .cp{font-size:11.5px;color:#8a978d;white-space:nowrap}
+
   /* item list */
   .kat-title{font-family:'Marcellus',serif;font-size:13px;letter-spacing:1px;color:var(--green);margin:14px 2px 6px;text-transform:uppercase}
   .item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed #d8cfb6}
@@ -155,7 +184,10 @@
   <div class="card">
     <h2>Catat Shodaqoh Masuk</h2>
     <label>Item lelang</label>
-    <select id="selItem"></select>
+    <div class="csel" id="cselItem">
+      <div class="csel-val" id="cselVal"><span class="cv-text">Loading...</span><span class="cv-arr">▾</span></div>
+      <div class="csel-panel" id="cselPanel"></div>
+    </div>
     <div class="grid2">
       <div>
         <label>Nama jamaah</label>
@@ -305,25 +337,46 @@ function toast(msg){
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1900);
 }
 
-/* ---------- build item dropdown ---------- */
-(function fillSelect(){
-  const sel=$('#selItem'); let html='';
-  let lastKat='';
-  ITEMS.forEach(i=>{
-    if(i.kat!==lastKat){ if(lastKat)html+='</optgroup>'; html+=`<optgroup label="${i.kat}">`; lastKat=i.kat; }
-    html+=`<option value="${i.id}">${i.id}. ${i.nama} · ${(i.harga/1000).toFixed(0)}rb/${i.sat}</option>`;
-  });
-  html+='</optgroup>';
-  html+=`<optgroup label="LAINNYA"><option value="0">Infaq bebas (tulis nominal)</option></optgroup>`;
-  sel.innerHTML=html;
-})();
+/* ---------- custom dropdown ---------- */
+let currentItemId = ITEMS[0].id;
 
-/* unit label changes for bebas */
-$('#selItem').addEventListener('change',()=>{
-  const id=+$('#selItem').value;
-  if(id===0){ $('#lblJumlah').textContent='Nominal (Rp)'; $('#inJumlah').value=''; $('#inJumlah').step=1000; $('#inJumlah').placeholder='cth. 100000'; }
-  else { const it=itemById(id); $('#lblJumlah').textContent='Jumlah ('+it.sat+')'; $('#inJumlah').step=1; if(!$('#inJumlah').value)$('#inJumlah').value=1; }
+function cselLabel(id){
+  if(id===0) return 'Infaq bebas · tulis nominal';
+  const it=itemById(id);
+  return `${it.id}. ${it.nama} · ${(it.harga/1000).toFixed(0)}rb/${it.sat}`;
+}
+function buildCsel(){
+  let html=''; let lastKat='';
+  ITEMS.forEach(i=>{
+    if(i.kat!==lastKat){ html+=`<div class="cgl">${i.kat}</div>`; lastKat=i.kat; }
+    html+=`<div class="copt${i.id===currentItemId?' sel':''}" data-id="${i.id}">
+      <span class="cn">${i.id}</span><span class="ct">${i.nama}</span>
+      <span class="cp">${(i.harga/1000).toFixed(0)}rb/${i.sat}</span></div>`;
+  });
+  html+=`<div class="cgl">LAINNYA</div>
+    <div class="copt${currentItemId===0?' sel':''}" data-id="0">
+      <span class="cn">—</span><span class="ct">Infaq bebas</span>
+      <span class="cp">tulis nominal</span></div>`;
+  $('#cselPanel').innerHTML=html;
+  $('#cselVal').querySelector('.cv-text').textContent=cselLabel(currentItemId);
+}
+function onItemChange(id){
+  currentItemId=id; buildCsel();
+  if(id===0){
+    $('#lblJumlah').textContent='Nominal (Rp)'; $('#inJumlah').value='';
+    $('#inJumlah').step=1000; $('#inJumlah').placeholder='cth. 100000';
+  } else {
+    const it=itemById(id); $('#lblJumlah').textContent='Jumlah ('+it.sat+')';
+    $('#inJumlah').step=1; if(!$('#inJumlah').value) $('#inJumlah').value=1;
+  }
+}
+$('#cselVal').addEventListener('click',e=>{ e.stopPropagation(); $('#cselItem').classList.toggle('open'); });
+$('#cselPanel').addEventListener('click',e=>{
+  const opt=e.target.closest('.copt'); if(!opt) return;
+  $('#cselItem').classList.remove('open'); onItemChange(+opt.dataset.id);
 });
+document.addEventListener('click',e=>{ if(!e.target.closest('#cselItem')) $('#cselItem').classList.remove('open'); });
+buildCsel();
 
 /* ---------- render ---------- */
 function render(){
@@ -401,7 +454,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 
 /* ---------- actions ---------- */
 $('#btnAdd').addEventListener('click',()=>{
-  const id=+$('#selItem').value;
+  const id=currentItemId;
   const nama=$('#inNama').value.trim();
   let val=parseFloat($('#inJumlah').value);
   if(!nama){ toast('Isi nama jamaah dulu'); $('#inNama').focus(); return; }
@@ -443,9 +496,14 @@ $('#setJamaah').addEventListener('input',()=>{
 });
 
 $('#btnReset').addEventListener('click',()=>{
-  if(confirm('Hapus SEMUA data lelang? Tidak bisa dibatalkan.')){
-    state={entries:[],seq:1,panitia:state.panitia}; save(state); render(); toast('Data dikosongkan');
-  }
+  const k1=prompt('Masukkan kode akses pertama:');
+  if(k1===null) return;
+  if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
+  const k2=prompt('Masukkan kode akses kedua:');
+  if(k2===null) return;
+  if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
+  state={entries:[],seq:1,panitia:state.panitia,narasi:state.narasi,jamaah:state.jamaah};
+  save(state); render(); toast('Data berhasil dikosongkan');
 });
 
 /* ---------- broadcast text ---------- */
