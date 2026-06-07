@@ -443,6 +443,31 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
   font-family:inherit;cursor:pointer;
 }
 
+/* ── QRIS PAYMENT SECTION ───────────────── */
+.pay-toggle{display:flex;gap:8px;margin-bottom:14px}
+.pay-toggle-btn{
+  flex:1;height:42px;border:2px solid var(--border);background:#fff;
+  border-radius:var(--r2);font-size:13px;font-weight:700;font-family:inherit;
+  cursor:pointer;transition:.2s;color:var(--muted);
+}
+.pay-toggle-btn.active{border-color:var(--g1);background:var(--g3);color:var(--g2)}
+.qris-section{display:none;margin-bottom:16px}
+.qris-section.show{display:block}
+.qris-box{
+  background:#fff7ed;border:2px solid #fb923c;border-radius:var(--r2);
+  padding:16px;text-align:center;
+}
+.qris-title{font-size:12px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.qris-img{width:220px;height:220px;margin:0 auto 12px;display:block;border-radius:8px;border:4px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+.qris-merchant{font-weight:800;font-size:15px;margin-bottom:2px}
+.qris-nominal{font-size:22px;font-weight:900;color:#ea580c;margin-bottom:8px}
+.qris-expired{font-size:12px;color:var(--muted);margin-bottom:8px}
+.qris-countdown{font-size:18px;font-weight:900;color:var(--red);font-family:monospace}
+.qris-apps{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.qris-app-badge{font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;background:#f1f5f9;color:var(--muted)}
+.qris-loading{padding:40px;text-align:center;color:var(--muted);font-size:13px}
+.qris-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+
 /* ── TOAST ───────────────────────────────── */
 #toasts{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{padding:12px 16px;border-radius:var(--r2);color:#fff;font-size:13px;font-weight:600;max-width:300px;box-shadow:var(--sh2);opacity:0;transform:translateX(20px);transition:.3s}
@@ -668,12 +693,30 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 
     <!-- Bank transfer info (umum) -->
     <div class="bank-section" id="bank-section">
-      <div class="bank-title">💳 Transfer ke Rekening</div>
-      <div class="bank-nama" id="bank-nama">—</div>
-      <div class="bank-norek" id="bank-norek">—</div>
-      <div class="bank-atas" id="bank-atas">—</div>
-      <div class="bank-nominal" id="bank-nominal">—</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">⚠️ Diproses setelah admin verifikasi</div>
+      <!-- Toggle metode bayar -->
+      <div class="pay-toggle" id="pay-toggle" style="display:none">
+        <button class="pay-toggle-btn active" id="toggle-transfer" onclick="switchPayMethod('transfer')">🏦 Transfer Bank</button>
+        <button class="pay-toggle-btn" id="toggle-qris" onclick="switchPayMethod('qris')">📱 QRIS ShopeePay</button>
+      </div>
+
+      <!-- Info transfer bank -->
+      <div id="pay-transfer-info">
+        <div class="bank-title">💳 Transfer ke Rekening</div>
+        <div class="bank-nama" id="bank-nama">—</div>
+        <div class="bank-norek" id="bank-norek">—</div>
+        <div class="bank-atas" id="bank-atas">—</div>
+        <div class="bank-nominal" id="bank-nominal">—</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">⚠️ Diproses setelah admin verifikasi</div>
+      </div>
+
+      <!-- QRIS section -->
+      <div class="qris-section" id="qris-section">
+        <div class="qris-box">
+          <div class="qris-title">⚡ Bayar via QRIS ShopeePay</div>
+          <div id="qris-content" class="qris-loading">⏳ Memuat QRIS...</div>
+        </div>
+        <div class="qris-note">⚠️ Setelah transfer, beritahu admin untuk konfirmasi pembayaran. Pesanan diproses otomatis setelah dikonfirmasi.</div>
+      </div>
     </div>
 
     <button class="btn-konfirm" id="btn-konfirm" onclick="submitOrder()">⚡ Konfirmasi & Pesan</button>
@@ -696,6 +739,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
 // ═══════════════════════════════════════════
 // SUPABASE
@@ -712,6 +756,82 @@ let allKategori=[], allProduk=[], settingMap={}, supplierCfg=null;
 let currentKat=null, selectedProduk=null, currentCustomer=null;
 let detectedOperator=null, custTimer=null;
 let nomorHistory={};
+
+// ── QRIS state ──────────────────────────────
+let qrisTimer=null, qrisExpiredAt=null, currentPayMethod='transfer';
+
+function switchPayMethod(method) {
+  currentPayMethod = method;
+  const isQris = method === 'qris';
+  document.getElementById('toggle-transfer').classList.toggle('active', !isQris);
+  document.getElementById('toggle-qris').classList.toggle('active', isQris);
+  document.getElementById('pay-transfer-info').style.display = isQris ? 'none' : 'block';
+  const qrisSection = document.getElementById('qris-section');
+  qrisSection.classList.toggle('show', isQris);
+  if (isQris) loadQris();
+}
+
+async function loadQris() {
+  const content = document.getElementById('qris-content');
+  if (!content) return;
+  if (!selectedProduk) { content.innerHTML = '<div class="qris-loading">Pilih produk dulu</div>'; return; }
+
+  content.innerHTML = '<div class="qris-loading">⏳ Membuat QRIS...</div>';
+  clearInterval(qrisTimer);
+
+  try {
+    const refId = window._pendingRefId || ('PPOB-' + Date.now().toString(36).toUpperCase());
+    const res = await fetch('https://proxy.ubnb.pw/api/qris/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f' },
+      body: JSON.stringify({ amount: selectedProduk.harga_jual, ref_id: refId })
+    });
+    const json = await res.json();
+    if (!json.success || !json.qris_string) throw new Error(json.error || 'Gagal generate QRIS');
+
+    // Render QR ke canvas lalu ambil dataURL
+    const canvas = document.createElement('canvas');
+    await QRCode.toCanvas(canvas, json.qris_string, { width: 220, margin: 1, errorCorrectionLevel: 'M' });
+    const qrDataUrl = canvas.toDataURL('image/png');
+
+    qrisExpiredAt = new Date(json.expired_at).getTime();
+
+    content.innerHTML = `
+      <img src="${qrDataUrl}" class="qris-img" alt="QRIS">
+      <div class="qris-merchant">R Dwi Setyo Nugroho</div>
+      <div class="qris-nominal">${rp(json.amount)}</div>
+      <div class="qris-expired">QR kedaluwarsa dalam</div>
+      <div class="qris-countdown" id="qris-countdown">10:00</div>
+      <div class="qris-apps">
+        <span class="qris-app-badge">ShopeePay</span>
+        <span class="qris-app-badge">GoPay</span>
+        <span class="qris-app-badge">OVO</span>
+        <span class="qris-app-badge">DANA</span>
+        <span class="qris-app-badge">m-Banking</span>
+      </div>`;
+
+    // Countdown timer
+    qrisTimer = setInterval(() => {
+      const sisa = qrisExpiredAt - Date.now();
+      const el = document.getElementById('qris-countdown');
+      if (!el) { clearInterval(qrisTimer); return; }
+      if (sisa <= 0) {
+        clearInterval(qrisTimer);
+        el.textContent = 'KEDALUWARSA';
+        el.style.color = 'var(--red)';
+        content.insertAdjacentHTML('beforeend',
+          '<div style="margin-top:10px"><button onclick="loadQris()" style="background:var(--g1);color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:700;cursor:pointer">🔄 Perbarui QRIS</button></div>');
+        return;
+      }
+      const m = Math.floor(sisa / 60000);
+      const s = Math.floor((sisa % 60000) / 1000);
+      el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }, 1000);
+
+  } catch(e) {
+    content.innerHTML = `<div class="qris-loading">❌ ${e.message}<br><br><button onclick="loadQris()" style="background:var(--g1);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer">Coba Lagi</button></div>`;
+  }
+}
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -1198,6 +1318,8 @@ function showKonfirmasi(){
 
 function tutupModal(){
   document.getElementById('modal-overlay').classList.remove('show');
+  clearInterval(qrisTimer);
+  currentPayMethod='transfer';
 }
 
 function handleOverlayClick(e){
@@ -1246,12 +1368,20 @@ function searchCustomer(val){
       currentCustomer={tipe:'umum',nama:val,no_hp:val};
       found.className='cust-found umum show';
       found.innerHTML='<div class="cf-nama">🔓 '+val+'</div><div class="cf-meta">Tidak ditemukan di data anggota/jamaah</div><span class="cf-tag tag-u">Umum</span><div class="cf-bayar">💳 Wajib transfer manual</div>';
-      // Tampilkan info bank
+      // Tampilkan info bank + toggle QRIS
       document.getElementById('bank-nama').textContent=settingMap['bank_tujuan_nama']||'BSI';
       document.getElementById('bank-norek').textContent=settingMap['bank_tujuan_no_rek']||'—';
       document.getElementById('bank-atas').textContent=settingMap['bank_tujuan_atas_nama']||'—';
       document.getElementById('bank-nominal').textContent='Transfer: '+rp(selectedProduk?.harga_jual);
       document.getElementById('bank-section').classList.add('show');
+      // Tampilkan toggle metode bayar
+      document.getElementById('pay-toggle').style.display='flex';
+      // Reset ke transfer dulu
+      currentPayMethod='transfer';
+      document.getElementById('toggle-transfer').classList.add('active');
+      document.getElementById('toggle-qris').classList.remove('active');
+      document.getElementById('pay-transfer-info').style.display='block';
+      document.getElementById('qris-section').classList.remove('show');
     } catch(e){console.error(e);}
   }, 600);
 }
@@ -1298,7 +1428,8 @@ async function submitOrder(){
     }
 
     // Insert transaksi
-    const metodeBayar=custTipe==='anggota'?'utang_anggota':custTipe==='jamaah'?'utang_jamaah':'transfer_umum';
+    const metodeBayar=custTipe==='anggota'?'utang_anggota':custTipe==='jamaah'?'utang_jamaah':
+      (currentPayMethod==='qris'?'qris_shopee':'transfer_umum');
     const statusBayar=custTipe==='umum'?'menunggu':'utang';
     const {data:trx,error:trxErr}=await sb.from('ppob_transaksi').insert({
       ref_id:refId,pelanggan_id:pelangganId,
@@ -1354,7 +1485,9 @@ async function submitOrder(){
     // Success
     tutupModal();
     const msg=custTipe==='umum'
-      ? 'Silakan transfer '+rp(selectedProduk.harga_jual)+' ke '+( settingMap['bank_tujuan_nama']||'BSI')+' '+( settingMap['bank_tujuan_no_rek']||'')+'. Diproses setelah verifikasi admin.'
+      ? (currentPayMethod==='qris'
+          ? 'Scan QRIS ShopeePay lalu beritahu admin untuk konfirmasi. Pesanan diproses setelah dikonfirmasi.'
+          : 'Silakan transfer '+rp(selectedProduk.harga_jual)+' ke '+( settingMap['bank_tujuan_nama']||'BSI')+' '+( settingMap['bank_tujuan_no_rek']||'')+'. Diproses setelah verifikasi admin.')
       : 'Pesanan dicatat sebagai utang '+rp(selectedProduk.harga_jual)+'. Ditagih saat MPPS atau konfirmasi admin.';
     document.getElementById('sc-ref').textContent=refId;
     document.getElementById('sc-msg').textContent=msg;
