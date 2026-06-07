@@ -1018,6 +1018,10 @@ tr:last-child td { border-bottom: none; }
       <button class="nav-item" data-page="agen">
         <span class="nav-icon">👥</span> Daftar Agen
       </button>
+      <button class="nav-item" data-page="pengajuan">
+        <span class="nav-icon">📝</span> Pengajuan Anggota
+        <span class="nav-badge" id="badge-pengajuan" style="display:none">0</span>
+      </button>
 
       <div class="nav-section">Keuangan</div>
       <button class="nav-item" data-page="saldo">
@@ -1471,6 +1475,45 @@ tr:last-child td { border-bottom: none; }
               </thead>
               <tbody id="plg-tbody">
                 <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Memuat pelanggan...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PENGAJUAN ANGGOTA PPOB -->
+      <div class="page" id="page-pengajuan">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📝 Pengajuan Anggota Pasca-bayar</div>
+              <div class="card-subtitle" id="pengajuan-subtitle">Daftar pengajuan member toko PPOB</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <select class="filter-select" id="pengajuan-filter-status" onchange="loadPengajuan()" style="height:36px">
+                <option value="">Semua Status</option>
+                <option value="pending">⏳ Pending</option>
+                <option value="aktif">✅ Aktif</option>
+                <option value="nonaktif">🚫 Nonaktif</option>
+              </select>
+              <button class="btn btn-secondary" onclick="loadPengajuan()">🔄 Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nama</th>
+                  <th>Tipe</th>
+                  <th>No HP</th>
+                  <th style="text-align:right">Total Piutang</th>
+                  <th>Status</th>
+                  <th>Didaftarkan</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="pengajuan-tbody">
+                <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">Memuat...</td></tr>
               </tbody>
             </table>
           </div>
@@ -2033,6 +2076,7 @@ const pageTitles = {
   laporan: 'Laporan & Analytics',
   produk: 'Atur Produk',
   agen: 'Daftar Agen',
+  pengajuan: 'Pengajuan Anggota Pasca-bayar',
   saldo: 'Isi Saldo',
   bank: 'Pengaturan Bank',
   supplier: 'Supplier',
@@ -2053,7 +2097,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 
     // Trigger page-specific loader
     // Mapping khusus: page 'agen' → fungsi loadPelanggan, 'pengaturan' → loadPengaturan
-    const pageLoaderMap = { agen: 'loadPelanggan', pengaturan: 'loadPengaturan', bank: 'loadBank' };
+    const pageLoaderMap = { agen: 'loadPelanggan', pengaturan: 'loadPengaturan', bank: 'loadBank', pengajuan: 'loadPengajuan' };
     const loaderName = pageLoaderMap[page] || ('load' + page.charAt(0).toUpperCase() + page.slice(1));
     if (typeof window[loaderName] === 'function') {
       window[loaderName]();
@@ -3156,6 +3200,167 @@ Metode: ${metode || 'Tunai'}`)) return;
 
 
 // ═══════════════════════════════════════════════════════════════
+// PENGAJUAN ANGGOTA PPOB — loadPengajuan, approvePengajuan, tolakPengajuan
+// ═══════════════════════════════════════════════════════════════
+async function loadPengajuan() {
+  const tbody = document.getElementById('pengajuan-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">⏳ Memuat...</td></tr>`;
+
+  try {
+    const statusFilter = document.getElementById('pengajuan-filter-status')?.value;
+    let q = sb.from('ppob_member')
+      .select('id,nama,no_hp,status,total_piutang,anggota_id,jamaah_did,created_at,approved_at,approved_by,catatan_admin')
+      .order('created_at', { ascending: false });
+    if (statusFilter) q = q.eq('status', statusFilter);
+
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = data || [];
+
+    // Update badge pending
+    const pendingCount = rows.filter(r => r.status === 'pending').length;
+    const badge = document.getElementById('badge-pengajuan');
+    if (badge) {
+      badge.textContent = pendingCount;
+      badge.style.display = pendingCount > 0 ? 'inline' : 'none';
+    }
+    document.getElementById('pengajuan-subtitle').textContent =
+      `${rows.length} member | ${pendingCount} menunggu persetujuan`;
+
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">
+        <div style="font-size:32px">📝</div>Belum ada pengajuan
+      </td></tr>`;
+      return;
+    }
+
+    const statusBadge = {
+      pending:  '<span class="badge pending">⏳ Pending</span>',
+      aktif:    '<span class="badge success">✅ Aktif</span>',
+      nonaktif: '<span class="badge fail">🚫 Nonaktif</span>'
+    };
+    const tipeLabel = r => r.anggota_id ? '⭐ Anggota' : r.jamaah_did ? '👥 Jamaah' : '—';
+
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td><div style="font-weight:700">${r.nama}</div>
+        ${r.catatan_admin ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${r.catatan_admin}</div>` : ''}
+      </td>
+      <td>${tipeLabel(r)}</td>
+      <td style="font-family:monospace;font-size:12px">${r.no_hp}</td>
+      <td style="text-align:right;font-weight:700;color:${Number(r.total_piutang)>0?'var(--red)':'var(--text-muted)'}">
+        ${Number(r.total_piutang) > 0 ? formatRp(r.total_piutang) : '—'}
+      </td>
+      <td>${statusBadge[r.status] || r.status}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${formatTgl(r.created_at, false)}</td>
+      <td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${r.status === 'pending' ? `
+            <button class="btn btn-primary" style="padding:4px 12px;font-size:12px;height:30px"
+              onclick="approvePengajuan(${r.id},'${r.nama.replace(/'/g,"\\'")}')">✅ Approve</button>
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;height:30px;color:var(--red);border-color:var(--red)"
+              onclick="tolakPengajuan(${r.id},'${r.nama.replace(/'/g,"\\'")}')">✕ Tolak</button>
+          ` : ''}
+          ${r.status === 'aktif' ? `
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;height:30px;color:var(--red);border-color:var(--red)"
+              onclick="nonaktifkanMember(${r.id},'${r.nama.replace(/'/g,"\\'")}')">🚫 Nonaktifkan</button>
+          ` : ''}
+          ${r.status === 'nonaktif' ? `
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;height:30px"
+              onclick="aktifkanMember(${r.id},'${r.nama.replace(/'/g,"\\'")}')">✅ Aktifkan</button>
+          ` : ''}
+          <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px;height:30px"
+            onclick="lihatTrxMember(${r.id},'${r.nama.replace(/'/g,"\\'")}')">📋 Transaksi</button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  } catch(e) {
+    console.error('loadPengajuan error:', e);
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--red);padding:24px;text-align:center">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function approvePengajuan(id, nama) {
+  if (!konfirmasi(`Approve pengajuan "${nama}"?\n\nMember akan bisa login dan transaksi pasca-bayar.`)) return;
+  const { error } = await sb.from('ppob_member').update({
+    status: 'aktif',
+    approved_at: new Date().toISOString(),
+    approved_by: currentUser?.nama_lengkap || currentUser?.username,
+    updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { toast('Gagal approve: ' + error.message, 'error'); return; }
+  toast(`✅ ${nama} diapprove — sudah bisa login`, 'success');
+  await loadPengajuan();
+}
+
+async function tolakPengajuan(id, nama) {
+  const catatan = prompt(`Alasan penolakan untuk "${nama}" (opsional):`);
+  if (catatan === null) return; // cancel
+  const { error } = await sb.from('ppob_member').update({
+    status: 'nonaktif',
+    catatan_admin: catatan || 'Ditolak admin',
+    updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { toast('Gagal tolak: ' + error.message, 'error'); return; }
+  toast(`Pengajuan ${nama} ditolak`, 'warning');
+  await loadPengajuan();
+}
+
+async function nonaktifkanMember(id, nama) {
+  if (!konfirmasi(`Nonaktifkan member "${nama}"?\n\nMember tidak bisa login sampai diaktifkan kembali.`)) return;
+  const { error } = await sb.from('ppob_member').update({
+    status: 'nonaktif', updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  toast(`${nama} dinonaktifkan`, 'warning');
+  await loadPengajuan();
+}
+
+async function aktifkanMember(id, nama) {
+  if (!konfirmasi(`Aktifkan kembali member "${nama}"?`)) return;
+  const { error } = await sb.from('ppob_member').update({
+    status: 'aktif', updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  toast(`✅ ${nama} diaktifkan kembali`, 'success');
+  await loadPengajuan();
+}
+
+async function lihatTrxMember(memberId, nama) {
+  const { data } = await sb.from('ppob_transaksi')
+    .select('ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,created_at')
+    .eq('ppob_member_id', memberId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (!data || data.length === 0) {
+    alert(`${nama}\n\nBelum ada transaksi.`);
+    return;
+  }
+  const totalPiutang = data
+    .filter(t => t.status_bayar === 'utang')
+    .reduce((s, t) => s + Number(t.harga_jual || 0), 0);
+  const detail = data.map((t, i) =>
+    `${i+1}. ${t.nama_produk} (${t.tujuan}) — ${formatRp(t.harga_jual)} [${t.status}/${t.status_bayar}]`
+  ).join('\n');
+  alert(`TRANSAKSI: ${nama}\nTotal belum lunas: ${formatRp(totalPiutang)}\n\n${detail}`);
+}
+
+// Load badge pengajuan saat login
+async function loadPengajuanBadge() {
+  try {
+    const { count } = await sb.from('ppob_member')
+      .select('id', { count: 'exact', head: true }).eq('status', 'pending');
+    const badge = document.getElementById('badge-pengajuan');
+    if (badge) {
+      badge.textContent = count || 0;
+      badge.style.display = count > 0 ? 'inline' : 'none';
+    }
+  } catch(_) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PHASE 3 — VPS PROXY INTEGRATION (sync-products + execute-trx)
 // ═══════════════════════════════════════════════════════════════
 
@@ -3309,6 +3514,8 @@ onLoginSuccess = function() {
   setTglShortcut('month', /*silent*/true);
   // Load saldo topbar dari DB
   loadSaldoTopbar();
+  // Load badge pengajuan
+  loadPengajuanBadge();
   // Load dashboard
   loadDashboard();
   // Load pengaturan (untuk isi field branding, bank, dll)
