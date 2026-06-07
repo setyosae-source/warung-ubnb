@@ -1029,6 +1029,34 @@ app.post('/api/notify/test', authProxy, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// POST /api/notify/member-baru — v2.2.0
+// Dipanggil dari toko-ppob.html setelah customer submit pengajuan
+// Body: { nama, no_hp, tipe }
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/notify/member-baru', authProxy, async (req, res) => {
+  const { nama, no_hp, tipe } = req.body;
+  if (!nama || !no_hp) return res.status(400).json({ error: 'nama dan no_hp wajib' });
+  if (!TELEGRAM_ENABLED) return res.json({ ok: true, skipped: 'telegram disabled' });
+
+  try {
+    const tipeLabel = tipe === 'anggota' ? '⭐ Anggota UBNB' : tipe === 'jamaah' ? '👥 Jamaah Desa' : '—';
+    const msg =
+      `📝 <b>PENGAJUAN ANGGOTA PPOB</b>\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `Nama: <b>${nama}</b>\n` +
+      `No HP: <code>${no_hp}</code>\n` +
+      `Tipe: ${tipeLabel}\n\n` +
+      `🔗 <a href="${ADMIN_URL}#pengajuan">Buka Admin → Pengajuan Anggota</a>`;
+
+    const result = await sendTelegram(msg);
+    res.json({ ok: result.ok });
+  } catch(e) {
+    console.error('[notify/member-baru]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
 // POST /api/qris/generate — v2.2.0
 // Generate QRIS dinamis dari QRIS statis ShopeePay UBNB
 // Body: { amount: number, ref_id: string }
@@ -1087,7 +1115,7 @@ app.post('/api/qris/generate', authProxy, async (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint tidak ditemukan',
-    available: ['/health', '/api/digiflazz/*', '/webhook/digiflazz', '/api/qris/generate']
+    available: ['/health', '/api/digiflazz/*', '/webhook/digiflazz', '/api/qris/generate', '/api/notify/member-baru']
   });
 });
 
@@ -1097,7 +1125,7 @@ app.use((req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   UBNB PPOB Proxy v2.1.6                ║
+║   UBNB PPOB Proxy v2.2.0                ║
 ║   Port: ${PORT}  |  Mode: ${(DIGIFLAZZ_MODE + '          ').substring(0,10)}       ║
 ║   Supabase: skltbmcrqutevmtcxqxj        ║
 ║   Webhook signature: HMAC-SHA1          ║
