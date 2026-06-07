@@ -880,7 +880,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 // ═══════════════════════════════════════════
 // SUPABASE
@@ -1159,15 +1159,11 @@ async function loadQris() {
     const json = await res.json();
     if (!json.success || !json.qris_string) throw new Error(json.error || 'Gagal generate QRIS');
 
-    // Render QR ke canvas lalu ambil dataURL
-    const canvas = document.createElement('canvas');
-    await QRCode.toCanvas(canvas, json.qris_string, { width: 220, margin: 1, errorCorrectionLevel: 'M' });
-    const qrDataUrl = canvas.toDataURL('image/png');
-
     qrisExpiredAt = new Date(json.expired_at).getTime();
 
+    // Render placeholder dulu
     content.innerHTML = `
-      <img src="${qrDataUrl}" class="qris-img" alt="QRIS">
+      <div id="qr-render-target" style="width:220px;height:220px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center"></div>
       <div class="qris-merchant">R Dwi Setyo Nugroho</div>
       <div class="qris-nominal">${rp(json.amount)}</div>
       <div class="qris-expired">QR kedaluwarsa dalam</div>
@@ -1179,6 +1175,19 @@ async function loadQris() {
         <span class="qris-app-badge">DANA</span>
         <span class="qris-app-badge">m-Banking</span>
       </div>`;
+
+    // Render QR pakai qrcodejs ke div target
+    const qrTarget = document.getElementById('qr-render-target');
+    new QRCode(qrTarget, {
+      text: json.qris_string,
+      width: 220, height: 220,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    // Style canvas/img hasil render
+    await new Promise(r => setTimeout(r, 80));
+    const qrEl = qrTarget.querySelector('img,canvas');
+    if (qrEl) { qrEl.style.cssText='width:220px;height:220px;border-radius:8px;border:4px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,.12)'; }
 
     // Countdown timer
     qrisTimer = setInterval(() => {
