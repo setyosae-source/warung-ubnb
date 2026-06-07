@@ -1724,6 +1724,16 @@ tr:last-child td { border-bottom: none; }
               <input type="text" class="filter-input" id="set-pesan_toko_tutup" style="width:100%;height:40px"></div>
             <div class="form-group"><label>No WA Notifikasi Admin</label>
               <input type="text" class="filter-input" id="set-notifikasi_wa_admin" placeholder="628xxx" style="width:100%;height:40px"></div>
+            <div class="form-group">
+              <label>Sync Transaksi Sukses ke Warung</label>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+                <div class="toggle" id="toggle-sync-warung" onclick="toggleSyncWarung(this)" style="cursor:pointer"></div>
+                <span id="sync-warung-label" style="font-size:13px;color:var(--text-muted)">Nonaktif</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+                Jika aktif, setiap transaksi PPOB yang sukses otomatis tercatat di warung.html (tabel ppob lama) via Kas Digiflazz.
+              </div>
+            </div>
             <button class="btn btn-primary" style="width:100%;height:42px;margin-top:8px" onclick="simpanSettingGroup(['mode_operasi','toko_buka','pesan_toko_tutup','notifikasi_wa_admin'])">💾 Simpan Sistem</button>
           </div>
         </div>
@@ -2595,9 +2605,32 @@ async function loadPengaturan() {
       const el = document.getElementById('set-' + key);
       if (el) el.value = val || '';
     });
+
+    // Set toggle sync_ke_warung
+    const syncAktif = settings['sync_ke_warung'] === 'true';
+    const toggleEl = document.getElementById('toggle-sync-warung');
+    const labelEl  = document.getElementById('sync-warung-label');
+    if (toggleEl) toggleEl.classList.toggle('on', syncAktif);
+    if (labelEl)  labelEl.textContent = syncAktif ? '✅ Aktif — sync ke warung' : 'Nonaktif';
+
   } catch(e) {
     console.error('loadPengaturan error:', e);
     toast('Gagal load pengaturan: ' + e.message, 'error');
+  }
+}
+
+async function toggleSyncWarung(el) {
+  const isOn = el.classList.toggle('on');
+  const label = document.getElementById('sync-warung-label');
+  if (label) label.textContent = isOn ? '✅ Aktif — sync ke warung' : 'Nonaktif';
+  const { error } = await sb.from('ppob_setting')
+    .update({ value: isOn ? 'true' : 'false', updated_at: new Date().toISOString(), updated_by: currentUser?.id })
+    .eq('key', 'sync_ke_warung');
+  if (error) {
+    toast('Gagal simpan: ' + error.message, 'error');
+    el.classList.toggle('on'); // rollback
+  } else {
+    toast(isOn ? '✅ Sync ke warung AKTIF' : 'Sync ke warung NONAKTIF', isOn ? 'success' : 'warning');
   }
 }
 
