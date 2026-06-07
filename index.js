@@ -102,6 +102,36 @@ const ADMIN_URL                = process.env.ADMIN_URL || 'https://ubnb.pw/admin
 const DIGIFLAZZ_BASE   = 'https://api.digiflazz.com/v1';
 const IS_DEV           = DIGIFLAZZ_MODE === 'dev';
 
+// QRIS statis ShopeePay UBNB (R Dwi Setyo Nugroho)
+// Bisa di-override via env QRIS_STATIS
+const QRIS_STATIS = process.env.QRIS_STATIS ||
+  '00020101021240540016ID.CO.SHOPEE.WWW01189360091830141211690208339152505204482953033605802ID5919R Dwi Setyo Nugroho6015Jakarta Selatan61051295062470804DMCT99350002000125Php98qOiEy0XmgyOEjdJmwhIH6304254B';
+
+// ═══════════════════════════════════════════════════════════════
+// HELPER: Konversi QRIS statis → dinamis (port dari idlanyor/qris-api)
+// Logika: inject nominal ke string QRIS, hitung ulang CRC16
+// ═══════════════════════════════════════════════════════════════
+function qrisCRC16(str) {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+    }
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+}
+
+function convertQrisDinamis(qrisStatis, nominal) {
+  nominal = String(parseInt(nominal, 10)); // pastikan angka bersih
+  let qris = qrisStatis.slice(0, -4);     // buang CRC lama
+  qris = qris.replace('010211', '010212'); // set mode dinamis
+  const parts = qris.split('5802ID');
+  const tag54 = '54' + String(nominal.length).padStart(2, '0') + nominal;
+  const fix = parts[0].trim() + tag54 + '5802ID' + parts[1].trim();
+  return fix + qrisCRC16(fix);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // HELPER: MD5 signature untuk Digiflazz API request
 // ═══════════════════════════════════════════════════════════════
@@ -999,12 +1029,65 @@ app.post('/api/notify/test', authProxy, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// POST /api/qris/generate — v2.2.0
+// Generate QRIS dinamis dari QRIS statis ShopeePay UBNB
+// Body: { amount: number, ref_id: string }
+// Return: { qris_string, ref_id, amount, expired_at }
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/qris/generate', authProxy, async (req, res) => {
+  try {
+    const { amount, ref_id } = req.body;
+    if (!amount || isNaN(Number(amount)) || Number(amount) < 1) {
+      return res.status(400).json({ error: 'amount wajib diisi dan harus > 0' });
+    }
+    if (!ref_id) {
+      return res.status(400).json({ error: 'ref_id wajib diisi' });
+    }
+
+    // Ambil QRIS statis — prioritas: DB > env > hardcode
+    let qrisStatis = QRIS_STATIS;
+    try {
+      const setting = await supabaseQuery(
+        'ppob_setting', 'GET', null, '?key=eq.qris_statis&select=value'
+      );
+      if (setting?.[0]?.value) qrisStatis = setting[0].value;
+    } catch (_) { /* fallback ke env/hardcode */ }
+
+    const qrisDinamis = convertQrisDinamis(qrisStatis, String(Math.round(amount)));
+
+    // Expired 10 menit dari sekarang
+    const expiredAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    // Log ke DB (update ppob_transaksi: metode_bayar = qris, expired)
+    await supabaseQuery(
+      `ppob_transaksi?ref_id=eq.${encodeURIComponent(ref_id)}`,
+      'PATCH',
+      { metode_bayar: 'qris_shopee', updated_at: new Date().toISOString() }
+    ).catch(() => {});
+
+    console.log(`[qris/generate] ref=${ref_id} amount=${amount}`);
+
+    res.json({
+      success: true,
+      qris_string: qrisDinamis,
+      ref_id,
+      amount: Number(amount),
+      expired_at: expiredAt
+    });
+
+  } catch (e) {
+    console.error('[qris/generate]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
 // 404 handler
 // ═══════════════════════════════════════════════════════════════
 app.use((req, res) => {
   res.status(404).json({
     error: 'Endpoint tidak ditemukan',
-    available: ['/health', '/api/digiflazz/*', '/webhook/digiflazz']
+    available: ['/health', '/api/digiflazz/*', '/webhook/digiflazz', '/api/qris/generate']
   });
 });
 
