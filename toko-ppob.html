@@ -483,7 +483,31 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .popup-btn-proses{flex:1;height:48px;background:linear-gradient(135deg,var(--g2),var(--g1));border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:#fff}
 .popup-btn-proses:disabled{opacity:.6;cursor:not-allowed}
 
-/* ── PROCESSING SCREEN ───────────────────── */
+/* ── STRUK ANGGOTA ───────────────────────── */
+.struk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.3s}
+.struk-overlay.show{opacity:1;pointer-events:all}
+.struk-sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px 20px 32px;max-height:85vh;overflow-y:auto;transform:translateY(100%);transition:.3s}
+.struk-overlay.show .struk-sheet{transform:translateY(0)}
+.struk-header{text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px dashed var(--border)}
+.struk-logo{font-size:13px;font-weight:900;color:var(--g2);letter-spacing:1px}
+.struk-merchant{font-size:11px;color:var(--muted);margin-top:2px}
+.struk-status{display:inline-block;padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;margin-top:10px}
+.struk-status.sukses{background:#d1fae5;color:#065f46}
+.struk-status.gagal{background:#fee2e2;color:#991b1b}
+.struk-status.pending{background:#fef3c7;color:#92400e}
+.struk-body{margin-bottom:16px}
+.struk-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+.struk-row:last-child{border-bottom:none}
+.struk-row-label{color:var(--muted);font-weight:500}
+.struk-row-val{font-weight:700;text-align:right;max-width:60%;word-break:break-all}
+.struk-token{background:#fefce8;border:2px dashed #ca8a04;border-radius:10px;padding:14px;text-align:center;margin:12px 0}
+.struk-token-label{font-size:11px;color:#92400e;font-weight:700;text-transform:uppercase;margin-bottom:6px}
+.struk-token-val{font-size:22px;font-weight:900;color:#92400e;font-family:monospace;letter-spacing:2px;cursor:pointer}
+.struk-footer{text-align:center;font-size:11px;color:var(--muted);padding-top:12px;border-top:2px dashed var(--border);line-height:1.6}
+.struk-btns{display:flex;gap:10px;margin-top:16px}
+.struk-btn{flex:1;height:44px;border:none;border-radius:var(--r2);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer}
+.struk-btn-wa{background:#25D366;color:#fff}
+.struk-btn-tutup{background:#f1f5f9;color:var(--text)}
 .proc-overlay{position:fixed;inset:0;background:var(--navy);z-index:9500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;opacity:0;pointer-events:none;transition:.3s}
 .proc-overlay.show{opacity:1;pointer-events:all}
 .proc-spinner{width:72px;height:72px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 24px}
@@ -928,6 +952,11 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
   </div>
 </div>
 
+<!-- STRUK ANGGOTA -->
+<div class="struk-overlay" id="struk-overlay" onclick="if(event.target===this)tutupStruk()">
+  <div class="struk-sheet" id="struk-sheet"></div>
+</div>
+
 <!-- PROCESSING OVERLAY -->
 <div class="proc-overlay" id="proc-overlay">
   <div class="proc-spinner"></div>
@@ -1193,9 +1222,10 @@ async function renderAkun(){
         </div>
         <div class="trx-item-bottom">
           <div class="trx-item-harga">${rp(t.harga_jual)}</div>
-          <div style="display:flex;gap:6px">
+          <div style="display:flex;gap:6px;align-items:center">
             <span class="trx-status-badge ${trxCls}">${t.status.toUpperCase()}</span>
             <span class="trx-status-badge ${bayarCls}">${bayarTxt}</span>
+            <button onclick='tampilStrukAnggota(${JSON.stringify(t)})' style="background:var(--g1);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">📄 Struk</button>
           </div>
         </div>
       </div>`;
@@ -1994,6 +2024,59 @@ function shareHasilWA(d){
   else if(d.sn) teks+=`SN: ${d.sn}\n`;
   teks+=`Ref: ${d.ref_id}\n\n_PPOB UBNB Desa Perwira_`;
   window.open('https://wa.me/?text='+encodeURIComponent(teks),'_blank');
+}
+
+function tutupStruk(){
+  document.getElementById('struk-overlay').classList.remove('show');
+}
+
+async function tampilStrukAnggota(t){
+  // Ambil data lengkap termasuk sn dari DB
+  const {data}=await sb.from('ppob_transaksi')
+    .select('ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,sn,message,created_at,completed_at')
+    .eq('ref_id',t.ref_id).single();
+  const d=data||t;
+
+  const tgl=dt=>new Date(dt).toLocaleString('id-ID',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const isPLN=(d.sn||'').replace(/\D/g,'').length>=16||(d.nama_produk||'').toLowerCase().includes('token');
+  const statusCls=d.status==='sukses'?'sukses':d.status==='gagal'?'gagal':'pending';
+  const statusTxt=d.status==='sukses'?'✅ SUKSES':d.status==='gagal'?'❌ GAGAL':'⏳ PROSES';
+  const bayarTxt=d.status_bayar==='lunas'?'✅ Lunas':'⏳ Belum Lunas';
+
+  const tokenBlock=isPLN&&d.sn?`
+    <div class="struk-token">
+      <div class="struk-token-label">⚡ Nomor Token PLN</div>
+      <div class="struk-token-val" onclick="salinToken('${d.sn}')">${formatToken(d.sn)}</div>
+      <div style="font-size:11px;color:#92400e;margin-top:4px">👆 Ketuk untuk salin</div>
+    </div>`:'';
+
+  document.getElementById('struk-sheet').innerHTML=`
+    <div class="struk-header">
+      <div class="struk-logo">PPOB UBNB</div>
+      <div class="struk-merchant">Desa Perwira · Layanan Digital</div>
+      <div class="struk-status ${statusCls}">${statusTxt}</div>
+    </div>
+    ${tokenBlock}
+    <div class="struk-body">
+      <div class="struk-row"><span class="struk-row-label">Produk</span><span class="struk-row-val">${d.nama_produk||'—'}</span></div>
+      <div class="struk-row"><span class="struk-row-label">Tujuan</span><span class="struk-row-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>
+      <div class="struk-row"><span class="struk-row-label">Total</span><span class="struk-row-val" style="color:var(--g2);font-size:15px">${rp(d.harga_jual)}</span></div>
+      ${d.sn&&!isPLN?`<div class="struk-row"><span class="struk-row-label">SN</span><span class="struk-row-val" style="font-size:11px">${d.sn}</span></div>`:''}
+      <div class="struk-row"><span class="struk-row-label">Status Bayar</span><span class="struk-row-val">${bayarTxt}</span></div>
+      <div class="struk-row"><span class="struk-row-label">Waktu</span><span class="struk-row-val">${tgl(d.completed_at||d.created_at)}</span></div>
+      <div class="struk-row"><span class="struk-row-label">Ref ID</span><span class="struk-row-val" style="font-size:11px;font-family:monospace">${d.ref_id}</span></div>
+      ${d.message?`<div class="struk-row"><span class="struk-row-label">Keterangan</span><span class="struk-row-val" style="font-size:12px">${d.message}</span></div>`:''}
+    </div>
+    <div class="struk-footer">
+      Terima kasih telah menggunakan layanan PPOB UBNB<br>
+      Desa Perwira · ${new Date().getFullYear()}
+    </div>
+    <div class="struk-btns">
+      <button class="struk-btn struk-btn-wa" onclick='shareHasilWA(${JSON.stringify({ref_id:d.ref_id,nama_produk:d.nama_produk,tujuan:d.tujuan,harga_jual:d.harga_jual,sn:d.sn})})'>📱 WhatsApp</button>
+      <button class="struk-btn struk-btn-tutup" onclick="tutupStruk()">✕ Tutup</button>
+    </div>`;
+
+  document.getElementById('struk-overlay').classList.add('show');
 }
 
 function tutupModal(){
