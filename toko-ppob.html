@@ -483,6 +483,20 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .popup-btn-proses{flex:1;height:48px;background:linear-gradient(135deg,var(--g2),var(--g1));border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:#fff}
 .popup-btn-proses:disabled{opacity:.6;cursor:not-allowed}
 
+/* ── INQUIRY PASCABAYAR ──────────────────── */
+.inquiry-box{background:#fff;border:2px solid var(--border);border-radius:var(--r2);padding:16px;margin-top:12px;transition:.3s}
+.inquiry-box.loading{border-color:var(--amber);background:#fffbeb}
+.inquiry-box.sukses{border-color:var(--g1);background:var(--g3)}
+.inquiry-box.error{border-color:var(--red);background:#fee2e2}
+.inquiry-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.inquiry-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:13px}
+.inquiry-row:last-child{border-bottom:none}
+.inquiry-row-label{color:var(--muted);font-weight:500}
+.inquiry-row-val{font-weight:700;text-align:right}
+.inquiry-total{font-size:16px;font-weight:900;color:var(--g2);margin-top:8px;padding-top:8px;border-top:2px solid var(--g1);display:flex;justify-content:space-between}
+.inquiry-spinner{display:flex;align-items:center;gap:8px;color:var(--amber);font-size:13px;font-weight:600}
+.inquiry-spinner::before{content:'';width:16px;height:16px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+
 /* ── STRUK ANGGOTA ───────────────────────── */
 .struk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.3s}
 .struk-overlay.show{opacity:1;pointer-events:all}
@@ -813,6 +827,13 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     </div>
   </div>
 
+  <!-- Inquiry Pascabayar Box -->
+  <div id="inquiry-pasca-box" style="display:none;padding:0 16px">
+    <div class="inquiry-box" id="inquiry-pasca-inner">
+      <div class="inquiry-spinner">Mengecek tagihan...</div>
+    </div>
+  </div>
+
   <!-- Produk -->
   <div class="produk-section">
     <div id="produk-content">
@@ -1010,6 +1031,10 @@ let nomorHistory={};
 
 // ── QRIS state ──────────────────────────────
 let qrisTimer=null, qrisExpiredAt=null, currentPayMethod='qris';
+
+// ── Inquiry Pascabayar state ─────────────────
+let pascaInquiryData=null; // hasil inquiry: {tr_name, nominal, admin, price, period, tr_id, buyer_sku_code, customer_no}
+let pascaInquiryTimer=null;
 
 // ── Member session ───────────────────────────
 let currentMember=null; // { id, nama, no_hp, total_piutang, tipe:'member'|'umum' }
@@ -1563,7 +1588,11 @@ async function goKategori(katId){
   } else histRow.style.display='none';
 
   // Load produk kategori ini
-  document.getElementById('produk-content').innerHTML='<div class="empty-state"><div class="ico">'+currentKat.icon+'</div><p>Masukkan nomor tujuan<br>untuk melihat produk</p></div>';
+  const isPascaKat=['TAGIHAN_PLN','TAGIHAN_HP','PDAM','BPJS','TELKOM','MULTIFINANCE','PAJAK'].includes(currentKat.kode);
+  const placeholderTeks=isPascaKat
+    ? 'Masukkan nomor pelanggan<br>untuk cek tagihan'
+    : 'Masukkan nomor tujuan<br>untuk melihat produk';
+  document.getElementById('produk-content').innerHTML=`<div class="empty-state"><div class="ico">${currentKat.icon}</div><p>${placeholderTeks}</p></div>`;
 
   // Preload produk kategori
   allProduk=[];
@@ -1597,6 +1626,83 @@ function isKategoriTokenPLN(){
   const kode=(currentKat?.kode||'').toUpperCase();
   // TOKEN_PLN — kategori prabayar PLN (yang bisa pakai endpoint /v1/inquiry-pln)
   return kode === 'TOKEN_PLN';
+}
+
+function isKategoriPasca(){
+  const pasca=['TAGIHAN_PLN','TAGIHAN_HP','PDAM','BPJS','TELKOM','MULTIFINANCE','PAJAK'];
+  return pasca.includes((currentKat?.kode||'').toUpperCase());
+}
+
+function resetPascaInquiry(){
+  pascaInquiryData=null;
+  document.getElementById('inquiry-pasca-box').style.display='none';
+}
+
+async function doInquiryPasca(nomor){
+  if(!currentKat||!isKategoriPasca()) return;
+  if(!nomor||nomor.length<5) return;
+
+  const produk=allProduk[0];
+  if(!produk) return;
+
+  pascaInquiryData=null;
+  selectedProduk=null;
+  document.getElementById('bottom-bar').classList.remove('show');
+
+  const box=document.getElementById('inquiry-pasca-box');
+  const inner=document.getElementById('inquiry-pasca-inner');
+  box.style.display='block';
+  inner.className='inquiry-box loading';
+  inner.innerHTML='<div class="inquiry-spinner">Mengecek tagihan...</div>';
+
+  try{
+    const refId='INQ-'+Date.now().toString(36).toUpperCase();
+    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/inquiry-pasca',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
+      body:JSON.stringify({customer_no:nomor,buyer_sku_code:produk.sku_supplier,ref_id:refId})
+    });
+    const json=await res.json();
+    const d=json?.data||{};
+
+    if(d.response_code==='00'||d.message?.toLowerCase().includes('sukses')||d.message?.toLowerCase().includes('success')){
+      pascaInquiryData={
+        tr_name:d.tr_name||d.customer_name||'—',
+        nominal:d.nominal||0,
+        admin:d.admin||0,
+        price:d.price||d.selling_price||0,
+        period:d.period||d.periode||'—',
+        tr_id:d.tr_id||null,
+        buyer_sku_code:produk.sku_supplier,
+        customer_no:nomor,
+        ref_id:refId,
+        produk_id:produk.id,
+        sku_supplier:produk.sku_supplier,
+        nama_produk:produk.nama_produk
+      };
+
+      inner.className='inquiry-box sukses';
+      inner.innerHTML=`
+        <div class="inquiry-label">📋 Detail Tagihan</div>
+        <div class="inquiry-row"><span class="inquiry-row-label">Nama</span><span class="inquiry-row-val">${pascaInquiryData.tr_name}</span></div>
+        <div class="inquiry-row"><span class="inquiry-row-label">Periode</span><span class="inquiry-row-val">${pascaInquiryData.period}</span></div>
+        <div class="inquiry-row"><span class="inquiry-row-label">Tagihan</span><span class="inquiry-row-val">${rp(pascaInquiryData.nominal)}</span></div>
+        <div class="inquiry-row"><span class="inquiry-row-label">Admin</span><span class="inquiry-row-val">${rp(pascaInquiryData.admin)}</span></div>
+        <div class="inquiry-total"><span>Total Bayar</span><span>${rp(pascaInquiryData.price)}</span></div>`;
+
+      selectedProduk={...produk,harga_jual:pascaInquiryData.price};
+      document.getElementById('bb-harga').textContent=rp(pascaInquiryData.price);
+      document.getElementById('bottom-bar').classList.add('show');
+      document.getElementById('btn-bayar').innerHTML='💳 Bayar Tagihan';
+
+    } else {
+      inner.className='inquiry-box error';
+      inner.innerHTML=`<div style="color:var(--red);font-size:13px;font-weight:600">❌ ${d.message||'Tagihan tidak ditemukan'}</div>`;
+    }
+  }catch(e){
+    inner.className='inquiry-box error';
+    inner.innerHTML=`<div style="color:var(--red);font-size:13px;font-weight:600">❌ Koneksi bermasalah: ${e.message}</div>`;
+  }
 }
 
 function resetPlnInfo(){
@@ -1711,15 +1817,22 @@ function onNomorInput(val){
   }
 
   // ⚡ INQUIRY PLN — auto-trigger untuk kategori Token PLN
-  // Nomor meter PLN minimal 11 digit (subscriber id) atau 11-12 digit (meter no)
   if(isKategoriTokenPLN()){
     if(cleanVal.length>=11){
-      // Auto inquiry setelah 1 detik delay (debounce)
       plnInquiryTimer=setTimeout(()=>inquiryPLN(cleanVal), 1000);
     } else {
-      // Nomor belum lengkap — sembunyikan info
       resetPlnInfo();
       updateBottomBarPLN();
+    }
+  }
+
+  // 📋 INQUIRY PASCABAYAR — auto-trigger untuk kategori tagihan
+  if(isKategoriPasca()){
+    if(cleanVal.length>=5){
+      clearTimeout(pascaInquiryTimer);
+      pascaInquiryTimer=setTimeout(()=>doInquiryPasca(cleanVal), 1200);
+    } else {
+      resetPascaInquiry();
     }
   }
 }
@@ -1737,12 +1850,16 @@ function clearNomor(){
   document.getElementById('bottom-bar').classList.remove('show');
   document.getElementById('produk-content').innerHTML='<div class="empty-state"><div class="ico">'+(currentKat?.icon||'📱')+'</div><p>Masukkan nomor tujuan<br>untuk melihat produk</p></div>';
   resetPlnInfo();
+  resetPascaInquiry();
 }
 
 // ═══════════════════════════════════════════
 // RENDER PRODUK LIST
 // ═══════════════════════════════════════════
 function renderProdukList(nomor){
+  // Pascabayar tidak perlu pilih produk — inquiry sudah handle
+  if(isKategoriPasca()) return;
+
   let list=allProduk;
 
   // Filter by operator jika terdeteksi
@@ -1803,11 +1920,16 @@ function showKonfirmasi(){
   if(isKategoriTokenPLN() && !plnInquiryData){
     toast('Cek nomor meter dulu (tunggu verifikasi)','e');return;
   }
+  if(isKategoriPasca() && !pascaInquiryData){
+    toast('Tunggu cek tagihan selesai dulu','e');return;
+  }
 
   document.getElementById('od-produk').textContent=selectedProduk.nama_produk;
   document.getElementById('od-tujuan').textContent=nomor;
   if(isKategoriTokenPLN() && plnInquiryData){
     document.getElementById('od-operator').textContent=plnInquiryData.name+' · '+plnInquiryData.segment_power;
+  } else if(isKategoriPasca() && pascaInquiryData){
+    document.getElementById('od-operator').textContent=pascaInquiryData.tr_name+' · '+pascaInquiryData.period;
   } else {
     document.getElementById('od-operator').textContent=detectedOperator||currentKat?.nama||'—';
   }
@@ -1888,10 +2010,16 @@ async function autoEksekusiDigiflazz(refId){
       return;
     }
 
-    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction',{
+    const isPasca=trx.tipe==='pascabayar'||isKategoriPasca();
+    const endpoint=isPasca?'pay-pasca':'transaction';
+    const body=isPasca
+      ? {customer_no:trx.tujuan, buyer_sku_code:trx.sku_supplier, ref_id:refId, transaksi_id:trx.id}
+      : {ref_id:refId, customer_no:trx.tujuan, buyer_sku_code:trx.sku_supplier};
+
+    const res=await fetch(`https://proxy.ubnb.pw/api/digiflazz/${endpoint}`,{
       method:'POST',
       headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
-      body:JSON.stringify({ref_id:refId,customer_no:trx.tujuan,buyer_sku_code:trx.sku_supplier})
+      body:JSON.stringify(body)
     });
     const json=await res.json();
     document.getElementById('proc-overlay').classList.remove('show');
@@ -2642,11 +2770,6 @@ async function salinRefIdSc() {
 }
 
 // Salin Token PLN
-async function salinToken(token) {
-  await copyToClipboard(token);
-  toast('⚡ Token PLN disalin', 's');
-}
-
 // Helper: copy ke clipboard (cross-browser)
 async function copyToClipboard(text) {
   try {
