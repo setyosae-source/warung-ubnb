@@ -359,8 +359,8 @@ table.bmt-tbl .total-row td{font-weight:700;background:var(--HL);border-top:2px 
 /* ── PRINT ─────────────────────────────────── */
 @media print{
   @page{size:A4 portrait;margin:12mm 10mm;}
-  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
-  html,body{background:white!important;background-color:white!important;}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;}
+  html,body{background:white!important;background-color:white!important;color-scheme:light!important;}
   body>*{display:none!important;}
   body>#print-area{display:block!important;padding:0;font-family:Arial,sans-serif;font-size:9pt;background:white!important;color:#1a1a1a!important;width:100%;}
   /* Header dokumen */
@@ -1363,15 +1363,12 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 <!-- Preview Cetak -->
 <div class="preview-cetak-overlay" id="preview-cetak">
   <div class="preview-cetak-box">
-    <div class="preview-cetak-toolbar">
-      <div class="preview-cetak-title" id="preview-cetak-title">Preview Dokumen</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <div id="kartu-tab-toggle" style="display:none;background:rgba(255,255,255,.1);border-radius:var(--rs);padding:2px">
-          <button class="btn sm" id="tab-rencana" onclick="switchKartuMode('rencana')" style="background:var(--E);color:var(--H);border:none;font-weight:700;padding:4px 10px;font-size:11px">📋 Rencana</button>
-          <button class="btn sm" id="tab-aktual" onclick="switchKartuMode('aktual')" style="background:transparent;color:white;border:none;font-weight:600;padding:4px 10px;font-size:11px">📊 Aktual</button>
-        </div>
-        <button class="btn emas sm" onclick="executePrint()" style="font-weight:700">🖨️ Cetak</button>
-        <button class="btn sm" onclick="tutupPreviewCetak()" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3)">✕ Tutup</button>
+    <div class="preview-cetak-toolbar" style="flex-wrap:wrap;gap:6px;padding:8px 12px">
+      <div class="preview-cetak-title" id="preview-cetak-title" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Preview Dokumen</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+        <button class="btn sm" onclick="executePDF()" style="background:#2563eb;color:white;border:none;font-weight:700;padding:5px 10px;font-size:11px">📥 PDF</button>
+        <button class="btn emas sm" onclick="executePrint()" style="font-weight:700;padding:5px 10px;font-size:11px">🖨️ Print</button>
+        <button class="btn sm" onclick="tutupPreviewCetak()" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);padding:5px 10px;font-size:11px">✕</button>
       </div>
     </div>
     <div class="preview-cetak-content">
@@ -2741,40 +2738,8 @@ function buildKartuPrint(a){
 function cetakKartu(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
   if(!a){toast('Buka detail akad dulu dari Daftar',true);return;}
-  // Default mode = rencana, simpan akad untuk toggle
   window._kartuAkad=a;
-  window._kartuMode='rencana';
-  bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuPreview(a), ()=>buildKartuPrint(a));
-  // Tampilkan toggle tab khusus untuk kartu angsuran
-  const tg=document.getElementById('kartu-tab-toggle');
-  if(tg)tg.style.display='flex';
-  syncKartuTabUI();
-}
-function switchKartuMode(mode){
-  window._kartuMode=mode;
-  const a=window._kartuAkad;
-  if(!a)return;
-  if(mode==='rencana'){
-    document.getElementById('preview-cetak-paper').innerHTML=buildKartuPreview(a);
-    _printFn=()=>buildKartuPrint(a);
-  } else {
-    document.getElementById('preview-cetak-paper').innerHTML=buildKartuAktualPreview(a);
-    _printFn=()=>buildKartuAktualPrint(a);
-  }
-  syncKartuTabUI();
-}
-function syncKartuTabUI(){
-  const mode=window._kartuMode||'rencana';
-  const tR=document.getElementById('tab-rencana');
-  const tA=document.getElementById('tab-aktual');
-  if(!tR||!tA)return;
-  if(mode==='rencana'){
-    tR.style.background='var(--E)';tR.style.color='var(--H)';
-    tA.style.background='transparent';tA.style.color='white';
-  } else {
-    tA.style.background='var(--E)';tA.style.color='var(--H)';
-    tR.style.background='transparent';tR.style.color='white';
-  }
+  bukaPreviewCetak('Kartu Angsuran — '+a.nama_jamaah, buildKartuAktualPreview(a), ()=>buildKartuAktualPrint(a));
 }
 
 // ============================================================
@@ -3043,11 +3008,21 @@ function bukaPreviewCetak(judul, previewHTML, printFn){
 }
 function tutupPreviewCetak(){
   closeModal('preview-cetak');
-  // Reset toggle tab untuk preview berikutnya
-  const tg=document.getElementById('kartu-tab-toggle');
-  if(tg)tg.style.display='none';
   window._kartuAkad=null;
-  window._kartuMode=null;
+}
+function executePDF(){
+  if(_printFn){
+    const area=document.getElementById('print-area');
+    area.innerHTML=_printFn();
+    tutupPreviewCetak();
+    setTimeout(()=>{
+      area.style.display='block';
+      setTimeout(()=>{
+        window.print();
+        setTimeout(()=>{area.style.display='none';area.innerHTML='';},1500);
+      },400);
+    },150);
+  }
 }
 function executePrint(){
   if(_printFn){
@@ -3058,9 +3033,9 @@ function executePrint(){
       area.style.display='block';
       setTimeout(()=>{
         window.print();
-        setTimeout(()=>{area.style.display='none';area.innerHTML='';},1000);
-      },300);
-    },100);
+        setTimeout(()=>{area.style.display='none';area.innerHTML='';},1500);
+      },400);
+    },150);
   }
 }
 
