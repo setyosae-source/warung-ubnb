@@ -468,6 +468,21 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .qris-loading{padding:40px;text-align:center;color:var(--muted);font-size:13px}
 .qris-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
 
+/* ── POPUP KONFIRMASI NOMOR ──────────────── */
+.popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:.2s}
+.popup-overlay.show{opacity:1;pointer-events:all}
+.popup-card{background:#fff;border-radius:20px;padding:24px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3);transform:scale(.95);transition:.2s}
+.popup-overlay.show .popup-card{transform:scale(1)}
+.popup-icon{font-size:48px;text-align:center;margin-bottom:12px}
+.popup-title{font-size:17px;font-weight:900;text-align:center;margin-bottom:8px}
+.popup-body{font-size:14px;color:var(--muted);text-align:center;line-height:1.6;margin-bottom:8px}
+.popup-nomor{font-size:22px;font-weight:900;text-align:center;font-family:monospace;color:var(--g2);background:var(--g3);border-radius:10px;padding:10px;margin:12px 0}
+.popup-warning{font-size:12px;color:var(--red);text-align:center;font-weight:600;margin-bottom:20px}
+.popup-btns{display:flex;gap:10px}
+.popup-btn-perbaiki{flex:1;height:48px;background:#f1f5f9;border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:var(--text)}
+.popup-btn-proses{flex:1;height:48px;background:linear-gradient(135deg,var(--g2),var(--g1));border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:#fff}
+.popup-btn-proses:disabled{opacity:.6;cursor:not-allowed}
+
 /* ── TOAST ───────────────────────────────── */
 #toasts{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{padding:12px 16px;border-radius:var(--r2);color:#fff;font-size:13px;font-weight:600;max-width:300px;box-shadow:var(--sh2);opacity:0;transform:translateX(20px);transition:.3s}
@@ -813,6 +828,21 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
   </button>
 </div>
 
+<!-- POPUP KONFIRMASI NOMOR (untuk anggota) -->
+<div class="popup-overlay" id="popup-nomor">
+  <div class="popup-card">
+    <div class="popup-icon">⚠️</div>
+    <div class="popup-title">Konfirmasi Nomor Tujuan</div>
+    <div class="popup-body">Pastikan nomor berikut sudah benar:</div>
+    <div class="popup-nomor" id="popup-nomor-val">—</div>
+    <div class="popup-warning">⚠️ Jika salah, transaksi tidak dapat dibatalkan!</div>
+    <div class="popup-btns">
+      <button class="popup-btn-perbaiki" onclick="tutupPopupNomor()">✏️ Perbaiki</button>
+      <button class="popup-btn-proses" id="popup-btn-proses" onclick="prosesAnggota()">✅ Ya, Proses</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL KONFIRMASI -->
 <div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
   <div class="modal-sheet" id="modal-sheet">
@@ -853,14 +883,14 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     <div class="bank-section" id="bank-section">
       <div class="qris-section show" id="qris-section">
         <div class="qris-box">
-          <div class="qris-title">📱 Bayar via QRIS (Semua E-Wallet / Bank) </div>
+          <div class="qris-title">📱 Bayar via QRIS (GoPay / Semua Bank)</div>
           <div id="qris-content" class="qris-loading">⏳ Memuat QRIS...</div>
         </div>
         <div class="qris-note">⚠️ Setelah scan & bayar, beritahu admin untuk konfirmasi. Pesanan diproses setelah dikonfirmasi.</div>
       </div>
     </div>
 
-    <button class="btn-konfirm" id="btn-konfirm" onclick="submitOrder()">⚡ Konfirmasi & Pesan</button>
+    <button class="btn-konfirm" id="btn-konfirm" onclick="onKlikKonfirm()">⚡ Konfirmasi & Pesan</button>
     <button class="btn-batal-modal" onclick="tutupModal()">Batal</button>
   </div>
 </div>
@@ -1701,7 +1731,6 @@ function showKonfirmasi(){
     document.getElementById('od-operator').textContent=detectedOperator||currentKat?.nama||'—';
   }
   document.getElementById('od-total').textContent=rp(selectedProduk.harga_jual);
-
   const isMember=currentMember?.tipe==='member';
   // Tampilkan info member atau QRIS
   document.getElementById('modal-member-info').style.display=isMember?'block':'none';
@@ -1710,14 +1739,82 @@ function showKonfirmasi(){
   if(isMember){
     document.getElementById('modal-member-nama').textContent=currentMember.nama;
     document.getElementById('modal-member-hp').textContent=currentMember.no_hp;
+    // Label tombol anggota
+    document.getElementById('btn-konfirm').textContent='📋 Konfirmasi & Catat Tagihan';
   } else {
     // Load QRIS otomatis
     clearInterval(qrisTimer);
     document.getElementById('qris-content').innerHTML='<div class="qris-loading">⏳ Memuat QRIS...</div>';
     loadQris();
+    document.getElementById('btn-konfirm').textContent='⚡ Konfirmasi & Pesan';
   }
 
   document.getElementById('modal-overlay').classList.add('show');
+}
+
+// ── POPUP KONFIRMASI NOMOR ────────────────────
+function onKlikKonfirm(){
+  const isMember=currentMember?.tipe==='member';
+  if(isMember){
+    // Tampilkan popup konfirmasi nomor dulu
+    const nomor=document.getElementById('input-nomor').value.trim();
+    document.getElementById('popup-nomor-val').textContent=nomor;
+    document.getElementById('popup-nomor').classList.add('show');
+  } else {
+    submitOrder();
+  }
+}
+
+function tutupPopupNomor(){
+  document.getElementById('popup-nomor').classList.remove('show');
+}
+
+async function prosesAnggota(){
+  const btn=document.getElementById('popup-btn-proses');
+  btn.disabled=true;
+  btn.textContent='⏳ Memproses...';
+  tutupPopupNomor();
+
+  try{
+    // 1. Simpan dulu ke DB (catat tagihan)
+    await submitOrder();
+
+    // 2. Auto eksekusi ke Digiflazz (ambil ref_id dari transaksi terakhir)
+    if(window._lastRefId){
+      await autoEksekusiDigiflazz(window._lastRefId);
+    }
+  }finally{
+    btn.disabled=false;
+    btn.textContent='✅ Ya, Proses';
+  }
+}
+
+async function autoEksekusiDigiflazz(refId){
+  try{
+    // Ambil data transaksi
+    const {data:trx}=await sb.from('ppob_transaksi')
+      .select('id,sku_supplier,tujuan,harga_jual,status')
+      .eq('ref_id',refId).single();
+    if(!trx||trx.status!=='pending') return;
+
+    // Hit proxy eksekusi
+    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
+      body:JSON.stringify({
+        transaksi_id: trx.id,
+        sku: trx.sku_supplier,
+        customer_no: trx.tujuan,
+        ref_id: refId
+      })
+    });
+    const json=await res.json();
+    console.log('[autoEksekusi]',refId,json);
+    // Status update via webhook — tidak perlu update manual di sini
+  }catch(e){
+    console.warn('[autoEksekusi] error:',e.message);
+    // Tidak block user — webhook akan update status nanti
+  }
 }
 
 function tutupModal(){
@@ -1849,6 +1946,7 @@ async function submitOrder(){
     if(isMember) trxIns.ppob_member_id=currentMember.id;
     const {data:trx,error:trxErr}=await sb.from('ppob_transaksi').insert(trxIns).select('id').single();
     if(trxErr) throw trxErr;
+    window._lastRefId=refId; // simpan untuk auto eksekusi anggota
 
     // Catat piutang untuk member
     if(isMember&&pelangganId){
