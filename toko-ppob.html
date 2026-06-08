@@ -1774,15 +1774,20 @@ async function prosesAnggota(){
   btn.disabled=true;
   btn.textContent='⏳ Memproses...';
   tutupPopupNomor();
+  tutupModal();
 
   try{
-    // 1. Simpan dulu ke DB (catat tagihan)
+    // 1. Simpan ke DB
     await submitOrder();
 
-    // 2. Auto eksekusi ke Digiflazz (ambil ref_id dari transaksi terakhir)
-    if(window._lastRefId){
-      await autoEksekusiDigiflazz(window._lastRefId);
+    // 2. Auto eksekusi pakai _lastRefId yang disimpan submitOrder
+    const refId=window._lastRefId;
+    if(refId){
+      toast('⏳ Memproses transaksi ke Digiflazz...','i');
+      await autoEksekusiDigiflazz(refId);
     }
+  }catch(e){
+    console.error('[prosesAnggota]',e);
   }finally{
     btn.disabled=false;
     btn.textContent='✅ Ya, Proses';
@@ -1791,13 +1796,17 @@ async function prosesAnggota(){
 
 async function autoEksekusiDigiflazz(refId){
   try{
-    // Ambil data transaksi
     const {data:trx}=await sb.from('ppob_transaksi')
-      .select('id,sku_supplier,tujuan,harga_jual,status')
+      .select('id,sku_supplier,tujuan,harga_jual,status,nama_produk')
       .eq('ref_id',refId).single();
-    if(!trx||trx.status!=='pending') return;
+    if(!trx||trx.status!=='pending'){
+      // Sudah diproses, tampilkan success saja
+      document.getElementById('sc-ref').textContent=refId;
+      document.getElementById('sc-msg').textContent='Tagihan dicatat. Diproses oleh sistem.';
+      document.getElementById('success-overlay').classList.add('show');
+      return;
+    }
 
-    // Hit proxy eksekusi
     const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
@@ -1810,10 +1819,28 @@ async function autoEksekusiDigiflazz(refId){
     });
     const json=await res.json();
     console.log('[autoEksekusi]',refId,json);
-    // Status update via webhook — tidak perlu update manual di sini
+
+    // Tampilkan hasil ke user
+    const berhasil=json?.success||json?.data?.status==='Sukses';
+    const proses=json?.data?.status==='Pending'||json?.data?.status==='pending';
+    let msg='';
+    if(berhasil){
+      msg=`✅ Transaksi berhasil diproses!\nSN: ${json?.data?.sn||'-'}`;
+    } else if(proses){
+      msg='⏳ Transaksi sedang diproses. Status akan diupdate otomatis.';
+    } else {
+      msg='Tagihan dicatat. Status: '+( json?.data?.status||'diproses')+'. Cek riwayat transaksi di akun Anda.';
+    }
+    document.getElementById('sc-ref').textContent=refId;
+    document.getElementById('sc-msg').textContent=msg;
+    document.getElementById('success-overlay').classList.add('show');
+
   }catch(e){
     console.warn('[autoEksekusi] error:',e.message);
-    // Tidak block user — webhook akan update status nanti
+    // Tetap tampilkan success — tagihan sudah tercatat
+    document.getElementById('sc-ref').textContent=refId;
+    document.getElementById('sc-msg').textContent='Tagihan dicatat. Transaksi akan diproses segera.';
+    document.getElementById('success-overlay').classList.add('show');
   }
 }
 
@@ -1989,12 +2016,15 @@ async function submitOrder(){
 
     // Success
     tutupModal();
-    const msg=isMember
-      ? 'Pesanan dicatat sebagai tagihan '+rp(selectedProduk.harga_jual)+'. Ditagih saat MPPS atau konfirmasi admin.'
-      : 'Scan QRIS ShopeePay lalu beritahu admin untuk konfirmasi. Pesanan diproses setelah dikonfirmasi.';
-    document.getElementById('sc-ref').textContent=refId;
-    document.getElementById('sc-msg').textContent=msg;
-    document.getElementById('success-overlay').classList.add('show');
+    if(!isMember){
+      // Umum: tampilkan success overlay langsung
+      const msg='Scan QRIS lalu beritahu admin untuk konfirmasi. Pesanan diproses setelah dikonfirmasi.';
+      document.getElementById('sc-ref').textContent=refId;
+      document.getElementById('sc-msg').textContent=msg;
+      document.getElementById('success-overlay').classList.add('show');
+    }
+    // Anggota: success overlay ditampilkan oleh autoEksekusiDigiflazz setelah proses
+    return refId;
 
   }catch(e){
     console.error('[submitOrder]',e);
