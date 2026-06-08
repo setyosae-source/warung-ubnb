@@ -483,6 +483,39 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .popup-btn-proses{flex:1;height:48px;background:linear-gradient(135deg,var(--g2),var(--g1));border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:#fff}
 .popup-btn-proses:disabled{opacity:.6;cursor:not-allowed}
 
+/* ── PROCESSING SCREEN ───────────────────── */
+.proc-overlay{position:fixed;inset:0;background:var(--navy);z-index:9500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;opacity:0;pointer-events:none;transition:.3s}
+.proc-overlay.show{opacity:1;pointer-events:all}
+.proc-spinner{width:72px;height:72px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 24px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.proc-title{font-size:20px;font-weight:900;color:#fff;text-align:center;margin-bottom:8px}
+.proc-sub{font-size:13px;color:rgba(255,255,255,.6);text-align:center}
+
+/* ── RESULT SCREEN ───────────────────────── */
+.result-overlay{position:fixed;inset:0;z-index:9500;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:0;opacity:0;pointer-events:none;transition:.3s;overflow-y:auto}
+.result-overlay.show{opacity:1;pointer-events:all}
+.result-overlay.sukses{background:linear-gradient(160deg,#065f46,#059669)}
+.result-overlay.gagal{background:linear-gradient(160deg,#7f1d1d,#dc2626)}
+.result-inner{width:100%;max-width:480px;min-height:100vh;display:flex;flex-direction:column;padding:40px 20px 32px}
+.result-icon{font-size:72px;text-align:center;margin-bottom:16px;animation:bounceIn .5s ease}
+@keyframes bounceIn{0%{transform:scale(0)}70%{transform:scale(1.1)}100%{transform:scale(1)}}
+.result-title{font-size:26px;font-weight:900;color:#fff;text-align:center;margin-bottom:4px}
+.result-sub{font-size:14px;color:rgba(255,255,255,.7);text-align:center;margin-bottom:24px}
+.result-card{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:20px;margin-bottom:12px}
+.result-row{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)}
+.result-row:last-child{border-bottom:none}
+.result-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;margin-right:12px}
+.result-val{font-size:14px;color:#fff;font-weight:700;text-align:right;word-break:break-all}
+.result-token{background:rgba(255,255,0,.15);border:2px dashed rgba(255,255,0,.5);border-radius:12px;padding:16px;text-align:center;margin:16px 0}
+.result-token-label{font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.result-token-val{font-size:28px;font-weight:900;color:#fde047;letter-spacing:4px;font-family:monospace;cursor:pointer}
+.result-token-copy{font-size:11px;color:rgba(255,255,255,.6);margin-top:6px}
+.result-btns{display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:20px}
+.result-btn{width:100%;height:50px;border:none;border-radius:var(--r2);font-size:15px;font-weight:800;font-family:inherit;cursor:pointer;transition:.2s}
+.result-btn-primary{background:#fff;color:var(--navy)}
+.result-btn-secondary{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)}
+.result-btn-wa{background:#25D366;color:#fff}
+
 /* ── TOAST ───────────────────────────────── */
 #toasts{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{padding:12px 16px;border-radius:var(--r2);color:#fff;font-size:13px;font-weight:600;max-width:300px;box-shadow:var(--sh2);opacity:0;transform:translateX(20px);transition:.3s}
@@ -893,6 +926,18 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     <button class="btn-konfirm" id="btn-konfirm" onclick="onKlikKonfirm()">⚡ Konfirmasi & Pesan</button>
     <button class="btn-batal-modal" onclick="tutupModal()">Batal</button>
   </div>
+</div>
+
+<!-- PROCESSING OVERLAY -->
+<div class="proc-overlay" id="proc-overlay">
+  <div class="proc-spinner"></div>
+  <div class="proc-title">Sedang Memproses...</div>
+  <div class="proc-sub">Mohon tunggu, jangan tutup halaman ini</div>
+</div>
+
+<!-- RESULT OVERLAY -->
+<div class="result-overlay" id="result-overlay">
+  <div class="result-inner" id="result-inner"></div>
 </div>
 
 <!-- SUCCESS OVERLAY -->
@@ -1795,52 +1840,160 @@ async function prosesAnggota(){
 }
 
 async function autoEksekusiDigiflazz(refId){
+  document.getElementById('proc-overlay').classList.add('show');
   try{
     const {data:trx}=await sb.from('ppob_transaksi')
       .select('id,sku_supplier,tujuan,harga_jual,status,nama_produk')
       .eq('ref_id',refId).single();
-    if(!trx||trx.status!=='pending'){
-      // Sudah diproses, tampilkan success saja
-      document.getElementById('sc-ref').textContent=refId;
-      document.getElementById('sc-msg').textContent='Tagihan dicatat. Diproses oleh sistem.';
-      document.getElementById('success-overlay').classList.add('show');
+
+    if(!trx||trx.status==='sukses'){
+      document.getElementById('proc-overlay').classList.remove('show');
+      tampilResultSukses({ref_id:refId,nama_produk:trx?.nama_produk,tujuan:trx?.tujuan,harga_jual:trx?.harga_jual});
       return;
     }
 
     const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
-      body:JSON.stringify({
-        ref_id: refId,
-        customer_no: trx.tujuan,
-        buyer_sku_code: trx.sku_supplier
-      })
+      body:JSON.stringify({ref_id:refId,customer_no:trx.tujuan,buyer_sku_code:trx.sku_supplier})
     });
     const json=await res.json();
-    console.log('[autoEksekusi]',refId,json);
+    document.getElementById('proc-overlay').classList.remove('show');
 
-    // Tampilkan hasil ke user
-    const berhasil=json?.success||json?.data?.status==='Sukses';
-    const proses=json?.data?.status==='Pending'||json?.data?.status==='pending';
-    let msg='';
-    if(berhasil){
-      msg=`✅ Transaksi berhasil diproses!\nSN: ${json?.data?.sn||'-'}`;
-    } else if(proses){
-      msg='⏳ Transaksi sedang diproses. Status akan diupdate otomatis.';
+    const d=json?.data||{};
+    const status=(d.status||'').toLowerCase();
+    if(status==='sukses'||status==='success'){
+      tampilResultSukses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:d.sn||null,message:d.message||null});
+    } else if(status==='pending'||status==='proses'){
+      tampilResultProses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual});
     } else {
-      msg='Tagihan dicatat. Status: '+( json?.data?.status||'diproses')+'. Cek riwayat transaksi di akun Anda.';
+      // Gagal — hapus tagihan dari DB
+      await hapusTagihanGagal(refId);
+      tampilResultGagal({ref_id:refId,pesan:d.message||json?.error||'Transaksi tidak dapat diproses'});
     }
-    document.getElementById('sc-ref').textContent=refId;
-    document.getElementById('sc-msg').textContent=msg;
-    document.getElementById('success-overlay').classList.add('show');
-
   }catch(e){
-    console.warn('[autoEksekusi] error:',e.message);
-    // Tetap tampilkan success — tagihan sudah tercatat
-    document.getElementById('sc-ref').textContent=refId;
-    document.getElementById('sc-msg').textContent='Tagihan dicatat. Transaksi akan diproses segera.';
-    document.getElementById('success-overlay').classList.add('show');
+    document.getElementById('proc-overlay').classList.remove('show');
+    tampilResultGagal({ref_id:refId,pesan:'Koneksi bermasalah: '+e.message});
   }
+}
+
+async function hapusTagihanGagal(refId){
+  try{
+    const {data:trx}=await sb.from('ppob_transaksi').select('id').eq('ref_id',refId).single();
+    if(!trx) return;
+    await sb.from('ppob_piutang').delete().eq('transaksi_id',trx.id);
+    await sb.from('ppob_transaksi').update({status:'gagal',updated_at:new Date().toISOString()}).eq('id',trx.id);
+    // Kurangi piutang member
+    if(currentMember?.tipe==='member'){
+      const newPiutang=Math.max(0,Number(currentMember.total_piutang||0)-Number(selectedProduk?.harga_jual||0));
+      await sb.from('ppob_member').update({total_piutang:newPiutang,updated_at:new Date().toISOString()}).eq('id',currentMember.id);
+      currentMember.total_piutang=newPiutang;
+      sessionStorage.setItem(MEMBER_KEY,JSON.stringify(currentMember));
+      updateHomeHeader();
+    }
+  }catch(_){}
+}
+
+function tampilResultSukses(d){
+  const isPLN=(d.sn||'').replace(/\D/g,'').length>=16||(d.nama_produk||'').toLowerCase().includes('token');
+  const tokenBlock=isPLN&&d.sn?`
+    <div class="result-token">
+      <div class="result-token-label">⚡ Nomor Token PLN</div>
+      <div class="result-token-val" onclick="salinToken('${d.sn}')">${formatToken(d.sn)}</div>
+      <div class="result-token-copy">👆 Ketuk untuk salin</div>
+    </div>`:'';
+  document.getElementById('result-overlay').className='result-overlay sukses show';
+  document.getElementById('result-inner').innerHTML=`
+    <div class="result-icon">✅</div>
+    <div class="result-title">Transaksi Berhasil!</div>
+    <div class="result-sub">${new Date().toLocaleString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+    ${tokenBlock}
+    <div class="result-card">
+      <div class="result-row"><span class="result-label">Produk</span><span class="result-val">${d.nama_produk||'—'}</span></div>
+      <div class="result-row"><span class="result-label">Tujuan</span><span class="result-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>
+      <div class="result-row"><span class="result-label">Total</span><span class="result-val">${rp(d.harga_jual)}</span></div>
+      ${d.sn&&!isPLN?`<div class="result-row"><span class="result-label">SN</span><span class="result-val" style="font-size:12px">${d.sn}</span></div>`:''}
+      <div class="result-row"><span class="result-label">Ref ID</span><span class="result-val" style="font-size:12px;font-family:monospace">${d.ref_id}</span></div>
+      ${d.message?`<div class="result-row"><span class="result-label">Info</span><span class="result-val" style="font-size:12px">${d.message}</span></div>`:''}
+    </div>
+    <div class="result-btns">
+      <button class="result-btn result-btn-wa" onclick='shareHasilWA(${JSON.stringify(d)})'>📱 Bagikan via WhatsApp</button>
+      <button class="result-btn result-btn-secondary" onclick="tutupResult()">🏠 Transaksi Lagi</button>
+    </div>`;
+}
+
+function tampilResultProses(d){
+  const el=document.getElementById('result-overlay');
+  el.className='result-overlay show';
+  el.style.background='linear-gradient(160deg,#1e3a5f,#2563eb)';
+  document.getElementById('result-inner').innerHTML=`
+    <div class="result-icon">⏳</div>
+    <div class="result-title">Sedang Diproses</div>
+    <div class="result-sub">Transaksi diterima, sedang diproses operator</div>
+    <div class="result-card">
+      <div class="result-row"><span class="result-label">Produk</span><span class="result-val">${d.nama_produk||'—'}</span></div>
+      <div class="result-row"><span class="result-label">Tujuan</span><span class="result-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>
+      <div class="result-row"><span class="result-label">Total</span><span class="result-val">${rp(d.harga_jual)}</span></div>
+      <div class="result-row"><span class="result-label">Ref ID</span><span class="result-val" style="font-size:12px;font-family:monospace">${d.ref_id}</span></div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border-radius:12px;padding:14px;color:rgba(255,255,255,.8);font-size:13px;text-align:center;line-height:1.6">
+      ℹ️ Status akan diupdate otomatis. Cek riwayat di <b>Akun Saya</b>.
+    </div>
+    <div class="result-btns">
+      <button class="result-btn result-btn-primary" onclick="goAkun()">📋 Lihat Riwayat</button>
+      <button class="result-btn result-btn-secondary" onclick="tutupResult()">🏠 Transaksi Lagi</button>
+    </div>`;
+}
+
+function tampilResultGagal(d){
+  document.getElementById('result-overlay').className='result-overlay gagal show';
+  document.getElementById('result-inner').innerHTML=`
+    <div class="result-icon">❌</div>
+    <div class="result-title">Transaksi Gagal</div>
+    <div class="result-sub">Tagihan tidak jadi dicatat</div>
+    <div class="result-card">
+      <div class="result-row"><span class="result-label">Ref ID</span><span class="result-val" style="font-size:12px;font-family:monospace">${d.ref_id}</span></div>
+      <div class="result-row"><span class="result-label">Alasan</span><span class="result-val" style="font-size:13px">${d.pesan||'Gagal'}</span></div>
+    </div>
+    <div class="result-btns">
+      <button class="result-btn result-btn-primary" onclick="cobaLagiResult('${d.ref_id}')">🔄 Coba Lagi</button>
+      <button class="result-btn result-btn-secondary" onclick="tutupResult()">🏠 Kembali</button>
+    </div>`;
+}
+
+function tutupResult(){
+  document.getElementById('result-overlay').classList.remove('show');
+  document.getElementById('result-overlay').style.background='';
+  tutupSukses();
+}
+
+async function cobaLagiResult(refId){
+  document.getElementById('result-overlay').classList.remove('show');
+  await autoEksekusiDigiflazz(refId);
+}
+
+function formatToken(sn){
+  if(!sn) return sn;
+  const clean=sn.replace(/\D/g,'');
+  if(clean.length>=16) return clean.match(/.{1,4}/g).join('-');
+  return sn;
+}
+
+function salinToken(sn){
+  const clean=sn.replace(/\D/g,'');
+  navigator.clipboard?.writeText(clean).then(()=>toast('Token disalin!','s')).catch(()=>{});
+}
+
+function shareHasilWA(d){
+  const isPLN=(d.sn||'').replace(/\D/g,'').length>=16||(d.nama_produk||'').toLowerCase().includes('token');
+  let teks=`✅ *TRANSAKSI BERHASIL*\n`;
+  teks+=`Produk: ${d.nama_produk||'-'}\n`;
+  teks+=`Tujuan: ${d.tujuan||'-'}\n`;
+  teks+=`Total: ${rp(d.harga_jual)}\n`;
+  if(isPLN&&d.sn) teks+=`⚡ Token: *${formatToken(d.sn)}*\n`;
+  else if(d.sn) teks+=`SN: ${d.sn}\n`;
+  teks+=`Ref: ${d.ref_id}\n\n_PPOB UBNB Desa Perwira_`;
+  window.open('https://wa.me/?text='+encodeURIComponent(teks),'_blank');
 }
 
 function tutupModal(){
