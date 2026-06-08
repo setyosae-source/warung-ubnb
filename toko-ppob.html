@@ -483,6 +483,13 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .popup-btn-proses{flex:1;height:48px;background:linear-gradient(135deg,var(--g2),var(--g1));border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:#fff}
 .popup-btn-proses:disabled{opacity:.6;cursor:not-allowed}
 
+/* ── DROPDOWN PRODUK PASCA ───────────────── */
+.pasca-produk-wrap{padding:0 16px 12px;display:none}
+.pasca-produk-wrap.show{display:block}
+.pasca-produk-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.pasca-produk-select{width:100%;height:48px;border:2px solid var(--border);border-radius:var(--r2);padding:0 14px;font-size:14px;font-family:inherit;background:#fff;outline:none;cursor:pointer}
+.pasca-produk-select:focus{border-color:var(--g1)}
+
 /* ── INQUIRY PASCABAYAR ──────────────────── */
 .inquiry-box{background:#fff;border:2px solid var(--border);border-radius:var(--r2);padding:16px;margin-top:12px;transition:.3s}
 .inquiry-box.loading{border-color:var(--amber);background:#fffbeb}
@@ -785,7 +792,15 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 
   <!-- Hero dengan input -->
   <div class="kat-hero">
-    <div class="input-box">
+    <!-- Dropdown pilih produk (hanya untuk pascabayar >1 produk) -->
+    <div class="pasca-produk-wrap" id="pasca-produk-wrap">
+      <div class="pasca-produk-label">Pilih Layanan</div>
+      <select class="pasca-produk-select" id="pasca-produk-select" onchange="onPilihProdukPasca(this.value)">
+        <option value="">— Pilih —</option>
+      </select>
+    </div>
+
+    <div class="input-box" id="input-box-nomor" style="display:none">
       <div class="input-label" id="input-label">Nomor HP / Tujuan</div>
       <div class="input-row">
         <span class="ico" id="input-ico">📱</span>
@@ -1601,8 +1616,28 @@ async function goKategori(katId){
   const {data}=await sb.from('ppob_produk')
     .select('*,ppob_kategori(nama,kode)')
     .eq('kategori_id',katId).eq('status','aktif')
-    .order('harga_jual');
+    .order('nama_produk');
   allProduk=data||[];
+
+  // Cek apakah pascabayar dengan >1 produk — tampilkan dropdown
+  const isPascaMulti = isPascaKat && allProduk.length > 1;
+  const wrapEl = document.getElementById('pasca-produk-wrap');
+  const inputBox = document.getElementById('input-box-nomor');
+
+  if(isPascaMulti){
+    // Tampilkan dropdown, sembunyikan input nomor dulu
+    wrapEl.classList.add('show');
+    inputBox.style.display='none';
+    document.getElementById('pasca-produk-select').innerHTML =
+      '<option value="">— Pilih Layanan —</option>' +
+      allProduk.map(p=>`<option value="${p.id}">${p.nama_produk}</option>`).join('');
+    selectedProduk=null;
+  } else {
+    // Langsung tampilkan input nomor
+    wrapEl.classList.remove('show');
+    inputBox.style.display='block';
+    if(allProduk.length===1) selectedProduk=allProduk[0];
+  }
 
   showScreen('screen-kat');
 }
@@ -1615,6 +1650,20 @@ async function ulangiTransaksi(produkId, nomor){
   if(kat) await goKategori(kat.id);
   document.getElementById('input-nomor').value=nomor;
   onNomorInput(nomor);
+}
+
+function onPilihProdukPasca(produkId){
+  if(!produkId){
+    selectedProduk=null;
+    document.getElementById('input-box-nomor').style.display='none';
+    resetPascaInquiry();
+    return;
+  }
+  selectedProduk=allProduk.find(p=>String(p.id)===String(produkId))||null;
+  document.getElementById('input-box-nomor').style.display='block';
+  document.getElementById('input-nomor').value='';
+  document.getElementById('input-nomor').focus();
+  resetPascaInquiry();
 }
 
 // ═══════════════════════════════════════════
@@ -1667,14 +1716,14 @@ async function doInquiryPasca(nomor){
     const json=await res.json();
     const d=json?.data||{};
 
-    if(d.response_code==='00'||d.message?.toLowerCase().includes('sukses')||d.message?.toLowerCase().includes('success')){
+    if(d.response_code==='00'||d.message?.toLowerCase().includes('inquiry success')||d.message?.toLowerCase().includes('sukses')){
       pascaInquiryData={
         tr_name:d.tr_name||d.customer_name||'—',
         nominal:d.nominal||0,
         admin:d.admin||0,
         price:d.price||d.selling_price||0,
         period:d.period||d.periode||'—',
-        tr_id:d.tr_id||null,
+        tr_id:d.tr_id||d.tr_id_str||null,  // WAJIB untuk pay-pasca
         buyer_sku_code:produk.sku_supplier,
         customer_no:nomor,
         ref_id:refId,
@@ -1848,7 +1897,9 @@ function clearNomor(){
   document.getElementById('input-nomor').value='';
   document.getElementById('btn-clear').classList.remove('show');
   detectedOperator=null;
-  selectedProduk=null;
+  if(!document.getElementById('pasca-produk-wrap').classList.contains('show')){
+    selectedProduk=null;
+  }
   document.getElementById('bottom-bar').classList.remove('show');
   document.getElementById('produk-content').innerHTML='<div class="empty-state"><div class="ico">'+(currentKat?.icon||'📱')+'</div><p>Masukkan nomor tujuan<br>untuk melihat produk</p></div>';
   resetPlnInfo();
@@ -2015,7 +2066,7 @@ async function autoEksekusiDigiflazz(refId){
     const isPasca=trx.tipe==='pascabayar'||isKategoriPasca();
     const endpoint=isPasca?'pay-pasca':'transaction';
     const body=isPasca
-      ? {customer_no:trx.tujuan, buyer_sku_code:trx.sku_supplier, ref_id:refId, transaksi_id:trx.id}
+      ? {tr_id: pascaInquiryData?.tr_id, transaksi_id:trx.id}
       : {ref_id:refId, customer_no:trx.tujuan, buyer_sku_code:trx.sku_supplier};
 
     const res=await fetch(`https://proxy.ubnb.pw/api/digiflazz/${endpoint}`,{
