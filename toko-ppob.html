@@ -1967,12 +1967,51 @@ function tampilResultProses(d){
       <div class="result-row"><span class="result-label">Ref ID</span><span class="result-val" style="font-size:12px;font-family:monospace">${d.ref_id}</span></div>
     </div>
     <div style="background:rgba(255,255,255,.1);border-radius:12px;padding:14px;color:rgba(255,255,255,.8);font-size:13px;text-align:center;line-height:1.6">
-      ℹ️ Status akan diupdate otomatis. Cek riwayat di <b>Akun Saya</b>.
+      ℹ️ Menunggu konfirmasi dari operator...<br>
+      <span id="polling-counter" style="font-size:11px;opacity:.7">Mengecek status otomatis</span>
     </div>
     <div class="result-btns">
       <button class="result-btn result-btn-primary" onclick="goAkun()">📋 Lihat Riwayat</button>
       <button class="result-btn result-btn-secondary" onclick="tutupResult()">🏠 Transaksi Lagi</button>
     </div>`;
+
+  // Polling setiap 3 detik, maksimal 2 menit
+  let attempt=0;
+  const maxAttempt=40;
+  const pollInterval=setInterval(async()=>{
+    attempt++;
+    const counter=document.getElementById('polling-counter');
+    if(counter) counter.textContent=`Mengecek status... (${attempt}/${maxAttempt})`;
+
+    try{
+      const {data:trx}=await sb.from('ppob_transaksi')
+        .select('status,sn,message,nama_produk,tujuan,harga_jual,completed_at')
+        .eq('ref_id',d.ref_id).single();
+
+      if(trx?.status==='sukses'){
+        clearInterval(pollInterval);
+        // Refresh piutang member
+        if(currentMember?.tipe==='member'){
+          const {data:m}=await sb.from('ppob_member').select('total_piutang').eq('id',currentMember.id).single();
+          if(m){currentMember.total_piutang=m.total_piutang;sessionStorage.setItem(MEMBER_KEY,JSON.stringify(currentMember));updateHomeHeader();}
+        }
+        tampilResultSukses({ref_id:d.ref_id,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:trx.sn,message:trx.message});
+      } else if(trx?.status==='gagal'){
+        clearInterval(pollInterval);
+        await hapusTagihanGagal(d.ref_id);
+        tampilResultGagal({ref_id:d.ref_id,pesan:trx.message||'Transaksi gagal diproses operator'});
+      }
+    }catch(_){}
+
+    if(attempt>=maxAttempt){
+      clearInterval(pollInterval);
+      const counter=document.getElementById('polling-counter');
+      if(counter) counter.textContent='Timeout. Cek riwayat transaksi di Akun Saya.';
+    }
+  },3000);
+
+  // Simpan interval ID untuk dibersihkan saat tutup
+  window._pollInterval=pollInterval;
 }
 
 function tampilResultGagal(d){
@@ -1992,6 +2031,7 @@ function tampilResultGagal(d){
 }
 
 function tutupResult(){
+  clearInterval(window._pollInterval);
   document.getElementById('result-overlay').classList.remove('show');
   document.getElementById('result-overlay').style.background='';
   tutupSukses();
