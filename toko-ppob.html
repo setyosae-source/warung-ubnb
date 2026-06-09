@@ -483,6 +483,13 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .popup-btn-proses{flex:1;height:48px;background:linear-gradient(135deg,var(--g2),var(--g1));border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;color:#fff}
 .popup-btn-proses:disabled{opacity:.6;cursor:not-allowed}
 
+/* ── E-TOLL / NFC ────────────────────────── */
+.nfc-btn{display:none;width:100%;height:44px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:var(--r2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:8px;align-items:center;justify-content:center;gap:8px}
+.nfc-btn.show{display:flex}
+.nfc-btn:disabled{opacity:.6}
+.nfc-scanning{background:linear-gradient(135deg,#7c3aed,#a855f7)!important;animation:pulse .8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+
 /* ── DROPDOWN PRODUK PASCA ───────────────── */
 .pasca-produk-wrap{padding:0 16px 12px;display:none}
 .pasca-produk-wrap.show{display:block}
@@ -810,6 +817,11 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
           oninput="onNomorInput(this.value)">
         <button class="input-clear" id="btn-clear" onclick="clearNomor()">✕</button>
       </div>
+
+      <!-- Tombol NFC (hanya tampil untuk E-Toll dan browser support NFC) -->
+      <button class="nfc-btn" id="btn-nfc" onclick="scanNFC()">
+        📡 Scan Kartu E-Toll via NFC
+      </button>
 
 
       <!-- History chips -->
@@ -1588,6 +1600,7 @@ async function goKategori(katId){
   document.getElementById('btn-clear').classList.remove('show');
   if(typeof resetPlnInfo === 'function') resetPlnInfo();
   if(typeof resetPascaInquiry === 'function') resetPascaInquiry();
+  if(typeof stopNFC === 'function') stopNFC();
 
   // Set UI
   document.getElementById('kat-topbar-title').textContent=currentKat.nama;
@@ -1605,8 +1618,25 @@ async function goKategori(katId){
   else if(kode.includes('PAJAK')||kode.includes('PBB')){label='Nomor Objek Pajak (NOP)';ico='🏛️';}
   else if(kode.includes('INTERNET')){label='Nomor Pelanggan Internet';ico='🌐';}
   else if(kode==='TV'){label='Nomor Pelanggan TV';ico='📺';}
+  else if(kode==='ETOLL'){label='Nomor Kartu E-Toll';ico='🚗';}
+
   document.getElementById('input-label').textContent=label;
   document.getElementById('input-ico').textContent=ico;
+
+  // Tampilkan tombol NFC kalau E-Toll dan browser support
+  const nfcBtn=document.getElementById('btn-nfc');
+  if(nfcBtn){
+    const isEtoll=kode==='ETOLL';
+    const nfcSupport='NDEFReader' in window;
+    nfcBtn.classList.toggle('show', isEtoll && nfcSupport);
+    if(isEtoll && !nfcSupport){
+      // Tampilkan info di bawah input kalau NFC tidak support
+      nfcBtn.className='nfc-btn show';
+      nfcBtn.style.background='#6b7280';
+      nfcBtn.textContent='📡 NFC tidak tersedia di perangkat ini';
+      nfcBtn.disabled=true;
+    }
+  }
 
   // History chips
   const hist=getNomorHistory(currentKat.kode||katId);
@@ -1696,6 +1726,56 @@ function isKategoriTokenPLN(){
 function isKategoriPasca(){
   const pasca=['TAGIHAN_PLN','TAGIHAN_HP','PDAM','BPJS','TELKOM','MULTIFINANCE','PAJAK','INTERNET','TV'];
   return pasca.includes((currentKat?.kode||'').toUpperCase());
+}
+
+function isKategoriEToll(){
+  return (currentKat?.kode||'').toUpperCase()==='ETOLL';
+}
+
+// ── NFC SCAN ─────────────────────────────────
+let nfcReader=null;
+
+async function scanNFC(){
+  if(!('NDEFReader' in window)){toast('NFC tidak didukung browser ini','e');return;}
+  const btn=document.getElementById('btn-nfc');
+  btn.disabled=true;
+  btn.className='nfc-btn show nfc-scanning';
+  btn.textContent='📡 Menunggu kartu... (tempelkan ke HP)';
+  try{
+    nfcReader=new NDEFReader();
+    await nfcReader.scan();
+    nfcReader.addEventListener('reading',({serialNumber})=>{
+      const nomor=serialNumber.replace(/:/g,'').toUpperCase();
+      document.getElementById('input-nomor').value=nomor;
+      onNomorInput(nomor);
+      stopNFC();
+      toast('✅ Kartu terbaca: '+nomor,'s');
+    });
+    nfcReader.addEventListener('readingerror',()=>{
+      toast('Gagal baca kartu, coba lagi','e');
+      stopNFC();
+    });
+    // Auto stop setelah 30 detik
+    setTimeout(stopNFC, 30000);
+  }catch(e){
+    toast('NFC error: '+e.message,'e');
+    stopNFC();
+  }
+}
+
+function stopNFC(){
+  const btn=document.getElementById('btn-nfc');
+  if(btn){
+    btn.disabled=false;
+    btn.className='nfc-btn show';
+    btn.innerHTML='📡 Scan Kartu E-Toll via NFC';
+  }
+  nfcReader=null;
+}
+
+function validasiNomorEToll(nomor){
+  const clean=nomor.replace(/\s/g,'');
+  return /^[A-F0-9]{16,20}$/i.test(clean)||/^\d{16,20}$/.test(clean);
 }
 
 function resetPascaInquiry(){
@@ -1905,6 +1985,18 @@ function onNomorInput(val){
       resetPascaInquiry();
     }
   }
+
+  // 🚗 E-TOLL — tampilkan produk setelah nomor valid
+  if(isKategoriEToll()){
+    if(validasiNomorEToll(cleanVal)){
+      renderProdukList(cleanVal);
+    } else {
+      document.getElementById('produk-content').innerHTML=
+        '<div class="empty-state"><div class="ico">🚗</div><p>Masukkan nomor kartu E-Toll<br>(16-20 digit)</p></div>';
+      selectedProduk=null;
+      document.getElementById('bottom-bar').classList.remove('show');
+    }
+  }
 }
 
 function pilihHistory(nomor){
@@ -1930,6 +2022,7 @@ function clearNomor(){
 // ═══════════════════════════════════════════
 function renderProdukList(nomor){
   // Pascabayar tidak perlu pilih produk — inquiry sudah handle
+  // Tapi E-Toll tetap tampilkan grid nominal
   if(isKategoriPasca()) return;
 
   let list=allProduk;
@@ -1994,6 +2087,9 @@ function showKonfirmasi(){
   }
   if(isKategoriPasca() && !pascaInquiryData){
     toast('Tunggu cek tagihan selesai dulu','e');return;
+  }
+  if(isKategoriEToll() && !validasiNomorEToll(nomor)){
+    toast('Nomor kartu E-Toll tidak valid (16-20 digit)','e');return;
   }
 
   document.getElementById('od-produk').textContent=selectedProduk.nama_produk;
