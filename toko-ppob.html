@@ -1310,22 +1310,33 @@ async function loadQris() {
     const json = await res.json();
     if (!json.success || !json.qris_string) throw new Error(json.error || 'Gagal generate QRIS');
 
+    // Hitung biaya QRIS 0.7% (dibulatkan ke atas)
+    const hargaAsli = selectedProduk.harga_jual;
+    const biayaQris = Math.ceil(hargaAsli * 0.007);
+    const totalQris = hargaAsli + biayaQris;
+    // Update harga di modal
+    document.getElementById('od-total').textContent = rp(totalQris);
+
     qrisExpiredAt = new Date(json.expired_at).getTime();
 
     // Render placeholder dulu
     content.innerHTML = `
       <div id="qr-render-target" style="width:220px;height:220px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center"></div>
       <div class="qris-merchant">Krasti Pizza · UBNB</div>
-      <div class="qris-nominal">${rp(json.amount)}</div>
+      <div class="qris-nominal">${rp(totalQris)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Termasuk biaya QRIS ${rp(biayaQris)}</div>
       <div class="qris-expired">QR kedaluwarsa dalam</div>
       <div class="qris-countdown" id="qris-countdown">10:00</div>
       <div class="qris-apps">
-        <span class="qris-app-badge">ShopeePay</span>
         <span class="qris-app-badge">GoPay</span>
         <span class="qris-app-badge">OVO</span>
         <span class="qris-app-badge">DANA</span>
+        <span class="qris-app-badge">ShopeePay</span>
         <span class="qris-app-badge">m-Banking</span>
       </div>`;
+
+    // Simpan total QRIS untuk submitOrder
+    window._qrisTotalBayar = totalQris;
 
     // Render QR pakai qrcodejs ke div target
     const qrTarget = document.getElementById('qr-render-target');
@@ -1723,8 +1734,10 @@ async function doInquiryPasca(nomor){
         nominal:d.nominal||0,
         admin:d.admin||0,
         price:d.price||d.selling_price||0,
+        price_markup:(d.price||d.selling_price||0)+Number(produk.markup||0),
+        markup:Number(produk.markup||0),
         period:d.period||d.periode||'—',
-        tr_id:d.tr_id||d.tr_id_str||null,  // WAJIB untuk pay-pasca
+        tr_id:d.tr_id||d.tr_id_str||null,
         buyer_sku_code:produk.sku_supplier,
         customer_no:nomor,
         ref_id:refId,
@@ -1741,10 +1754,11 @@ async function doInquiryPasca(nomor){
         <div class="inquiry-row"><span class="inquiry-row-label">Periode</span><span class="inquiry-row-val">${pascaInquiryData.period}</span></div>
         <div class="inquiry-row"><span class="inquiry-row-label">Tagihan</span><span class="inquiry-row-val">${rp(nominalTagihan>0?nominalTagihan:pascaInquiryData.nominal)}</span></div>
         <div class="inquiry-row"><span class="inquiry-row-label">Admin</span><span class="inquiry-row-val">${rp(pascaInquiryData.admin)}</span></div>
-        <div class="inquiry-total"><span>Total Bayar</span><span>${rp(pascaInquiryData.price)}</span></div>`;
+        ${pascaInquiryData.markup>0?`<div class="inquiry-row"><span class="inquiry-row-label">Biaya Layanan</span><span class="inquiry-row-val">${rp(pascaInquiryData.markup)}</span></div>`:''}
+        <div class="inquiry-total"><span>Total Bayar</span><span>${rp(pascaInquiryData.price_markup)}</span></div>`;
 
-      selectedProduk={...produk,harga_jual:pascaInquiryData.price};
-      document.getElementById('bb-harga').textContent=rp(pascaInquiryData.price);
+      selectedProduk={...produk,harga_jual:pascaInquiryData.price_markup};
+      document.getElementById('bb-harga').textContent=rp(pascaInquiryData.price_markup);
       document.getElementById('bottom-bar').classList.add('show');
       document.getElementById('btn-bayar').innerHTML='💳 Bayar Tagihan';
 
@@ -2266,10 +2280,21 @@ async function simpanJPG(elId, filename){
   if(!el){toast('Element tidak ditemukan','e');return;}
   toast('Menyimpan struk...','i');
   try{
+    // Simpan style sementara
+    const origBg=el.style.background;
+    const origColor=el.style.color;
+    el.style.background=el.style.background||'#1a5c45'; // pastikan ada background
+
     const canvas=await html2canvas(el,{
-      scale:2, useCORS:true, backgroundColor:'#ffffff',
-      logging:false
+      scale:2,
+      useCORS:true,
+      backgroundColor:null,
+      logging:false,
+      windowWidth:el.scrollWidth,
+      windowHeight:el.scrollHeight
     });
+    el.style.background=origBg;
+
     const link=document.createElement('a');
     link.download=(filename||'struk-ppob')+'.jpg';
     link.href=canvas.toDataURL('image/jpeg',0.92);
@@ -2451,14 +2476,15 @@ async function submitOrder(){
     // Insert transaksi
     const metodeBayar=isMember?'utang_anggota':'qris_gopay';
     const statusBayar=isMember?'utang':'menunggu';
+    const hargaJual = (!isMember && window._qrisTotalBayar) ? window._qrisTotalBayar : selectedProduk.harga_jual;
     const trxIns={
-      ref_id:refId,pelanggan_id:pelangganId,
-      produk_id:selectedProduk.id,supplier_id:supplierCfg?.id||null,
-      sku_supplier:selectedProduk.sku_supplier,nama_produk:selectedProduk.nama_produk,
-      tujuan:nomor,harga_modal:selectedProduk.harga_modal,
-      harga_jual:selectedProduk.harga_jual,markup:selectedProduk.markup,
-      status:'pending',metode_bayar:metodeBayar,status_bayar:statusBayar,
-      created_at:now,updated_at:now
+      ref_id:refId, pelanggan_id:pelangganId,
+      produk_id:selectedProduk.id, supplier_id:supplierCfg?.id||null,
+      sku_supplier:selectedProduk.sku_supplier, nama_produk:selectedProduk.nama_produk,
+      tujuan:nomor, harga_modal:selectedProduk.harga_modal,
+      harga_jual:hargaJual, markup:selectedProduk.markup,
+      status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayar,
+      created_at:now, updated_at:now
     };
     if(isMember) trxIns.ppob_member_id=currentMember.id;
     const {data:trx,error:trxErr}=await sb.from('ppob_transaksi').insert(trxIns).select('id').single();
