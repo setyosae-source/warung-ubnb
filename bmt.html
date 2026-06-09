@@ -3010,34 +3010,30 @@ function tutupPreviewCetak(){
   closeModal('preview-cetak');
   window._kartuAkad=null;
 }
-function executePDF(){
-  if(_printFn){
-    const area=document.getElementById('print-area');
-    area.innerHTML=_printFn();
-    tutupPreviewCetak();
-    setTimeout(()=>{
-      area.style.display='block';
-      setTimeout(()=>{
+function _doPrint(){
+  if(!_printFn) return;
+  const area=document.getElementById('print-area');
+  area.innerHTML=_printFn();
+  tutupPreviewCetak();
+  // Tunggu modal tutup dulu, lalu set visible
+  setTimeout(()=>{
+    area.style.display='block';
+    // Double rAF: pastikan browser sudah layout & paint sebelum print
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
         window.print();
-        setTimeout(()=>{area.style.display='none';area.innerHTML='';},1500);
-      },400);
-    },150);
-  }
+        // Cleanup setelah print dialog ditutup user
+        const cleanup=()=>{area.style.display='none';area.innerHTML='';};
+        // afterprint event lebih reliable daripada setTimeout
+        window.addEventListener('afterprint', cleanup, {once:true});
+        // Fallback kalau afterprint tidak fired (beberapa Android)
+        setTimeout(cleanup, 3000);
+      });
+    });
+  },250);
 }
-function executePrint(){
-  if(_printFn){
-    const area=document.getElementById('print-area');
-    area.innerHTML=_printFn();
-    tutupPreviewCetak();
-    setTimeout(()=>{
-      area.style.display='block';
-      setTimeout(()=>{
-        window.print();
-        setTimeout(()=>{area.style.display='none';area.innerHTML='';},1500);
-      },400);
-    },150);
-  }
-}
+function executePDF(){ _doPrint(); }
+function executePrint(){ _doPrint(); }
 
 
 // PENGAJUAN
