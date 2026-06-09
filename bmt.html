@@ -1366,7 +1366,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="preview-cetak-toolbar" style="flex-wrap:wrap;gap:6px;padding:8px 12px">
       <div class="preview-cetak-title" id="preview-cetak-title" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Preview Dokumen</div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-        <button class="btn sm" onclick="executePDF()" style="background:#2563eb;color:white;border:none;font-weight:700;padding:5px 10px;font-size:11px">📥 PDF</button>
+        <button class="btn sm" onclick="executeJPG()" style="background:#2563eb;color:white;border:none;font-weight:700;padding:5px 10px;font-size:11px">📥 JPG</button>
         <button class="btn emas sm" onclick="executePrint()" style="font-weight:700;padding:5px 10px;font-size:11px">🖨️ Print</button>
         <button class="btn sm" onclick="tutupPreviewCetak()" style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);padding:5px 10px;font-size:11px">✕</button>
       </div>
@@ -3010,30 +3010,49 @@ function tutupPreviewCetak(){
   closeModal('preview-cetak');
   window._kartuAkad=null;
 }
-function _doPrint(){
-  if(!_printFn) return;
+async function executeJPG(){
+  const paper=document.getElementById('preview-cetak-paper');
+  if(!paper||!paper.innerHTML){toast('Tidak ada konten',true);return;}
+  toast('⏳ Menyiapkan gambar...');
+  try{
+    if(typeof html2canvas==='undefined'){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload=res;s.onerror=rej;
+        document.head.appendChild(s);
+      });
+    }
+    const canvas=await html2canvas(paper,{
+      backgroundColor:'#ffffff',
+      scale:1,
+      useCORS:true,
+      logging:false,
+    });
+    const link=document.createElement('a');
+    const nama=(window._kartuAkad?window._kartuAkad.nama_jamaah.replace(/\s+/g,'_'):'kartu');
+    link.download='kartu-angsuran-'+nama+'.jpg';
+    link.href=canvas.toDataURL('image/jpeg',0.92);
+    link.click();
+    toast('✅ Gambar tersimpan');
+  }catch(e){
+    toast('Gagal: '+e.message,true);
+  }
+}
+function executePrint(){
+  if(!_printFn)return;
   const area=document.getElementById('print-area');
   area.innerHTML=_printFn();
   tutupPreviewCetak();
-  // Tunggu modal tutup dulu, lalu set visible
   setTimeout(()=>{
     area.style.display='block';
-    // Double rAF: pastikan browser sudah layout & paint sebelum print
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        window.print();
-        // Cleanup setelah print dialog ditutup user
-        const cleanup=()=>{area.style.display='none';area.innerHTML='';};
-        // afterprint event lebih reliable daripada setTimeout
-        window.addEventListener('afterprint', cleanup, {once:true});
-        // Fallback kalau afterprint tidak fired (beberapa Android)
-        setTimeout(cleanup, 3000);
-      });
-    });
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      window.print();
+      window.addEventListener('afterprint',()=>{area.style.display='none';area.innerHTML='';},{once:true});
+      setTimeout(()=>{area.style.display='none';area.innerHTML='';},3000);
+    }));
   },250);
 }
-function executePDF(){ _doPrint(); }
-function executePrint(){ _doPrint(); }
 
 
 // PENGAJUAN
