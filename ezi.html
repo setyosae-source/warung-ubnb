@@ -3189,12 +3189,12 @@ async function doLoginAdmin(){
   try{
     const passHash=await sha256(p);
     const {data,error}=await sb.from('users')
-      .select('username,nama,role,password_hash')
+      .select('id,username,nama,role,password_hash')
       .eq('username',u).maybeSingle();
     if(error||!data){ err.textContent='Username tidak ditemukan'; err.style.display='block'; return; }
     if(data.password_hash!==passHash){ err.textContent='Password salah'; err.style.display='block'; return; }
     // Sukses
-    currentAdmin={username:data.username, nama:data.nama||data.username};
+    currentAdmin={id:data.id, username:data.username, nama:data.nama||data.username};
     sessionStorage.setItem(ADMIN_KEY, JSON.stringify(currentAdmin));
     // Set mode umum sebagai base (admin overrides per-transaksi)
     currentMember={tipe:'umum'};
@@ -3236,7 +3236,7 @@ function updateAdminBanner(){
   });
   ['admin-banner-name-home','admin-banner-name-kat'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el) el.textContent=names[0]||'Admin';
+    if(el) el.textContent=(names[0]||'Admin')+' · v2';
   });
 }
 
@@ -3244,8 +3244,17 @@ function updateAdminBanner(){
 (function restoreAdminSession(){
   try{
     const s=sessionStorage.getItem(ADMIN_KEY);
-    if(s){ currentAdmin=JSON.parse(s); updateAdminBanner(); }
-  }catch(_){}
+    if(s){
+      const parsed=JSON.parse(s);
+      // Session lama tanpa id → clear, force re-login
+      if(!parsed.id){
+        sessionStorage.removeItem(ADMIN_KEY);
+        return;
+      }
+      currentAdmin=parsed;
+      updateAdminBanner();
+    }
+  }catch(_){ sessionStorage.removeItem(ADMIN_KEY); }
 })();
 
 // ── HARGA JUAL DEFAULT ───────────────────────
@@ -3362,7 +3371,7 @@ function maRecalcMargin(){
   info.classList.toggle('ma-margin-warn', warn);
   let msg=`Modal ${rp(modal)} → Jual ${rp(jual)} · Margin <b>${rp(margin)}</b>`;
   if(warn)        msg += ' ❌ di bawah modal!';
-  else if(lowMargin) msg += ' ⚠️';
+  else if(lowMargin) msg += ' ⚠️ kurang dari Rp 2.500 (boleh, tapi keuntungan tipis)';
   info.innerHTML = msg;
   if(exec){
     exec.disabled = warn || jual<=0;
@@ -3494,7 +3503,7 @@ window.submitOrder = async function(){
       tujuan:nomor, harga_modal:selectedProduk.harga_modal,
       harga_jual:adm.harga_jual, markup:adm.harga_jual - Number(selectedProduk.harga_modal||0),
       status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayarTrx,
-      dibuat_oleh:adm.username,
+      dibuat_oleh:adm.id,
       created_at:now, updated_at:now,
       paid_at: statusBayarTrx==='lunas' ? now : null
     };
