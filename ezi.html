@@ -3285,8 +3285,15 @@ function adminShowModalCheckout(){
   maSetBayar('lunas');
 
   // Info produk
-  const modal=Number(selectedProduk.harga_modal)||0;
-  const def=adminHargaJualDefault(modal);
+  // Untuk pasca bayar: harga modal = price dari inquiry (sebelum markup), harga jual = price_markup
+  let modal, def;
+  if(isKategoriPasca() && pascaInquiryData){
+    modal = Number(pascaInquiryData.price) || 0;          // harga modal = harga dari supplier (price tanpa markup)
+    def   = Number(pascaInquiryData.price_markup) || 0;   // harga jual default = price + markup
+  } else {
+    modal = Number(selectedProduk.harga_modal) || 0;
+    def   = adminHargaJualDefault(modal);
+  }
   document.getElementById('ma-produk-info').textContent=
     selectedProduk.nama_produk + ' · ' + nomor;
   document.getElementById('ma-modal').value=rp(modal);
@@ -3361,7 +3368,11 @@ document.addEventListener('click',e=>{
 });
 
 function maRecalcMargin(){
-  const modal=Number(selectedProduk?.harga_modal)||0;
+  // Baca modal dari field ma-modal (sudah di-set benar oleh adminShowModalCheckout,
+  // termasuk untuk pasca bayar yang pakai pascaInquiryData.price)
+  const modalEl=document.getElementById('ma-modal');
+  const modalRaw=modalEl?modalEl.value.replace(/[^0-9]/g,''):'0';
+  const modal=Number(modalRaw)||0;
   const jual=Number(document.getElementById('ma-harga-jual').value)||0;
   const margin=jual-modal;
   const info=document.getElementById('ma-margin-info');
@@ -3390,7 +3401,9 @@ async function maEksekusi(){
     toast('Pilih pelanggan dulu','e'); return;
   }
   const jual=Number(document.getElementById('ma-harga-jual').value)||0;
-  const modal=Number(selectedProduk?.harga_modal)||0;
+  // Baca modal dari field ma-modal (sudah diisi benar, termasuk untuk pasca bayar)
+  const modalRawExec=(document.getElementById('ma-modal')?.value||'').replace(/[^0-9]/g,'');
+  const modal=Number(modalRawExec)||0;
   if(jual < modal){ toast('Harga jual tidak boleh di bawah modal','e'); return; }
 
   // Susun context untuk submitOrder
@@ -3496,12 +3509,16 @@ window.submitOrder = async function(){
     }
 
     // Insert ppob_transaksi
+    // Untuk pasca bayar: harga_modal = price dari inquiry (harga supplier sebelum markup)
+    const hargaModalTrx = (isKategoriPasca() && pascaInquiryData)
+      ? Number(pascaInquiryData.price) || 0
+      : Number(selectedProduk.harga_modal) || 0;
     const trxIns={
       ref_id:refId, pelanggan_id:pelangganId,
       produk_id:selectedProduk.id, supplier_id:supplierCfg?.id||null,
       sku_supplier:selectedProduk.sku_supplier, nama_produk:selectedProduk.nama_produk,
-      tujuan:nomor, harga_modal:selectedProduk.harga_modal,
-      harga_jual:adm.harga_jual, markup:adm.harga_jual - Number(selectedProduk.harga_modal||0),
+      tujuan:nomor, harga_modal:hargaModalTrx,
+      harga_jual:adm.harga_jual, markup:adm.harga_jual - hargaModalTrx,
       status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayarTrx,
       dibuat_oleh:adm.id,
       created_at:now, updated_at:now,
