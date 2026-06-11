@@ -1200,6 +1200,10 @@ tr:last-child td { border-bottom: none; }
             style="padding:8px 18px;border:none;background:none;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);font-family:inherit;font-size:14px;margin-bottom:-2px">
             📋 Piutang <span id="badge-piutang" style="background:var(--amber);color:white;border-radius:99px;padding:1px 7px;font-size:11px;margin-left:4px;display:none">0</span>
           </button>
+          <button class="trx-tab" id="tab-btn-inbox" onclick="switchTrxTab('inbox')"
+            style="padding:8px 18px;border:none;background:none;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);font-family:inherit;font-size:14px;margin-bottom:-2px">
+            📨 Inbox Digiflazz <span id="badge-inbox" style="background:#6366f1;color:white;border-radius:99px;padding:1px 7px;font-size:11px;margin-left:4px;display:none">0</span>
+          </button>
         </div>
 
         <!-- TAB: SEMUA TRANSAKSI -->
@@ -1321,6 +1325,89 @@ tr:last-child td { border-bottom: none; }
                   <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Memuat data...</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: INBOX DIGIFLAZZ -->
+        <div id="tab-inbox" style="display:none">
+          <div class="filter-bar" style="flex-wrap:wrap;gap:8px">
+            <input type="date" class="filter-input" id="inbox-filter-from" style="width:145px" title="Dari tanggal">
+            <span style="align-self:center;color:var(--text-muted);font-size:12px">s/d</span>
+            <input type="date" class="filter-input" id="inbox-filter-to" style="width:145px" title="Sampai tanggal">
+            <select class="filter-select" id="inbox-filter-tipe">
+              <option value="">Semua Tipe</option>
+              <option value="prabayar">Prabayar</option>
+              <option value="pascabayar">Pasca Bayar</option>
+            </select>
+            <select class="filter-select" id="inbox-filter-status">
+              <option value="">Semua Status</option>
+              <option value="Sukses">Sukses</option>
+              <option value="Pending">Pending</option>
+              <option value="Gagal">Gagal</option>
+            </select>
+            <input type="text" class="filter-input" id="inbox-filter-cari"
+              placeholder="🔍 Ref ID / no tujuan / produk" style="flex:1;min-width:180px">
+            <button class="btn btn-primary" onclick="loadInbox()">Filter</button>
+            <button class="btn btn-secondary" onclick="resetInboxFilter()">Reset</button>
+          </div>
+
+          <!-- Summary strip -->
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="inbox-summary" style="display:none"></div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">📨 Inbox Notifikasi Digiflazz</div>
+                <div class="card-subtitle" id="inbox-subtitle">Semua callback/notifikasi masuk dari Digiflazz (prabayar &amp; pasca bayar)</div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-secondary" onclick="loadInbox()">🔄 Refresh</button>
+                <button class="btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer"
+                  onclick="clearInbox()">🗑️ Hapus Lama</button>
+              </div>
+            </div>
+
+            <!-- Auto-refresh toggle -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--text-muted)">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="inbox-autorefresh" onchange="toggleInboxAutoRefresh(this.checked)" style="accent-color:var(--hijau)">
+                <span>Auto-refresh tiap 15 detik</span>
+              </label>
+              <span id="inbox-last-update" style="margin-left:auto"></span>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:130px">Waktu</th>
+                    <th>Ref ID</th>
+                    <th>Produk / SKU</th>
+                    <th>Tujuan</th>
+                    <th>Tipe</th>
+                    <th>Status</th>
+                    <th>SN / Token</th>
+                    <th>Pesan</th>
+                    <th style="width:80px">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="inbox-tbody">
+                  <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">Memuat data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="inbox-pagination" style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap"></div>
+          </div>
+
+          <!-- DETAIL MODAL -->
+          <div id="inbox-detail-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center">
+            <div style="background:var(--card);border-radius:16px;padding:24px;max-width:560px;width:94%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <div style="font-size:16px;font-weight:800">📨 Detail Notifikasi</div>
+                <button onclick="closeInboxDetail()" style="border:none;background:var(--bg);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px">✕ Tutup</button>
+              </div>
+              <div id="inbox-detail-body"></div>
             </div>
           </div>
         </div>
@@ -2909,19 +2996,21 @@ async function loadDashboard() {
 // TAB SWITCHER — Halaman Transaksi
 // ───────────────────────────────────────────────────────────────
 function switchTrxTab(tab) {
-  ['semua','verifikasi','piutang'].forEach(t => {
+  ['semua','verifikasi','piutang','inbox'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     const btn = document.getElementById('tab-btn-' + t);
     if (!el || !btn) return;
     const isActive = t === tab;
     el.style.display = isActive ? 'block' : 'none';
-    btn.style.borderBottomColor = isActive ? 'var(--hijau)' : 'transparent';
-    btn.style.color = isActive ? 'var(--hijau)' : 'var(--text-muted)';
+    const activeColor = t === 'inbox' ? '#6366f1' : 'var(--hijau)';
+    btn.style.borderBottomColor = isActive ? activeColor : 'transparent';
+    btn.style.color = isActive ? activeColor : 'var(--text-muted)';
     btn.style.fontWeight = isActive ? '700' : '600';
   });
   if (tab === 'semua') loadTransaksi();
   if (tab === 'verifikasi') loadVerifikasi();
   if (tab === 'piutang') loadPiutang();
+  if (tab === 'inbox') loadInbox();
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -3663,6 +3752,402 @@ function onLoginSuccess() {
   console.log('[PPOB] Logged in as:', currentUser);
   // PHASE 2b akan tambahkan: loadDashboard(), loadSupplierSaldo(), dll
 }
+
+// ═══════════════════════════════════════════════════════════════
+// INBOX DIGIFLAZZ
+// Tabel: digiflazz_inbox (dibuat otomatis jika belum ada di Supabase)
+// Kolom: id, ref_id, tipe (prabayar/pascabayar), produk, sku,
+//        tujuan, status, sn, message, rc, harga, data_json (JSONB),
+//        received_at (timestamptz)
+// ═══════════════════════════════════════════════════════════════
+
+let _inboxPage    = 1;
+const INBOX_LIMIT = 50;
+let _inboxTotal   = 0;
+let _inboxTimer   = null;
+let _inboxDetail  = null;
+
+// ── DDL SQL hint untuk admin (jika tabel belum ada) ────────────
+const INBOX_DDL = `
+CREATE TABLE IF NOT EXISTS digiflazz_inbox (
+  id           bigserial PRIMARY KEY,
+  ref_id       text,
+  tipe         text,        -- 'prabayar' | 'pascabayar'
+  produk       text,
+  sku          text,
+  tujuan       text,
+  status       text,        -- 'Sukses' | 'Pending' | 'Gagal'
+  sn           text,
+  message      text,
+  rc           text,
+  harga        numeric,
+  data_json    jsonb,
+  received_at  timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_inbox_ref   ON digiflazz_inbox(ref_id);
+CREATE INDEX IF NOT EXISTS idx_inbox_recv  ON digiflazz_inbox(received_at DESC);
+`;
+
+async function loadInbox() {
+  const tbody = document.getElementById('inbox-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">⏳ Memuat...</td></tr>`;
+
+  const fromVal  = document.getElementById('inbox-filter-from')?.value;
+  const toVal    = document.getElementById('inbox-filter-to')?.value;
+  const tipe     = document.getElementById('inbox-filter-tipe')?.value;
+  const statusF  = document.getElementById('inbox-filter-status')?.value;
+  const cari     = document.getElementById('inbox-filter-cari')?.value?.trim();
+
+  try {
+    // ── Cek apakah tabel ada ──────────────────────────────────
+    const { error: probeErr } = await sb
+      .from('digiflazz_inbox')
+      .select('id', { head: true, count: 'exact' })
+      .limit(1);
+
+    if (probeErr && probeErr.code === '42P01') {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px">
+        <div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:8px">⚠️ Tabel belum dibuat</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Jalankan SQL berikut di Supabase SQL Editor:</div>
+        <pre style="text-align:left;background:#f8fafc;padding:14px;border-radius:8px;font-size:11px;border:1px solid var(--border);white-space:pre-wrap;max-width:540px;margin:0 auto">${INBOX_DDL.trim()}</pre>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:10px">Setelah tabel dibuat, webhook Digiflazz akan otomatis menyimpan notifikasi masuk.</div>
+      </td></tr>`;
+      document.getElementById('inbox-subtitle').textContent = 'Tabel belum tersedia';
+      return;
+    }
+
+    // ── Count total untuk pagination ─────────────────────────
+    let qCount = sb.from('digiflazz_inbox').select('id', { count: 'exact', head: true });
+    if (fromVal)  qCount = qCount.gte('received_at', fromVal + 'T00:00:00');
+    if (toVal)    qCount = qCount.lte('received_at', toVal   + 'T23:59:59');
+    if (tipe)     qCount = qCount.eq('tipe', tipe);
+    if (statusF)  qCount = qCount.eq('status', statusF);
+    if (cari)     qCount = qCount.or(`ref_id.ilike.%${cari}%,tujuan.ilike.%${cari}%,produk.ilike.%${cari}%,sku.ilike.%${cari}%`);
+    const { count } = await qCount;
+    _inboxTotal = count || 0;
+
+    // ── Fetch data ────────────────────────────────────────────
+    const offset = (_inboxPage - 1) * INBOX_LIMIT;
+    let q = sb.from('digiflazz_inbox')
+      .select('*')
+      .order('received_at', { ascending: false })
+      .range(offset, offset + INBOX_LIMIT - 1);
+
+    if (fromVal)  q = q.gte('received_at', fromVal + 'T00:00:00');
+    if (toVal)    q = q.lte('received_at', toVal   + 'T23:59:59');
+    if (tipe)     q = q.eq('tipe', tipe);
+    if (statusF)  q = q.eq('status', statusF);
+    if (cari)     q = q.or(`ref_id.ilike.%${cari}%,tujuan.ilike.%${cari}%,produk.ilike.%${cari}%,sku.ilike.%${cari}%`);
+
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = data || [];
+
+    // ── Summary ───────────────────────────────────────────────
+    renderInboxSummary(rows);
+
+    // ── Update subtitle ───────────────────────────────────────
+    document.getElementById('inbox-subtitle').textContent =
+      `${_inboxTotal} notifikasi tersimpan · halaman ${_inboxPage}`;
+    document.getElementById('inbox-last-update').textContent =
+      'Update: ' + new Date().toLocaleTimeString('id-ID');
+
+    // ── Badge (notif unread: status Pending) ──────────────────
+    const pendingCount = rows.filter(r => r.status === 'Pending').length;
+    const badgeEl = document.getElementById('badge-inbox');
+    if (badgeEl) {
+      badgeEl.textContent = pendingCount;
+      badgeEl.style.display = pendingCount > 0 ? 'inline' : 'none';
+    }
+
+    // ── Render rows ───────────────────────────────────────────
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">📭 Tidak ada notifikasi</td></tr>`;
+      renderInboxPagination();
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+      const waktu = r.received_at
+        ? new Date(r.received_at).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' })
+        : '—';
+
+      const statusBadge = inboxStatusBadge(r.status);
+      const tipeBadge   = r.tipe === 'prabayar'
+        ? `<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:99px;font-size:11px;font-weight:700">⚡ PRA</span>`
+        : r.tipe === 'pascabayar'
+        ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 7px;border-radius:99px;font-size:11px;font-weight:700">📄 PASCA</span>`
+        : `<span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:99px;font-size:11px">?</span>`;
+
+      // Token hint untuk prabayar sukses
+      const snDisplay = r.sn
+        ? `<span class="mono" style="font-size:11px;color:#15803d;cursor:pointer" title="${r.sn}" onclick="navigator.clipboard?.writeText('${r.sn.replace(/'/g,"\'")}').then(()=>toast('SN disalin!'))">${r.sn.length > 22 ? r.sn.slice(0,20)+'…' : r.sn}</span>`
+        : '<span style="color:#d1d5db">—</span>';
+
+      const refDisplay = r.ref_id
+        ? `<span class="mono" style="font-size:11px">${r.ref_id.length > 20 ? r.ref_id.slice(0,18)+'…' : r.ref_id}</span>`
+        : '—';
+
+      const msgDisplay = r.message
+        ? `<span style="font-size:11px;color:var(--text-muted)" title="${r.message}">${r.message.length > 30 ? r.message.slice(0,28)+'…' : r.message}</span>`
+        : '—';
+
+      return `<tr style="cursor:pointer" onclick="openInboxDetail(${r.id})">
+        <td style="font-size:11px;white-space:nowrap">${waktu}</td>
+        <td>${refDisplay}</td>
+        <td>
+          <div style="font-weight:600;font-size:12px">${r.produk || '—'}</div>
+          ${r.sku ? `<div class="mono" style="font-size:10px;color:var(--text-muted)">${r.sku}</div>` : ''}
+        </td>
+        <td class="mono" style="font-size:12px">${r.tujuan || '—'}</td>
+        <td>${tipeBadge}</td>
+        <td>${statusBadge}</td>
+        <td style="max-width:160px">${snDisplay}</td>
+        <td>${msgDisplay}</td>
+        <td>
+          <button onclick="event.stopPropagation();openInboxDetail(${r.id})"
+            style="border:none;background:var(--bg);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600">
+            Detail
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    renderInboxPagination();
+
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--red)">❌ Error: ${e.message}</td></tr>`;
+    console.error('loadInbox error:', e);
+  }
+}
+
+function inboxStatusBadge(status) {
+  const map = {
+    'Sukses':  'background:#d1fae5;color:#065f46',
+    'sukses':  'background:#d1fae5;color:#065f46',
+    'Pending': 'background:#fef3c7;color:#92400e',
+    'pending': 'background:#fef3c7;color:#92400e',
+    'Gagal':   'background:#fee2e2;color:#991b1b',
+    'gagal':   'background:#fee2e2;color:#991b1b',
+  };
+  const icon = { Sukses:'✅', sukses:'✅', Pending:'⏳', pending:'⏳', Gagal:'❌', gagal:'❌' };
+  const style = map[status] || 'background:#f3f4f6;color:#374151';
+  return `<span style="${style};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap">${icon[status] || ''} ${status || '—'}</span>`;
+}
+
+function renderInboxSummary(rows) {
+  const wrap = document.getElementById('inbox-summary');
+  if (!wrap) return;
+  const sukses  = rows.filter(r => r.status?.toLowerCase() === 'sukses').length;
+  const pending = rows.filter(r => r.status?.toLowerCase() === 'pending').length;
+  const gagal   = rows.filter(r => r.status?.toLowerCase() === 'gagal').length;
+  const pra     = rows.filter(r => r.tipe === 'prabayar').length;
+  const pasca   = rows.filter(r => r.tipe === 'pascabayar').length;
+  wrap.style.display = 'flex';
+  wrap.innerHTML = [
+    { label: 'Total (halaman ini)', val: rows.length, color: '#374151', bg: '#f3f4f6' },
+    { label: '✅ Sukses', val: sukses,  color: '#065f46', bg: '#d1fae5' },
+    { label: '⏳ Pending', val: pending, color: '#92400e', bg: '#fef3c7' },
+    { label: '❌ Gagal',   val: gagal,   color: '#991b1b', bg: '#fee2e2' },
+    { label: '⚡ Prabayar',  val: pra,   color: '#1e40af', bg: '#dbeafe' },
+    { label: '📄 Pascabayar', val: pasca, color: '#6d28d9', bg: '#ede9fe' },
+  ].map(s => `
+    <div style="background:${s.bg};border-radius:10px;padding:8px 14px;min-width:100px">
+      <div style="font-size:10px;color:${s.color};font-weight:700;margin-bottom:2px">${s.label}</div>
+      <div style="font-size:20px;font-weight:900;color:${s.color}">${s.val}</div>
+    </div>`).join('');
+}
+
+function renderInboxPagination() {
+  const wrap = document.getElementById('inbox-pagination');
+  if (!wrap) return;
+  const totalPages = Math.ceil(_inboxTotal / INBOX_LIMIT);
+  if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+
+  let html = '';
+  const btnStyle = (active) =>
+    `style="padding:5px 12px;border-radius:7px;border:1.5px solid ${active?'var(--hijau)':'var(--border)'};background:${active?'var(--hijau)':'var(--card)'};color:${active?'#fff':'var(--text)'};font-weight:700;cursor:pointer;font-size:13px"`;
+
+  if (_inboxPage > 1) html += `<button ${btnStyle(false)} onclick="inboxGoPage(${_inboxPage-1})">← Prev</button>`;
+  for (let p = Math.max(1, _inboxPage-2); p <= Math.min(totalPages, _inboxPage+2); p++) {
+    html += `<button ${btnStyle(p===_inboxPage)} onclick="inboxGoPage(${p})">${p}</button>`;
+  }
+  if (_inboxPage < totalPages) html += `<button ${btnStyle(false)} onclick="inboxGoPage(${_inboxPage+1})">Next →</button>`;
+  html += `<span style="align-self:center;font-size:12px;color:var(--text-muted)">Total: ${_inboxTotal}</span>`;
+  wrap.innerHTML = html;
+}
+
+function inboxGoPage(p) {
+  _inboxPage = p;
+  loadInbox();
+}
+
+function resetInboxFilter() {
+  ['inbox-filter-from','inbox-filter-to','inbox-filter-tipe','inbox-filter-status','inbox-filter-cari']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  _inboxPage = 1;
+  loadInbox();
+}
+
+// ── Detail modal ───────────────────────────────────────────────
+async function openInboxDetail(id) {
+  const modal = document.getElementById('inbox-detail-modal');
+  const body  = document.getElementById('inbox-detail-body');
+  modal.style.display = 'flex';
+  body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted)">⏳ Memuat...</div>';
+
+  try {
+    const { data, error } = await sb.from('digiflazz_inbox').select('*').eq('id', id).single();
+    if (error) throw error;
+    _inboxDetail = data;
+
+    const waktu = data.received_at
+      ? new Date(data.received_at).toLocaleString('id-ID', { weekday:'long', day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' })
+      : '—';
+
+    const jsonFormatted = data.data_json
+      ? JSON.stringify(data.data_json, null, 2)
+      : null;
+
+    // Token box untuk prabayar sukses dengan SN
+    const isToken = data.tipe === 'prabayar' && data.status?.toLowerCase() === 'sukses' && data.sn;
+    const tokenMatch = data.sn?.match(/(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})/);
+
+    body.innerHTML = `
+      <div style="display:grid;gap:8px">
+        ${detailRow('Ref ID', `<span class="mono">${data.ref_id || '—'}</span>`)}
+        ${detailRow('Waktu Terima', waktu)}
+        ${detailRow('Tipe', data.tipe === 'prabayar'
+          ? '<span style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:99px;font-weight:700;font-size:12px">⚡ Prabayar</span>'
+          : '<span style="background:#ede9fe;color:#6d28d9;padding:3px 10px;border-radius:99px;font-weight:700;font-size:12px">📄 Pasca Bayar</span>')}
+        ${detailRow('Status', inboxStatusBadge(data.status))}
+        ${detailRow('Produk', data.produk || '—')}
+        ${detailRow('SKU', `<span class="mono">${data.sku || '—'}</span>`)}
+        ${detailRow('No. Tujuan', `<span class="mono">${data.tujuan || '—'}</span>`)}
+        ${data.harga ? detailRow('Harga', `<strong>${formatRp(data.harga)}</strong>`) : ''}
+        ${detailRow('RC', `<span class="mono">${data.rc || '—'}</span>`)}
+        ${detailRow('Pesan', data.message || '—')}
+      </div>
+
+      ${isToken && tokenMatch ? `
+      <div style="margin:16px 0;padding:16px;background:#f0fdf4;border:2px solid #86efac;border-radius:12px;text-align:center">
+        <div style="font-size:11px;color:#15803d;font-weight:700;margin-bottom:8px;letter-spacing:1px">⚡ TOKEN LISTRIK PLN</div>
+        <div style="font-family:monospace;font-size:24px;font-weight:900;color:#14532d;letter-spacing:3px;line-height:1.4">${tokenMatch[1]}</div>
+        <button onclick="navigator.clipboard?.writeText('${tokenMatch[1].replace(/-/g,'')}').then(()=>toast('Token disalin!'))"
+          style="margin-top:10px;border:none;background:#15803d;color:white;padding:6px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+          📋 Salin Token
+        </button>
+      </div>` : data.sn ? `
+      <div style="margin:16px 0;padding:12px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:10px">
+        <div style="font-size:11px;color:var(--text-muted);font-weight:700;margin-bottom:6px">SN / SERIAL NUMBER</div>
+        <div class="mono" style="font-size:13px;font-weight:600;word-break:break-all">${data.sn}</div>
+        <button onclick="navigator.clipboard?.writeText('${(data.sn||'').replace(/'/g,"\'")}').then(()=>toast('SN disalin!'))"
+          style="margin-top:8px;border:none;background:var(--bg);color:var(--text);padding:5px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--border)">
+          📋 Salin SN
+        </button>
+      </div>` : ''}
+
+      ${jsonFormatted ? `
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-muted);padding:6px 0">📦 Raw JSON Payload</summary>
+        <pre style="background:#f8fafc;padding:12px;border-radius:8px;font-size:11px;border:1px solid var(--border);overflow-x:auto;margin-top:6px;max-height:240px;overflow-y:auto">${jsonFormatted.replace(/</g,'&lt;')}</pre>
+      </details>` : ''}
+
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+        <button onclick="inboxMatchTrx('${data.ref_id || ''}')"
+          style="flex:1;padding:10px;border:none;background:#dbeafe;color:#1e40af;border-radius:10px;font-weight:700;cursor:pointer;font-size:13px">
+          🔗 Cocokkan Transaksi
+        </button>
+        <button onclick="closeInboxDetail()"
+          style="flex:1;padding:10px;border:1.5px solid var(--border);background:var(--card);color:var(--text);border-radius:10px;font-weight:600;cursor:pointer;font-size:13px">
+          ✕ Tutup
+        </button>
+      </div>
+    `;
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);padding:16px">Error: ${e.message}</div>`;
+  }
+}
+
+function detailRow(label, val) {
+  return `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+    <span style="color:var(--text-muted);min-width:110px;flex-shrink:0;font-weight:500">${label}</span>
+    <span style="color:var(--text);font-weight:600;flex:1">${val}</span>
+  </div>`;
+}
+
+function closeInboxDetail() {
+  document.getElementById('inbox-detail-modal').style.display = 'none';
+  _inboxDetail = null;
+}
+
+// Cocokkan ref_id inbox ke transaksi ppob
+async function inboxMatchTrx(refId) {
+  if (!refId) { toast('Ref ID kosong', true); return; }
+  closeInboxDetail();
+  // Switch ke tab semua dan filter by ref ID
+  document.getElementById('trx-filter-cari').value = refId;
+  switchTrxTab('semua');
+  await loadTransaksi();
+  toast('🔍 Filter transaksi: ' + refId);
+}
+
+// ── Auto-refresh ───────────────────────────────────────────────
+function toggleInboxAutoRefresh(on) {
+  if (_inboxTimer) clearInterval(_inboxTimer);
+  _inboxTimer = null;
+  if (on) {
+    _inboxTimer = setInterval(() => {
+      const tab = document.getElementById('tab-inbox');
+      if (tab && tab.style.display !== 'none') loadInbox();
+    }, 15000);
+    toast('🔄 Auto-refresh aktif (15 detik)');
+  }
+}
+
+// ── Hapus data lama (> 30 hari) ────────────────────────────────
+async function clearInbox() {
+  const confirm = window.confirm('Hapus semua notifikasi inbox yang lebih dari 30 hari?\nData tidak bisa dikembalikan.');
+  if (!confirm) return;
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { error, count } = await sb
+    .from('digiflazz_inbox')
+    .delete({ count: 'exact' })
+    .lt('received_at', cutoff);
+  if (error) { toast('Gagal hapus: ' + error.message, true); return; }
+  toast(`🗑️ ${count || 0} notifikasi lama dihapus`);
+  loadInbox();
+}
+
+// ── Ingest manual (dari webhook Digiflazz yg sudah berjalan) ──
+// Fungsi ini dipanggil oleh server proxy saat terima callback.
+// Jika ingin bisa juga dicatat langsung dari browser,
+// bisa panggil fungsi ini dengan payload Digiflazz.
+async function ingestInboxPayload(payload) {
+  if (!payload) return;
+  // Deteksi prabayar vs pascabayar dari struktur payload Digiflazz
+  const isPassca = !!(payload.invoice_number || payload.meter_number || payload.subscriber_id);
+  const tipe     = isPassca ? 'pascabayar' : 'prabayar';
+
+  const row = {
+    ref_id:      payload.ref_id      || payload.trx_id      || null,
+    tipe,
+    produk:      payload.buyer_product_status || payload.product_name || payload.produk || null,
+    sku:         payload.buyer_sku_code || payload.sku       || null,
+    tujuan:      payload.customer_no  || payload.tujuan      || null,
+    status:      payload.status       || null,
+    sn:          payload.sn           || payload.serial_number || null,
+    message:     payload.message      || null,
+    rc:          payload.rc           || null,
+    harga:       payload.price        || payload.harga       || null,
+    data_json:   payload,
+  };
+
+  const { error } = await sb.from('digiflazz_inbox').insert([row]);
+  if (error) console.warn('ingestInboxPayload error:', error.message);
+}
+
 </script>
 </body>
 </html>
