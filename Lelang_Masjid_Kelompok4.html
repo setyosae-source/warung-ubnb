@@ -130,7 +130,6 @@
   .gbadge-grp{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.4px;white-space:nowrap}
   .gbadge-grp.all{background:#e4f4ec;color:var(--ok)}
   .gbadge-grp.part{background:#fef5e7;color:#b07a20}
-  .gentry-wrap{position:relative;isolation:isolate}
   .gentry{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid #ede7d6}
   .gdesc{flex:1;font-size:12.5px;color:#5c6b62;min-width:0}
   .gpay-wrap{display:flex;align-items:center;gap:5px;flex:0 0 auto}
@@ -143,17 +142,6 @@
   .gunpay{background:none;border:none;color:#c5cfc9;font-size:13px;cursor:pointer;padding:0 2px;line-height:1}
   .gdel{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:2px 6px;line-height:1}
   .empty{text-align:center;color:#9aa89f;font-size:13px;padding:18px 0}
-  /* riwayat bayar */
-  .griwayat{background:#f7fdf9;border-top:1px dashed #c5e0d5;padding:6px 12px 8px}
-  .griwayat-title{font-size:10.5px;font-weight:700;color:#5c9e7a;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
-  .griwayat-row{display:flex;justify-content:space-between;font-size:11.5px;color:#5c6b62;padding:2px 0;border-bottom:1px solid #e8f2ec}
-  .griwayat-row:last-child{border-bottom:none}
-  .griwayat-row .gtgl{color:#8a978d;font-size:10.5px}
-  .griwayat-row .gnilai{font-weight:600;color:var(--ok)}
-  .griwayat-row .ghapus{background:none;border:none;color:#e89070;font-size:11px;cursor:pointer;padding:0 3px}
-  .gsisa-info{font-size:11px;color:var(--red);font-weight:600;margin-top:4px}
-  .gpay-tambah{background:none;border:1.4px solid #5c9e7a;color:#2f6b4a;border-radius:99px;padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;font-family:inherit;font-weight:600}
-  .gpay-tambah:active{background:#e4f4ec55}
 
   /* shadow settings button */
   .btn-setting{
@@ -383,17 +371,7 @@ async function loadFromDB(){
     sbFetch('/rest/v1/lelang_entries?select=*&order=seq'),
     sbFetch('/rest/v1/lelang_settings?select=*'),
   ]);
-  state.entries=(rows||[]).map(r=>{
-    let riwayat=[];
-    try{
-      const raw=r.nilai_bayar;
-      if(typeof raw==='string'&&raw.startsWith('[')){riwayat=JSON.parse(raw);}
-      else if(typeof raw==='number'&&raw>0){riwayat=[{tgl:r.ts||Date.now(),nilai:raw}];}
-      else if(raw&&!isNaN(raw)&&+raw>0){riwayat=[{tgl:r.ts||Date.now(),nilai:+raw}];}
-    }catch(ex){}
-    const totalBayar=riwayat.reduce((s,x)=>s+(+x.nilai||0),0);
-    return {_id:r.id,itemId:r.item_id,nama:r.nama,qty:+r.qty,ts:r.ts,paid:!!r.paid,nilayBayar:totalBayar,riwayatBayar:riwayat};
-  });
+  state.entries=(rows||[]).map(r=>({_id:r.id,itemId:r.item_id,nama:r.nama,qty:+r.qty,ts:r.ts,paid:!!r.paid,nilayBayar:+r.nilai_bayar||0}));
   state.seq=(rows||[]).reduce((m,r)=>Math.max(m,r.seq),0)+1;
   (settings||[]).forEach(s=>{try{
     if(s.key==='panitia') state.panitia=JSON.parse(s.value);
@@ -421,58 +399,39 @@ async function addEntryDB(entry){
   setSync('saving');
   try{
     const res=await sbFetch('/rest/v1/lelang_entries',{method:'POST',
-      body:JSON.stringify({seq:state.seq++,item_id:entry.itemId,nama:entry.nama,qty:entry.qty,ts:entry.ts,paid:false,nilai_bayar:'[]'})
+      body:JSON.stringify({seq:state.seq++,item_id:entry.itemId,nama:entry.nama,qty:entry.qty,ts:entry.ts,paid:false,nilai_bayar:0})
     });
     entry._id=res[0].id;
     setSync('ok');
   }catch(e){setSync('error'); toast('Gagal simpan, coba lagi');}
-  entry.paid=false; entry.nilayBayar=0; entry.riwayatBayar=[];
+  entry.paid=false; entry.nilayBayar=0;
   state.entries.push(entry); render();
 }
 async function deleteEntryDB(sbId){
   setSync('saving');
-  state.entries=state.entries.filter(e=>String(e._id)!==String(sbId)); render();
+  state.entries=state.entries.filter(e=>e._id!==sbId); render();
   try{
     await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'DELETE',headers:{'Prefer':''}});
     setSync('ok');
   }catch(e){setSync('error');}
 }
 async function markPaymentDB(sbId, nilai){
-  const e=state.entries.find(x=>String(x._id)===String(sbId)); if(!e) return;
-  if(!e.riwayatBayar) e.riwayatBayar=[];
-  const newEntry={tgl:Date.now(),nilai:nilai};
-  e.riwayatBayar.push(newEntry);
-  e.nilayBayar=e.riwayatBayar.reduce((s,x)=>s+(+x.nilai||0),0);
-  const tagihan=entryNominal(e);
-  e.paid=e.nilayBayar>=tagihan;
-  setSync('saving'); render();
+  const e=state.entries.find(x=>x._id===sbId); if(!e) return;
+  e.paid=true; e.nilayBayar=nilai; setSync('saving'); render();
   try{
     await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'PATCH',
-      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:e.paid,nilai_bayar:JSON.stringify(e.riwayatBayar)})});
+      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:true,nilai_bayar:nilai})});
     setSync('ok');
-  }catch(ex){setSync('error');}
+  }catch(e){setSync('error');}
 }
 async function cancelPaymentDB(sbId){
-  const e=state.entries.find(x=>String(x._id)===String(sbId)); if(!e) return;
-  e.paid=false; e.nilayBayar=0; e.riwayatBayar=[]; setSync('saving'); render();
+  const e=state.entries.find(x=>x._id===sbId); if(!e) return;
+  e.paid=false; e.nilayBayar=0; setSync('saving'); render();
   try{
     await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'PATCH',
-      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:false,nilai_bayar:'[]'})});
+      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:false,nilai_bayar:0})});
     setSync('ok');
-  }catch(ex){setSync('error');}
-}
-async function hapusBayarTerakhirDB(sbId){
-  const e=state.entries.find(x=>String(x._id)===String(sbId)); if(!e||!e.riwayatBayar||!e.riwayatBayar.length) return;
-  e.riwayatBayar.pop();
-  e.nilayBayar=e.riwayatBayar.reduce((s,x)=>s+(+x.nilai||0),0);
-  const tagihan=entryNominal(e);
-  e.paid=e.riwayatBayar.length>0&&e.nilayBayar>=tagihan;
-  setSync('saving'); render();
-  try{
-    await sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'PATCH',
-      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:e.paid,nilai_bayar:JSON.stringify(e.riwayatBayar)})});
-    setSync('ok');
-  }catch(ex){setSync('error');}
+  }catch(e){setSync('error');}
 }
 async function resetDB(){
   setSync('saving');
@@ -584,43 +543,20 @@ function render(){
       const ents=groups[nama];
       const totNama=ents.reduce((s,e)=>s+entryNominal(e),0);
       const paidCount=ents.filter(e=>e.paid).length;
-      const hasPartial=ents.filter(e=>!e.paid&&(e.riwayatBayar||[]).length>0).length;
       let badge='';
       if(paidCount>0&&paidCount===ents.length) badge='<span class="gbadge-grp all">SEMUA LUNAS</span>';
-      else if(paidCount>0||hasPartial>0) badge=`<span class="gbadge-grp part">${paidCount}/${ents.length} lunas</span>`;
+      else if(paidCount>0) badge=`<span class="gbadge-grp part">${paidCount}/${ents.length} lunas</span>`;
       const rows=ents.map(e=>{
         const it=itemById(e.itemId);
         const desc=e.itemId===0?'Infaq bebas':`${e.qty} ${it.sat} · ${it.nama}`;
         const defaultVal=entryNominal(e);
-        const rw=e.riwayatBayar||[];
-        const totalBayar=rw.reduce((s,x)=>s+(+x.nilai||0),0);
-        const sisa=Math.max(0,defaultVal-totalBayar);
-        // riwayat rows
-        let riwayatHtml='';
-        if(rw.length>0){
-          const rowsRw=rw.map((x,xi)=>{
-            const d=new Date(+x.tgl);
-            const tglStr=d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+'.'+String(d.getMinutes()).padStart(2,'0');
-            return `<div class="griwayat-row"><span class="gtgl">Tgl ${tglStr}</span><span class="gnilai">${rp(x.nilai)}</span><button class="ghapus" data-id="${e._id}" data-xi="${xi}" title="Hapus bayar ini">✕</button></div>`;
-          }).join('');
-          const sisaInfo=sisa>0?`<div class="gsisa-info">⏳ Sisa belum bayar: ${rp(sisa)}</div>`:'';
-          riwayatHtml=`<div class="griwayat"><div class="griwayat-title">Riwayat Bayar</div>${rowsRw}${sisaInfo}</div>`;
-        }
-        // pay area
-        let payArea;
-        if(e.paid){
-          payArea=`<div class="gpay-wrap"><span class="gbadge-lunas">✅ LUNAS</span><span class="gpaid-val">${rp(totalBayar)}</span><button class="gpay-tambah" data-id="${e._id}" data-default="${sisa>0?sisa:defaultVal}" title="Tambah pembayaran">+ Bayar</button><button class="gunpay" data-id="${e._id}" title="Reset semua bayar">↩</button></div>`;
-        } else if(rw.length>0){
-          payArea=`<div class="gpay-wrap"><span style="font-size:11px;color:#b07a20;font-weight:600">⏳ ${rp(totalBayar)}/${rp(defaultVal)}</span><button class="gpay-tambah" data-id="${e._id}" data-default="${sisa}" title="Tambah pembayaran">+ Bayar</button><button class="gunpay" data-id="${e._id}" title="Reset semua bayar">↩</button></div>`;
-        } else {
-          payArea=`<div class="gpay-wrap"><span class="gtagihan">⏳ ${rp(defaultVal)}</span><button class="gpay" data-id="${e._id}" data-default="${defaultVal}">Bayar</button></div>`;
-        }
-        return `<div class="gentry-wrap" data-entry-id="${e._id}">
-          <div class="gentry">
-            <span class="gdesc">${desc}</span>
-            ${payArea}
-            <button class="gdel" data-id="${e._id}">×</button>
-          </div>${riwayatHtml}
+        const payArea=e.paid
+          ?`<div class="gpay-wrap"><span class="gbadge-lunas">✅ LUNAS</span><span class="gpaid-val">${rp(e.nilayBayar)}</span><button class="gunpay" data-id="${e._id}" title="Batal bayar">↩</button></div>`
+          :`<div class="gpay-wrap"><span class="gtagihan">⏳ ${rp(defaultVal)}</span><button class="gpay" data-id="${e._id}" data-default="${defaultVal}">Bayar</button></div>`;
+        return `<div class="gentry">
+          <span class="gdesc">${desc}</span>
+          ${payArea}
+          <button class="gdel" data-id="${e._id}">×</button>
         </div>`;
       }).join('');
       return `<div class="group">
@@ -661,15 +597,21 @@ $('#btnAdd').addEventListener('click',async()=>{
 });
 
 $('#logList').addEventListener('click',e=>{
-  // Gunakan e.target langsung — lebih aman di mobile, hindari closest() yang bisa naik ke tombol lain
-  const btn=e.target;
-  if(!btn || btn.tagName!=='BUTTON') return;
-
-  // Bayar pertama kali
-  if(btn.classList.contains('gpay')){
-    e.stopPropagation();
-    const sbId=btn.dataset.id;
-    const defVal=+btn.dataset.default||0;
+  const del=e.target.closest('.gdel');
+  if(del){
+    const k1=prompt('Kode akses pertama:');
+    if(k1===null) return;
+    if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
+    const k2=prompt('Kode akses kedua:');
+    if(k2===null) return;
+    if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
+    if(confirm('Hapus entri ini?')) deleteEntryDB(+del.dataset.id);
+    return;
+  }
+  const pay=e.target.closest('.gpay');
+  if(pay){
+    const sbId=+pay.dataset.id;
+    const defVal=+pay.dataset.default||0;
     const k1=prompt('Kode akses pertama:');
     if(k1===null) return;
     if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
@@ -683,64 +625,8 @@ $('#logList').addEventListener('click',e=>{
     markPaymentDB(sbId, val);
     return;
   }
-  // Tambah bayar (cicilan berikutnya)
-  if(btn.classList.contains('gpay-tambah')){
-    e.stopPropagation();
-    const sbId=btn.dataset.id;
-    const defVal=+btn.dataset.default||0;
-    const k1=prompt('Kode akses pertama:');
-    if(k1===null) return;
-    if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
-    const k2=prompt('Kode akses kedua:');
-    if(k2===null) return;
-    if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-    const input=prompt(`Tambah pembayaran:\n(sisa: ${rp(defVal)})`, defVal);
-    if(input===null) return;
-    const val=parseFloat(String(input).replace(/[^0-9]/g,''));
-    if(!val||val<=0){ toast('Nilai tidak valid'); return; }
-    markPaymentDB(sbId, val);
-    return;
-  }
-  // Reset semua bayar
-  if(btn.classList.contains('gunpay')){
-    e.stopPropagation();
-    cancelPaymentDB(btn.dataset.id);
-    return;
-  }
-  // Hapus 1 baris riwayat bayar
-  if(btn.classList.contains('ghapus')){
-    e.stopPropagation();
-    const sbId=btn.dataset.id;
-    const xi=+btn.dataset.xi;
-    const k1=prompt('Kode akses pertama:');
-    if(k1===null) return;
-    if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
-    const k2=prompt('Kode akses kedua:');
-    if(k2===null) return;
-    if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-    const entry=state.entries.find(x=>String(x._id)===String(sbId)); if(!entry) return;
-    if(!confirm(`Hapus pembayaran ke-${xi+1} ini?`)) return;
-    entry.riwayatBayar.splice(xi,1);
-    entry.nilayBayar=entry.riwayatBayar.reduce((s,x)=>s+(+x.nilai||0),0);
-    entry.paid=entry.riwayatBayar.length>0&&entry.nilayBayar>=entryNominal(entry);
-    setSync('saving'); render();
-    sbFetch(`/rest/v1/lelang_entries?id=eq.${sbId}`,{method:'PATCH',
-      headers:{'Prefer':'return=minimal'},body:JSON.stringify({paid:entry.paid,nilai_bayar:JSON.stringify(entry.riwayatBayar)})})
-      .then(()=>setSync('ok')).catch(()=>setSync('error'));
-    return;
-  }
-  // Hapus entri (×) — paling terakhir dicek supaya tidak nyasar
-  if(btn.classList.contains('gdel')){
-    e.stopPropagation();
-    const k1=prompt('Kode akses pertama:');
-    if(k1===null) return;
-    if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
-    const k2=prompt('Kode akses kedua:');
-    if(k2===null) return;
-    if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-    if(confirm('Hapus entri ini?')) deleteEntryDB(btn.dataset.id);
-    return;
-  }
+  const unpay=e.target.closest('.gunpay');
+  if(unpay){ cancelPaymentDB(+unpay.dataset.id); return; }
 });
 
 ['setNama','setWa','setRek'].forEach(k=>{
@@ -878,43 +764,42 @@ function exportExcel(){
   if(typeof XLSX==='undefined'){ toast('Library belum termuat, coba lagi sebentar'); return; }
   const wb=XLSX.utils.book_new();
   const g=grouped();
-
-  // ── Sheet 1: Rekap Donatur (+ kolom bayar & sisa) ──
+  // Sheet 1 – Rekap donatur + status bayar
   const r1=[
     ['REKAP SHODAQOH LELANG — PEMBANGUNAN MASJID KELOMPOK 4'],
     ['Tanggal:',nowStr()],[],
-    ['No','Nama Donatur','Item','Qty','Satuan','Tagihan (Rp)','Sudah Bayar (Rp)','Sisa (Rp)','Status']
+    ['No','Nama Donatur','Item','Qty','Satuan','Tagihan (Rp)','Sudah Dibayar (Rp)','Sisa (Rp)','Status']
   ];
   let no=1;
   Object.keys(g).forEach(nama=>{
     g[nama].forEach((e,i)=>{
       const it=itemById(e.itemId);
       const tagihan=entryNominal(e);
-      const rw=e.riwayatBayar||[];
-      const bayar=rw.reduce((s,x)=>s+(+x.nilai||0),0);
+      const bayar=(e.riwayatBayar||[]).reduce((s,x)=>s+(+x.nilai||0),0);
       const sisa=Math.max(0,tagihan-bayar);
-      const status=bayar>=tagihan?'LUNAS':bayar>0?'SEBAGIAN':'BELUM';
-      r1.push([
-        i===0?no:'', i===0?nama:'',
-        e.itemId===0?'Infaq bebas':it.nama,
-        e.qty, e.itemId===0?'rupiah':it.sat,
-        tagihan, bayar, sisa, status
-      ]);
+      const status=e.paid?'LUNAS':(bayar>0?'CICILAN':'BELUM BAYAR');
+      r1.push([i===0?no:'', i===0?nama:'',
+        e.itemId===0?'Infaq bebas':it.nama, e.qty,
+        e.itemId===0?'rupiah':it.sat,
+        tagihan, bayar, sisa, status]);
     });
-    const subTag=g[nama].reduce((s,e)=>s+entryNominal(e),0);
-    const subBayar=g[nama].reduce((s,e)=>s+(e.riwayatBayar||[]).reduce((a,x)=>a+(+x.nilai||0),0),0);
-    r1.push(['','','','','Subtotal:',subTag,subBayar,Math.max(0,subTag-subBayar),'']);
+    const subtag=g[nama].reduce((s,e)=>s+entryNominal(e),0);
+    const subbay=g[nama].reduce((s,e)=>s+(e.riwayatBayar||[]).reduce((a,x)=>a+(+x.nilai||0),0),0);
+    const subsisa=Math.max(0,subtag-subbay);
+    r1.push(['','','','','Subtotal:',subtag,subbay,subsisa,'']);
     no++;
   });
   const totalTag=totalTerkumpul();
-  const totalBayar=state.entries.reduce((s,e)=>s+(e.riwayatBayar||[]).reduce((a,x)=>a+(+x.nilai||0),0),0);
-  r1.push([],['','','','','TOTAL TAGIHAN:',totalTag,totalBayar,Math.max(0,totalTag-totalBayar),'']);
-  r1.push(['','','','','Sisa kebutuhan:',Math.max(0,TARGET-totalTag),'','','']);
+  const totalBay=state.entries.reduce((s,e)=>s+(e.riwayatBayar||[]).reduce((a,x)=>a+(+x.nilai||0),0),0);
+  r1.push([]);
+  r1.push(['','','','','TOTAL TAGIHAN:',totalTag,'','','']);
+  r1.push(['','','','','TOTAL DIBAYAR:','',totalBay,'','']);
+  r1.push(['','','','','SISA BELUM BAYAR:','','',(Math.max(0,totalTag-totalBay)),'']);
+  r1.push(['','','','','Sisa kebutuhan item:',Math.max(0,TARGET-totalTag),'','','']);
   const ws1=XLSX.utils.aoa_to_sheet(r1);
-  ws1['!cols']=[{wch:5},{wch:24},{wch:28},{wch:8},{wch:10},{wch:18},{wch:18},{wch:14},{wch:12}];
+  ws1['!cols']=[{wch:5},{wch:24},{wch:28},{wch:6},{wch:10},{wch:18},{wch:20},{wch:16},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws1,'Rekap Donatur');
-
-  // ── Sheet 2: Status Item ──
+  // Sheet 2 – Status item
   const r2=[['STATUS ITEM LELANG'],[],
     ['No','Item','Kategori','Butuh','Terkumpul Qty','Nilai Terkumpul (Rp)','Sisa Qty','Sisa Nilai (Rp)']];
   ITEMS.forEach(i=>{
@@ -925,46 +810,6 @@ function exportExcel(){
   const ws2=XLSX.utils.aoa_to_sheet(r2);
   ws2['!cols']=[{wch:5},{wch:28},{wch:14},{wch:10},{wch:16},{wch:22},{wch:10},{wch:20}];
   XLSX.utils.book_append_sheet(wb,ws2,'Status Item');
-
-  // ── Sheet 3: Laporan Pembayaran (riwayat tiap bayar) ──
-  const r3=[
-    ['LAPORAN PEMBAYARAN RINCI — PEMBANGUNAN MASJID KELOMPOK 4'],
-    ['Tanggal cetak:',nowStr()],[],
-    ['No','Nama Donatur','Item','Tagihan (Rp)','Pembayaran ke-','Tgl Bayar','Nilai Bayar (Rp)','Total Terbayar (Rp)','Sisa (Rp)','Status']
-  ];
-  let no3=1;
-  Object.keys(g).forEach(nama=>{
-    g[nama].forEach(e=>{
-      const it=itemById(e.itemId);
-      const tagihan=entryNominal(e);
-      const rw=e.riwayatBayar||[];
-      if(rw.length===0){
-        r3.push([no3,nama,e.itemId===0?'Infaq bebas':it.nama,tagihan,'—','—',0,0,tagihan,'BELUM']);
-      } else {
-        let kumulatif=0;
-        rw.forEach((x,xi)=>{
-          const d=new Date(+x.tgl);
-          const tglStr=d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+'.'+String(d.getMinutes()).padStart(2,'0');
-          kumulatif+=(+x.nilai||0);
-          const sisaX=Math.max(0,tagihan-kumulatif);
-          const statusX=sisaX===0?'LUNAS':'SEBAGIAN';
-          r3.push([
-            xi===0?no3:'',
-            xi===0?nama:'',
-            xi===0?(e.itemId===0?'Infaq bebas':it.nama):'',
-            xi===0?tagihan:'',
-            xi+1, tglStr, +x.nilai||0, kumulatif, sisaX, statusX
-          ]);
-        });
-      }
-      no3++;
-    });
-  });
-  r3.push([],['','','','','','TOTAL TERBAYAR:',state.entries.reduce((s,e)=>s+(e.riwayatBayar||[]).reduce((a,x)=>a+(+x.nilai||0),0),0)]);
-  const ws3=XLSX.utils.aoa_to_sheet(r3);
-  ws3['!cols']=[{wch:5},{wch:24},{wch:26},{wch:16},{wch:15},{wch:20},{wch:18},{wch:20},{wch:14},{wch:12}];
-  XLSX.utils.book_append_sheet(wb,ws3,'Laporan Pembayaran');
-
   XLSX.writeFile(wb,`Lelang_Masjid_K4_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('File Excel sedang diunduh...');
 }
