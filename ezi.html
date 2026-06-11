@@ -764,6 +764,18 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .trx-status-badge.sukses{background:#d1fae5;color:#065f46}
 .trx-status-badge.pending{background:#fef3c7;color:#92400e}
 .trx-status-badge.gagal{background:#fee2e2;color:#991b1b}
+/* ── Struk preview styles (mirip warung) ── */
+.struk-admin-wrap .sh{text-align:center;margin-bottom:14px}
+.struk-admin-wrap .sh .logo{width:48px;height:48px;background:#fef9c3;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#1a2744;margin:0 auto 8px;letter-spacing:-1px;font-family:inherit}
+.struk-admin-wrap .sh h3{font-size:18px;font-weight:800;color:#111;margin:0 0 2px}
+.struk-admin-wrap .sh p{font-size:11px;color:#888;margin:2px 0;line-height:1.5}
+.struk-admin-wrap .sdiv{border:none;border-top:1.5px dashed #ddd;margin:10px 0}
+.struk-admin-wrap .srow{display:flex;justify-content:space-between;align-items:flex-start;margin:5px 0;font-size:13px;color:#222;gap:8px}
+.struk-admin-wrap .srow.bold{font-weight:800;font-size:16px}
+.struk-admin-wrap .srow.disc{color:#dc2626}
+.struk-admin-wrap .sfooter{text-align:center;font-size:11px;color:#aaa;margin-top:12px}
+.struk-admin-wrap .sfooter .thx{font-size:13px;color:#15803d;font-weight:700;margin-bottom:4px;line-height:1.5}
+
 </style>
 </head>
 <body>
@@ -3842,162 +3854,221 @@ async function arOpenStruk(refId){
 }
 
 function renderStrukAdmin(d){
-  // ── helpers ──
-  const tgl = dt => {
+  /* ── helpers ── */
+  const fmtTgl = dt => {
     if(!dt) return '—';
     const o = new Date(dt);
-    const hari = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][o.getDay()];
-    const tgl2 = String(o.getDate()).padStart(2,'0');
-    const bln  = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][o.getMonth()];
-    const thn  = o.getFullYear();
-    const jam  = String(o.getHours()).padStart(2,'0');
-    const mnt  = String(o.getMinutes()).padStart(2,'0');
-    return `${hari}, ${tgl2} ${bln} ${thn}`;
+    const HARI  = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli',
+                   'Agustus','September','Oktober','November','Desember'];
+    return `${HARI[o.getDay()]}, ${o.getDate()} ${BULAN[o.getMonth()]} ${o.getFullYear()}`;
   };
-  const jam = dt => {
+  const fmtJam = dt => {
     if(!dt) return '';
-    const o=new Date(dt);
-    return String(o.getHours()).padStart(2,'0')+'.'+String(o.getMinutes()).padStart(2,'0');
+    const o = new Date(dt);
+    return String(o.getHours()).padStart(2,'0') + '.' + String(o.getMinutes()).padStart(2,'0');
   };
+  const fmtRp = v => 'Rp\u00a0' + Number(v||0).toLocaleString('id-ID');
 
-  // ── parse SN / token PLN ──
-  const parts   = (d.sn||'').split('/');
-  const isPLN   = (d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
-  const tokenStr= (isPLN && parts.length>=4) ? parts[0].trim() : (isPLN&&d.sn ? d.sn : null);
-  const namaPLN = parts.length>=4 ? parts[1].trim() : '';
-  const tarifPLN= parts.length>=4 ? (parts[2]||'').trim() : '';
-  const standPLN= parts.length>=5 ? (parts[4]||'').trim() : '';
+  /* ── parse SN / token ── */
+  const sn        = d.sn || '';
+  const parts     = sn.split('/');
+  const namaProd  = (d.nama_produk||'').toLowerCase();
 
-  // ── pelanggan ──
-  const pelNama  = d.ppob_pelanggan?.nama || null;
-  const noAnggota= d.ppob_pelanggan?.no_anggota || d.ppob_pelanggan?.anggota_id || null;
-  const pelTipe  = d.ppob_pelanggan?.tipe || '';
-  const isAnggota= pelTipe==='anggota'||pelTipe==='jamaah';
+  // Token PLN: HANYA prabayar (kata "token" atau "prabayar" di nama produk)
+  const isPraBayar = namaProd.includes('token') ||
+                     namaProd.includes('prabayar') ||
+                     namaProd.includes('prepaid');
+  const isPascaBayar = namaProd.includes('pascabayar') ||
+                       namaProd.includes('pasca bayar') ||
+                       namaProd.includes('pasca') ||
+                       namaProd.includes('postpaid') ||
+                       namaProd.includes('tagihan');
 
-  // ── harga & status ──
+  // Token regex — 5 grup 4 digit, atau 20 digit beruntun
+  const tokenRe = /(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})/;
+  const tokenMatchSN = sn.match(tokenRe);
+  const tokenStr = isPraBayar && !isPascaBayar && tokenMatchSN
+                   ? tokenMatchSN[1].replace(/\s/g,'-')
+                   : null;
+
+  /* ── info pelanggan ── */
+  const pelNama    = d.ppob_pelanggan?.nama || null;
+  const noAnggota  = d.ppob_pelanggan?.no_anggota || d.ppob_pelanggan?.anggota_id || null;
+  const pelTipe    = (d.ppob_pelanggan?.tipe||'').toLowerCase();
+  const isAnggota  = pelTipe==='anggota' || pelTipe==='jamaah';
+
+  /* ── harga & status ── */
   const hargaJual  = Number(d.harga_jual||0);
   const statusBayar= d.status_bayar;
-  let statusLabel, statusClass;
-  if(statusBayar==='lunas'){statusLabel='✓ LUNAS';statusClass='sp-status-lunas';}
-  else if(statusBayar==='utang'){statusLabel='⏳ BELUM BAYAR';statusClass='sp-status-belum';}
-  else if(d.status==='gagal'){statusLabel='✗ GAGAL';statusClass='sp-status-gagal';}
-  else{statusLabel='⏳ BELUM BAYAR';statusClass='sp-status-belum';}
+  const statusTrx  = d.status;
 
-  // ── ref nomor pendek ──
-  const refShort = (d.ref_id||'').length > 22
-    ? (d.ref_id||'').slice(0,22)+'…'
-    : (d.ref_id||'—');
-
-  // ── operator / dibuat oleh ──
-  const opNama = currentAdmin?.nama || 'Admin';
-
-  // ── section detail per produk ──
-  // Deteksi kategori dari nama produk
-  const pn = (d.nama_produk||'').toLowerCase();
-  const isPDAM   = pn.includes('pdam')||pn.includes('air');
-  const isBPJS   = pn.includes('bpjs');
-  const isTelkom = pn.includes('telkom')||pn.includes('indihome');
-  const isPulsa  = pn.includes('pulsa')||pn.includes('data')||pn.includes('paket');
-
-  // ── serial / SN non-PLN ──
-  const snDisplay = d.sn && !isPLN ? d.sn : null;
-
-  // ── section title ──
-  let sectionTitle = d.nama_produk||'—';
-
-  // Baris detail produk
-  let detailRows = '';
-  if(isPLN && namaPLN){
-    detailRows += `<div class="sp-row"><span class="sp-row-l">Nama</span><span class="sp-row-r">${namaPLN}</span></div>`;
-    detailRows += `<div class="sp-row"><span class="sp-row-l">IDPEL</span><span class="sp-row-r mono">${d.tujuan||'—'}</span></div>`;
-    if(standPLN) detailRows += `<div class="sp-row"><span class="sp-row-l">Stand</span><span class="sp-row-r mono">${standPLN}</span></div>`;
-    if(tarifPLN) detailRows += `<div class="sp-row"><span class="sp-row-l">${tarifPLN}</span><span class="sp-row-r"></span></div>`;
-    // periode dari SN: biasanya parts[3]
-    const periPLN = parts.length>=4 ? (parts[3]||'').trim() : '';
-    if(periPLN) detailRows += `<div class="sp-row"><span class="sp-row-l">Periode</span><span class="sp-row-r">${periPLN}</span></div>`;
-  } else if(isPDAM){
-    detailRows += `<div class="sp-row"><span class="sp-row-l">Nama Rekening</span><span class="sp-row-r">${namaPLN||'—'}</span></div>`;
-    detailRows += `<div class="sp-row"><span class="sp-row-l">No Pelanggan</span><span class="sp-row-r mono">${d.tujuan||'—'}</span></div>`;
-    if(snDisplay) detailRows += `<div class="sp-row"><span class="sp-row-l">No Referensi</span><span class="sp-row-r mono" style="font-size:11px">${snDisplay}</span></div>`;
-  } else if(isPulsa||isBPJS||isTelkom){
-    detailRows += `<div class="sp-row"><span class="sp-row-l">No Tujuan</span><span class="sp-row-r mono">${d.tujuan||'—'}</span></div>`;
-    if(snDisplay) detailRows += `<div class="sp-row"><span class="sp-row-l">Serial</span><span class="sp-row-r mono" style="font-size:11px">${snDisplay}</span></div>`;
-    detailRows += `<div class="sp-row"><span class="sp-row-l">${d.nama_produk||''}</span><span class="sp-row-r"></span></div>`;
+  let statusHtml;
+  if(statusBayar==='lunas'){
+    statusHtml = `<span style="color:#15803d;font-weight:700">✓ LUNAS</span>`;
+  } else if(statusTrx==='gagal'){
+    statusHtml = `<span style="color:#dc2626;font-weight:700">✗ GAGAL</span>`;
   } else {
-    detailRows += `<div class="sp-row"><span class="sp-row-l">No Tujuan</span><span class="sp-row-r mono">${d.tujuan||'—'}</span></div>`;
-    if(snDisplay) detailRows += `<div class="sp-row"><span class="sp-row-l">Serial</span><span class="sp-row-r mono" style="font-size:11px">${snDisplay}</span></div>`;
+    statusHtml = `<span style="color:#b45309;font-weight:700">⏳ BELUM BAYAR</span>`;
   }
 
-  // Token block
+  /* ── nomor transaksi pendek ── */
+  const noTrx = d.ref_id || '—';
+  const opNama = currentAdmin?.nama || 'Admin';
+
+  /* ── section detail produk ── */
+  // Parse catatan/SN ke key:value baris
+  // Format SN pasca bayar biasanya: "NAMA/IDPEL/PERIODE/..." atau baris-baris
+  let detailRows = '';
+
+  if(isPraBayar && !isPascaBayar){
+    // PLN PRABAYAR — detail dari SN parts
+    const namaPLN  = parts[1]?.trim() || '';
+    const idpel    = parts.length>=2 ? d.tujuan : '';
+    const tarif    = parts[2]?.trim() || '';
+    const periode  = parts[3]?.trim() || '';
+    const stand    = parts[4]?.trim() || '';
+
+    if(namaPLN) detailRows += row('Nama', namaPLN);
+    detailRows += row('IDPEL', d.tujuan||'—', true);
+    if(stand)   detailRows += row('Stand', stand);
+    if(tarif)   detailRows += row(tarif, '');
+    if(periode) detailRows += row('Periode', periode);
+  } else if(isPascaBayar){
+    // PASCA BAYAR — parse SN baris key:value atau pipe-separated
+    const snLines = sn.includes('|') ? sn.split('|') : sn.split('\n');
+    let hasDetail = false;
+    snLines.forEach(line => {
+      const b = line.trim(); if(!b) return;
+      const colonIdx = b.indexOf(':');
+      if(colonIdx > 0){
+        const k = b.slice(0, colonIdx).trim();
+        const v = b.slice(colonIdx+1).trim();
+        if(v) { detailRows += row(k, v, k.toLowerCase().includes('id')||k.toLowerCase().includes('no')); hasDetail=true; }
+      } else {
+        detailRows += `<div class="srow" style="color:#888;font-size:11px">${b}</div>`;
+        hasDetail = true;
+      }
+    });
+    // fallback jika SN kosong
+    if(!hasDetail){
+      detailRows += row('No. Tujuan', d.tujuan||'—', true);
+    }
+  } else {
+    // Produk lain (pulsa, data, BPJS, PDAM, dll)
+    const snLines = sn.includes('|') ? sn.split('|') : sn.split('\n');
+    let hasDetail = false;
+    snLines.forEach(line => {
+      const b = line.trim(); if(!b) return;
+      const colonIdx = b.indexOf(':');
+      if(colonIdx > 0){
+        const k = b.slice(0, colonIdx).trim();
+        const v = b.slice(colonIdx+1).trim();
+        if(v) { detailRows += row(k, v, false); hasDetail=true; }
+      } else {
+        detailRows += `<div class="srow" style="color:#888;font-size:11px">${b}</div>`;
+        hasDetail = true;
+      }
+    });
+    if(!hasDetail){
+      detailRows += row('No. Tujuan', d.tujuan||'—', true);
+      if(sn && !sn.match(tokenRe)) detailRows += row('Serial', sn, true);
+    }
+  }
+
+  /* helper row */
+  function row(k, v, mono=false){
+    if(!k && !v) return '';
+    if(!v) return `<div class="srow" style="color:#888;font-size:11px">${k}</div>`;
+    return `<div class="srow" style="font-size:12px;padding:2px 0">
+      <span style="color:#999;min-width:100px;flex-shrink:0">${k}</span>
+      <span style="color:#222;font-weight:600;text-align:right;${mono?'font-family:monospace':''}">${v}</span>
+    </div>`;
+  }
+
+  /* ── token block ── */
   const tokenBlock = tokenStr ? `
-    <div class="sp-token-box">
-      <div class="sp-token-label">⚡ TOKEN PLN</div>
-      <div class="sp-token-val" onclick="navigator.clipboard?.writeText('${tokenStr.replace(/[^0-9]/g,'')}').then(()=>toast('Token disalin!','s'))">${formatToken(tokenStr)}</div>
-      <div style="font-size:10px;color:var(--g2);margin-top:4px">👆 Ketuk token untuk salin</div>
-    </div>` : '';
-
-  // Anggota badge
-  const anggotaBadge = isAnggota ? `
-    <div class="sp-anggota-badge">
-      ⭐ Transaksi Anggota dihitung untuk SHU tahunan
-    </div>` : '';
-
-  // No anggota display
-  const noAnggotaDisplay = noAnggota ? `<div class="sp-anggota">No. Anggota: ${noAnggota}</div>` : '';
-
-  document.getElementById('struk-admin-print').innerHTML = `
-    <div class="sp-header">
-      <div class="sp-ezi-logo">EZi</div>
-      <div class="sp-meta">
-        ${tgl(d.created_at)}<br>
-        ${jam(d.created_at)} | No: <b>${refShort}</b> | Op: ${opNama}
-        ${pelNama ? `<br>Pelanggan: ⭐ <b>${pelNama}</b>` : ''}
+    <div style="margin:12px 0;padding:14px 10px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;text-align:center">
+      <div style="font-size:10px;color:#666;margin-bottom:8px;font-weight:700;letter-spacing:1px">TOKEN LISTRIK</div>
+      <div style="font-size:26px;font-weight:900;letter-spacing:3px;color:#14532d;font-family:monospace;line-height:1.4"
+           onclick="navigator.clipboard?.writeText('${tokenStr.replace(/-/g,'')}').then(()=>toast('Token disalin!','s'))">
+        ${tokenStr}
       </div>
-      ${noAnggotaDisplay}
-    </div>
-    ${anggotaBadge}
-    <hr class="sp-sep">
-    ${tokenBlock}
-    <div class="sp-section-title">${sectionTitle}</div>
-    <div>${detailRows}</div>
-    <hr class="sp-sep">
-    <div class="sp-total-row">
-      <span class="sp-total-label">TOTAL</span>
-      <span class="sp-total-val">${rp(hargaJual)}</span>
-    </div>
-    <div class="sp-status-row">
-      <span class="sp-status-label">Status</span>
-      <span class="${statusClass}">${statusLabel}</span>
-    </div>
-    <hr class="sp-sep">
-    <div class="sp-footer">
-      Terima kasih, Alhamdulillah<br>
-      Jazaakumullohu khoiro 🙏
-    </div>
-    <div class="sp-footer-sub">EZi · Layanan Produk Digital · UBNB</div>
-    <div id="sp-qr-wrap" style="text-align:center;margin-top:10px"></div>
-    <div class="sp-date-chip">${tgl(d.created_at)}</div>
-    <div style="height:20px"></div>
-  `;
+      <div style="font-size:10px;color:#15803d;margin-top:6px">👆 Ketuk untuk salin token</div>
+    </div>` : '';
 
-  // Generate QR code untuk link EZi
+  /* ── anggota badge ── */
+  const anggotaBadge = isAnggota
+    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>`
+    : '';
+
+  /* ── build HTML ── */
+  let h = '';
+  // HEADER
+  h += `<div class="sh">
+    <div class="logo" style="background:#fef9c3;font-size:20px;font-weight:900;color:#1a2744;font-family:inherit;letter-spacing:-1px">EZi</div>
+    <h3>EZi</h3>
+    <p>${fmtTgl(d.created_at)}</p>
+    <p>${fmtJam(d.created_at)} | No: ${noTrx} | Op: ${opNama}</p>
+    ${pelNama ? `<p>Pelanggan: <b>${isAnggota?'⭐ ':''}${pelNama}</b></p>` : ''}
+    ${noAnggota ? `<p style="font-size:11px;color:#15803d">No. Anggota: ${noAnggota}</p>` : ''}
+  </div>`;
+  h += anggotaBadge;
+  h += `<hr class="sdiv">`;
+  h += tokenBlock;
+  // Nama produk
+  h += `<div class="srow" style="font-weight:700">${d.nama_produk||'—'}</div>`;
+  h += detailRows;
+  h += `<hr class="sdiv">`;
+  // Diskon
+  const diskonNominal = Number(d.diskon_nominal||d.diskon_total||0);
+  if(diskonNominal > 0){
+    h += `<div class="srow"><span>Harga Normal</span><span>${fmtRp(hargaJual+diskonNominal)}</span></div>`;
+    h += `<div class="srow disc"><span style="color:#dc2626">Diskon</span><span style="color:#dc2626">-${fmtRp(diskonNominal)}</span></div>`;
+    h += `<div class="srow bold"><span>TOTAL BAYAR</span><span>${fmtRp(hargaJual)}</span></div>`;
+  } else {
+    h += `<div class="srow bold"><span>TOTAL</span><span>${fmtRp(hargaJual)}</span></div>`;
+  }
+  h += `<div class="srow"><span>Status</span><span>${statusHtml}</span></div>`;
+  // Footer
+  h += `<hr class="sdiv">
+  <div class="sfooter">
+    <div class="thx">Terima kasih, Alhamdulillah<br>Jazaakumullohu khoiro 🙏</div>
+    <div style="margin-top:4px;font-size:11px;color:#aaa">EZi · Layanan Produk Digital · UBNB</div>
+    <div id="sp-qr-wrap" style="margin:10px auto 4px;display:inline-block"></div>
+    <div style="font-size:10px;color:#aaa;margin-top:2px">ubnb.pw/ezi.html</div>
+    <div style="display:inline-block;background:#e1f5ee;color:#0f6e56;font-size:11px;padding:3px 10px;border-radius:99px;margin-top:6px">${fmtTgl(d.created_at)}</div>
+  </div>`;
+
+  document.getElementById('struk-admin-print').innerHTML = h;
+
+  /* ── QR code ── */
   setTimeout(()=>{
     const wrap = document.getElementById('sp-qr-wrap');
     if(!wrap) return;
     wrap.innerHTML = '';
-    try{
-      new QRCode(wrap, {
-        text: 'https://ubnb.pw/ezi.html',
-        width: 80, height: 80,
-        colorDark: '#1a2744',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      wrap.innerHTML += '<div style="font-size:10px;color:#6b7280;margin-top:4px">ubnb.pw/ezi.html</div>';
-    }catch(e){ wrap.innerHTML=''; }
-  }, 50);
+    if(typeof QRCode === 'undefined'){
+      // load lib on-demand
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+      s.onload = () => _makeQR(wrap);
+      document.head.appendChild(s);
+    } else {
+      _makeQR(wrap);
+    }
+  }, 60);
 }
 
+function _makeQR(wrap){
+  try{
+    new QRCode(wrap,{
+      text:'https://ubnb.pw/ezi.html',
+      width:80, height:80,
+      colorDark:'#1a2744', colorLight:'#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }catch(e){ wrap.innerHTML=''; }
+}
 function tutupStrukAdmin(){
   document.getElementById('struk-admin-overlay').classList.remove('show');
   _strukAdminData = null;
@@ -4008,13 +4079,25 @@ async function strukAdminUnduh(){
   if(!el){ toast('Element tidak ditemukan','e'); return; }
   toast('⏳ Menyiapkan struk...','i');
   try{
-    const canvas = await html2canvas(el, {
-      scale:2, useCORS:true, backgroundColor:'#ffffff',
-      logging:false
+    // Clone ke hidden div dengan lebar fixed agar konsisten
+    const clone = el.cloneNode(true);
+    clone.style.cssText = 'position:fixed;left:-9999px;top:0;width:360px;background:#fff;padding:24px 20px;font-family:-apple-system,sans-serif;z-index:-1';
+    document.body.appendChild(clone);
+    // Tunggu QR di clone juga render
+    const qrWrapClone = clone.querySelector('#sp-qr-wrap');
+    if(qrWrapClone && typeof QRCode !== 'undefined'){
+      qrWrapClone.innerHTML='';
+      try{ new QRCode(qrWrapClone,{text:'https://ubnb.pw/ezi.html',width:80,height:80,colorDark:'#1a2744',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
+    }
+    await new Promise(r=>setTimeout(r,120));
+    const canvas = await html2canvas(clone, {
+      scale:3, useCORS:true, backgroundColor:'#ffffff', logging:false
     });
+    document.body.removeChild(clone);
     const link = document.createElement('a');
-    link.download = 'struk-'+ (_strukAdminData?.ref_id||'ppob') + '.jpg';
-    link.href = canvas.toDataURL('image/jpeg', 0.92);
+    const noFile = (_strukAdminData?.ref_id||'ppob').replace(/[^a-zA-Z0-9-_]/g,'_');
+    link.download = 'struk-'+ noFile + '.png';
+    link.href = canvas.toDataURL('image/png');
     link.click();
     toast('✅ Struk berhasil diunduh!','s');
   }catch(e){
