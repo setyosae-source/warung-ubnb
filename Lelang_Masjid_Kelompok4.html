@@ -661,25 +661,57 @@ $('#btnAdd').addEventListener('click',async()=>{
 });
 
 $('#logList').addEventListener('click',e=>{
-  // Cek tombol hapus entri (×) — harus paling pertama & paling strict
-  const del=e.target.closest('.gdel');
-  if(del){
+  // Gunakan e.target langsung — lebih aman di mobile, hindari closest() yang bisa naik ke tombol lain
+  const btn=e.target;
+  if(!btn || btn.tagName!=='BUTTON') return;
+
+  // Bayar pertama kali
+  if(btn.classList.contains('gpay')){
     e.stopPropagation();
+    const sbId=btn.dataset.id;
+    const defVal=+btn.dataset.default||0;
     const k1=prompt('Kode akses pertama:');
     if(k1===null) return;
     if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
     const k2=prompt('Kode akses kedua:');
     if(k2===null) return;
     if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-    if(confirm('Hapus entri ini?')) deleteEntryDB(del.dataset.id);
+    const input=prompt(`Nilai pembayaran:\n(default tagihan: ${rp(defVal)})`, defVal);
+    if(input===null) return;
+    const val=parseFloat(String(input).replace(/[^0-9]/g,''));
+    if(!val||val<=0){ toast('Nilai tidak valid'); return; }
+    markPaymentDB(sbId, val);
+    return;
+  }
+  // Tambah bayar (cicilan berikutnya)
+  if(btn.classList.contains('gpay-tambah')){
+    e.stopPropagation();
+    const sbId=btn.dataset.id;
+    const defVal=+btn.dataset.default||0;
+    const k1=prompt('Kode akses pertama:');
+    if(k1===null) return;
+    if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
+    const k2=prompt('Kode akses kedua:');
+    if(k2===null) return;
+    if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
+    const input=prompt(`Tambah pembayaran:\n(sisa: ${rp(defVal)})`, defVal);
+    if(input===null) return;
+    const val=parseFloat(String(input).replace(/[^0-9]/g,''));
+    if(!val||val<=0){ toast('Nilai tidak valid'); return; }
+    markPaymentDB(sbId, val);
+    return;
+  }
+  // Reset semua bayar
+  if(btn.classList.contains('gunpay')){
+    e.stopPropagation();
+    cancelPaymentDB(btn.dataset.id);
     return;
   }
   // Hapus 1 baris riwayat bayar
-  const hapusBayar=e.target.closest('.ghapus');
-  if(hapusBayar){
+  if(btn.classList.contains('ghapus')){
     e.stopPropagation();
-    const sbId=hapusBayar.dataset.id;
-    const xi=+hapusBayar.dataset.xi;
+    const sbId=btn.dataset.id;
+    const xi=+btn.dataset.xi;
     const k1=prompt('Kode akses pertama:');
     if(k1===null) return;
     if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
@@ -697,45 +729,16 @@ $('#logList').addEventListener('click',e=>{
       .then(()=>setSync('ok')).catch(()=>setSync('error'));
     return;
   }
-  // Reset semua bayar
-  const unpay=e.target.closest('.gunpay');
-  if(unpay){ e.stopPropagation(); cancelPaymentDB(unpay.dataset.id); return; }
-  // Bayar pertama kali
-  const pay=e.target.closest('.gpay');
-  if(pay){
+  // Hapus entri (×) — paling terakhir dicek supaya tidak nyasar
+  if(btn.classList.contains('gdel')){
     e.stopPropagation();
-    const sbId=pay.dataset.id;
-    const defVal=+pay.dataset.default||0;
     const k1=prompt('Kode akses pertama:');
     if(k1===null) return;
     if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
     const k2=prompt('Kode akses kedua:');
     if(k2===null) return;
     if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-    const input=prompt(`Nilai pembayaran:\n(default tagihan: ${rp(defVal)})`, defVal);
-    if(input===null) return;
-    const val=parseFloat(String(input).replace(/[^0-9]/g,''));
-    if(!val||val<=0){ toast('Nilai tidak valid'); return; }
-    markPaymentDB(sbId, val);
-    return;
-  }
-  // Tambah bayar (cicilan berikutnya)
-  const payTambah=e.target.closest('.gpay-tambah');
-  if(payTambah){
-    e.stopPropagation();
-    const sbId=payTambah.dataset.id;
-    const defVal=+payTambah.dataset.default||0;
-    const k1=prompt('Kode akses pertama:');
-    if(k1===null) return;
-    if(k1.trim()!=='0354'){ toast('Kode akses salah'); return; }
-    const k2=prompt('Kode akses kedua:');
-    if(k2===null) return;
-    if(k2.trim()!=='0789'){ toast('Kode akses salah'); return; }
-    const input=prompt(`Tambah pembayaran:\n(sisa: ${rp(defVal)})`, defVal);
-    if(input===null) return;
-    const val=parseFloat(String(input).replace(/[^0-9]/g,''));
-    if(!val||val<=0){ toast('Nilai tidak valid'); return; }
-    markPaymentDB(sbId, val);
+    if(confirm('Hapus entri ini?')) deleteEntryDB(btn.dataset.id);
     return;
   }
 });
