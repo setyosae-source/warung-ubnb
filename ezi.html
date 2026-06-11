@@ -817,14 +817,14 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 
     <!-- PANEL ADMIN -->
     <div id="panel-admin" class="auth-card" style="display:none">
-      <div style="font-size:15px;font-weight:800;margin-bottom:6px;color:var(--text)">👤 Login Admin</div>
+      <div style="font-size:15px;font-weight:800;margin-bottom:6px;color:var(--text)">🔧 Login Admin & Reseller</div>
       <div style="background:#fef3c7;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#78350f;line-height:1.7">
-        ⚠️ Hanya untuk admin (Setyo / Sukamto).<br>
+        ⚠️ Hanya untuk admin &amp; reseller.<br>
         Transaksi atas nama pelanggan akan tercatat di histori.
       </div>
       <div class="auth-field">
         <label>Username</label>
-        <input type="text" id="admin-user" placeholder="Setyo / Sukamto" autocomplete="off">
+        <input type="text" id="admin-user" placeholder="Username" autocomplete="off">
       </div>
       <div class="auth-field">
         <label>Password</label>
@@ -832,7 +832,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
       </div>
 
       <div id="admin-err" style="display:none;background:#fee2e2;color:var(--red);font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-weight:600"></div>
-      <button class="btn-auth" id="btn-login-admin" onclick="doLoginAdmin()">Masuk Admin</button>
+      <button class="btn-auth" id="btn-login-admin" onclick="doLoginAdmin()">Masuk</button>
       <div class="auth-switch"><a onclick="showPanel('login')">← Kembali ke Login Member</a></div>
     </div>
 
@@ -868,7 +868,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     <!-- Tombol lanjut sebagai Umum -->
     <button class="btn-umum" onclick="lanjutUmum()">Lanjut sebagai Umum (Bayar QRIS) →</button>
     <div style="text-align:center;font-size:11px;color:rgba(255,255,255,.6);margin-top:8px">⚠️ Pengguna umum dikenakan biaya pembayaran QRIS 0.7% dari total transaksi</div>
-    <div class="admin-toggle"><a onclick="showPanel('admin')">🔧 Login sebagai Admin</a></div>
+    <div class="admin-toggle"><a onclick="showPanel('admin')">🔧 Login sebagai Admin &amp; Reseller</a></div>
   </div>
 </div>
 
@@ -4309,6 +4309,99 @@ function strukAdminWA(){
 
 // START
 initApp();
+
+// ── BACK BUTTON (tombol fisik HP) ──────────────────────────────
+function pushHistoryState(){
+  history.pushState({ezi:true}, '');
+}
+
+function handleBackButton(){
+  // Prioritas 1: proc-overlay (sedang proses) — abaikan
+  if(document.getElementById('proc-overlay')?.classList.contains('show')) return;
+
+  // Prioritas 2: result-overlay (sukses/gagal)
+  if(document.getElementById('result-overlay')?.classList.contains('show')){
+    tutupResult();
+    pushHistoryState();
+    return;
+  }
+
+  // Prioritas 3: struk admin overlay
+  if(document.getElementById('struk-admin-overlay')?.classList.contains('show')){
+    tutupStrukAdmin();
+    pushHistoryState();
+    return;
+  }
+
+  // Prioritas 4: struk member overlay
+  if(document.getElementById('struk-overlay')?.classList.contains('show')){
+    tutupStruk();
+    pushHistoryState();
+    return;
+  }
+
+  // Prioritas 5: modal konfirmasi bayar
+  if(document.getElementById('modal-overlay')?.classList.contains('show')){
+    tutupModal();
+    pushHistoryState();
+    return;
+  }
+
+  // Prioritas 6: modal detail transaksi
+  if(document.getElementById('modal-detail-trx')?.classList.contains('show')){
+    tutupDetailTrx();
+    pushHistoryState();
+    return;
+  }
+
+  // Prioritas 7: popup konfirmasi nomor
+  if(document.getElementById('popup-nomor')?.classList.contains('show')){
+    document.getElementById('popup-nomor').classList.remove('show');
+    pushHistoryState();
+    return;
+  }
+
+  // Prioritas 8: screen non-home (kembali ke home)
+  const activeScreen = document.querySelector('.screen.active')?.id;
+  if(activeScreen && activeScreen !== 'screen-auth'){
+    // Kalau ada session (member/admin), konfirmasi logout atau kembali
+    if(activeScreen === 'screen-home'){
+      // Di home dengan session aktif → tanya logout
+      if(currentMember && currentMember.tipe !== 'umum'){
+        if(confirm('Keluar dari akun?')){
+          if(isAdminMode()) doLogoutAdmin();
+          else doLogout();
+        } else {
+          pushHistoryState();
+        }
+        return;
+      } else if(isAdminMode()){
+        if(confirm('Keluar dari mode admin?')){
+          doLogoutAdmin();
+        } else {
+          pushHistoryState();
+        }
+        return;
+      }
+      // Umum di home → biarkan keluar app (tidak push state)
+      return;
+    }
+    // Screen lain (kat, cek-trx, akun, riwayat) → kembali ke home
+    goHome();
+    pushHistoryState();
+    return;
+  }
+
+  // Screen auth → biarkan browser keluar / tutup tab (tidak push state)
+}
+
+window.addEventListener('popstate', function(e){
+  handleBackButton();
+});
+
+// Push initial state saat pertama load agar popstate bisa tertangkap
+history.pushState({ezi:true}, '');
+
 </script>
 </body>
 </html>
