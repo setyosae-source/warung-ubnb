@@ -4040,7 +4040,71 @@ function exportIsrunExcel(){
   a.download='ISRUN_'+periode+'_'+(CU.kelompok_scope||'desa')+'.csv';
   a.click();
   URL.revokeObjectURL(url);
-  toast('✅ File diunduh');
+  toast('\u2705 File diunduh');
+}
+
+// ── LOGBOOK ────────────────────────────────────────────────────
+async function renderLogbook() {
+  const el = document.getElementById('logbook-content');
+  if (!el) return;
+  el.innerHTML = '<div class="msg info">Memuat log...</div>';
+  try {
+    const { data, error } = await sb.from('dk_activity_log')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    if (!data || !data.length) {
+      el.innerHTML = '<div class="msg info">Belum ada log aktivitas.</div>';
+      return;
+    }
+
+    // Kelompokkan per hari
+    const groups = {};
+    data.forEach(row => {
+      const tgl = (row.created_at || '').slice(0, 10);
+      if (!groups[tgl]) groups[tgl] = [];
+      groups[tgl].push(row);
+    });
+
+    const aksiIcon = {
+      login: '🔑', logout: '🚪',
+      buat_kegiatan: '📅', edit_kegiatan: '✏️', hapus_kegiatan: '🗑️',
+      buka_daftar_hadir: '📋', input_hadir: '✅',
+      generate_laporan: '📄',
+    };
+
+    let html = '';
+    Object.keys(groups).sort().reverse().forEach(tgl => {
+      const rows = groups[tgl];
+      const todayStr = new Date().toISOString().slice(0,10);
+      const label = tgl === todayStr ? 'Hari ini' : tgl;
+      html += '<div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);padding:8px 0 4px;border-bottom:1px solid #e5e7eb;margin-bottom:4px">'
+            + label + ' <span style="font-weight:400">(' + rows.length + ' aktivitas)</span></div>';
+      rows.forEach(r => {
+        const icon  = aksiIcon[r.aksi] || '📌';
+        const waktu = (r.created_at||'').slice(11,16);
+        const det   = r.detail && Object.keys(r.detail).length
+          ? ' — ' + Object.entries(r.detail).map(([k,v]) => k + ': <b>' + v + '</b>').join(', ')
+          : '';
+        const detHtml = det ? '<span style="color:var(--text-muted,#888);font-size:11px">' + det + '</span>' : '';
+        const kelpLabel = r.kelompok
+          ? '<span style="background:#d1fae5;color:#065f46;font-size:10px;padding:1px 5px;border-radius:10px;margin-left:4px">Kelompok ' + r.kelompok + '</span>'
+          : '';
+        html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6">'
+              + '<span style="font-size:18px;line-height:1.2">' + icon + '</span>'
+              + '<div style="flex:1;min-width:0">'
+              + '<div style="font-size:13px;font-weight:600">' + r.aksi.replace(/_/g,' ') + detHtml + '</div>'
+              + '<div style="font-size:11px;color:var(--text-muted,#888);margin-top:1px">'
+              + '<b>' + (r.username||'—') + '</b> · ' + (r.role||'—') + kelpLabel + ' · ' + waktu
+              + '</div></div></div>';
+      });
+    });
+
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-muted,#888);margin-bottom:8px">200 entri terakhir</div>' + html;
+  } catch(e) {
+    el.innerHTML = '<div class="msg error">❌ Gagal memuat log: ' + e.message + '</div>';
+  }
 }
 </script>
 </body>
