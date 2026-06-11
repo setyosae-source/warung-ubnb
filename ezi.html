@@ -830,6 +830,37 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
         <label>Password</label>
         <input type="password" id="admin-pass" placeholder="••••••" autocomplete="off" onkeydown="if(event.key==='Enter')doLoginAdmin()">
       </div>
+      <div class="auth-field">
+        <label>💰 Biaya Layanan EZi</label>
+        <select id="admin-layanan-ezi" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;background:#fff;color:var(--text);font-weight:600" onchange="biayaLayananEzi=Number(this.value)">
+          <option value="1000">Rp 1.000</option>
+          <option value="2000">Rp 2.000</option>
+          <option value="3000" selected>Rp 3.000 (default)</option>
+          <option value="4000">Rp 4.000</option>
+          <option value="5000">Rp 5.000</option>
+          <option value="6000">Rp 6.000</option>
+          <option value="7000">Rp 7.000</option>
+          <option value="8000">Rp 8.000</option>
+          <option value="9000">Rp 9.000</option>
+          <option value="10000">Rp 10.000</option>
+          <option value="11000">Rp 11.000</option>
+          <option value="12000">Rp 12.000</option>
+          <option value="13000">Rp 13.000</option>
+          <option value="14000">Rp 14.000</option>
+          <option value="15000">Rp 15.000</option>
+          <option value="16000">Rp 16.000</option>
+          <option value="17000">Rp 17.000</option>
+          <option value="18000">Rp 18.000</option>
+          <option value="19000">Rp 19.000</option>
+          <option value="20000">Rp 20.000</option>
+          <option value="21000">Rp 21.000</option>
+          <option value="22000">Rp 22.000</option>
+          <option value="23000">Rp 23.000</option>
+          <option value="24000">Rp 24.000</option>
+          <option value="25000">Rp 25.000</option>
+        </select>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Berlaku untuk semua transaksi sesi ini</div>
+      </div>
       <div id="admin-err" style="display:none;background:#fee2e2;color:var(--red);font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-weight:600"></div>
       <button class="btn-auth" id="btn-login-admin" onclick="doLoginAdmin()">Masuk Admin</button>
       <div class="auth-switch"><a onclick="showPanel('login')">← Kembali ke Login Member</a></div>
@@ -2135,13 +2166,20 @@ async function doInquiryPasca(nomor){
     const d=json?.data||{};
 
     if(d.response_code==='00'||d.message?.toLowerCase().includes('inquiry success')||d.message?.toLowerCase().includes('sukses')||(d.tr_name&&d.price)){
+      // Hitung harga jual pasca: floor((price + layanan*lembar) / 500) * 500
+      const _lembarPasca = Number(d.desc?.lembar_tagihan||1);
+      const _pricePasca  = Number(d.price||d.selling_price||0);
+      const _hjPasca     = adminHargaJualDefault(_pricePasca, _lembarPasca);
+      const _layananPasca= _hjPasca - _pricePasca;
+
       pascaInquiryData={
         tr_name:d.tr_name||d.customer_name||'—',
         nominal:d.nominal||0,
         admin:d.admin||0,
-        price:d.price||d.selling_price||0,
-        price_markup:(d.price||d.selling_price||0)+Number(produk.markup||0),
-        markup:Number(produk.markup||0),
+        price:_pricePasca,
+        price_markup:_hjPasca,
+        markup:_layananPasca,
+        lembar:_lembarPasca,
         period:d.period||d.periode||'—',
         tr_id:d.tr_id||d.tr_id_str||null,
         buyer_sku_code:produk.sku_supplier,
@@ -2160,7 +2198,7 @@ async function doInquiryPasca(nomor){
         <div class="inquiry-row"><span class="inquiry-row-label">Periode</span><span class="inquiry-row-val">${pascaInquiryData.period}</span></div>
         <div class="inquiry-row"><span class="inquiry-row-label">Tagihan</span><span class="inquiry-row-val">${rp(nominalTagihan>0?nominalTagihan:pascaInquiryData.nominal)}</span></div>
         <div class="inquiry-row"><span class="inquiry-row-label">Admin</span><span class="inquiry-row-val">${rp(pascaInquiryData.admin)}</span></div>
-        ${pascaInquiryData.markup>0?`<div class="inquiry-row"><span class="inquiry-row-label">Biaya Layanan</span><span class="inquiry-row-val">${rp(pascaInquiryData.markup)}</span></div>`:''}
+        <div class="inquiry-row"><span class="inquiry-row-label">Layanan EZi</span><span class="inquiry-row-val">${rp(pascaInquiryData.markup)}</span></div>
         <div class="inquiry-total"><span>Total Bayar</span><span>${rp(pascaInquiryData.price_markup)}</span></div>`;
 
       selectedProduk={...produk,harga_jual:pascaInquiryData.price_markup};
@@ -2533,7 +2571,7 @@ async function autoEksekusiDigiflazz(refId){
     const d=json?.data||{};
     const status=(d.status||'').toLowerCase();
     if(status==='sukses'||status==='success'){
-      tampilResultSukses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:d.sn||null,message:d.message||null});
+      tampilResultSukses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:d.sn||null,message:d.message||null,raw_response:d});
     } else if(status==='pending'||status==='proses'){
       tampilResultProses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual});
     } else {
@@ -2565,13 +2603,36 @@ async function hapusTagihanGagal(refId){
 }
 
 function tampilResultSukses(d){
-  const isPLN=(d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
-  const tokenBlock=isPLN&&d.sn?`
+  const namaProd=(d.nama_produk||'').toLowerCase();
+  const isPLN=namaProd.includes('token')||namaProd.includes('pln');
+  const isPra=isPLN&&!namaProd.includes('pasca');
+
+  // Token PLN prabayar
+  const snClean=d.sn||''
+  const tokenRe2=/([\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4})/;
+  const tokenMatchSN2=snClean.match(tokenRe2);
+  const tokenStr2=isPra&&tokenMatchSN2?tokenMatchSN2[1].replace(/\s/g,'-'):null;
+
+  const tokenBlock=tokenStr2?`
+    <div class="result-token">
+      <div class="result-token-label">⚡ Nomor Token PLN</div>
+      <div class="result-token-val" onclick="salinToken('${tokenStr2}')">${"${tokenStr2}"}</div>
+      <div class="result-token-copy">👆 Ketuk untuk salin</div>
+    </div>`:(isPLN&&d.sn&&!tokenStr2?`
     <div class="result-token">
       <div class="result-token-label">⚡ Nomor Token PLN</div>
       <div class="result-token-val" onclick="salinToken('${d.sn}')">${formatToken(d.sn)}</div>
       <div class="result-token-copy">👆 Ketuk untuk salin</div>
-    </div>`:'';
+    </div>`:'');
+
+  // Detail dari raw_response
+  const rawRows=parseRawDetail(d);
+  const detailHtml=rawRows.map(r=>`
+    <div class="result-row">
+      <span class="result-label">${"${r.label}"}</span>
+      <span class="result-val" style="${"${r.mono?'font-family:monospace;font-size:12px':'font-size:12px'}"}">${"${r.val}"}</span>
+    </div>`).join('');
+
   document.getElementById('result-overlay').className='result-overlay sukses show';
   document.getElementById('result-inner').innerHTML=`
     <div class="result-icon">✅</div>
@@ -2580,9 +2641,10 @@ function tampilResultSukses(d){
     ${tokenBlock}
     <div class="result-card">
       <div class="result-row"><span class="result-label">Produk</span><span class="result-val">${d.nama_produk||'—'}</span></div>
-      <div class="result-row"><span class="result-label">Tujuan</span><span class="result-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>
+      ${detailHtml}
+      ${rawRows.length===0?`<div class="result-row"><span class="result-label">Tujuan</span><span class="result-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>`:''}
       <div class="result-row"><span class="result-label">Total</span><span class="result-val">${rp(d.harga_jual)}</span></div>
-      ${d.sn&&!isPLN?`<div class="result-row"><span class="result-label">SN</span><span class="result-val" style="font-size:12px">${d.sn}</span></div>`:''}
+      ${d.sn&&!isPLN&&rawRows.length===0?`<div class="result-row"><span class="result-label">SN</span><span class="result-val" style="font-size:12px">${d.sn}</span></div>`:''}
       <div class="result-row"><span class="result-label">Ref ID</span><span class="result-val" style="font-size:12px;font-family:monospace">${d.ref_id}</span></div>
       ${d.message?`<div class="result-row"><span class="result-label">Info</span><span class="result-val" style="font-size:12px">${d.message}</span></div>`:''}
     </div>
@@ -2626,7 +2688,7 @@ function tampilResultProses(d){
 
     try{
       const {data:trx}=await sb.from('ppob_transaksi')
-        .select('status,sn,message,nama_produk,tujuan,harga_jual,completed_at')
+        .select('status,sn,message,raw_response,nama_produk,tujuan,harga_jual,completed_at')
         .eq('ref_id',d.ref_id).single();
 
       if(trx?.status==='sukses'){
@@ -2636,7 +2698,7 @@ function tampilResultProses(d){
           const {data:m}=await sb.from('ppob_member').select('total_piutang').eq('id',currentMember.id).single();
           if(m){currentMember.total_piutang=m.total_piutang;sessionStorage.setItem(MEMBER_KEY,JSON.stringify(currentMember));updateHomeHeader();}
         }
-        tampilResultSukses({ref_id:d.ref_id,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:trx.sn,message:trx.message});
+        tampilResultSukses({ref_id:d.ref_id,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:trx.sn,message:trx.message,raw_response:trx.raw_response});
       } else if(trx?.status==='gagal'){
         clearInterval(pollInterval);
         await hapusTagihanGagal(d.ref_id);
@@ -2742,24 +2804,39 @@ function tutupStruk(){
 }
 
 async function tampilStrukAnggota(t){
-  // Ambil data lengkap termasuk sn dari DB
+  // Ambil data lengkap termasuk raw_response dari DB
   const {data}=await sb.from('ppob_transaksi')
-    .select('ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,sn,message,created_at,completed_at')
+    .select('ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,sn,message,raw_response,created_at,completed_at')
     .eq('ref_id',t.ref_id).single();
   const d=data||t;
 
   const tgl=dt=>new Date(dt).toLocaleString('id-ID',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const isPLN=(d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
+  const isPra=isPLN&&!(d.nama_produk||'').toLowerCase().includes('pasca');
   const statusCls=d.status==='sukses'?'sukses':d.status==='gagal'?'gagal':'pending';
   const statusTxt=d.status==='sukses'?'✅ SUKSES':d.status==='gagal'?'❌ GAGAL':'⏳ PROSES';
   const bayarTxt=d.status_bayar==='lunas'?'✅ Lunas':d.status_bayar==='batal'?'🚫 Batal':'⏳ Belum Lunas';
 
-  const tokenBlock=isPLN&&d.sn?`
+  // Token PLN prabayar
+  const snClean=d.sn||'';
+  const tokenRe=/([\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4})/;
+  const tokenMatchSN=snClean.match(tokenRe);
+  const tokenStr=isPra&&tokenMatchSN?tokenMatchSN[1].replace(/\s/g,'-'):null;
+
+  const tokenBlock=tokenStr?`
     <div class="struk-token">
       <div class="struk-token-label">⚡ Nomor Token PLN</div>
-      <div class="struk-token-val" onclick="salinToken('${d.sn}')">${formatToken(d.sn)}</div>
+      <div class="struk-token-val" onclick="salinToken('${tokenStr}')">${tokenStr}</div>
       <div style="font-size:11px;color:#92400e;margin-top:4px">👆 Ketuk untuk salin</div>
     </div>`:'';
+
+  // Detail rows dari raw_response
+  const rawRows = parseRawDetail(d);
+  const detailHtml = rawRows.map(r=>`
+    <div class="struk-row">
+      <span class="struk-row-label">${r.label}</span>
+      <span class="struk-row-val" style="${r.mono?'font-family:monospace;font-size:12px':'font-size:12px'}">${r.val}</span>
+    </div>`).join('');
 
   document.getElementById('struk-sheet').innerHTML=`
     <div class="struk-header">
@@ -2770,9 +2847,10 @@ async function tampilStrukAnggota(t){
     ${tokenBlock}
     <div class="struk-body">
       <div class="struk-row"><span class="struk-row-label">Produk</span><span class="struk-row-val">${d.nama_produk||'—'}</span></div>
-      <div class="struk-row"><span class="struk-row-label">Tujuan</span><span class="struk-row-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>
+      ${detailHtml}
+      ${rawRows.length===0?`<div class="struk-row"><span class="struk-row-label">Tujuan</span><span class="struk-row-val" style="font-family:monospace">${d.tujuan||'—'}</span></div>`:''}
+      ${d.sn&&!isPLN&&rawRows.length===0?`<div class="struk-row"><span class="struk-row-label">SN</span><span class="struk-row-val" style="font-size:11px">${d.sn}</span></div>`:''}
       <div class="struk-row"><span class="struk-row-label">Total</span><span class="struk-row-val" style="color:var(--g2);font-size:15px">${rp(d.harga_jual)}</span></div>
-      ${d.sn&&!isPLN?`<div class="struk-row"><span class="struk-row-label">SN</span><span class="struk-row-val" style="font-size:11px">${d.sn}</span></div>`:''}
       <div class="struk-row"><span class="struk-row-label">Status Bayar</span><span class="struk-row-val">${bayarTxt}</span></div>
       <div class="struk-row"><span class="struk-row-label">Waktu</span><span class="struk-row-val">${tgl(d.completed_at||d.created_at)}</span></div>
       <div class="struk-row"><span class="struk-row-label">Ref ID</span><span class="struk-row-val" style="font-size:11px;font-family:monospace">${d.ref_id}</span></div>
@@ -3318,6 +3396,7 @@ const ADMIN_WHITELIST=['Setyo','Sukamto'];
 let currentAdmin=null; // {username, nama, pelanggan, harga_jual, status_bayar}
 let _adminPickedPelanggan=null; // {tipe, id_anggota, jamaah_did, nama, no_hp}
 let _adminBayar='lunas';
+let biayaLayananEzi=3000; // kebijakan biaya layanan, dapat diubah via dropdown admin
 
 function isAdminMode(){ return !!currentAdmin; }
 
@@ -3367,6 +3446,9 @@ function doLogoutAdmin(){
   sessionStorage.removeItem(ADMIN_KEY);
   currentMember=null;
   sessionStorage.removeItem(MEMBER_KEY);
+  biayaLayananEzi=3000;
+  const sel=document.getElementById('admin-layanan-ezi');
+  if(sel) sel.value='3000';
   updateAdminBanner();
   showScreen('screen-auth');
   showPanel('login');
@@ -3406,10 +3488,12 @@ function updateAdminBanner(){
 
 // ── HARGA JUAL DEFAULT ───────────────────────
 // Algoritma: ceil((modal + 2500) / 500) * 500
-function adminHargaJualDefault(modal){
+function adminHargaJualDefault(modal, lembar){
   const m=Number(modal)||0;
   if(m<=0) return 0;
-  return Math.ceil((m + 2500) / 500) * 500;
+  const n=Number(lembar)||1;
+  const layanan=biayaLayananEzi*n;
+  return Math.floor((m + layanan) / 500) * 500;
 }
 
 // ── MODAL ADMIN CHECKOUT ─────────────────────
@@ -3435,11 +3519,11 @@ function adminShowModalCheckout(){
   // Untuk pasca bayar: harga modal = price dari inquiry (sebelum markup), harga jual = price_markup
   let modal, def;
   if(isKategoriPasca() && pascaInquiryData){
-    modal = Number(pascaInquiryData.price) || 0;          // harga modal = harga dari supplier (price tanpa markup)
-    def   = Number(pascaInquiryData.price_markup) || 0;   // harga jual default = price + markup
+    modal = Number(pascaInquiryData.price) || 0;          // harga modal = harga dari supplier
+    def   = Number(pascaInquiryData.price_markup) || 0;   // harga jual = formula layanan EZi
   } else {
     modal = Number(selectedProduk.harga_modal) || 0;
-    def   = adminHargaJualDefault(modal);
+    def   = adminHargaJualDefault(modal, 1);
   }
   document.getElementById('ma-produk-info').textContent=
     selectedProduk.nama_produk + ' · ' + nomor;
@@ -3841,6 +3925,85 @@ function arRender(){
 // ── STRUK ADMIN ───────────────────────────────
 let _strukAdminData = null;
 
+/* ── Helper: parse raw_response Digiflazz → array detail rows ── */
+function parseRawDetail(d){
+  // d = object ppob_transaksi
+  const raw = d.raw_response || {};
+  const desc = raw.desc || {};
+  const namaProd = (d.nama_produk||'').toLowerCase();
+  const isPasca = namaProd.includes('pasca') || namaProd.includes('postpaid') || namaProd.includes('tagihan');
+  const isPra   = namaProd.includes('token') || namaProd.includes('prabayar') || namaProd.includes('prepaid');
+  const isPDAM  = namaProd.toLowerCase().includes('pdam') || namaProd.toLowerCase().includes('air minum') || (raw.buyer_sku_code||'').includes('pam');
+
+  const rows = [];
+  const add = (label, val, mono=false) => { if(val!==undefined && val!==null && val!=='') rows.push({label, val:String(val), mono}); };
+
+  if(isPasca || isPDAM){
+    // Nama pelanggan dari raw
+    const nama = raw.customer_name || raw.tr_name;
+    if(nama) add('Nama Pelanggan', nama);
+    add('No. Pelanggan', raw.customer_no || d.tujuan, true);
+
+    // Untuk PLN pasca: ada daya & tarif
+    if(!isPDAM && desc.daya) add('Daya', desc.daya + ' VA');
+    if(!isPDAM && desc.tarif) add('Tarif', desc.tarif);
+
+    const lembar = desc.lembar_tagihan || 1;
+    if(lembar > 1) add('Lembar Tagihan', lembar + ' bulan');
+
+    // Hitung Layanan EZi dari selisih harga_jual DB - harga_modal DB
+    const _hjDb = Number(d.harga_jual||0);
+    const _hmDb = Number(d.harga_modal||raw.price||raw.selling_price||0);
+    const _layananEzi = _hjDb > 0 && _hmDb > 0 ? _hjDb - _hmDb : 0;
+
+    const details = desc.detail || [];
+    if(details.length === 1){
+      const dt = details[0];
+      if(dt.periode){
+        const p = String(dt.periode);
+        const bulan = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+        const pFmt = p.length===6 ? bulan[parseInt(p.slice(4))]+'  '+p.slice(0,4) : p;
+        add('Periode', pFmt);
+      }
+      if(dt.meter_awal) add('Stand Awal', dt.meter_awal, true);
+      if(dt.meter_akhir) add('Stand Akhir', dt.meter_akhir, true);
+      if(dt.meter_awal && dt.meter_akhir){
+        const pemakaian = parseInt(dt.meter_akhir) - parseInt(dt.meter_awal);
+        if(!isNaN(pemakaian) && pemakaian >= 0) add('Pemakaian', pemakaian + ' kWh');
+      }
+      if(dt.nilai_tagihan) add('Tagihan', 'Rp\u00a0'+Number(dt.nilai_tagihan).toLocaleString('id-ID'));
+      if(Number(dt.denda||0) > 0) add('Denda', 'Rp\u00a0'+Number(dt.denda).toLocaleString('id-ID'));
+      if(Number(dt.biaya_lain||0) > 0) add('Biaya Lain', 'Rp\u00a0'+Number(dt.biaya_lain).toLocaleString('id-ID'));
+      if(dt.admin) add('Biaya Admin', 'Rp\u00a0'+Number(dt.admin).toLocaleString('id-ID'));
+      if(_layananEzi > 0) add('Layanan EZi', 'Rp\u00a0'+_layananEzi.toLocaleString('id-ID'));
+    } else if(details.length > 1){
+      // Multi-lembar tunggakan
+      details.forEach((dt, i) => {
+        const p = String(dt.periode||'');
+        const bulan = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+        const pFmt = p.length===6 ? bulan[parseInt(p.slice(4))]+' '+p.slice(0,4) : p;
+        add('— Bulan '+(i+1), pFmt + (dt.nilai_tagihan ? '  Rp\u00a0'+Number(dt.nilai_tagihan).toLocaleString('id-ID') : ''));
+        if(dt.meter_awal) add('  Stand', dt.meter_awal+' → '+dt.meter_akhir, true);
+        if(Number(dt.denda||0)>0) add('  Denda', 'Rp\u00a0'+Number(dt.denda).toLocaleString('id-ID'));
+      });
+      if(raw.admin) add('Total Admin', 'Rp\u00a0'+Number(raw.admin).toLocaleString('id-ID'));
+      if(_layananEzi > 0) add('Layanan EZi', 'Rp\u00a0'+_layananEzi.toLocaleString('id-ID'));
+    }
+
+  } else if(isPra){
+    // PLN Prabayar — tetap dari SN string
+    const sn = d.sn || '';
+    const parts = sn.split('/');
+    if(parts[1]?.trim()) add('Nama', parts[1].trim());
+    add('ID Pelanggan', d.tujuan||'—', true);
+    if(parts[2]?.trim()) add('Tarif/Daya', parts[2].trim());
+    if(parts[3]?.trim()) add('Periode', parts[3].trim());
+    if(parts[4]?.trim()) add('Stand Meter', parts[4].trim());
+  }
+
+  return rows;
+}
+
 async function arOpenStruk(refId){
   // Ambil data lengkap
   const { data, error } = await sb
@@ -3917,45 +4080,16 @@ function renderStrukAdmin(d){
   const opNama = currentAdmin?.nama || 'Admin';
 
   /* ── section detail produk ── */
-  // Parse catatan/SN ke key:value baris
-  // Format SN pasca bayar biasanya: "NAMA/IDPEL/PERIODE/..." atau baris-baris
   let detailRows = '';
 
-  if(isPraBayar && !isPascaBayar){
-    // PLN PRABAYAR — detail dari SN parts
-    const namaPLN  = parts[1]?.trim() || '';
-    const idpel    = parts.length>=2 ? d.tujuan : '';
-    const tarif    = parts[2]?.trim() || '';
-    const periode  = parts[3]?.trim() || '';
-    const stand    = parts[4]?.trim() || '';
+  // Cek apakah ada data terstruktur di raw_response
+  const rawParsed = parseRawDetail(d);
 
-    if(namaPLN) detailRows += row('Nama', namaPLN);
-    detailRows += row('IDPEL', d.tujuan||'—', true);
-    if(stand)   detailRows += row('Stand', stand);
-    if(tarif)   detailRows += row(tarif, '');
-    if(periode) detailRows += row('Periode', periode);
-  } else if(isPascaBayar){
-    // PASCA BAYAR — parse SN baris key:value atau pipe-separated
-    const snLines = sn.includes('|') ? sn.split('|') : sn.split('\n');
-    let hasDetail = false;
-    snLines.forEach(line => {
-      const b = line.trim(); if(!b) return;
-      const colonIdx = b.indexOf(':');
-      if(colonIdx > 0){
-        const k = b.slice(0, colonIdx).trim();
-        const v = b.slice(colonIdx+1).trim();
-        if(v) { detailRows += row(k, v, k.toLowerCase().includes('id')||k.toLowerCase().includes('no')); hasDetail=true; }
-      } else {
-        detailRows += `<div class="srow" style="color:#888;font-size:11px">${b}</div>`;
-        hasDetail = true;
-      }
-    });
-    // fallback jika SN kosong
-    if(!hasDetail){
-      detailRows += row('No. Tujuan', d.tujuan||'—', true);
-    }
+  if(rawParsed.length > 0){
+    // Gunakan data dari raw_response (pasca PLN, PDAM, pra PLN)
+    rawParsed.forEach(r => { detailRows += row(r.label, r.val, r.mono); });
   } else {
-    // Produk lain (pulsa, data, BPJS, PDAM, dll)
+    // Fallback: produk lain (pulsa, data, BPJS, dll) — parse dari SN string
     const snLines = sn.includes('|') ? sn.split('|') : sn.split('\n');
     let hasDetail = false;
     snLines.forEach(line => {
