@@ -4029,13 +4029,21 @@ function parseRawDetail(d){
   } else if(isPra){
     // PLN Prabayar — parse dari message: NAMA/TARIF/DAYA/KWH
     // message contoh: "NGADIMAN/R1/000002200/320.50"
+    // sn bisa berupa token saja (dari admin) atau gabungan (dari webhook lama)
     const msg = d.message || '';
     const sn  = d.sn || '';
-    const parts = msg.split('/');
-    const nama   = parts[0]?.trim();
-    const tarif  = parts[1]?.trim();
-    const dayaRaw= parts[2]?.trim();  // "000002200" = 2200 VA
-    const kwh    = parts[3]?.trim();  // "320.50"
+
+    // Kalau sn mengandung '/' → format lama (sn = token/nama/tarif/...)
+    // Kalau tidak → format baru admin (sn = token saja, message = nama/tarif/...)
+    const srcStr = sn.includes('/') ? sn : msg;
+    const parts = srcStr.split('/');
+
+    // Untuk format lama, parts[0] adalah token (skip), shift index
+    const offset = sn.includes('/') ? 1 : 0;
+    const nama   = parts[offset]?.trim();
+    const tarif  = parts[offset+1]?.trim();
+    const dayaRaw= parts[offset+2]?.trim();
+    const kwh    = parts[offset+3]?.trim();
 
     add('No. Meter', d.tujuan||'—', true);
     if(nama)    add('Nama', nama);
