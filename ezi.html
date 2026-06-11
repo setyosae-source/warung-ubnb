@@ -529,9 +529,9 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .struk-row:last-child{border-bottom:none}
 .struk-row-label{color:var(--muted);font-weight:500}
 .struk-row-val{font-weight:700;text-align:right;max-width:60%;word-break:break-all}
-.struk-token{background:#fefce8;border:2px dashed #ca8a04;border-radius:10px;padding:14px;text-align:center;margin:12px 0}
-.struk-token-label{font-size:11px;color:#92400e;font-weight:700;text-transform:uppercase;margin-bottom:6px}
-.struk-token-val{font-size:22px;font-weight:900;color:#92400e;font-family:monospace;letter-spacing:2px;cursor:pointer}
+.struk-token{background:#fefce8;border:2px dashed #ca8a04;border-radius:14px;padding:18px 14px;text-align:center;margin:14px 0}
+.struk-token-label{font-size:11px;color:#92400e;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.struk-token-val{font-size:28px;font-weight:900;color:#92400e;font-family:monospace;letter-spacing:3px;cursor:pointer;line-height:1.4;word-break:break-all}
 .struk-footer{text-align:center;font-size:11px;color:var(--muted);padding-top:12px;border-top:2px dashed var(--border);line-height:1.6}
 .struk-btns{display:flex;gap:10px;margin-top:16px}
 .struk-btn{flex:1;height:44px;border:none;border-radius:var(--r2);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer}
@@ -559,9 +559,9 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .result-row:last-child{border-bottom:none}
 .result-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0;margin-right:12px}
 .result-val{font-size:14px;color:#fff;font-weight:700;text-align:right;word-break:break-all}
-.result-token{background:rgba(255,255,0,.15);border:2px dashed rgba(255,255,0,.5);border-radius:12px;padding:16px;text-align:center;margin:16px 0}
-.result-token-label{font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.result-token-val{font-size:28px;font-weight:900;color:#fde047;letter-spacing:4px;font-family:monospace;cursor:pointer}
+.result-token{background:rgba(255,255,0,.15);border:2px dashed rgba(255,255,0,.5);border-radius:14px;padding:18px 14px;text-align:center;margin:16px 0}
+.result-token-label{font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px}
+.result-token-val{font-size:30px;font-weight:900;color:#fde047;letter-spacing:4px;font-family:monospace;cursor:pointer;line-height:1.4;word-break:break-all}
 .result-token-copy{font-size:11px;color:rgba(255,255,255,.6);margin-top:6px}
 .result-btns{display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:20px}
 .result-btn{width:100%;height:50px;border:none;border-radius:var(--r2);font-size:15px;font-weight:800;font-family:inherit;cursor:pointer;transition:.2s}
@@ -2618,14 +2618,14 @@ function tampilResultSukses(d){
 
   const tokenBlock=tokenStr2?`
     <div class="result-token">
-      <div class="result-token-label">⚡ Nomor Token PLN</div>
+      <div class="result-token-label">⚡ TOKEN LISTRIK</div>
       <div class="result-token-val" onclick="salinToken('${tokenStr2}')">${"${tokenStr2}"}</div>
-      <div class="result-token-copy">👆 Ketuk untuk salin</div>
+      <div class="result-token-copy">👆 Ketuk untuk salin token</div>
     </div>`:(isPLN&&d.sn&&!tokenStr2?`
     <div class="result-token">
-      <div class="result-token-label">⚡ Nomor Token PLN</div>
+      <div class="result-token-label">⚡ TOKEN LISTRIK</div>
       <div class="result-token-val" onclick="salinToken('${d.sn}')">${formatToken(d.sn)}</div>
-      <div class="result-token-copy">👆 Ketuk untuk salin</div>
+      <div class="result-token-copy">👆 Ketuk untuk salin token</div>
     </div>`:'');
 
   // Detail dari raw_response
@@ -2809,9 +2809,16 @@ function tutupStruk(){
 async function tampilStrukAnggota(t){
   // Ambil data lengkap termasuk raw_response dari DB
   const {data}=await sb.from('ppob_transaksi')
-    .select('ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,sn,message,raw_response,created_at,completed_at')
+    .select('ref_id,nama_produk,tujuan,harga_jual,harga_modal,status,status_bayar,sn,message,raw_response,created_at,completed_at,dibuat_oleh,ppob_pelanggan(nama,tipe)')
     .eq('ref_id',t.ref_id).single();
   const d=data||t;
+
+  // Resolve nama operator
+  let namaOp = null;
+  if(d.dibuat_oleh){
+    const {data:usr}=await sb.from('users').select('nama,username').eq('id',d.dibuat_oleh).maybeSingle();
+    namaOp = usr?.nama || usr?.username || null;
+  }
 
   const tgl=dt=>new Date(dt).toLocaleString('id-ID',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const isPLN=(d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
@@ -2828,11 +2835,10 @@ async function tampilStrukAnggota(t){
 
   const tokenBlock=tokenStr?`
     <div class="struk-token">
-      <div class="struk-token-label">⚡ Nomor Token PLN</div>
+      <div class="struk-token-label">⚡ TOKEN LISTRIK</div>
       <div class="struk-token-val" onclick="salinToken('${tokenStr}')">${tokenStr}</div>
-      <div style="font-size:11px;color:#92400e;margin-top:4px">👆 Ketuk untuk salin</div>
+      <div style="font-size:11px;color:#92400e;margin-top:8px;font-weight:600">👆 Ketuk untuk salin token</div>
     </div>`:'';
-
   // Detail rows dari raw_response
   const rawRows = parseRawDetail(d);
   const detailHtml = rawRows.map(r=>`
@@ -2845,6 +2851,11 @@ async function tampilStrukAnggota(t){
     <div class="struk-header">
       <div class="struk-logo">EZi</div>
       <div class="struk-merchant">Layanan Produk Digital · UBNB</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">${tgl(d.created_at)}</div>
+      <div style="font-size:11px;color:var(--muted)">No: ${d.ref_id}</div>
+      ${namaOp ? `<div style="font-size:11px;color:var(--muted)">Op: ${namaOp}</div>` : ''}
+      ${d.ppob_pelanggan?.nama ? `<div style="font-size:12px;font-weight:700;color:var(--g2);margin-top:4px">Pelanggan: ⭐ ${d.ppob_pelanggan.nama}</div>` : ''}
+      ${d.ppob_pelanggan?.nama ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:5px 10px;margin-top:6px;font-size:11px;color:#78350f;font-weight:600">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>` : ''}
       <div class="struk-status ${statusCls}">${statusTxt}</div>
     </div>
     ${tokenBlock}
@@ -4016,14 +4027,31 @@ function parseRawDetail(d){
     }
 
   } else if(isPra){
-    // PLN Prabayar — tetap dari SN string
-    const sn = d.sn || '';
-    const parts = sn.split('/');
-    if(parts[1]?.trim()) add('Nama', parts[1].trim());
-    add('ID Pelanggan', d.tujuan||'—', true);
-    if(parts[2]?.trim()) add('Tarif/Daya', parts[2].trim());
-    if(parts[3]?.trim()) add('Periode', parts[3].trim());
-    if(parts[4]?.trim()) add('Stand Meter', parts[4].trim());
+    // PLN Prabayar — parse dari message: NAMA/TARIF/DAYA/KWH
+    // message contoh: "NGADIMAN/R1/000002200/320.50"
+    const msg = d.message || '';
+    const sn  = d.sn || '';
+    const parts = msg.split('/');
+    const nama   = parts[0]?.trim();
+    const tarif  = parts[1]?.trim();
+    const dayaRaw= parts[2]?.trim();  // "000002200" = 2200 VA
+    const kwh    = parts[3]?.trim();  // "320.50"
+
+    add('No. Meter', d.tujuan||'—', true);
+    if(nama)    add('Nama', nama);
+    if(tarif)   add('Tarif', tarif);
+    if(dayaRaw){
+      const dayaNum = parseInt(dayaRaw, 10);
+      if(!isNaN(dayaNum) && dayaNum > 0) add('Daya', dayaNum.toLocaleString('id-ID') + ' VA');
+    }
+    if(kwh && parseFloat(kwh) > 0) add('Jumlah kWh', parseFloat(kwh).toLocaleString('id-ID') + ' kWh');
+
+    // Harga modal & layanan EZi
+    const _hjDb = Number(d.harga_jual||0);
+    const _hmDb = Number(d.harga_modal||0);
+    if(_hmDb > 0) add('Harga Token', 'Rp\u00a0'+_hmDb.toLocaleString('id-ID'));
+    const _layananEzi = _hjDb > 0 && _hmDb > 0 ? _hjDb - _hmDb : 0;
+    if(_layananEzi > 0) add('Layanan EZi', 'Rp\u00a0'+_layananEzi.toLocaleString('id-ID'));
   }
 
   return rows;
