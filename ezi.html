@@ -2822,8 +2822,7 @@ async function tampilStrukAnggota(t){
 
   const tgl=dt=>new Date(dt).toLocaleString('id-ID',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const isPLN=(d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
-  const isPra=isPLN&&!(d.nama_produk||'').toLowerCase().includes('pasca');
-  const statusCls=d.status==='sukses'?'sukses':d.status==='gagal'?'gagal':'pending';
+  const isPra=isPLN&&!(d.nama_produk||'').toLowerCase().includes('pasca');  const statusCls=d.status==='sukses'?'sukses':d.status==='gagal'?'gagal':'pending';
   const statusTxt=d.status==='sukses'?'✅ SUKSES':d.status==='gagal'?'❌ GAGAL':'⏳ PROSES';
   const bayarTxt=d.status_bayar==='lunas'?'✅ Lunas':d.status_bayar==='batal'?'🚫 Batal':'⏳ Belum Lunas';
 
@@ -3477,7 +3476,7 @@ function updateAdminBanner(){
   });
   ['admin-banner-name-home','admin-banner-name-kat'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el) el.textContent=(names[0]||'Admin')+' · v4';
+    if(el) el.textContent=(names[0]||'Admin')+' · v3';
   });
 }
 
@@ -3968,7 +3967,13 @@ function parseRawDetail(d){
   const desc = raw.desc || {};
   const namaProd = (d.nama_produk||'').toLowerCase();
   const isPasca = namaProd.includes('pasca') || namaProd.includes('postpaid') || namaProd.includes('tagihan');
-  const isPra   = namaProd.includes('token') || namaProd.includes('prabayar') || namaProd.includes('prepaid');
+  const isPra   = !isPasca && (
+                    namaProd.includes('token') ||
+                    namaProd.includes('prabayar') ||
+                    namaProd.includes('prepaid') ||
+                    (namaProd.includes('pln') && !isPasca) ||
+                    /pln\s*\d/.test(namaProd)   // "PLN 500.000", "PLN 100.000" dll
+                  );
   const isPDAM  = namaProd.toLowerCase().includes('pdam') || namaProd.toLowerCase().includes('air minum') || (raw.buyer_sku_code||'').includes('pam');
 
   const rows = [];
@@ -4100,14 +4105,18 @@ function renderStrukAdmin(d){
   const namaProd  = (d.nama_produk||'').toLowerCase();
 
   // Token PLN: HANYA prabayar (kata "token" atau "prabayar" di nama produk)
-  const isPraBayar = namaProd.includes('token') ||
-                     namaProd.includes('prabayar') ||
-                     namaProd.includes('prepaid');
   const isPascaBayar = namaProd.includes('pascabayar') ||
                        namaProd.includes('pasca bayar') ||
                        namaProd.includes('pasca') ||
                        namaProd.includes('postpaid') ||
                        namaProd.includes('tagihan');
+  const isPraBayar = !isPascaBayar && (
+                       namaProd.includes('token') ||
+                       namaProd.includes('prabayar') ||
+                       namaProd.includes('prepaid') ||
+                       namaProd.includes('pln') ||
+                       /pln\s*\d/.test(namaProd)
+                     );
 
   // Token regex — 5 grup 4 digit, atau 20 digit beruntun
   const tokenRe = /(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})/;
@@ -4183,13 +4192,13 @@ function renderStrukAdmin(d){
 
   /* ── token block ── */
   const tokenBlock = tokenStr ? `
-    <div style="margin:14px 0 4px;padding:18px 12px 14px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #4ade80;border-radius:14px;text-align:center;box-shadow:0 2px 10px rgba(74,222,128,.25)">
-      <div style="font-size:11px;color:#15803d;margin-bottom:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase">⚡ TOKEN LISTRIK</div>
-      <div style="font-size:32px;font-weight:900;letter-spacing:4px;color:#14532d;font-family:monospace;line-height:1.5;word-break:break-all;padding:0 4px"
+    <div style="margin:12px 0;padding:14px 10px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;text-align:center">
+      <div style="font-size:10px;color:#666;margin-bottom:8px;font-weight:700;letter-spacing:1px">TOKEN LISTRIK</div>
+      <div style="font-size:26px;font-weight:900;letter-spacing:3px;color:#14532d;font-family:monospace;line-height:1.4"
            onclick="navigator.clipboard?.writeText('${tokenStr.replace(/-/g,'')}').then(()=>toast('Token disalin!','s'))">
         ${tokenStr}
       </div>
-      <div style="font-size:11px;color:#15803d;margin-top:8px;font-weight:600">👆 Ketuk untuk salin token</div>
+      <div style="font-size:10px;color:#15803d;margin-top:6px">👆 Ketuk untuk salin token</div>
     </div>` : '';
 
   /* ── anggota badge ── */
@@ -4209,11 +4218,10 @@ function renderStrukAdmin(d){
   </div>`;
   h += anggotaBadge;
   h += `<hr class="sdiv">`;
+  h += tokenBlock;
   // Nama produk
   h += `<div class="srow" style="font-weight:700">${d.nama_produk||'—'}</div>`;
   h += detailRows;
-  // Token setelah detail (khusus PLN prabayar)
-  h += tokenBlock;
   h += `<hr class="sdiv">`;
   // Diskon
   const diskonNominal = Number(d.diskon_nominal||d.diskon_total||0);
@@ -4233,6 +4241,7 @@ function renderStrukAdmin(d){
     <div id="sp-qr-wrap" style="margin:10px auto 4px;display:inline-block"></div>
     <div style="font-size:10px;color:#aaa;margin-top:2px">ubnb.pw/ezi.html</div>
     <div style="display:inline-block;background:#e1f5ee;color:#0f6e56;font-size:11px;padding:3px 10px;border-radius:99px;margin-top:6px">${fmtTgl(d.created_at)}</div>
+    <div style="font-size:9px;color:#ccc;margin-top:4px">v.ezi-20260612-r4</div>
   </div>`;
 
   document.getElementById('struk-admin-print').innerHTML = h;
