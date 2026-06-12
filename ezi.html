@@ -2777,16 +2777,49 @@ function tampilResultProses(d){
 
       if(trx?.status==='sukses'){
         clearInterval(pollInterval);
-        // Refresh piutang member
         if(currentMember?.tipe==='member'){
           const {data:m}=await sb.from('ppob_member').select('total_piutang').eq('id',currentMember.id).single();
           if(m){currentMember.total_piutang=m.total_piutang;sessionStorage.setItem(MEMBER_KEY,JSON.stringify(currentMember));updateHomeHeader();}
         }
         tampilResultSukses({ref_id:d.ref_id,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:trx.sn,message:trx.message,raw_response:trx.raw_response});
+        return;
       } else if(trx?.status==='gagal'){
         clearInterval(pollInterval);
         await hapusTagihanGagal(d.ref_id);
         tampilResultGagal({ref_id:d.ref_id,pesan:trx.message||'Transaksi gagal diproses operator'});
+        return;
+      }
+
+      // DB masih pending — mulai attempt ke-5 (15 detik), cek langsung ke Digiflazz
+      // supaya tidak tergantung webhook
+      if(attempt >= 5 && attempt % 5 === 0){
+        try{
+          const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/cek-transaksi',{
+            method:'POST',
+            headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
+            body:JSON.stringify({ref_id:d.ref_id})
+          });
+          const json=await res.json();
+          const dgfStatus=(json?.data?.status||'').toLowerCase();
+          if(dgfStatus==='sukses'||dgfStatus==='success'){
+            // Update DB langsung
+            await sb.from('ppob_transaksi').update({
+              status:'sukses',
+              sn:json.data.sn||null,
+              message:json.data.message||null,
+              raw_response:json.data,
+              completed_at:new Date().toISOString(),
+              updated_at:new Date().toISOString()
+            }).eq('ref_id',d.ref_id);
+            // Akan ter-detect di polling berikutnya
+          } else if(dgfStatus==='gagal'||dgfStatus==='failed'){
+            await sb.from('ppob_transaksi').update({
+              status:'gagal',
+              message:json.data.message||'Gagal',
+              updated_at:new Date().toISOString()
+            }).eq('ref_id',d.ref_id);
+          }
+        }catch(_){} // Gagal cek Digiflazz tidak masalah, polling tetap jalan
       }
     }catch(_){}
 
