@@ -4116,11 +4116,12 @@ async function arSimpanSelisih(saldoApi, saldoDb, jenisDefault, refTrxId){
   const ket = (document.getElementById('ar-selisih-ket')?.value||'').trim();
   if(!ket){ toast('Isi keterangan dulu','e'); return; }
   const ketLower = ket.toLowerCase();
-  let jenis = jenisDefault;
-  if(ketLower.includes('deposit')||ketLower.includes('topup')||ketLower.includes('transfer')) jenis='deposit';
-  else if(ketLower.includes('komisi')||ketLower.includes('bonus')) jenis='komisi';
-  else if(ketLower.includes('transaksi')||ketLower.includes('belum tercatat')) jenis='transaksi_belum_tercatat';
-  else jenis='manual';
+  let jenis = 'sync_saldo';
+  if(ketLower.includes('deposit')||ketLower.includes('topup')||ketLower.includes('top up')||ketLower.includes('transfer')||ketLower.includes('mutasi')||ketLower.includes('bukalapak')||ketLower.includes('isi saldo')||ketLower.includes('tambah saldo')) jenis='top_up';
+  else if(ketLower.includes('komisi')||ketLower.includes('bonus')||ketLower.includes('refund')) jenis='refund';
+  else if(ketLower.includes('transaksi')||ketLower.includes('belum tercatat')) jenis='transaksi';
+  else if(ketLower.includes('koreksi')||ketLower.includes('adjust')) jenis='adjustment';
+  else jenis='sync_saldo';
 
   try{
     // 1. Simpan ke ppob_saldo_log dulu
@@ -4136,12 +4137,13 @@ async function arSimpanSelisih(saldoApi, saldoDb, jenisDefault, refTrxId){
     if(logErr) throw logErr;
 
     // 2. Kalau deposit atau komisi → buat jurnal akuntansi
-    if(jenis==='deposit' || jenis==='komisi'){
+    if(jenis==='top_up' || jenis==='refund'){
+      const p_jenis = jenis==='top_up' ? 'deposit' : 'komisi';
       const selisih = Math.abs(Number(saldoApi) - Number(saldoDb||saldoApi));
       if(selisih > 0){
         const {error:rpcErr}=await sb.rpc('fn_jurnal_deposit_digiflazz',{
           p_nominal:    selisih,
-          p_jenis:      jenis,
+          p_jenis:      p_jenis,
           p_keterangan: ket,
           p_operator:   currentAdmin?.username||'admin',
           p_tanggal:    new Date().toISOString().split('T')[0],
@@ -4191,7 +4193,7 @@ async function arKirimDeposit(){
       // Simpan ke ppob_saldo_log sebagai riwayat request deposit
       await sb.from('ppob_saldo_log').insert({
         supplier_id: 1,
-        jenis: 'deposit',
+        jenis: 'top_up',
         jumlah: amount,
         catatan: `Request deposit ${rp(amount)} via ${bank} atas nama ${owner}`,
         dibuat_oleh: currentAdmin?.id||null,
