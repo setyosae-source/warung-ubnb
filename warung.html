@@ -2001,6 +2001,27 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 
       <!-- PAGE: PPOB RIWAYAT -->
       <div id="page-ppob-riwayat" class="page">
+        <!-- SALDO BUKALAPAK + TOP UP -->
+        <div class="card" id="card-topup-buka" style="margin-bottom:12px">
+          <div class="card-header" style="margin-bottom:6px">
+            <div class="card-title">💳 Saldo Bukalapak</div>
+            <button class="btn sm teal" onclick="fetchSaldoBukalapak()" title="Refresh saldo">🔄</button>
+          </div>
+          <div id="saldo-buka-display" style="font-size:22px;font-weight:700;color:var(--green);margin:4px 0 2px">—</div>
+          <div style="font-size:11px;color:var(--text-muted)">Saldo deposit Mitra Bukalapak</div>
+          <!-- Form Top Up: pemilik only -->
+          <div class="role-pemilik-only" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">Top Up Saldo</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;flex:1;background:white">
+                <span style="padding:0 8px;font-size:12px;color:var(--text-muted);background:var(--bg);height:100%;display:flex;align-items:center;border-right:1px solid var(--border)">Rp</span>
+                <input type="number" id="topup-buka-nominal" placeholder="Nominal top up..." style="flex:1;border:none;padding:8px 10px;font-size:13px;outline:none;font-family:inherit" min="100000" step="100000"/>
+              </div>
+              <button class="btn primary" id="btn-topup-buka" onclick="topupBukalapak()" style="white-space:nowrap;padding:8px 14px">Top Up</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">⚠️ Admin BCA Rp1.000 otomatis ditambahkan ke total transfer</div>
+          </div>
+        </div>
         <div class="tabs" style="flex-wrap:wrap">
           <button class="tab active" onclick="setPPOBFilter('semua',this)">Semua</button>
           <button class="tab" onclick="setPPOBFilter('lunas',this)">Lunas</button>
@@ -3476,7 +3497,7 @@ function showPage(id,btn){
     },200);
   }
   if(id==='ppob'){lKas().then(()=>initPPOBForm());}
-  if(id==='ppob-riwayat'){lPPOB().then(()=>renderPPOBRiwayat());}
+  if(id==='ppob-riwayat'){lPPOB().then(()=>renderPPOBRiwayat());fetchSaldoBukalapak();}
   if(id==='ppob-laporan'){lPPOB().then(()=>renderPPOBLaporan());}
   if(id==='daftar-produk'){renderDaftarProduk();}
   if(id==='tracking-laundry'){lLaundry().then(()=>renderTrackingLaundry());}
@@ -13742,7 +13763,51 @@ document.addEventListener('click',e=>{
 
 
 <script>
-if('serviceWorker' in navigator){
+// ─── TOP UP BUKALAPAK ───────────────────────────────────────
+async function fetchSaldoBukalapak(){
+  const el=document.getElementById('saldo-buka-display');
+  if(!el)return;
+  el.textContent='⏳';
+  try{
+    const{data,error}=await sb.from('kas').select('saldo').eq('id',2).single();
+    if(error)throw error;
+    const s=parseInt(data.saldo);
+    el.textContent='Rp '+fN(s);
+    el.style.color=s<0?'var(--red)':'var(--green)';
+  }catch(e){
+    el.textContent='Gagal load';
+    el.style.color='var(--red)';
+  }
+}
+
+async function topupBukalapak(){
+  const nominal=parseInt(document.getElementById('topup-buka-nominal')?.value)||0;
+  if(nominal<100000){toast('Nominal minimal Rp100.000',true);return;}
+  const totalTf=nominal+1000;
+  if(!confirm('Top Up Kas Bukalapak\n\nNominal   : Rp '+fN(nominal)+'\nAdmin BCA : Rp 1.000\nTotal TF  : Rp '+fN(totalTf)+'\n\nKas Utama berkurang Rp '+fN(totalTf)+'.\n\nLanjutkan?'))return;
+  const btn=document.getElementById('btn-topup-buka');
+  const inp=document.getElementById('topup-buka-nominal');
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  try{
+    const op=CU?.username||'Setyo';
+    const{data,error}=await sb.rpc('fn_topup_bukalapak',{p_jumlah:nominal,p_operator:op});
+    if(error)throw error;
+    const s=parseInt(data.saldo_baru);
+    const el=document.getElementById('saldo-buka-display');
+    el.textContent='Rp '+fN(s);
+    el.style.color=s<0?'var(--red)':'var(--green)';
+    if(inp)inp.value='';
+    toast('✅ Top Up berhasil! '+data.no_jurnal);
+  }catch(e){
+    toast('Gagal top up: '+(e.message||JSON.stringify(e)),true);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Top Up';}
+  }
+}
+</script>
+
+<script>
+if('serviceWorker' in navigator && location.hostname !== 'www.claudeusercontent.com'){
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js')
       .then(r => console.log('SW registered'))
