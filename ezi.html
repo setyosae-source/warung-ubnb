@@ -3937,6 +3937,12 @@ function arRender(){
     const icon = STATUS_ICON[t.status]||'📦';
     const pel = t.ppob_pelanggan?.nama || '—';
     const marginVal = Number(t.markup||0);
+    const isPending = t.status==='pending'||t.status==='proses';
+    const syncBtn = isPending
+      ? `<button onclick="event.stopPropagation();arSyncStatus('${t.ref_id}',this)"
+           style="margin-top:4px;background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">
+           🔄 Sync
+         </button>` : '';
     return `<div class="ar-item" onclick="arOpenStruk('${t.ref_id}')">
       <div class="ar-item-icon">${katIcon(t.nama_produk)}</div>
       <div class="ar-item-body">
@@ -3952,9 +3958,73 @@ function arRender(){
         <div class="ar-item-harga">${rp(t.harga_jual)}</div>
         ${marginVal>0 ? `<div class="ar-item-margin">+${rp(marginVal)}</div>` : ''}
         <div><span class="ar-item-status ${statusCls}">${icon} ${(t.status||'').toUpperCase()}</span></div>
+        ${syncBtn}
       </div>
     </div>`;
   }).join('');
+}
+
+// ── SYNC STATUS DIGIFLAZZ ─────────────────────
+async function arSyncStatus(refId, btnEl){
+  if(btnEl){ btnEl.disabled=true; btnEl.textContent='⏳'; }
+  try{
+    // 1. Ambil data trx dari DB
+    const {data:trx,error:trxErr}=await sb.from('ppob_transaksi')
+      .select('id,ref_id,sku_supplier,tujuan,status,nama_produk,harga_jual,ppob_member_id')
+      .eq('ref_id',refId).single();
+    if(trxErr||!trx) throw new Error('Transaksi tidak ditemukan');
+    if(trx.status==='sukses'){ toast('Sudah sukses','i'); return; }
+
+    // 2. Hit proxy cek-transaksi
+    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
+      body:JSON.stringify({
+        cmd:'inq-pasca',   // Digiflazz: inquiry status
+        ref_id:refId,
+        buyer_sku_code:trx.sku_supplier,
+        customer_no:trx.tujuan
+      })
+    });
+    const json=await res.json();
+    const d=json?.data||{};
+    const status=(d.status||'').toLowerCase();
+
+    if(status==='sukses'||status==='success'){
+      // Update DB
+      await sb.from('ppob_transaksi').update({
+        status:'sukses',
+        sn:d.sn||null,
+        message:d.message||null,
+        raw_response:d,
+        completed_at:new Date().toISOString(),
+        updated_at:new Date().toISOString()
+      }).eq('id',trx.id);
+
+      toast('✅ Sukses! '+trx.nama_produk,'s');
+      arLoad(); // refresh list
+    } else if(status==='pending'||status==='proses'){
+      toast('⏳ Masih pending di Digiflazz','i');
+      if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔄 Sync'; }
+    } else if(status==='gagal'||status==='failed'){
+      await sb.from('ppob_transaksi').update({
+        status:'gagal',
+        status_bayar:'batal',
+        message:d.message||'Gagal',
+        updated_at:new Date().toISOString()
+      }).eq('id',trx.id);
+      toast('❌ Gagal: '+(d.message||'error'),'e');
+      arLoad();
+    } else {
+      // Endpoint tidak support cmd ini — coba endpoint cek-transaksi kalau ada
+      toast('Tidak dapat cek status: '+(json?.error||json?.message||'no response'),'e');
+      if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔄 Sync'; }
+    }
+  }catch(e){
+    console.error('[arSyncStatus]',e);
+    toast('Gagal sync: '+e.message,'e');
+    if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔄 Sync'; }
+  }
 }
 
 // ── STRUK ADMIN ───────────────────────────────
