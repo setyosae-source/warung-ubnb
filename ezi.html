@@ -3507,16 +3507,22 @@ async function doLoginAdmin(){
   }
   btn.disabled=true; btn.textContent='⏳ Memeriksa...';
   try{
-    const passHash=await sha256(p);
-    const {data,error}=await sb.from('users')
-      .select('id,username,nama,role,password_hash')
-      .eq('username',u).maybeSingle();
-    if(error||!data){ err.textContent='Username tidak ditemukan'; err.style.display='block'; return; }
-    if(data.password_hash!==passHash){ err.textContent='Password salah'; err.style.display='block'; return; }
+    // Query ke ppob_admin_users (password plaintext)
+    const {data,error}=await sb.from('ppob_admin_users')
+      .select('id,username,nama_lengkap,role,status')
+      .eq('username',u)
+      .eq('password',p)
+      .eq('status','aktif')
+      .maybeSingle();
+    if(error||!data){
+      err.textContent='Username atau password salah';
+      err.style.display='block'; return;
+    }
+    // Update last_login
+    sb.from('ppob_admin_users').update({last_login:new Date().toISOString()}).eq('id',data.id).then(()=>{});
     // Sukses
-    currentAdmin={id:data.id, username:data.username, nama:data.nama||data.username};
+    currentAdmin={id:data.id, username:data.username, nama:data.nama_lengkap||data.username};
     sessionStorage.setItem(ADMIN_KEY, JSON.stringify(currentAdmin));
-    // Set mode umum sebagai base (admin overrides per-transaksi)
     currentMember={tipe:'umum'};
     sessionStorage.setItem(MEMBER_KEY, JSON.stringify(currentMember));
     document.getElementById('admin-user').value='';
@@ -4054,22 +4060,23 @@ async function arLoadSaldo(){
     // 4. Tampilkan log selisih sebelumnya
     const {data:logs}=await sb.from('ppob_saldo_log')
       .select('*,users(nama)')
-      .order('tgl',{ascending:false}).limit(10);
+      .order('created_at',{ascending:false}).limit(10);
 
     let logHtml = '';
     if(logs?.length){
       logHtml = `<div style="margin-top:16px">
         <div style="font-size:12px;font-weight:800;color:#1a2744;margin-bottom:8px">📋 Riwayat Catatan Saldo</div>
         ${logs.map(l=>{
-          const selisihVal = Number(l.selisih||0);
-          const color = selisihVal>0?'#15803d':selisihVal<0?'#dc2626':'#64748b';
-          const sign  = selisihVal>0?'+':'';
+          const jumlahVal = Number(l.jumlah||0);
+          const selisihVal = Number(l.saldo_sesudah||0) - Number(l.saldo_sebelum||0);
+          const color = selisihVal>=0?'#15803d':'#dc2626';
+          const sign  = selisihVal>=0?'+':'';
           return `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:11px">
             <div style="display:flex;justify-content:space-between">
-              <span style="color:#64748b">${new Date(l.tgl).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
-              <span style="font-weight:800;color:${color}">${sign}${rp(Math.abs(selisihVal))}</span>
+              <span style="color:#64748b">${new Date(l.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+              <span style="font-weight:800;color:${color}">${sign}${rp(jumlahVal)}</span>
             </div>
-            <div style="color:#374151;margin-top:2px">${l.keterangan||l.jenis||'—'}</div>
+            <div style="color:#374151;margin-top:2px">${l.catatan||l.jenis||'—'}</div>
             ${l.users?.nama?`<div style="color:#aaa">oleh ${l.users.nama}</div>`:''}
           </div>`;
         }).join('')}
@@ -4118,9 +4125,12 @@ async function arSimpanSelisih(saldoApi, saldoDb, jenisDefault, refTrxId){
   try{
     // 1. Simpan ke ppob_saldo_log dulu
     const {data:log, error:logErr}=await sb.from('ppob_saldo_log').insert({
-      saldo_api:saldoApi, saldo_db:saldoDb, jenis, keterangan:ket,
-      dicatat_oleh:currentAdmin?.id||null, ref_trx_id:refTrxId||null,
-      tgl:new Date().toISOString()
+      jenis,
+      jumlah:       Math.abs(Number(saldoApi) - Number(saldoDb||saldoApi)),
+      saldo_sebelum: Number(saldoDb||0),
+      saldo_sesudah: Number(saldoApi||0),
+      catatan:      ket,
+      dibuat_oleh:  currentAdmin?.id||null,
     }).select('id').single();
     if(logErr) throw logErr;
 
@@ -4179,12 +4189,10 @@ async function arKirimDeposit(){
     if(d.rc==='00'){
       // Simpan ke ppob_saldo_log sebagai riwayat request deposit
       await sb.from('ppob_saldo_log').insert({
-        saldo_api: null,
-        saldo_db: null,
         jenis: 'deposit',
-        keterangan: `Request deposit ${rp(amount)} via ${bank} atas nama ${owner}`,
-        dicatat_oleh: currentAdmin?.id||null,
-        tgl: new Date().toISOString()
+        jumlah: amount,
+        catatan: `Request deposit ${rp(amount)} via ${bank} atas nama ${owner}`,
+        dibuat_oleh: currentAdmin?.id||null,
       });
 
       resultEl.style.display='block';
@@ -4194,9 +4202,19 @@ async function arKirimDeposit(){
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
             <div style="color:#64748b">Bank Tujuan</div><div style="font-weight:700">${d.bank||bank}</div>
             <div style="color:#64748b">Metode</div><div style="font-weight:700">${d.payment_method||'—'}</div>
-            <div style="color:#64748b">No. Rekening</div><div style="font-weight:700;font-size:14px;color:#1d4ed8">${d.account_no||'—'}</div>
+            <div style="color:#64748b">No. Rekening</div>
+            <div style="font-weight:700;font-size:14px;color:#1d4ed8;cursor:pointer" 
+              onclick="navigator.clipboard.writeText('${d.account_no||''}').then(()=>toast('✅ No. rekening disalin','s'))"
+              title="Ketuk untuk salin">
+              ${d.account_no||'—'} 📋
+            </div>
             <div style="color:#64748b">Berita Transfer</div><div style="font-weight:800;color:#dc2626">${d.notes||'—'}</div>
-            <div style="color:#64748b">Nominal Transfer</div><div style="font-weight:800;font-size:14px;color:#15803d">${rp(d.amount||amount)}</div>
+            <div style="color:#64748b">Nominal Transfer</div>
+            <div style="font-weight:800;font-size:14px;color:#15803d;cursor:pointer"
+              onclick="navigator.clipboard.writeText('${d.amount||amount}').then(()=>toast('✅ Nominal disalin','s'))"
+              title="Ketuk untuk salin">
+              ${rp(d.amount||amount)} 📋
+            </div>
           </div>
           <div style="margin-top:10px;background:#fef9c3;border-radius:8px;padding:8px;font-size:11px;color:#854d0e;font-weight:600">
             ⚠️ Wajib cantumkan berita transfer: <b>${d.notes||'—'}</b>
