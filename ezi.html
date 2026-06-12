@@ -3933,54 +3933,162 @@ function arSetFilter(f){
 }
 
 async function arLoadSaldo(){
-  const nomEl = document.getElementById('ar-saldo-nominal');
+  const nomEl  = document.getElementById('ar-saldo-nominal');
   const timeEl = document.getElementById('ar-saldo-time');
-  const trxEl = document.getElementById('ar-saldo-trx-list');
+  const trxEl  = document.getElementById('ar-saldo-trx-list');
   if(nomEl) nomEl.textContent='⏳';
+  if(trxEl) trxEl.innerHTML='<div style="text-align:center;color:#aaa;padding:12px">Memuat...</div>';
+
   try{
-    // Cek saldo realtime dari Digiflazz
+    // 1. Saldo realtime dari API
     const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/saldo',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
       body:JSON.stringify({})
     });
     const json=await res.json();
-    const saldo=Number(json?.data?.deposit||0);
-    if(nomEl) nomEl.textContent=rp(saldo);
+    const saldoApi=Number(json?.data?.deposit||0);
+    if(nomEl) nomEl.textContent=rp(saldoApi);
     if(timeEl) timeEl.textContent='Update: '+new Date().toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
 
-    // Tampilkan pemakaian saldo dari raw_response transaksi sukses
+    // 2. Ambil trx terakhir yang punya buyer_last_saldo di raw_response
     const {data:trxs}=await sb.from('ppob_transaksi')
-      .select('ref_id,nama_produk,tujuan,harga_modal,created_at,raw_response,ppob_pelanggan(nama)')
+      .select('id,ref_id,nama_produk,tujuan,harga_modal,harga_jual,created_at,completed_at,raw_response,ppob_pelanggan(nama)')
       .eq('status','sukses')
-      .order('created_at',{ascending:false})
+      .not('raw_response','is',null)
+      .order('completed_at',{ascending:false})
       .limit(50);
 
-    if(!trxs||!trxs.length){
-      if(trxEl) trxEl.innerHTML='<div style="text-align:center;color:#aaa;padding:16px">Belum ada data</div>';
-      return;
+    // Cari trx paling baru yang punya buyer_last_saldo
+    const trxDenganSaldo = (trxs||[]).filter(t=> t.raw_response?.buyer_last_saldo != null);
+    const trxTerakhir    = trxDenganSaldo[0];
+    const saldoDb        = trxTerakhir ? Number(trxTerakhir.raw_response.buyer_last_saldo) : null;
+    const selisih        = saldoDb !== null ? saldoApi - saldoDb : null;
+
+    // 3. Tampilkan info selisih
+    let selisihHtml = '';
+    if(selisih !== null){
+      const absSelisih = Math.abs(selisih);
+      if(Math.abs(selisih) < 1000){
+        // Dianggap sesuai (toleransi < 1000 karena floating point)
+        selisihHtml = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#15803d;font-weight:700">
+          ✅ Saldo sinkron dengan transaksi terakhir
+        </div>`;
+      } else if(selisih > 0){
+        selisihHtml = `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:800;color:#854d0e;margin-bottom:4px">📈 Saldo lebih besar dari transaksi terakhir</div>
+          <div style="font-size:20px;font-weight:900;color:#15803d">+${rp(absSelisih)}</div>
+          <div style="font-size:11px;color:#92400e;margin-top:2px">Kemungkinan: deposit masuk atau komisi</div>
+          <div style="margin-top:10px" id="ar-selisih-form">
+            <input type="text" id="ar-selisih-ket" placeholder="Keterangan (mis: Deposit BCA 500rb, Komisi...)"
+              style="width:100%;padding:8px 10px;border:1px solid #fcd34d;border-radius:8px;font-size:12px;font-family:inherit;margin-bottom:6px;box-sizing:border-box">
+            <button onclick="arSimpanSelisih(${saldoApi},${saldoDb},'deposit','${trxTerakhir?.ref_id||''}')"
+              style="width:100%;padding:8px;background:#854d0e;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+              💾 Simpan Catatan
+            </button>
+          </div>
+        </div>`;
+      } else {
+        selisihHtml = `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:800;color:#991b1b;margin-bottom:4px">📉 Saldo lebih kecil dari transaksi terakhir</div>
+          <div style="font-size:20px;font-weight:900;color:#dc2626">−${rp(absSelisih)}</div>
+          <div style="font-size:11px;color:#991b1b;margin-top:2px">⚠️ Kemungkinan ada transaksi yang belum tercatat</div>
+          <div style="margin-top:10px" id="ar-selisih-form">
+            <input type="text" id="ar-selisih-ket" placeholder="Keterangan (mis: Transaksi manual di dashboard...)"
+              style="width:100%;padding:8px 10px;border:1px solid #fca5a5;border-radius:8px;font-size:12px;font-family:inherit;margin-bottom:6px;box-sizing:border-box">
+            <button onclick="arSimpanSelisih(${saldoApi},${saldoDb},'transaksi_belum_tercatat','${trxTerakhir?.ref_id||''}')"
+              style="width:100%;padding:8px;background:#991b1b;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+              💾 Simpan Catatan
+            </button>
+          </div>
+        </div>`;
+      }
+    } else {
+      selisihHtml = `<div style="background:#f1f5f9;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#64748b">
+        ℹ️ Belum ada data transaksi untuk dibandingkan
+      </div>`;
     }
 
-    const rows = trxs.map(t=>{
-      const saldoSetelah = t.raw_response?.saldo || t.raw_response?.buyer_last_saldo || '—';
-      const tgl = new Date(t.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    // 4. Tampilkan log selisih sebelumnya
+    const {data:logs}=await sb.from('ppob_saldo_log')
+      .select('*,users(nama)')
+      .order('tgl',{ascending:false}).limit(10);
+
+    let logHtml = '';
+    if(logs?.length){
+      logHtml = `<div style="margin-top:16px">
+        <div style="font-size:12px;font-weight:800;color:#1a2744;margin-bottom:8px">📋 Riwayat Catatan Saldo</div>
+        ${logs.map(l=>{
+          const selisihVal = Number(l.selisih||0);
+          const color = selisihVal>0?'#15803d':selisihVal<0?'#dc2626':'#64748b';
+          const sign  = selisihVal>0?'+':'';
+          return `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:11px">
+            <div style="display:flex;justify-content:space-between">
+              <span style="color:#64748b">${new Date(l.tgl).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+              <span style="font-weight:800;color:${color}">${sign}${rp(Math.abs(selisihVal))}</span>
+            </div>
+            <div style="color:#374151;margin-top:2px">${l.keterangan||l.jenis||'—'}</div>
+            ${l.users?.nama?`<div style="color:#aaa">oleh ${l.users.nama}</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    // 5. Riwayat pemakaian saldo per transaksi
+    const trxRows = (trxs||[]).slice(0,20).map(t=>{
+      const saldoSetelah = t.raw_response?.buyer_last_saldo;
+      const tgl = new Date(t.completed_at||t.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       const pel = t.ppob_pelanggan?.nama||'—';
       return `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f1f5f9;gap:8px">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:12px;color:#1a2744">${t.nama_produk||'—'}</div>
-          <div style="font-size:11px;color:#999">${tgl} · ${pel}</div>
+          <div style="font-weight:700;font-size:12px;color:#1a2744;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.nama_produk||'—'}</div>
+          <div style="font-size:10px;color:#999">${tgl} · ${pel}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:12px;font-weight:700;color:#dc2626">−${rp(t.harga_modal)}</div>
-          ${saldoSetelah!=='—'?`<div style="font-size:10px;color:#999">Sisa ${rp(saldoSetelah)}</div>`:''}
+          ${saldoSetelah!=null?`<div style="font-size:10px;color:#999">Sisa ${rp(saldoSetelah)}</div>`:''}
         </div>
       </div>`;
     }).join('');
-    if(trxEl) trxEl.innerHTML=rows;
+
+    if(trxEl) trxEl.innerHTML = `
+      ${selisihHtml}
+      ${trxRows ? `<div style="font-size:12px;font-weight:800;color:#1a2744;margin-bottom:8px">📊 Pemakaian Saldo</div>${trxRows}` : ''}
+      ${logHtml}
+    `;
 
   }catch(e){
     if(nomEl) nomEl.textContent='Error';
     if(trxEl) trxEl.innerHTML='<div style="color:red;padding:8px">Gagal: '+e.message+'</div>';
+  }
+}
+
+async function arSimpanSelisih(saldoApi, saldoDb, jenisDefault, refTrxId){
+  const ket = (document.getElementById('ar-selisih-ket')?.value||'').trim();
+  if(!ket){ toast('Isi keterangan dulu','e'); return; }
+
+  // Deteksi jenis dari keterangan
+  const ketLower = ket.toLowerCase();
+  let jenis = jenisDefault;
+  if(ketLower.includes('deposit') || ketLower.includes('topup') || ketLower.includes('transfer')) jenis='deposit';
+  else if(ketLower.includes('komisi') || ketLower.includes('bonus')) jenis='komisi';
+  else if(ketLower.includes('transaksi') || ketLower.includes('belum tercatat')) jenis='transaksi_belum_tercatat';
+  else jenis='manual';
+
+  try{
+    await sb.from('ppob_saldo_log').insert({
+      saldo_api:    saldoApi,
+      saldo_db:     saldoDb,
+      jenis,
+      keterangan:   ket,
+      dicatat_oleh: currentAdmin?.id||null,
+      ref_trx_id:   refTrxId||null,
+      tgl:          new Date().toISOString()
+    });
+    toast('✅ Catatan tersimpan','s');
+    arLoadSaldo(); // refresh
+  }catch(e){
+    toast('Gagal simpan: '+e.message,'e');
   }
 }
 
