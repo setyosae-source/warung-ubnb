@@ -4114,13 +4114,36 @@ async function arSimpanSelisih(saldoApi, saldoDb, jenisDefault, refTrxId){
   else if(ketLower.includes('komisi')||ketLower.includes('bonus')) jenis='komisi';
   else if(ketLower.includes('transaksi')||ketLower.includes('belum tercatat')) jenis='transaksi_belum_tercatat';
   else jenis='manual';
+
   try{
-    await sb.from('ppob_saldo_log').insert({
+    // 1. Simpan ke ppob_saldo_log dulu
+    const {data:log, error:logErr}=await sb.from('ppob_saldo_log').insert({
       saldo_api:saldoApi, saldo_db:saldoDb, jenis, keterangan:ket,
       dicatat_oleh:currentAdmin?.id||null, ref_trx_id:refTrxId||null,
       tgl:new Date().toISOString()
-    });
-    toast('✅ Catatan tersimpan','s');
+    }).select('id').single();
+    if(logErr) throw logErr;
+
+    // 2. Kalau deposit atau komisi → buat jurnal akuntansi
+    if(jenis==='deposit' || jenis==='komisi'){
+      const selisih = Math.abs(Number(saldoApi) - Number(saldoDb||saldoApi));
+      if(selisih > 0){
+        const {error:rpcErr}=await sb.rpc('fn_jurnal_deposit_digiflazz',{
+          p_nominal:    selisih,
+          p_jenis:      jenis,
+          p_keterangan: ket,
+          p_operator:   currentAdmin?.username||'admin',
+          p_tanggal:    new Date().toISOString().split('T')[0],
+          p_log_id:     log.id
+        });
+        if(rpcErr) throw rpcErr;
+        toast(`✅ Catatan + jurnal ${jenis} tersimpan (${rp(selisih)})`,'s');
+      } else {
+        toast('✅ Catatan tersimpan (selisih 0, tidak ada jurnal)','s');
+      }
+    } else {
+      toast('✅ Catatan tersimpan','s');
+    }
     arLoadSaldo();
   }catch(e){ toast('Gagal simpan: '+e.message,'e'); }
 }
