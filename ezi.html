@@ -1351,6 +1351,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
       <button class="ar-chip"        id="ar-chip-pending"onclick="arSetFilter('pending')">⏳ Pending</button>
       <button class="ar-chip"        id="ar-chip-gagal"  onclick="arSetFilter('gagal')">❌ Gagal</button>
       <button class="ar-chip"        id="ar-chip-today"  onclick="arSetFilter('today')">📅 Hari Ini</button>
+      <button class="ar-chip"        id="ar-chip-saldo"  onclick="arSetFilter('saldo')">💰 Saldo</button>
     </div>
   </div>
 
@@ -1361,6 +1362,20 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     <div class="ar-stat"><div class="ar-stat-label">Margin</div><div class="ar-stat-val green" id="ar-s-margin">—</div></div>
     <div class="ar-stat"><div class="ar-stat-label">Sukses</div><div class="ar-stat-val green" id="ar-s-sukses">—</div></div>
     <div class="ar-stat"><div class="ar-stat-label">Gagal</div><div class="ar-stat-val red" id="ar-s-gagal">—</div></div>
+  </div>
+
+  <!-- Panel Saldo (hidden by default) -->
+  <div id="ar-saldo-panel" style="display:none;padding:16px">
+    <div style="background:#fff;border-radius:16px;padding:20px;text-align:center;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+      <div style="font-size:12px;color:#999;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Saldo Digiflazz</div>
+      <div id="ar-saldo-nominal" style="font-size:32px;font-weight:900;color:#15803d">—</div>
+      <div id="ar-saldo-time" style="font-size:11px;color:#aaa;margin-top:4px">—</div>
+      <button onclick="arLoadSaldo()" style="margin-top:12px;background:#15803d;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Refresh Saldo</button>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+      <div style="font-size:13px;font-weight:800;margin-bottom:12px;color:#1a2744">📊 Pemakaian Saldo per Transaksi</div>
+      <div id="ar-saldo-trx-list" style="font-size:12px;color:#666">Memuat...</div>
+    </div>
   </div>
 
   <!-- List -->
@@ -3861,11 +3876,77 @@ function arRefresh(){ arLoad(); }
 
 function arSetFilter(f){
   _arFilter = f;
-  ['all','sukses','pending','gagal','today'].forEach(k=>{
+  ['all','sukses','pending','gagal','today','saldo'].forEach(k=>{
     const el = document.getElementById('ar-chip-'+k);
     if(el) el.classList.toggle('active', k===f);
   });
-  arRender();
+  // Toggle panel saldo vs list
+  const saldoPanel = document.getElementById('ar-saldo-panel');
+  const arList = document.getElementById('ar-list');
+  const arSummary = document.getElementById('ar-summary');
+  if(f==='saldo'){
+    if(saldoPanel) saldoPanel.style.display='block';
+    if(arList) arList.style.display='none';
+    if(arSummary) arSummary.style.display='none';
+    arLoadSaldo();
+  } else {
+    if(saldoPanel) saldoPanel.style.display='none';
+    if(arList) arList.style.display='block';
+    if(arSummary) arSummary.style.display='';
+    arRender();
+  }
+}
+
+async function arLoadSaldo(){
+  const nomEl = document.getElementById('ar-saldo-nominal');
+  const timeEl = document.getElementById('ar-saldo-time');
+  const trxEl = document.getElementById('ar-saldo-trx-list');
+  if(nomEl) nomEl.textContent='⏳';
+  try{
+    // Cek saldo realtime dari Digiflazz
+    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/saldo',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
+      body:JSON.stringify({})
+    });
+    const json=await res.json();
+    const saldo=Number(json?.data?.deposit||0);
+    if(nomEl) nomEl.textContent=rp(saldo);
+    if(timeEl) timeEl.textContent='Update: '+new Date().toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+
+    // Tampilkan pemakaian saldo dari raw_response transaksi sukses
+    const {data:trxs}=await sb.from('ppob_transaksi')
+      .select('ref_id,nama_produk,tujuan,harga_modal,created_at,raw_response,ppob_pelanggan(nama)')
+      .eq('status','sukses')
+      .order('created_at',{ascending:false})
+      .limit(50);
+
+    if(!trxs||!trxs.length){
+      if(trxEl) trxEl.innerHTML='<div style="text-align:center;color:#aaa;padding:16px">Belum ada data</div>';
+      return;
+    }
+
+    const rows = trxs.map(t=>{
+      const saldoSetelah = t.raw_response?.saldo || t.raw_response?.buyer_last_saldo || '—';
+      const tgl = new Date(t.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      const pel = t.ppob_pelanggan?.nama||'—';
+      return `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f1f5f9;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:12px;color:#1a2744">${t.nama_produk||'—'}</div>
+          <div style="font-size:11px;color:#999">${tgl} · ${pel}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:12px;font-weight:700;color:#dc2626">−${rp(t.harga_modal)}</div>
+          ${saldoSetelah!=='—'?`<div style="font-size:10px;color:#999">Sisa ${rp(saldoSetelah)}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+    if(trxEl) trxEl.innerHTML=rows;
+
+  }catch(e){
+    if(nomEl) nomEl.textContent='Error';
+    if(trxEl) trxEl.innerHTML='<div style="color:red;padding:8px">Gagal: '+e.message+'</div>';
+  }
 }
 
 function arFilter(){
@@ -3968,30 +4049,23 @@ function arRender(){
 async function arSyncStatus(refId, btnEl){
   if(btnEl){ btnEl.disabled=true; btnEl.textContent='⏳'; }
   try{
-    // 1. Ambil data trx dari DB
     const {data:trx,error:trxErr}=await sb.from('ppob_transaksi')
       .select('id,ref_id,sku_supplier,tujuan,status,nama_produk,harga_jual,ppob_member_id')
       .eq('ref_id',refId).single();
     if(trxErr||!trx) throw new Error('Transaksi tidak ditemukan');
     if(trx.status==='sukses'){ toast('Sudah sukses','i'); return; }
 
-    // 2. Hit proxy cek-transaksi
-    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/transaction',{
+    // Hit endpoint cek-transaksi
+    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/cek-transaksi',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
-      body:JSON.stringify({
-        cmd:'inq-pasca',   // Digiflazz: inquiry status
-        ref_id:refId,
-        buyer_sku_code:trx.sku_supplier,
-        customer_no:trx.tujuan
-      })
+      body:JSON.stringify({ref_id:refId})
     });
     const json=await res.json();
     const d=json?.data||{};
     const status=(d.status||'').toLowerCase();
 
     if(status==='sukses'||status==='success'){
-      // Update DB
       await sb.from('ppob_transaksi').update({
         status:'sukses',
         sn:d.sn||null,
@@ -4000,9 +4074,8 @@ async function arSyncStatus(refId, btnEl){
         completed_at:new Date().toISOString(),
         updated_at:new Date().toISOString()
       }).eq('id',trx.id);
-
       toast('✅ Sukses! '+trx.nama_produk,'s');
-      arLoad(); // refresh list
+      arLoad();
     } else if(status==='pending'||status==='proses'){
       toast('⏳ Masih pending di Digiflazz','i');
       if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔄 Sync'; }
@@ -4016,8 +4089,7 @@ async function arSyncStatus(refId, btnEl){
       toast('❌ Gagal: '+(d.message||'error'),'e');
       arLoad();
     } else {
-      // Endpoint tidak support cmd ini — coba endpoint cek-transaksi kalau ada
-      toast('Tidak dapat cek status: '+(json?.error||json?.message||'no response'),'e');
+      toast('Tidak dapat cek status: '+(json?.error||'no response'),'e');
       if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔄 Sync'; }
     }
   }catch(e){
