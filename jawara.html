@@ -428,11 +428,6 @@ img{display:block;}
 </head>
 <body>
 
-      
-    
-  </div>
-</div>
-
 <!-- ═══════════════════════════
      TOPBAR
 ═══════════════════════════ -->
@@ -558,7 +553,7 @@ img{display:block;}
   <div class="page-hdr"><div class="page-ttl">📦 Pesanan Saya</div></div>
   <div class="tabbar">
     <div class="ptab on" onclick="fPesanan('semua',this)">Semua</div>
-    <div class="ptab" onclick="fPesanan('pending',this)">Menunggu</div>
+    <div class="ptab" onclick="fPesanan('menunggu',this)">Menunggu</div>
     <div class="ptab" onclick="fPesanan('proses',this)">Diproses</div>
     <div class="ptab" onclick="fPesanan('selesai',this)">Selesai</div>
   </div>
@@ -715,20 +710,21 @@ img{display:block;}
 // Lightweight Supabase REST helper
 const _SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
-const _H={'apikey':_SB_KEY,'Authorization':'Bearer '+_SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+const _H={'apikey':_SB_KEY,'Authorization':'Bearer '+_SB_KEY,'Content-Type':'application/json'};
 
 const SB={
   from(table){
-    let _sel='*',_filters=[],_order=null,_limit=null,_method='GET',_body=null,_head=false,_count=false;
+    let _sel='*',_filters=[],_order=null,_limit=null,_method='GET',_body=null,_head=false,_count=false,_single=false;
     const q={
-      select(s,opts){_sel=s;if(opts?.count==='exact')_count=true;return q;},
-      eq(col,val){_filters.push(`${col}=eq.${val}`);return q;},
-      gt(col,val){_filters.push(`${col}=gt.${val}`);return q;},
-      lt(col,val){_filters.push(`${col}=lt.${val}`);return q;},
-      in(col,vals){_filters.push(`${col}=in.(${vals.join(',')})`);return q;},
+      select(s,opts){_sel=s;if(opts?.count==='exact')_count=true;if(opts?.head===true){_head=true;_method='HEAD';}return q;},
+      eq(col,val){_filters.push(`${col}=eq.${encodeURIComponent(val)}`);return q;},
+      gt(col,val){_filters.push(`${col}=gt.${encodeURIComponent(val)}`);return q;},
+      lt(col,val){_filters.push(`${col}=lt.${encodeURIComponent(val)}`);return q;},
+      in(col,vals){_filters.push(`${col}=in.(${vals.map(v=>encodeURIComponent(v)).join(',')})`);return q;},
       order(col,opts){_order=`${col}${opts?.ascending===false?'.desc':''}`;return q;},
       limit(n){_limit=n;return q;},
       head(h){_head=true;_method='HEAD';return q;},
+      single(){_single=true;return q;},
       insert(rows){_method='POST';_body=JSON.stringify(Array.isArray(rows)?rows:[rows]);return q;},
       then(res,rej){
         // PostgREST: select tidak di-encode, filter pakai format col=op.val
@@ -737,19 +733,36 @@ const SB={
         if(_order)url+=`&order=${_order}`;
         if(_limit)url+=`&limit=${_limit}`;
         const hdrs={..._H};
-        if(_count||_head)hdrs['Prefer']='count=exact';
+        // Prefer header: gabung count + return
+        const prefer=[];
+        if(_count||_head)prefer.push('count=exact');
+        if(_method==='POST'||_method==='PATCH')prefer.push('return=representation');
+        if(prefer.length)hdrs['Prefer']=prefer.join(',');
         return fetch(url,{method:_method,headers:hdrs,body:_body})
           .then(async r=>{
+            // Ekstrak count dari content-range header (kalau diminta)
+            let cnt=null;
+            if(_count||_head){
+              const cr=r.headers.get('content-range');
+              if(cr){const parts=cr.split('/');cnt=parseInt(parts[1]||'0',10);if(isNaN(cnt))cnt=null;}
+            }
             if(_head){
-              const cnt=parseInt(r.headers.get('content-range')?.split('/')[1]||'0');
               return res({data:null,count:cnt,error:null});
             }
             const txt=await r.text();
-            if(!txt)return res({data:[],error:null});
-            const data=JSON.parse(txt);
-            if(data?.message)return res({data:null,error:data.message});
-            return res({data:Array.isArray(data)?data:[data],error:null,count:null});
-          }).catch(e=>res({data:null,error:e.message}));
+            if(!txt)return res({data:_single?null:[],count:cnt,error:null});
+            let data;
+            try{data=JSON.parse(txt);}catch(e){return res({data:null,count:cnt,error:'Invalid response'});}
+            // PostgREST error: status >= 400 dan response object punya code/message/hint
+            if(!r.ok && data && typeof data==='object' && !Array.isArray(data) && (data.code||data.message||data.hint)){
+              return res({data:null,count:cnt,error:data.message||data.code||'Request failed'});
+            }
+            if(_single){
+              const row=Array.isArray(data)?(data[0]||null):data;
+              return res({data:row,count:cnt,error:null});
+            }
+            return res({data:Array.isArray(data)?data:[data],count:cnt,error:null});
+          }).catch(e=>res({data:null,count:null,error:e.message}));
       },
       catch(fn){return q.then(r=>r,fn);}
     };
@@ -758,15 +771,29 @@ const SB={
 };
 // STATE
 let U=null,S={},cart=[],aB=[],aMK=[],aKat=[];
-let cTab='a',curP=null,payMode='nanti';
+let cTab='a',curP=null,payMode='cod';
+const WA_DEFAULT='6285718264782';
 
 // UTILS
 const rp=n=>'Rp '+(Math.round(n||0)).toLocaleString('id-ID');
+// XSS-safe HTML escape untuk semua user-controlled string
+const esc=s=>{
+  if(s==null)return '';
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+};
+// Safe firstname extraction (handle null/empty)
+const firstName=s=>{
+  if(!s)return 'User';
+  const t=String(s).trim();
+  if(!t)return 'User';
+  return t.split(' ')[0];
+};
 let _t;
 function toast(m,tp=''){
   const w=document.getElementById('tw'),el=document.getElementById('tm');
+  if(!w||!el)return;
   el.textContent=m;el.className='toast'+(tp?' '+tp:'');w.style.display='block';
-  clearTimeout(_t);_t=setTimeout(()=>w.style.display='none',3e3);
+  clearTimeout(_t);_t=setTimeout(()=>{if(w)w.style.display='none';},3e3);
 }
 function syncCart(){
   const n=cart.reduce((a,i)=>a+i.qty,0);
@@ -780,11 +807,32 @@ function syncCart(){
   if(bc)bc.textContent='Checkout ('+n+')';
 }
 const saveCart=()=>localStorage.setItem('jw_c',JSON.stringify(cart));
-const loadCart=()=>{try{cart=JSON.parse(localStorage.getItem('jw_c')||'[]');}catch{cart=[];}};
+const loadCart=()=>{
+  try{
+    const raw=JSON.parse(localStorage.getItem('jw_c')||'[]');
+    if(!Array.isArray(raw)){cart=[];return;}
+    cart=raw.filter(x=>x&&typeof x==='object'&&typeof x.id==='string'&&typeof x.harga==='number'&&typeof x.qty==='number'&&x.qty>0&&x.qty<10000);
+  }catch{cart=[];}
+};
 const saveU=()=>U&&localStorage.setItem('jw_u',JSON.stringify(U));
-const loadU=()=>{try{const u=localStorage.getItem('jw_u');if(u)U=JSON.parse(u);}catch{}};
-const openOv=id=>document.getElementById(id).classList.add('show');
-const closeOv=id=>document.getElementById(id).classList.remove('show');
+const loadU=()=>{
+  try{
+    const u=localStorage.getItem('jw_u');
+    if(!u){U=null;return;}
+    const parsed=JSON.parse(u);
+    if(parsed&&typeof parsed==='object'&&parsed.id&&typeof parsed.nama==='string'){
+      U=parsed;
+    }else{
+      U=null;
+      localStorage.removeItem('jw_u');
+    }
+  }catch{
+    U=null;
+    try{localStorage.removeItem('jw_u');}catch(e){}
+  }
+};
+const openOv=id=>document.getElementById(id)?.classList.add('show');
+const closeOv=id=>document.getElementById(id)?.classList.remove('show');
 
 // PAGES
 function showPage(id){
@@ -801,16 +849,25 @@ function showPage(id){
 }
 function onAkun(){if(U)showPage('akun');else openOv('ov-login');}
 function tanyaAdmin(){
-  const wa=S.wa_center||'6285718264782';
+  const wa=S.wa_center||WA_DEFAULT;
   window.open(`https://wa.me/${wa}?text=${encodeURIComponent('Halo Admin JAWARA, saya butuh bantuan.')}`, '_blank');
 }
 
 // DATA
 
-// Cache helpers
+// Cache helpers (versioned: bump CACHE_VER untuk invalidate semua cache lama)
+const CACHE_VER = 'v2';
 const CACHE_TTL = 5 * 60 * 1000; // 5 menit
-function cacheGet(key){try{const d=JSON.parse(localStorage.getItem('jw_'+key));if(d&&Date.now()-d.t<CACHE_TTL)return d.v;}catch(e){}return null;}
-function cacheSet(key,val){try{localStorage.setItem('jw_'+key,JSON.stringify({t:Date.now(),v:val}));}catch(e){}}
+function cacheGet(key){
+  try{
+    const d=JSON.parse(localStorage.getItem('jw_'+key));
+    if(d&&d.v===CACHE_VER&&Date.now()-d.t<CACHE_TTL)return d.d;
+  }catch(e){}
+  return null;
+}
+function cacheSet(key,val){
+  try{localStorage.setItem('jw_'+key,JSON.stringify({v:CACHE_VER,t:Date.now(),d:val}));}catch(e){}
+}
 
 async function loadAll(){
   // 1. Tampilkan dari cache dulu (instan)
@@ -819,31 +876,30 @@ async function loadAll(){
   const cachedEZI    = cacheGet('ezi');
   const cachedKat    = cacheGet('kat');
 
-  if(cachedWarung){aB=cachedWarung;renderWarung(aB);}
+  if(cachedWarung){aB=cachedWarung;renderWarung(aB.slice(0,6));}
   if(cachedMK){aMK=cachedMK;renderAnggota();}
   if(cachedEZI){renderEZIFromData(cachedEZI);}
   if(cachedKat){aKat=cachedKat;}
 
   // 2. Fetch fresh dari Supabase di background
-  SB.from('barang').select('id,nama,harga,foto_url,catatan').gt('stok',0).order('id').limit(6)
-    .then(({data})=>{if(data){aB=data;renderWarung(aB);cacheSet('warung',data);}})
-    .catch(()=>{});
-
-  SB.from('ppob_kategori').select('id,nama,icon').order('urutan')
-    .then(({data})=>{if(data){renderEZIFromData(data);cacheSet('ezi',data);}})
-    .catch(()=>{});
-
-  SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_nama').eq('status','aktif').limit(6)
-    .then(({data})=>{if(data){aMK=data;renderAnggota();cacheSet('mk',data);}})
-    .catch(()=>{});
-
-  SB.from('ubnb_mk_kategori').select('*').eq('aktif',true).order('urutan')
-    .then(({data})=>{if(data){aKat=data;cacheSet('kat',data);}})
-    .catch(()=>{});
-
-  SB.from('setting_toko').select('key,value')
-    .then(({data})=>{(data||[]).forEach(s=>S[s.key]=s.value);})
-    .catch(()=>{});
+  let okCount=0,errCount=0;
+  const reqs=[
+    SB.from('barang').select('id,nama,harga,foto_url,catatan,stok').gt('stok',0).order('id').limit(6)
+      .then(({data,error})=>{if(error){errCount++;return;}if(data){aB=data;renderWarung(aB.slice(0,6));cacheSet('warung',data);okCount++;}}),
+    SB.from('ppob_kategori').select('id,nama,icon').order('urutan')
+      .then(({data,error})=>{if(error){errCount++;return;}if(data){renderEZIFromData(data);cacheSet('ezi',data);okCount++;}}),
+    SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,deskripsi,toko_id,toko:ubnb_mk_toko(nama_toko)').eq('status','aktif').limit(6)
+      .then(({data,error})=>{if(error){errCount++;return;}if(data){aMK=data;renderAnggota();cacheSet('mk',data);okCount++;}}),
+    SB.from('ubnb_mk_kategori').select('*').eq('aktif',true).order('urutan')
+      .then(({data,error})=>{if(error){errCount++;return;}if(data){aKat=data;cacheSet('kat',data);okCount++;}}),
+    SB.from('setting_toko').select('key,value')
+      .then(({data,error})=>{if(error){errCount++;return;}(data||[]).forEach(s=>S[s.key]=s.value);okCount++;})
+  ];
+  await Promise.allSettled(reqs);
+  // Jika semua gagal & tidak ada cache, info user
+  if(okCount===0&&errCount>0&&!cachedWarung&&!cachedMK){
+    toast('Koneksi bermasalah. Coba refresh halaman.','err');
+  }
 }
 
 function renderEZIFromData(data){
@@ -852,17 +908,17 @@ function renderEZIFromData(data){
   if(!data?.length){grid.innerHTML='<div style="color:#6b7280;font-size:12px;padding:10px">Tidak ada layanan</div>';return;}
   grid.innerHTML=data.map(k=>`
     <button class="ezi-item" onclick="window.location.href='https://ubnb.pw/ezi.html'">
-      <div class="ezi-ico">${k.icon||'📦'}</div>
-      <div class="ezi-lbl">${k.nama}</div>
+      <div class="ezi-ico">${esc(k.icon||'📦')}</div>
+      <div class="ezi-lbl">${esc(k.nama)}</div>
     </button>`).join('');
 }
 
 
 
 function filterKat(id,el){
-  if(id==='ppob'){document.getElementById('ppob-sec').scrollIntoView({behavior:'smooth'});return;}
-  if(id===0){renderWarung();renderAnggota();}
-  else if(id===-1)renderWarung();
+  if(id==='ppob'){document.getElementById('anggota-sec')?.scrollIntoView({behavior:'smooth'});return;}
+  if(id===0){renderWarung(aB);renderAnggota();}
+  else if(id===-1)renderWarung(aB);
   else renderAnggota(id);
 }
 
@@ -881,7 +937,7 @@ async function lihatSemuaAnggota(){
   const g=document.getElementById('grid-anggota');
   const btn=document.querySelector('[onclick="lihatSemuaAnggota()"]');
   if(btn)btn.textContent='Memuat...';
-  const{data}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_nama').eq('status','aktif').order('id');
+  const{data}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_id,toko:ubnb_mk_toko(nama_toko)').eq('status','aktif').order('id');
   renderAnggota(data||[]);
   if(btn)btn.textContent='Semua ›';
   document.getElementById('anggota-sec').scrollIntoView({behavior:'smooth'});
@@ -893,30 +949,37 @@ async function loadWarung(){
 }
 function renderWarung(list){
   const g=document.getElementById('grid-warung');
+  if(!g)return;
+  list=list||[];
   if(!list.length){g.innerHTML=`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">🛒</div><div class="empty-title">Belum Ada Produk</div></div>`;return;}
   g.innerHTML=list.map(b=>pCard({id:'w_'+b.id,nama:b.nama,harga:b.harga,foto:b.foto_url,toko:'Warung UBNB',tip:'w'})).join('');
 }
 function renderAnggota(katId){
-  const items=katId?aMK.filter(p=>p.kategori_id===katId):aMK.slice(0,6);
   const g=document.getElementById('grid-anggota');
+  if(!g)return;
+  const items=katId?aMK.filter(p=>p.kategori_id===katId):aMK.slice(0,6);
   if(!items.length){g.innerHTML=`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">🏪</div><div class="empty-title">Belum Ada Produk</div><div class="empty-sub">Jadilah pertama buka toko di JAWARA!</div></div>`;return;}
-  g.innerHTML=items.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko_nama||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('');
+  g.innerHTML=items.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko?.nama_toko||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('');
 }
 function pCard({id,nama,harga,foto,toko,tip,coret}){
   const disc=coret?Math.round((1-harga/coret)*100):0;
-  return`<div class="pcard" onclick="bukaDetail('${id}')">
+  const safeNama=esc(nama);
+  const safeToko=esc(toko);
+  const safeFoto=esc(foto||'');
+  const safeId=esc(id);
+  return`<div class="pcard" onclick="bukaDetail('${safeId}')">
     <div class="pc-img">
-      ${foto?`<img src="${foto}" alt="${nama}" loading="lazy" onerror="this.parentElement.textContent='🛒'">`:'🛒'}
+      ${foto?`<img src="${safeFoto}" alt="${safeNama}" loading="lazy" onerror="this.parentElement.textContent='🛒'">`:'🛒'}
       <div class="pc-tipe ${tip==='w'?'pc-tipe-w':'pc-tipe-a'}">${tip==='w'?'UB':'ANGGOTA'}</div>
       ${disc>0?`<div class="pc-disc-wrap"><div class="pc-disc">-${disc}%</div></div>`:''}
     </div>
     <div class="pc-body">
-      <div class="pc-nama">${nama}</div>
+      <div class="pc-nama">${safeNama}</div>
       ${coret?`<div class="pc-coret">${rp(coret)}</div>`:''}
       <div class="pc-price">${rp(harga)}</div>
       <div class="pc-footer">
-        <div class="pc-toko"><div class="pc-dot"></div>${toko}</div>
-        <button class="pc-add" onclick="event.stopPropagation();qAdd('${id}')">+</button>
+        <div class="pc-toko"><div class="pc-dot"></div>${safeToko}</div>
+        <button class="pc-add" onclick="event.stopPropagation();qAdd('${safeId}')">+</button>
       </div>
     </div>
   </div>`;
@@ -924,32 +987,48 @@ function pCard({id,nama,harga,foto,toko,tip,coret}){
 
 // SEARCH
 function onSearch(q){
-  if(!q){renderWarung();renderAnggota();return;}
+  if(!q){renderWarung(aB.slice(0,6));renderAnggota();return;}
   const ql=q.toLowerCase();
-  renderWarung(aB.filter(b=>(b.nama||'').toLowerCase().includes(ql)));
+  const filterW=aB.filter(b=>(b.nama||'').toLowerCase().includes(ql));
+  const filterA=aMK.filter(p=>(p.nama||'').toLowerCase().includes(ql));
+  renderWarung(filterW);
+  // render anggota dengan list filtered (override default slice)
+  const g=document.getElementById('grid-anggota');
+  if(g){
+    if(!filterA.length){
+      g.innerHTML=`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">🔍</div><div class="empty-title">Tidak ada hasil</div></div>`;
+    }else{
+      g.innerHTML=filterA.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko?.nama_toko||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('');
+    }
+  }
 }
 
 // DETAIL
 function bukaDetail(id){
   let p=null;
   if(id.startsWith('w_')){const b=aB.find(x=>'w_'+x.id===id);if(b)p={id,nama:b.nama,harga:b.harga,foto:b.foto_url,toko:'Warung UBNB',tip:'w',desc:b.catatan||'Produk segar Warung UBNB Perwira'};}
-  else{const mk=aMK.find(x=>'a_'+x.id===id);if(mk)p={id,nama:mk.nama,harga:mk.harga,foto:mk.foto_urls?.[0],toko:mk.toko_nama||'Toko Anggota',tip:'a',desc:mk.deskripsi||'',coret:mk.harga_coret};}
-  if(!p)return;curP=p;
+  else{const mk=aMK.find(x=>'a_'+x.id===id);if(mk)p={id,nama:mk.nama,harga:mk.harga,foto:mk.foto_urls?.[0],toko:mk.toko?.nama_toko||'Toko Anggota',tip:'a',desc:mk.deskripsi||'',coret:mk.harga_coret};}
+  if(!p){toast('Produk tidak ditemukan','err');return;}
+  curP=p;
   document.getElementById('det-ttl').textContent=p.nama;
   const disc=p.coret?Math.round((1-p.harga/p.coret)*100):0;
+  const safeFoto=esc(p.foto||'');
+  const safeNama=esc(p.nama);
+  const safeToko=esc(p.toko);
+  const safeDesc=esc(p.desc||'');
   document.getElementById('det-body').innerHTML=`
-    <div class="det-img">${p.foto?`<img src="${p.foto}" alt="${p.nama}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
+    <div class="det-img">${p.foto?`<img src="${safeFoto}" alt="${safeNama}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
     <div class="det-body">
       <div class="det-pr-row">
         <div class="det-pr">${rp(p.harga)}</div>
         ${p.coret?`<div class="det-coret">${rp(p.coret)}</div><div class="det-disc">-${disc}%</div>`:''}
       </div>
-      <div class="det-nm">${p.nama}</div>
+      <div class="det-nm">${safeNama}</div>
       <div class="det-toko">
         <div class="det-toko-ava">${p.tip==='w'?'🏪':'🛍️'}</div>
-        <div><div class="det-toko-nm">${p.toko}</div><div class="det-toko-sub">${p.tip==='w'?'Warung Resmi UBNB':'Toko Anggota JAWARA'}</div></div>
+        <div><div class="det-toko-nm">${safeToko}</div><div class="det-toko-sub">${p.tip==='w'?'Warung Resmi UBNB':'Toko Anggota JAWARA'}</div></div>
       </div>
-      ${p.desc?`<div class="det-desc">${p.desc}</div>`:''}
+      ${p.desc?`<div class="det-desc">${safeDesc}</div>`:''}
     </div>
     <div class="det-foot">
       <button class="btn-krt" onclick="addCart()">+ Keranjang</button>
@@ -961,8 +1040,8 @@ function qAdd(id){
   if(!U){openOv('ov-login');return;}
   let p=null;
   if(id.startsWith('w_')){const b=aB.find(x=>'w_'+x.id===id);if(b)p={id,nama:b.nama,harga:b.harga,foto:b.foto_url,toko:'Warung UBNB',tip:'w'};}
-  else{const mk=aMK.find(x=>'a_'+x.id===id);if(mk)p={id,nama:mk.nama,harga:mk.harga,foto:mk.foto_urls?.[0],toko:mk.toko_nama||'Toko Anggota',tip:'a'};}
-  if(!p)return;
+  else{const mk=aMK.find(x=>'a_'+x.id===id);if(mk)p={id,nama:mk.nama,harga:mk.harga,foto:mk.foto_urls?.[0],toko:mk.toko?.nama_toko||'Toko Anggota',tip:'a'};}
+  if(!p){toast('Produk tidak ditemukan','err');return;}
   const ex=cart.find(k=>k.id===id);
   if(ex)ex.qty++;else cart.push({...p,qty:1});
   saveCart();syncCart();toast('✓ Ditambahkan ke keranjang','ok');
@@ -991,10 +1070,10 @@ function renderCart(){
   lbl.textContent=n+' produk';
   body.innerHTML=cart.map((item,idx)=>`
     <div class="cart-item">
-      <div class="ci-img">${item.foto?`<img src="${item.foto}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
+      <div class="ci-img">${item.foto?`<img src="${esc(item.foto)}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
       <div class="ci-body">
-        <div class="ci-nm">${item.nama}</div>
-        <div class="ci-tk">🏪 ${item.toko}</div>
+        <div class="ci-nm">${esc(item.nama)}</div>
+        <div class="ci-tk">🏪 ${esc(item.toko)}</div>
         <div class="ci-row">
           <div class="ci-pr">${rp(item.harga*item.qty)}</div>
           <div class="qc">
@@ -1014,18 +1093,60 @@ function renderCart(){
 function chQ(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);saveCart();renderCart();syncCart();}
 function delI(i){cart.splice(i,1);saveCart();renderCart();syncCart();}
 
-// CHECKOUT
-function bukaCheckout(){
-  if(!U){openOv('ov-login');return;}
+// Validasi cart: cek produk masih ada dan harga current
+async function validateCart(){
   if(!cart.length)return;
+  const aIds=cart.filter(c=>c.id?.startsWith('a_')).map(c=>parseInt(c.id.replace('a_',''),10)).filter(x=>!isNaN(x));
+  const wIds=cart.filter(c=>c.id?.startsWith('w_')).map(c=>parseInt(c.id.replace('w_',''),10)).filter(x=>!isNaN(x));
+  const removed=[];const updated=[];
+  if(aIds.length){
+    try{
+      const{data}=await SB.from('ubnb_mk_produk').select('id,harga,status').in('id',aIds);
+      const map={};(data||[]).forEach(p=>map[p.id]=p);
+      cart=cart.filter(c=>{
+        if(!c.id?.startsWith('a_'))return true;
+        const pid=parseInt(c.id.replace('a_',''),10);
+        const p=map[pid];
+        if(!p||p.status!=='aktif'){removed.push(c.nama);return false;}
+        if(p.harga!==c.harga){updated.push(c.nama);c.harga=p.harga;}
+        return true;
+      });
+    }catch(e){}
+  }
+  if(wIds.length){
+    try{
+      const{data}=await SB.from('barang').select('id,harga,stok').in('id',wIds);
+      const map={};(data||[]).forEach(p=>map[p.id]=p);
+      cart=cart.filter(c=>{
+        if(!c.id?.startsWith('w_'))return true;
+        const pid=parseInt(c.id.replace('w_',''),10);
+        const p=map[pid];
+        if(!p||p.stok<=0){removed.push(c.nama);return false;}
+        if(p.harga!==c.harga){updated.push(c.nama);c.harga=p.harga;}
+        return true;
+      });
+    }catch(e){}
+  }
+  if(removed.length)toast('Produk dihapus dari keranjang: '+removed.join(', '),'err');
+  if(updated.length)toast('Harga diperbarui: '+updated.join(', '),'ok');
+  saveCart();syncCart();
+}
+
+// CHECKOUT
+async function bukaCheckout(){
+  if(!U){openOv('ov-login');return;}
+  if(!cart.length){toast('Keranjang kosong','err');return;}
+  // Validasi cart: pastikan semua produk anggota masih ada & harga current
+  await validateCart();
+  if(!cart.length){toast('Semua produk di keranjang sudah tidak tersedia','err');renderCart();return;}
   const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
   const norek=S.norek_nomor||'(Belum diset)',bank=S.norek_bank||'BSI',atas=S.norek_nama||'UBNB Perwira';
   document.getElementById('co-body').innerHTML=`
     <div class="co-card">
       <div class="co-ch">📍 Info Pemesan</div>
       <div class="co-cb">
-        <div style="font-size:14px;font-weight:700;margin-bottom:2px">${U.nama}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Kelompok ${U.kelompok||'-'} · ${U.tip==='a'?'Anggota':'Jamaah'}</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:2px">${esc(U.nama)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Kelompok ${esc(U.kelompok||'-')} · ${U.tip==='a'?'Anggota UBNB':U.tip==='j'?'Jamaah Perwira':'Pengguna EZI'}</div>
         <div class="fg" style="margin:0"><label class="fl">Alamat / Catatan</label>
         <input class="fi" type="text" id="co-alamat" placeholder="Alamat pengiriman atau catatan..."></div>
       </div>
@@ -1033,8 +1154,8 @@ function bukaCheckout(){
     <div class="co-card">
       <div class="co-ch">🛒 Produk</div>
       <div class="co-cb">${cart.map(item=>`<div class="co-item">
-        <div class="co-iimg">${item.foto?`<img src="${item.foto}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
-        <div style="flex:1;min-width:0"><div class="co-inm">${item.nama}</div><div class="co-isub">${item.toko} · ${item.qty}× ${rp(item.harga)}</div></div>
+        <div class="co-iimg">${item.foto?`<img src="${esc(item.foto)}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
+        <div style="flex:1;min-width:0"><div class="co-inm">${esc(item.nama)}</div><div class="co-isub">${esc(item.toko)} · ${item.qty}× ${rp(item.harga)}</div></div>
         <div class="co-ipr">${rp(item.harga*item.qty)}</div>
       </div>`).join('')}</div>
     </div>
@@ -1042,7 +1163,7 @@ function bukaCheckout(){
       <div class="co-ch">💳 Metode Bayar</div>
       <div class="co-cb">
         <div class="pay-opts">
-          <div class="popt on" id="po-n" onclick="pickPay('nanti')">
+          <div class="popt on" id="po-n" onclick="pickPay('cod')">
             <div class="prad"><div class="praddot"></div></div>
             <div style="flex:1"><div class="pname">Bayar Nanti</div><div class="psub">Tagihan dikirim ke WhatsApp</div></div>
             <div class="pico">📲</div>
@@ -1054,9 +1175,9 @@ function bukaCheckout(){
           </div>
         </div>
         <div class="norek-box" id="norek-box">
-          <div class="norek-bank">${bank}</div>
-          <div class="norek-num">${norek}</div>
-          <div class="norek-nm">a/n ${atas}</div>
+          <div class="norek-bank">${esc(bank)}</div>
+          <div class="norek-num">${esc(norek)}</div>
+          <div class="norek-nm">a/n ${esc(atas)}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:8px">Upload bukti transfer ke admin. Konfirmasi dalam 1×24 jam.</div>
         </div>
       </div>
@@ -1073,37 +1194,113 @@ function bukaCheckout(){
 }
 function pickPay(m){
   payMode=m;
-  document.getElementById('po-n').classList.toggle('on',m==='nanti');
-  document.getElementById('po-t').classList.toggle('on',m==='transfer');
+  document.getElementById('po-n')?.classList.toggle('on',m==='cod');
+  document.getElementById('po-t')?.classList.toggle('on',m==='transfer');
   document.getElementById('norek-box')?.classList.toggle('show',m==='transfer');
 }
 async function prosesOrder(){
   if(!U)return;
+  if(!cart.length){toast('Keranjang kosong','err');return;}
   const alamat=document.getElementById('co-alamat')?.value.trim()||'';
   const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
-  const kode='ORD-'+Date.now().toString(36).toUpperCase();
+  // Idempotent kode: timestamp + random suffix (mengurangi collision pada concurrent submit)
+  const kode='ORD-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
   const btn=document.getElementById('btn-order');
   btn.disabled=true;btn.textContent='Memproses...';
-  const{data:ord,error}=await SB.from('ubnb_mk_pesanan').insert([{
-    kode_pesanan:kode,pembeli_keluarga_id:U.tip==='a'?U.id:null,
-    pembeli_nama:U.nama,pembeli_wa:U.wa||null,
-    pembeli_alamat:alamat,subtotal:total,biaya_kirim:0,total,
-    status:'pending',metode_bayar:payMode,status_bayar:'belum',
-  }]).select('id').single();
-  if(error){toast('Gagal: '+error.message,'err');btn.disabled=false;btn.textContent='Buat Pesanan';return;}
-  await SB.from('ubnb_mk_pesanan_item').insert(cart.map(item=>({
-    pesanan_id:ord.id,
-    produk_id:item.id.startsWith('a_')?parseInt(item.id.replace('a_','')):null,
-    nama_produk:item.nama,foto_url:item.foto||null,
-    harga_saat_order:item.harga,qty:item.qty,subtotal:item.harga*item.qty,catatan_item:item.tip,
-  })));
-  if(payMode==='nanti'){
-    const wa=S.wa_center||'6285718264782';
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent('Halo Admin JAWARA!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nTotal: '+rp(total)+'\n\nMohon dikonfirmasi. Terima kasih! 🙏')}`, '_blank');
+  try{
+    // Coba via RPC (atomic transaction). Kalau RPC tidak ada, fallback ke 2-step dengan rollback manual.
+    const payload={
+      p_kode:kode,
+      p_member_id:U.id,
+      p_anggota_id:U.anggota_id||null,
+      p_jamaah_did:U.jamaah_did||null,
+      p_nama:U.nama,
+      p_wa:U.wa||U.no_hp||null,
+      p_alamat:alamat,
+      p_subtotal:total,
+      p_biaya_kirim:0,
+      p_total:total,
+      p_metode_bayar:payMode,
+      p_items:cart.map(item=>({
+        produk_id:item.id.startsWith('a_')?parseInt(item.id.replace('a_',''),10):null,
+        barang_id:item.id.startsWith('w_')?parseInt(item.id.replace('w_',''),10):null,
+        nama_produk:item.nama,
+        foto_url:item.foto||null,
+        harga_saat_order:item.harga,
+        qty:item.qty,
+        subtotal:item.harga*item.qty,
+        tipe:item.tip
+      }))
+    };
+    let orderOk=false;
+    const rpcRes=await fetch(`${_SB_URL}/rest/v1/rpc/jw_create_pesanan`,{
+      method:'POST',
+      headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    }).then(async r=>({ok:r.ok,text:await r.text()})).catch(e=>({ok:false,text:e.message}));
+    if(rpcRes.ok){
+      orderOk=true;
+    }else{
+      // Fallback: 2-step insert dengan rollback manual jika item gagal
+      const{data:ord,error}=await SB.from('ubnb_mk_pesanan').insert([{
+        kode_pesanan:kode,
+        toko_id:null,
+        pembeli_member_id:U.id,
+        pembeli_keluarga_id:U.anggota_id||null,
+        pembeli_nama:U.nama,
+        pembeli_wa:U.wa||U.no_hp||null,
+        pembeli_alamat:alamat,
+        subtotal:total,
+        biaya_kirim:0,
+        total,
+        status:'menunggu',
+        metode_bayar:payMode,
+        status_bayar:'belum',
+        metode_kirim:'ambil_sendiri',
+        sumber_ongkir:'penjual'
+      }]).select('id').single();
+      if(error||!ord){
+        toast('Gagal membuat pesanan: '+(error||'unknown'),'err');
+        btn.disabled=false;btn.textContent='Buat Pesanan';
+        return;
+      }
+      const{data:items,error:errItem}=await SB.from('ubnb_mk_pesanan_item').insert(cart.map(item=>({
+        pesanan_id:ord.id,
+        produk_id:item.id.startsWith('a_')?parseInt(item.id.replace('a_',''),10):null,
+        barang_id:item.id.startsWith('w_')?parseInt(item.id.replace('w_',''),10):null,
+        nama_produk:item.nama,
+        foto_url:item.foto||null,
+        harga_saat_order:item.harga,
+        qty:item.qty,
+        subtotal:item.harga*item.qty,
+        catatan_item:item.tip
+      })));
+      if(errItem){
+        // Rollback: hapus header pesanan supaya tidak orphan
+        try{
+          await fetch(`${_SB_URL}/rest/v1/ubnb_mk_pesanan?id=eq.${ord.id}`,{method:'DELETE',headers:_H});
+        }catch(e){}
+        toast('Gagal menyimpan item pesanan: '+errItem,'err');
+        btn.disabled=false;btn.textContent='Buat Pesanan';
+        return;
+      }
+      orderOk=true;
+    }
+    if(!orderOk){
+      btn.disabled=false;btn.textContent='Buat Pesanan';
+      return;
+    }
+    if(payMode==='cod'){
+      const wa=S.wa_center||WA_DEFAULT;
+      window.open(`https://wa.me/${wa}?text=${encodeURIComponent('Halo Admin JAWARA!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nTotal: '+rp(total)+'\n\nMohon dikonfirmasi. Terima kasih! 🙏')}`, '_blank');
+    }
+    cart=[];saveCart();syncCart();closeOv('ov-co');
+    toast('✅ Pesanan berhasil dibuat!','ok');showPage('pesanan');
+  }catch(e){
+    toast('Error: '+(e.message||'unknown'),'err');
+  }finally{
+    btn.disabled=false;btn.textContent='Buat Pesanan';
   }
-  cart=[];saveCart();syncCart();closeOv('ov-co');
-  toast('✅ Pesanan berhasil dibuat!','ok');showPage('pesanan');
-  btn.disabled=false;btn.textContent='Buat Pesanan';
 }
 
 // PESANAN
@@ -1111,29 +1308,35 @@ let pf='semua';
 function fPesanan(f,el){pf=f;document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on'));el?.classList.add('on');loadPesanan();}
 async function loadPesanan(){
   if(!U)return;
-  let q=SB.from('ubnb_mk_pesanan').select('*').eq('pembeli_nama',U.nama).order('created_at',{ascending:false});
-  if(pf!=='semua')q=q.eq('status',pf);
-  const{data}=await q;renderPesanan(data||[]);
+  let q=SB.from('ubnb_mk_pesanan').select('*').eq('pembeli_member_id',U.id).order('created_at',{ascending:false}).limit(200);
+  // Map filter UI ke status DB
+  if(pf==='menunggu')q=q.eq('status','menunggu');
+  else if(pf==='proses')q=q.in('status',['dikonfirmasi','diproses','siap']);
+  else if(pf==='selesai')q=q.eq('status','selesai');
+  // pf==='semua' atau lainnya: tidak filter status
+  const{data,error}=await q;
+  if(error){toast('Gagal memuat pesanan','err');renderPesanan([]);return;}
+  renderPesanan(data||[]);
 }
 function renderPesanan(list){
   const el=document.getElementById('pesanan-list');
   if(!list.length){el.innerHTML=`<div class="empty"><div class="empty-ico">📦</div><div class="empty-title">Belum Ada Pesanan</div><div class="empty-sub">Yuk mulai belanja di JAWARA!</div></div>`;return;}
-  const sL={pending:'⏳ Menunggu',proses:'🔄 Diproses',selesai:'✅ Selesai',batal:'❌ Batal'};
-  const sC={pending:'sp',proses:'sp2',selesai:'sp3',batal:'sp4'};
+  const sL={menunggu:'⏳ Menunggu',dikonfirmasi:'✓ Dikonfirmasi',diproses:'🔄 Diproses',siap:'📦 Siap',selesai:'✅ Selesai',dibatalkan:'❌ Dibatalkan'};
+  const sC={menunggu:'sp',dikonfirmasi:'sp2',diproses:'sp2',siap:'sp2',selesai:'sp3',dibatalkan:'sp4'};
   el.innerHTML=list.map(p=>`
     <div class="pcard2">
       <div class="p2h">
-        <div><div class="p2k">${p.kode_pesanan}</div><div class="p2d">${new Date(p.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</div></div>
-        <div class="p2s ${sC[p.status]||'sp3'}">${sL[p.status]||p.status}</div>
+        <div><div class="p2k">${esc(p.kode_pesanan)}</div><div class="p2d">${new Date(p.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</div></div>
+        <div class="p2s ${sC[p.status]||'sp3'}">${sL[p.status]||esc(p.status)}</div>
       </div>
       <div class="p2b">
-        <div style="font-size:12px;margin-bottom:3px">${p.pembeli_alamat||'—'}</div>
-        <div style="font-size:11px;color:var(--muted)">Bayar: <strong style="color:var(--sub)">${p.metode_bayar==='nanti'?'Bayar Nanti':'Transfer Bank'}</strong></div>
+        <div style="font-size:12px;margin-bottom:3px">${esc(p.pembeli_alamat||'—')}</div>
+        <div style="font-size:11px;color:var(--muted)">Bayar: <strong style="color:var(--sub)">${p.metode_bayar==='cod'?'Bayar Nanti':p.metode_bayar==='transfer'?'Transfer Bank':p.metode_bayar==='saldo_ubnb'?'Saldo UBNB':esc(p.metode_bayar||'-')}</strong></div>
       </div>
       <div class="p2f">
         <div class="p2t">${rp(p.total)}</div>
         <div style="display:flex;gap:6px">
-          ${p.status==='pending'&&p.metode_bayar==='transfer'?`<button class="btn-s bs-fill" onclick="toast('Upload bukti segera hadir!')">Upload Bukti</button>`:''}
+          ${p.status==='menunggu'&&p.metode_bayar==='transfer'?`<button class="btn-s bs-fill" onclick="toast('Upload bukti segera hadir!')">Upload Bukti</button>`:''}
           <button class="btn-s bs-out" onclick="toast('Detail segera hadir!')">Detail</button>
         </div>
       </div>
@@ -1157,7 +1360,10 @@ document.addEventListener('input',e=>{
 document.addEventListener('keydown',e=>{
   if(e.target.classList.contains('pin-box')&&e.key==='Backspace'&&!e.target.value){
     const prev=e.target.previousElementSibling;
-    if(prev&&prev.classList.contains('pin-box')){prev.focus();prev.value='';}
+    if(prev&&prev.classList.contains('pin-box')){
+      e.preventDefault();
+      prev.focus();prev.value='';
+    }
   }
 });
 
@@ -1180,17 +1386,46 @@ function getPIN(containerId){
     .map(b=>b.value).join('');
 }
 
+// Simple client-side rate limiter (defense-in-depth, server RLS tetap utama)
+const LOGIN_KEY='jw_login_attempts';
+function checkLoginAttempts(){
+  try{
+    const d=JSON.parse(localStorage.getItem(LOGIN_KEY)||'{"n":0,"t":0}');
+    const now=Date.now();
+    // Reset counter setelah 15 menit
+    if(now-d.t>15*60*1000){return {ok:true,n:0};}
+    if(d.n>=8)return {ok:false,wait:Math.ceil((15*60*1000-(now-d.t))/60000)};
+    return {ok:true,n:d.n};
+  }catch(e){return {ok:true,n:0};}
+}
+function recordLoginAttempt(success){
+  try{
+    if(success){localStorage.removeItem(LOGIN_KEY);return;}
+    const d=JSON.parse(localStorage.getItem(LOGIN_KEY)||'{"n":0,"t":0}');
+    const now=Date.now();
+    const n=(now-d.t>15*60*1000)?1:(d.n+1);
+    localStorage.setItem(LOGIN_KEY,JSON.stringify({n,t:now}));
+  }catch(e){}
+}
+
 async function doLogin(){
   const err=document.getElementById('ferr'),btn=document.getElementById('btn-masuk');
   const hp=getHP();
   const pin=getPIN('pin-boxes');
   if(!hp||hp.length<10){err.textContent='Nomor HP tidak valid';err.style.display='block';return;}
   if(pin.length!==6){err.textContent='PIN harus 6 digit';err.style.display='block';return;}
+  // Rate limit check
+  const rl=checkLoginAttempts();
+  if(!rl.ok){err.textContent=`Terlalu banyak percobaan. Coba lagi dalam ${rl.wait} menit.`;err.style.display='block';return;}
   btn.textContent='Memuat...';btn.disabled=true;err.style.display='none';
   try{
     // Cari member — coba semua format no HP
     const formats=allHPFormats(hp);
-    const{data:rows}=await SB.from('ppob_member').select('*').in('no_hp',formats);
+    const{data:rows,error}=await SB.from('ppob_member').select('*').in('no_hp',formats);
+    if(error){
+      err.textContent='Koneksi bermasalah. Coba lagi.';err.style.display='block';
+      return;
+    }
     const data=rows?.[0]||null;
     if(!data){
       // Nomor belum terdaftar — tampil form daftar
@@ -1200,10 +1435,19 @@ async function doLogin(){
       document.getElementById('reg-section').style.display='block';
       return;
     }
-    // Verifikasi PIN — coba SHA256 dulu, lalu raw
+    // Verifikasi PIN: hanya match dengan hash. Jika hash gagal (insecure context),
+    // gunakan marker yang TIDAK akan match dengan stored hash.
     const pinHash=await hashPIN(pin);
-    const pinMatch = data.pin_hash===pinHash || data.pin_hash===pin;
+    let pinMatch=false;
+    if(pinHash.startsWith('__INSECURE__')){
+      // Insecure context: tolak login untuk keamanan
+      err.textContent='Browser tidak aman (perlu HTTPS). Silakan akses lewat https://';
+      err.style.display='block';
+      return;
+    }
+    pinMatch = data.pin_hash===pinHash;
     if(!pinMatch){
+      recordLoginAttempt(false);
       err.textContent='PIN salah. Coba lagi.';err.style.display='block';
       // Highlight PIN boxes
       document.querySelectorAll('#pin-boxes .pin-box').forEach(b=>{
@@ -1213,20 +1457,91 @@ async function doLogin(){
       document.querySelector('#pin-boxes .pin-box')?.focus();
       return;
     }
-    U={id:data.id,nama:data.nama,no_hp:hp,tip:'ezi',wa:hp};
+    recordLoginAttempt(true);
+    U={id:data.id,nama:data.nama,no_hp:hp,tip:'ezi',wa:hp,kelompok:null,anggota_id:null,jamaah_did:null};
+    // Klasifikasi: cek anggota UBNB / jamaah desa
+    try{
+      const cls=await classifyUser(data);
+      U.tip=cls.tip;U.kelompok=cls.kelompok;U.anggota_id=cls.anggota_id;U.jamaah_did=cls.jamaah_did;
+    }catch(e){}
     saveU();updateUI();closeOv('ov-login');
-    toast('Selamat datang, '+U.nama.split(' ')[0]+'! 👋','ok');
+    toast('Selamat datang, '+firstName(U.nama)+'! 👋','ok');
     updateInfoBar();
   }finally{btn.textContent='Masuk ke JAWARA';btn.disabled=false;}
 }
 
 async function hashPIN(pin){
-  // Simple hash untuk verifikasi PIN
+  // SHA-256 hash. Catatan: hanya tersedia di secure context (HTTPS/localhost).
+  // Kalau gagal, return marker string (BUKAN plaintext) untuk mencegah PIN tersimpan plaintext.
+  if(!crypto?.subtle){
+    console.warn('crypto.subtle tidak tersedia - bukan secure context');
+    return '__INSECURE__'+pin;
+  }
   try{
     const enc=new TextEncoder().encode(pin);
     const buf=await crypto.subtle.digest('SHA-256',enc);
     return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }catch{return pin;}
+  }catch(e){
+    console.warn('hashPIN failed:',e);
+    return '__INSECURE__'+pin;
+  }
+}
+
+// Classify user: cek apakah anggota UBNB atau jamaah desa, get kelompok
+async function classifyUser(memberRow){
+  const result={tip:'ezi',kelompok:null,anggota_id:null,jamaah_did:null};
+  if(!memberRow)return result;
+  // PRIORITAS 1: ppob_member.anggota_id/jamaah_did sudah di-set oleh admin
+  // (server is source of truth — bukan client guessing)
+  if(memberRow.anggota_id){
+    result.tip='a';
+    result.anggota_id=memberRow.anggota_id;
+    // Lookup kelompok dari ubnb_anggota
+    try{
+      const{data}=await SB.from('ubnb_anggota').select('kelompok,jamaah_did').eq('id',memberRow.anggota_id).limit(1);
+      if(data?.length){
+        result.kelompok=data[0].kelompok;
+        if(data[0].jamaah_did)result.jamaah_did=data[0].jamaah_did;
+      }
+    }catch(e){}
+    return result;
+  }
+  if(memberRow.jamaah_did){
+    result.tip='j';
+    result.jamaah_did=memberRow.jamaah_did;
+    // Lookup kelompok dari jamaah_desa (PK=did, text)
+    try{
+      const{data}=await SB.from('jamaah_desa').select('kelompok').eq('did',memberRow.jamaah_did).limit(1);
+      if(data?.length)result.kelompok=data[0].kelompok;
+    }catch(e){}
+    return result;
+  }
+  // PRIORITAS 2 (fallback): coba match by no_hp ke ubnb_anggota
+  const hp=memberRow.no_hp||'';
+  if(hp){
+    const hpFormats=allHPFormats(hp);
+    try{
+      const{data:anggota}=await SB.from('ubnb_anggota').select('id,kelompok,jamaah_did').in('no_hp',hpFormats).limit(1);
+      if(anggota?.length){
+        result.tip='a';
+        result.kelompok=anggota[0].kelompok;
+        result.anggota_id=anggota[0].id;
+        if(anggota[0].jamaah_did)result.jamaah_did=anggota[0].jamaah_did;
+        return result;
+      }
+    }catch(e){}
+    // jamaah_desa: kontak via nomor_wa, PK=did (text)
+    try{
+      const{data:jamaah}=await SB.from('jamaah_desa').select('did,kelompok,nomor_wa').in('nomor_wa',hpFormats).limit(1);
+      if(jamaah?.length){
+        result.tip='j';
+        result.kelompok=jamaah[0].kelompok;
+        result.jamaah_did=jamaah[0].did;
+        return result;
+      }
+    }catch(e){}
+  }
+  return result;
 }
 
 function tutupRegister(){
@@ -1253,39 +1568,53 @@ async function doRegister(){
   btn.textContent='Mendaftar...';btn.disabled=true;
   try{
     const pinHash=await hashPIN(pin);
+    if(pinHash.startsWith('__INSECURE__')){
+      err.textContent='Browser tidak aman (perlu HTTPS). Tidak bisa daftar.';
+      err.style.display='block';
+      return;
+    }
     // Cek sudah ada? (semua format)
     const regFormats=allHPFormats(hp);
-    const{data:existRows}=await SB.from('ppob_member').select('id').in('no_hp',regFormats);
+    const{data:existRows,error:errCheck}=await SB.from('ppob_member').select('id').in('no_hp',regFormats);
+    if(errCheck){err.textContent='Koneksi bermasalah. Coba lagi.';err.style.display='block';return;}
     if(existRows?.length){err.textContent='Nomor HP sudah terdaftar. Silakan login.';err.style.display='block';return;}
     // Simpan dengan format asli yang diketik user
     const{data,error}=await SB.from('ppob_member').insert([{
       nama,no_hp:hp,pin_hash:pinHash,status:'aktif'
     }]).select('*').single();
-    if(error){err.textContent='Gagal daftar: '+error.message;err.style.display='block';return;}
-    U={id:data.id,nama:data.nama,no_hp:hp,tip:'ezi',wa:hp};
+    if(error||!data){err.textContent='Gagal daftar: '+(error||'unknown');err.style.display='block';return;}
+    U={id:data.id,nama:data.nama,no_hp:hp,tip:'ezi',wa:hp,kelompok:null,anggota_id:null,jamaah_did:null};
+    // Klasifikasi: cek anggota UBNB / jamaah desa
+    try{
+      const cls=await classifyUser(data);
+      U.tip=cls.tip;U.kelompok=cls.kelompok;U.anggota_id=cls.anggota_id;U.jamaah_did=cls.jamaah_did;
+    }catch(e){}
     saveU();updateUI();closeOv('ov-login');
-    toast('Akun berhasil dibuat! Selamat datang '+U.nama.split(' ')[0]+' 🎉','ok');
+    toast('Akun berhasil dibuat! Selamat datang '+firstName(U.nama)+' 🎉','ok');
     updateInfoBar();
   }finally{btn.textContent='Masuk ke JAWARA';btn.disabled=false;}
 }
 function updateUI(){
   if(!U)return;
-  const ico=U.nama[0]?.toUpperCase()||'U';
+  const ico=esc(firstName(U.nama)[0]?.toUpperCase()||'U');
   // Topbar: ganti tombol masuk jadi keranjang+chat+inisial
   document.getElementById('tb-act').innerHTML=`
     <button class="tb-btn" onclick="showPage('keranjang')">🛒<span class="tb-num" id="cnum">0</span></button>
     <button class="tb-btn" onclick="tanyaAdmin()">💬</button>
     <button class="tb-btn" style="font-size:13px;font-weight:900;color:var(--ink)" onclick="onAkun()">${ico}</button>`;
-  document.getElementById('nav-ico').textContent=ico;
+  const ni=document.getElementById('nav-ico');
+  if(ni)ni.textContent=ico;
   syncCart();
 }
 function updateInfoBar(){
   if(!U)return;
-  document.getElementById('ib-nama').textContent='Halo, '+U.nama.split(' ')[0];
-  // Load pesanan count
-  SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_nama',U.nama).then(({count})=>{
-    const el=document.getElementById('ib-pesanan');
-    if(el)el.textContent=count?count+' Pesanan':'Pesanan';
+  const elN=document.getElementById('ib-nama');
+  if(elN)elN.textContent='Halo, '+firstName(U.nama);
+  // Load pesanan count (kalau element ada)
+  const elP=document.getElementById('ib-pesanan');
+  if(!elP)return;
+  SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_member_id',U.id).then(({count})=>{
+    if(elP)elP.textContent=count?count+' Pesanan':'Pesanan';
   });
 }
 
@@ -1305,18 +1634,18 @@ function renderAkun(){
     <div class="akun-hero">
       <div class="ah-o1"></div><div class="ah-o2"></div>
       <div class="akun-row">
-        <div class="akun-ava">${U.nama[0]?.toUpperCase()||'U'}</div>
+        <div class="akun-ava">${esc(firstName(U.nama)[0]?.toUpperCase()||'U')}</div>
         <div>
-          <div class="akun-nm">${U.nama}</div>
-          <div class="akun-kel">Kelompok ${U.kelompok||'-'}</div>
-          <div class="akun-bdg">${U.tip==='a'?'👥 Anggota UBNB':'🕌 Jamaah Perwira'}</div>
+          <div class="akun-nm">${esc(U.nama)}</div>
+          <div class="akun-kel">Kelompok ${esc(U.kelompok||'-')}</div>
+          <div class="akun-bdg">${U.tip==='a'?'👥 Anggota UBNB':U.tip==='j'?'🕌 Jamaah Perwira':'📱 Pengguna EZI'}</div>
         </div>
       </div>
     </div>
     <div class="akun-stats">
       <div class="ast"><div class="ast-v" id="ac-p">—</div><div class="ast-l">Pesanan</div></div>
       <div class="ast"><div class="ast-v">${cart.length}</div><div class="ast-l">Keranjang</div></div>
-      <div class="ast"><div class="ast-v">0</div><div class="ast-l">Tagihan</div></div>
+      <div class="ast"><div class="ast-v" id="ac-t">—</div><div class="ast-l">Tagihan</div></div>
     </div>
     <div class="menu-grp" style="margin-top:18px">
       <div class="menu-card">
@@ -1351,22 +1680,31 @@ function renderAkun(){
       </div>
     </div>
     <div style="height:20px"></div>`;
-  SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_nama',U.nama).then(({count})=>{
+  SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_member_id',U.id).then(({count})=>{
     const el=document.getElementById('ac-p');if(el)el.textContent=count||0;
+  });
+  // Tagihan: pesanan yg status_bayar='belum' dan status != 'batal'
+  SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_member_id',U.id).eq('status_bayar','belum').then(({count})=>{
+    const el=document.getElementById('ac-t');if(el)el.textContent=count||0;
   });
 }
 function doLogout(){
   if(!confirm('Yakin mau keluar?'))return;
-  U=null;localStorage.removeItem('jw_u');
+  U=null;
+  try{localStorage.removeItem('jw_u');}catch(e){}
   // Reset topbar
-  document.getElementById('tb-act').innerHTML=`
+  const tbAct=document.getElementById('tb-act');
+  if(tbAct)tbAct.innerHTML=`
     <button class="tb-btn" onclick="showPage('keranjang')">🛒<span class="tb-num" id="cnum">0</span></button>
     <button class="tb-btn" onclick="tanyaAdmin()">💬</button>
     <button class="tb-masuk" onclick="onAkun()">Masuk</button>`;
-  document.getElementById('nav-ico').textContent='👤';
+  const navIco=document.getElementById('nav-ico');
+  if(navIco)navIco.textContent='👤';
   renderAkun();toast('Berhasil keluar');syncCart();
-  document.getElementById('ib-nama').textContent='Masuk untuk belanja';
-  document.getElementById('ib-pesanan').textContent='Pesanan';
+  const elN=document.getElementById('ib-nama');
+  if(elN)elN.textContent='Masuk untuk belanja';
+  const elP=document.getElementById('ib-pesanan');
+  if(elP)elP.textContent='Pesanan';
 }
 
 // PPOB & TOKO
@@ -1395,13 +1733,13 @@ async function loadPageProdukAnggota(){
   const g=document.getElementById('grid-pang');
   const lbl=document.getElementById('pang-lbl');
   if(aMK.length){
-    g.innerHTML=aMK.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko_nama||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('');
+    g.innerHTML=aMK.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko?.nama_toko||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('');
     lbl.textContent=aMK.length+' produk';
     return;
   }
-  const{data}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_nama').eq('status','aktif').order('id');
+  const{data}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_id,toko:ubnb_mk_toko(nama_toko)').eq('status','aktif').order('id');
   aMK=data||[];
-  g.innerHTML=aMK.length?aMK.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko_nama||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('')
+  g.innerHTML=aMK.length?aMK.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko?.nama_toko||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('')
     :`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">🏪</div><div class="empty-title">Belum Ada Produk</div><div class="empty-sub">Jadilah pertama buka toko!</div></div>`;
   lbl.textContent=aMK.length+' produk';
 }
