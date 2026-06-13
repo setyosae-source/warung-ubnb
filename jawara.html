@@ -712,7 +712,7 @@ img{display:block;}
 
 <script>
 
-// Lightweight Supabase REST helper - tidak perlu library 200KB
+// Lightweight Supabase REST helper
 const _SB_URL='https://skltbmcrqutevmtcxqxj.supabase.co';
 const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
 const _H={'apikey':_SB_KEY,'Authorization':'Bearer '+_SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
@@ -722,38 +722,40 @@ const SB={
     let _sel='*',_filters=[],_order=null,_limit=null,_method='GET',_body=null,_head=false,_count=false;
     const q={
       select(s,opts){_sel=s;if(opts?.count==='exact')_count=true;return q;},
-      eq(col,val){_filters.push(`${col}=eq.${encodeURIComponent(val)}`);return q;},
+      eq(col,val){_filters.push(`${col}=eq.${val}`);return q;},
       gt(col,val){_filters.push(`${col}=gt.${val}`);return q;},
       lt(col,val){_filters.push(`${col}=lt.${val}`);return q;},
-      in(col,vals){_filters.push(`${col}=in.(${vals.map(v=>encodeURIComponent(v)).join(',')})`);return q;},
+      in(col,vals){_filters.push(`${col}=in.(${vals.join(',')})`);return q;},
       order(col,opts){_order=`${col}${opts?.ascending===false?'.desc':''}`;return q;},
       limit(n){_limit=n;return q;},
       head(h){_head=true;_method='HEAD';return q;},
-      insert(rows,opts){_method='POST';_body=JSON.stringify(Array.isArray(rows)?rows:[rows]);return q;},
+      insert(rows){_method='POST';_body=JSON.stringify(Array.isArray(rows)?rows:[rows]);return q;},
       then(res,rej){
-        let url=`${_SB_URL}/rest/v1/${table}?select=${encodeURIComponent(_sel)}`;
+        // PostgREST: select tidak di-encode, filter pakai format col=op.val
+        let url=`${_SB_URL}/rest/v1/${table}?select=${_sel}`;
         _filters.forEach(f=>url+=`&${f}`);
         if(_order)url+=`&order=${_order}`;
         if(_limit)url+=`&limit=${_limit}`;
         const hdrs={..._H};
-        if(_count)hdrs['Prefer']='count=exact';
-        if(_head)hdrs['Prefer']='count=exact';
+        if(_count||_head)hdrs['Prefer']='count=exact';
         return fetch(url,{method:_method,headers:hdrs,body:_body})
           .then(async r=>{
-            if(_head||_method==='HEAD'){
+            if(_head){
               const cnt=parseInt(r.headers.get('content-range')?.split('/')[1]||'0');
               return res({data:null,count:cnt,error:null});
             }
-            const data=await r.json();
-            return res({data:Array.isArray(data)?data:null,error:data?.message||null,count:null});
-          }).catch(rej||((e)=>({data:null,error:e.message})));
+            const txt=await r.text();
+            if(!txt)return res({data:[],error:null});
+            const data=JSON.parse(txt);
+            if(data?.message)return res({data:null,error:data.message});
+            return res({data:Array.isArray(data)?data:[data],error:null,count:null});
+          }).catch(e=>res({data:null,error:e.message}));
       },
       catch(fn){return q.then(r=>r,fn);}
     };
     return q;
   }
 };
-
 // STATE
 let U=null,S={},cart=[],aB=[],aMK=[],aKat=[];
 let cTab='a',curP=null,payMode='nanti';
