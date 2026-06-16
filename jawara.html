@@ -2597,10 +2597,54 @@ async function submitPesananManual(){
 // PPOB & TOKO
 function bukaToko(){if(!U){openOv('ov-login');return;}if(U.tip!=='a'){toast('Fitur ini khusus anggota UBNB','err');return;}toast('Fitur buka toko segera hadir!');}
 
+// ===== MOBILE BACK BUTTON HANDLER =====
+// Tombol back HP: tutup overlay/page aktif. Di beranda → konfirmasi keluar.
+let _allowExit=false;
+function initMobileBack(){
+  // Push 1 state extra supaya back pertama tertangkap (bukan langsung keluar)
+  try{history.pushState({jawara:1,ts:Date.now()},'');}catch(e){return;}
+  window.addEventListener('popstate',handleMobileBack);
+}
+
+function handleMobileBack(e){
+  if(_allowExit)return; // sudah konfirmasi keluar — jangan intercept
+  // Re-push state supaya back berikutnya tetap ditangkap
+  try{history.pushState({jawara:1,ts:Date.now()},'');}catch(err){}
+
+  // 1) Tutup overlay aktif (prioritas tertinggi)
+  const ov=document.querySelector('.ov.show, .co-ov.show, .det-ov.show');
+  if(ov){
+    ov.classList.remove('show');
+    // Reset admin login form kalau yang ditutup ov-login dengan admin section terbuka
+    if(ov.id==='ov-login'){
+      const adm=document.getElementById('adm-section');
+      if(adm?.style.display==='block'){
+        adm.style.display='none';
+        document.querySelectorAll('#ov-login .fg, #ov-login #btn-masuk, #ov-login .ln, #ov-login #reg-section').forEach(el=>{el.style.display='';});
+      }
+    }
+    return;
+  }
+
+  // 2) Kalau bukan di beranda, kembali ke beranda
+  const activePage=document.querySelector('.page.active');
+  if(activePage&&activePage.id!=='page-home'){
+    showPage('home');
+    return;
+  }
+
+  // 3) Di beranda, tidak ada overlay → konfirmasi keluar
+  if(confirm('Keluar dari JAWARA?')){
+    _allowExit=true;
+    history.back();
+  }
+}
+
 // INIT
 loadU();loadAdm();loadCart();syncCart();
 if(U){updateUI();updateInfoBar();}
 loadAll();
+initMobileBack();
 </script>
 </body>
 </html>
