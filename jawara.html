@@ -923,24 +923,14 @@ function filterKat(id,el){
 }
 
 // RENDER
-async function lihatSemuaWarung(){
-  const g=document.getElementById('grid-warung');
-  const btn=document.querySelector('[onclick="lihatSemuaWarung()"]');
-  if(btn)btn.textContent='Memuat...';
-  const{data}=await SB.from('barang').select('id,nama,harga,foto_url,catatan').gt('stok',0).order('id');
-  renderWarung(data||[]);
-  if(btn)btn.textContent='Semua ›';
-  document.getElementById('grid-warung').scrollIntoView({behavior:'smooth'});
+function lihatSemuaWarung(){
+  // Navigate ke page-deals (halaman Produk UB)
+  showPage('deals');
 }
 
-async function lihatSemuaAnggota(){
-  const g=document.getElementById('grid-anggota');
-  const btn=document.querySelector('[onclick="lihatSemuaAnggota()"]');
-  if(btn)btn.textContent='Memuat...';
-  const{data}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_id,toko:ubnb_mk_toko(nama_toko)').eq('status','aktif').order('id');
-  renderAnggota(data||[]);
-  if(btn)btn.textContent='Semua ›';
-  document.getElementById('anggota-sec').scrollIntoView({behavior:'smooth'});
+function lihatSemuaAnggota(){
+  // Navigate ke page-ppob (halaman Produk Anggota)
+  showPage('ppob');
 }
 
 async function loadWarung(){
@@ -1246,7 +1236,7 @@ async function prosesOrder(){
         kode_pesanan:kode,
         toko_id:null,
         pembeli_member_id:U.id,
-        pembeli_keluarga_id:U.anggota_id||null,
+        pembeli_keluarga_id:null,  // FK ke keluarga_akses, JAWARA tidak pakai
         pembeli_nama:U.nama,
         pembeli_wa:U.wa||U.no_hp||null,
         pembeli_alamat:alamat,
@@ -1711,37 +1701,47 @@ function doLogout(){
 
 function bukaToko(){if(!U){openOv('ov-login');return;}if(U.tip!=='a'){toast('Fitur ini khusus anggota UBNB','err');return;}toast('Fitur buka toko segera hadir!');}
 
-// HALAMAN PRODUK UB
+// HALAMAN PRODUK UB (full list, no limit)
 async function loadPageProdukUB(){
   const g=document.getElementById('grid-pub');
   const lbl=document.getElementById('pub-lbl');
-  // Gunakan cache dulu kalau ada
+  if(!g)return;
+  // Render cache instan dulu (kalau ada)
   if(aB.length){
     g.innerHTML=aB.map(b=>pCard({id:'w_'+b.id,nama:b.nama,harga:b.harga,foto:b.foto_url,toko:'Warung UBNB',tip:'w'})).join('');
-    lbl.textContent=aB.length+' produk';
-    return;
+    if(lbl)lbl.textContent='Memuat semua...';
+  }else{
+    g.innerHTML=`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">⏳</div><div class="empty-title">Memuat...</div></div>`;
   }
-  const{data}=await SB.from('barang').select('id,nama,harga,foto_url,catatan').gt('stok',0).order('id');
+  // Fetch full
+  const{data,error}=await SB.from('barang').select('id,nama,harga,foto_url,catatan,stok').gt('stok',0).order('id');
+  if(error){if(lbl)lbl.textContent=aB.length+' produk';return;}
   aB=data||[];
+  // Catatan: tidak cacheSet di sini karena cache jw_warung di-pakai oleh home (limit 6).
+  // Page deals selalu re-fetch full untuk freshness.
   g.innerHTML=aB.length?aB.map(b=>pCard({id:'w_'+b.id,nama:b.nama,harga:b.harga,foto:b.foto_url,toko:'Warung UBNB',tip:'w'})).join('')
     :`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">🛒</div><div class="empty-title">Belum Ada Produk</div></div>`;
-  lbl.textContent=aB.length+' produk';
+  if(lbl)lbl.textContent=aB.length+' produk';
 }
 
-// HALAMAN PRODUK ANGGOTA
+// HALAMAN PRODUK ANGGOTA (full list, no limit)
 async function loadPageProdukAnggota(){
   const g=document.getElementById('grid-pang');
   const lbl=document.getElementById('pang-lbl');
+  if(!g)return;
   if(aMK.length){
     g.innerHTML=aMK.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko?.nama_toko||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('');
-    lbl.textContent=aMK.length+' produk';
-    return;
+    if(lbl)lbl.textContent='Memuat semua...';
+  }else{
+    g.innerHTML=`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">⏳</div><div class="empty-title">Memuat...</div></div>`;
   }
-  const{data}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,toko_id,toko:ubnb_mk_toko(nama_toko)').eq('status','aktif').order('id');
+  const{data,error}=await SB.from('ubnb_mk_produk').select('id,nama,harga,harga_coret,foto_urls,kategori_id,deskripsi,toko_id,toko:ubnb_mk_toko(nama_toko)').eq('status','aktif').order('id');
+  if(error){if(lbl)lbl.textContent=aMK.length+' produk';return;}
   aMK=data||[];
+  // Tidak cacheSet di sini (cache jw_mk untuk home limit 6)
   g.innerHTML=aMK.length?aMK.map(p=>pCard({id:'a_'+p.id,nama:p.nama,harga:p.harga,foto:p.foto_urls?.[0],toko:p.toko?.nama_toko||'Toko Anggota',tip:'a',coret:p.harga_coret})).join('')
     :`<div style="grid-column:1/-1" class="empty"><div class="empty-ico">🏪</div><div class="empty-title">Belum Ada Produk</div><div class="empty-sub">Jadilah pertama buka toko!</div></div>`;
-  lbl.textContent=aMK.length+' produk';
+  if(lbl)lbl.textContent=aMK.length+' produk';
 }
 
 // INIT
