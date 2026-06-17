@@ -2634,7 +2634,7 @@ async function autoEksekusiDigiflazz(refId){
   document.getElementById('proc-overlay').classList.add('show');
   try{
     const {data:trx}=await sb.from('ppob_transaksi')
-      .select('id,sku_supplier,tujuan,harga_jual,status,nama_produk')
+      .select('id,sku_supplier,tujuan,harga_jual,status,nama_produk,tipe')
       .eq('ref_id',refId).single();
 
     if(!trx||trx.status==='sukses'){
@@ -2701,30 +2701,22 @@ function tampilResultSukses(d){
   const isPLN=namaProd.includes('token')||namaProd.includes('pln');
   const isPra=isPLN&&!namaProd.includes('pasca');
 
-  // Token PLN prabayar
-  const snClean=d.sn||''
-  const tokenRe2=/([\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4}[-\s]?[\d]{4})/;
-  const tokenMatchSN2=snClean.match(tokenRe2);
-  const tokenStr2=isPra&&tokenMatchSN2?tokenMatchSN2[1].replace(/\s/g,'-'):null;
+  // Token PLN prabayar — ambil hanya 20 digit token, bukan SN gabungan
+  const tokenStr2=isPra?extractTokenPLN(d):null;
 
   const tokenBlock=tokenStr2?`
     <div class="result-token">
       <div class="result-token-label">⚡ TOKEN LISTRIK</div>
-      <div class="result-token-val" onclick="salinToken('${tokenStr2}')">${"${tokenStr2}"}</div>
+      <div class="result-token-val" onclick="salinToken('${tokenStr2}')">${tokenStr2}</div>
       <div class="result-token-copy">👆 Ketuk untuk salin token</div>
-    </div>`:(isPLN&&d.sn&&!tokenStr2?`
-    <div class="result-token">
-      <div class="result-token-label">⚡ TOKEN LISTRIK</div>
-      <div class="result-token-val" onclick="salinToken('${d.sn}')">${formatToken(d.sn)}</div>
-      <div class="result-token-copy">👆 Ketuk untuk salin token</div>
-    </div>`:'');
+    </div>`:'';
 
   // Detail dari raw_response
   const rawRows=parseRawDetail(d);
   const detailHtml=rawRows.map(r=>`
     <div class="result-row">
-      <span class="result-label">${"${r.label}"}</span>
-      <span class="result-val" style="${"${r.mono?'font-family:monospace;font-size:12px':'font-size:12px'}"}">${"${r.val}"}</span>
+      <span class="result-label">${r.label}</span>
+      <span class="result-val" style="${r.mono?'font-family:monospace;font-size:12px':'font-size:12px'}">${r.val}</span>
     </div>`).join('');
 
   document.getElementById('result-overlay').className='result-overlay sukses show';
@@ -2872,11 +2864,35 @@ async function cobaLagiResult(refId){
   await autoEksekusiDigiflazz(refId);
 }
 
+function extractTokenPLN(input){
+  // Ambil token PLN 20 digit dari berbagai format SN/message Digiflazz.
+  // Contoh format: "12345678901234567890", "1234-5678-9012-3456-7890",
+  // "12345678901234567890/NAMA/R1/000002200/320.50", atau "SN: 1234 5678 ..."
+  const sources = [];
+  if(typeof input === 'string'){
+    sources.push(input);
+  } else if(input){
+    if(input.sn) sources.push(input.sn);
+    if(input.message) sources.push(input.message);
+    if(input.raw_response?.sn) sources.push(input.raw_response.sn);
+    if(input.raw_response?.message) sources.push(input.raw_response.message);
+  }
+
+  const tokenRe = /(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})/;
+  for(const src of sources){
+    const m = String(src).match(tokenRe);
+    if(m){
+      const clean = m[1].replace(/\D/g,'');
+      if(clean.length === 20) return clean.match(/.{1,4}/g).join('-');
+    }
+  }
+  return '';
+}
+
 function formatToken(sn){
   if(!sn) return sn;
-  const clean=sn.replace(/\D/g,'');
-  if(clean.length>=16) return clean.match(/.{1,4}/g).join('-');
-  return sn;
+  const token = extractTokenPLN(sn);
+  return token || sn;
 }
 
 function salinToken(sn){
@@ -2886,12 +2902,14 @@ function salinToken(sn){
 
 function shareHasilWA(d){
   const isPLN=(d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
+  const token=isPLN?extractTokenPLN(d):'';
+
   let teks=`✅ *TRANSAKSI BERHASIL*\n`;
   teks+=`Produk: ${d.nama_produk||'-'}\n`;
   teks+=`Tujuan: ${d.tujuan||'-'}\n`;
   teks+=`Total: ${rp(d.harga_jual)}\n`;
-  if(isPLN&&d.sn) teks+=`⚡ Token: *${formatToken(d.sn)}*\n`;
-  else if(d.sn) teks+=`SN: ${d.sn}\n`;
+  if(isPLN&&token) teks+=`⚡ Token: *${token}*\n`;
+  else if(d.sn&&!isPLN) teks+=`SN: ${d.sn}\n`;
   teks+=`Ref: ${d.ref_id}\n\n_EZi · Layanan Produk Digital UBNB_`;
   window.open('https://wa.me/?text='+encodeURIComponent(teks),'_blank');
 }
@@ -4809,9 +4827,8 @@ async function strukAdminUnduh(){
 function strukAdminWA(){
   if(!_strukAdminData){ return; }
   const d = _strukAdminData;
-  const parts = (d.sn||'').split('/');
   const isPLN = (d.nama_produk||'').toLowerCase().includes('token')||(d.nama_produk||'').toLowerCase().includes('pln');
-  const token = (isPLN && parts.length>=4) ? parts[0].trim() : (isPLN&&d.sn?d.sn:'');
+  const token = isPLN ? extractTokenPLN(d) : '';
   const pel = d.ppob_pelanggan?.nama||'—';
   const STATUS_TXT = {sukses:'✅ SUKSES', pending:'⏳ PENDING', gagal:'❌ GAGAL'};
 
@@ -4829,7 +4846,7 @@ function strukAdminWA(){
 `;
   teks += `Status   : ${STATUS_TXT[d.status]||d.status}
 `;
-  if(token) teks += `⚡ Token  : *${formatToken(token)}*
+  if(token) teks += `⚡ Token  : *${token}*
 `;
   teks += `Waktu    : ${new Date(d.created_at).toLocaleString('id-ID')}
 `;
