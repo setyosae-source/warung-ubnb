@@ -542,6 +542,23 @@ img{display:block;}
 .toast{background:rgba(15,15,15,.9);color:var(--w);padding:10px 18px;border-radius:var(--r8);font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.2);}
 .toast.ok{background:rgba(26,172,112,.95);}
 .toast.err{background:rgba(239,68,68,.95);}
+
+/* ===== TAGIHAN HUTANG PIUTANG ===== */
+.tagihan-summary{background:linear-gradient(135deg,var(--g),var(--g2));color:var(--w);border-radius:var(--r12);padding:16px;margin:8px 14px 12px;box-shadow:var(--sh2);}
+.tagihan-lbl{font-size:11px;font-weight:700;opacity:.8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.tagihan-total{font-size:26px;font-weight:900;letter-spacing:-.5px;}
+.tagihan-sub{font-size:11px;opacity:.8;margin-top:4px;}
+.tagihan-card{background:var(--w);border:1px solid var(--bdr);border-radius:var(--r12);margin:0 14px 10px;overflow:hidden;box-shadow:var(--sh);}
+.tagihan-head{padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--bdr2);display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+.tagihan-ref{font-size:11px;font-weight:800;color:var(--ink);word-break:break-word;}
+.tagihan-date{font-size:10px;color:var(--muted);margin-top:2px;}
+.tagihan-status{font-size:10px;font-weight:800;background:#fef3c7;color:#92400e;border-radius:99px;padding:3px 8px;white-space:nowrap;}
+.tagihan-body{padding:12px;}
+.tagihan-prod{font-size:13px;font-weight:800;color:var(--ink);line-height:1.3;}
+.tagihan-meta{font-size:11px;color:var(--muted);margin-top:3px;word-break:break-word;}
+.tagihan-amt{font-size:18px;font-weight:900;color:var(--r);margin-top:8px;}
+.tagihan-actions{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--bdr2);}
+.tagihan-actions .btn-s{flex:1;text-align:center;}
 </style>
 </head>
 <body>
@@ -1073,7 +1090,7 @@ img{display:block;}
   <div class="co-foot comment-foot">
     <textarea class="comment-input" id="comment-input" rows="1" maxlength="500" placeholder="Tulis komentar…"></textarea>
     <button class="comment-send" id="comment-send" onclick="submitKomentar()">Kirim</button>
-    <button class="comment-wa" onclick="chatKomentarWA()">WA</button>
+    <button class="comment-wa" id="comment-wa-btn" onclick="chatKomentarWA()">WA</button>
   </div>
 </div>
 
@@ -1149,6 +1166,7 @@ let U=null,S={},cart=[],aB=[],aMK=[],aKat=[];
 let cTab='a',curP=null,payMode='cod';
 let posts=[],postFilter='semua';
 let activeCommentPostId=null,activeCommentPost=null,activeCommentBtn=null,activeCommentTable='jawara_post_comment',commentDbReady=null;
+let activePiutangMap={};
 let bpState={jenis:'info',produk:null,media:[]}; // buat post state
 let pmItems=[]; // pesan manual items state
 let katFilterUB=''; // filter kategori UB
@@ -1170,6 +1188,13 @@ const firstName=s=>{
   if(!t)return 'User';
   return t.split(' ')[0];
 };
+function normalizeWA(no){
+  let n=String(no||'').replace(/[^0-9]/g,'');
+  if(!n)return '';
+  if(n.startsWith('0'))n='62'+n.slice(1);
+  else if(n.startsWith('8'))n='62'+n;
+  return n;
+}
 if(!window.CSS)window.CSS={};
 if(!CSS.escape){CSS.escape=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,c=>'\\'+c);}
 let _t;
@@ -1647,6 +1672,10 @@ let pf='semua';
 function fPesanan(f,el){pf=f;document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on'));el?.classList.add('on');loadPesanan();}
 async function loadPesanan(){
   if(!U)return;
+  const ttl=document.querySelector('#page-pesanan .page-ttl');
+  if(ttl)ttl.textContent='📦 Pesanan Saya';
+  const tb=document.querySelector('#page-pesanan .tabbar');
+  if(tb)tb.style.display='flex';
   let q=SB.from('ubnb_mk_pesanan').select('*').eq('pembeli_member_id',U.id).order('created_at',{ascending:false}).limit(200);
   // Map filter UI ke status DB
   if(pf==='menunggu')q=q.eq('status','menunggu');
@@ -1666,11 +1695,109 @@ async function loadPesanan(){
 
 function bukaTagihan(){
   if(!U){openOv('ov-login');return;}
-  pf='tagihan';
-  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on'));
-  showPage('pesanan');
-  loadPesanan();
-  toast('Menampilkan tagihan belum dibayar','ok');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.bn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('page-pesanan')?.classList.add('active');
+  document.getElementById('bn-akun')?.classList.add('on');
+  const fab=document.getElementById('fab-wrap');
+  if(fab)fab.style.display='none';
+  const ttl=document.querySelector('#page-pesanan .page-ttl');
+  if(ttl)ttl.textContent='💳 Tagihan Saya';
+  const tb=document.querySelector('#page-pesanan .tabbar');
+  if(tb)tb.style.display='none';
+  loadTagihanPiutang();
+  window.scrollTo(0,0);
+}
+
+function nilaiPiutang(r){
+  return Number(r.sisa||r.jumlah_sisa||r.jumlah||r.nominal||r.total||0);
+}
+function statusPiutangLabel(s){
+  const v=String(s||'belum_bayar').toLowerCase();
+  if(['belum_bayar','belum','utang','hutang','pending'].includes(v))return 'Belum bayar';
+  if(['sebagian','cicil','parsial'].includes(v))return 'Bayar sebagian';
+  if(['lunas','dibayar','selesai','paid'].includes(v))return 'Lunas';
+  return s||'Belum bayar';
+}
+function isPiutangBelumLunas(r){
+  const v=String(r.status||r.status_bayar||'belum_bayar').toLowerCase();
+  return !['lunas','dibayar','selesai','paid'].includes(v);
+}
+async function getPelangganLogin(){
+  if(!U)return [];
+  const jobs=[];
+  const hp=U.no_hp||U.wa||'';
+  const formats=hp?allHPFormats(hp):[];
+  if(formats.length)jobs.push(SB.from('ppob_pelanggan').select('id,nama,no_hp,tipe,anggota_id,jamaah_did').in('no_hp',formats).limit(20));
+  if(U.anggota_id)jobs.push(SB.from('ppob_pelanggan').select('id,nama,no_hp,tipe,anggota_id,jamaah_did').eq('anggota_id',U.anggota_id).limit(20));
+  if(U.jamaah_did)jobs.push(SB.from('ppob_pelanggan').select('id,nama,no_hp,tipe,anggota_id,jamaah_did').eq('jamaah_did',U.jamaah_did).limit(20));
+  const out=[];
+  const seen=new Set();
+  const res=await Promise.allSettled(jobs);
+  res.forEach(r=>{
+    if(r.status==='fulfilled'&&!r.value.error){
+      (r.value.data||[]).forEach(x=>{if(x&&x.id&&!seen.has(x.id)){seen.add(x.id);out.push(x);}});
+    }
+  });
+  return out;
+}
+async function loadTagihanPiutang(){
+  const body=document.getElementById('pesanan-list');
+  if(!body)return;
+  body.innerHTML='<div style="text-align:center;padding:36px;color:var(--muted)">Memuat tagihan hutang piutang...</div>';
+  try{
+    const pelanggan=await getPelangganLogin();
+    const pelIds=pelanggan.map(p=>p.id).filter(Boolean);
+    if(!pelIds.length){renderTagihanPiutang([],{},pelanggan);return;}
+    const r=await SB.from('ppob_piutang').select('*').in('pelanggan_id',pelIds).order('created_at',{ascending:false}).limit(300);
+    if(r.error){throw new Error(r.error);}
+    const rows=(r.data||[]).filter(isPiutangBelumLunas);
+    const trxIds=[...new Set(rows.map(x=>x.transaksi_id).filter(Boolean))];
+    let trxMap={};
+    if(trxIds.length){
+      const tr=await SB.from('ppob_transaksi').select('id,ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,created_at').in('id',trxIds).limit(300);
+      if(!tr.error)(tr.data||[]).forEach(t=>trxMap[t.id]=t);
+    }
+    renderTagihanPiutang(rows,trxMap,pelanggan);
+  }catch(e){
+    body.innerHTML=`<div class="empty"><div class="empty-ico">⚠️</div><div class="empty-title">Gagal memuat tagihan</div><div class="empty-sub">${esc(e.message||e)}</div></div>`;
+  }
+}
+function renderTagihanPiutang(rows,trxMap,pelanggan){
+  const body=document.getElementById('pesanan-list');
+  if(!body)return;
+  activePiutangMap={};
+  rows=rows||[];
+  const total=rows.reduce((a,r)=>a+nilaiPiutang(r),0);
+  const nama=firstName(U?.nama||'Anggota');
+  const summary=`<div class="tagihan-summary"><div class="tagihan-lbl">Total hutang/piutang atas nama ${esc(nama)}</div><div class="tagihan-total">${rp(total)}</div><div class="tagihan-sub">${rows.length} catatan belum lunas dari tabel ppob_piutang</div></div>`;
+  if(!rows.length){
+    body.innerHTML=summary+`<div class="empty" style="padding:36px 20px"><div class="empty-ico">✅</div><div class="empty-title">Tidak ada tagihan</div><div class="empty-sub">Belum ada hutang/piutang yang masih terbuka untuk akun ini.</div></div>`;
+    return;
+  }
+  body.innerHTML=summary+rows.map(r=>{
+    const tr=trxMap[r.transaksi_id]||{};
+    const id=String(r.id||r.transaksi_id||Math.random());
+    activePiutangMap[id]={...r,_trx:tr};
+    const ref=tr.ref_id||r.ref_id||('PIUTANG-'+(r.id||''));
+    const prod=tr.nama_produk||r.nama_produk||r.keterangan||'Tagihan';
+    const tujuan=tr.tujuan||r.tujuan||'';
+    const tgl=r.created_at||tr.created_at||'';
+    const amt=nilaiPiutang(r);
+    return `<div class="tagihan-card">
+      <div class="tagihan-head"><div><div class="tagihan-ref">${esc(ref)}</div><div class="tagihan-date">${tgl?new Date(tgl).toLocaleString('id-ID'):''}</div></div><div class="tagihan-status">${esc(statusPiutangLabel(r.status||r.status_bayar))}</div></div>
+      <div class="tagihan-body"><div class="tagihan-prod">${esc(prod)}</div>${tujuan?`<div class="tagihan-meta">Tujuan: ${esc(tujuan)}</div>`:''}<div class="tagihan-amt">${rp(amt)}</div></div>
+      <div class="tagihan-actions"><button class="btn-s bs-out" onclick="chatTagihan('${esc(id)}')">Chat Admin</button><button class="btn-s bs-fill" onclick="window.location.href='https://ubnb.pw/ezi.html'">Buka EZI</button></div>
+    </div>`;
+  }).join('');
+}
+function chatTagihan(id){
+  const r=activePiutangMap[String(id)];
+  if(!r){toast('Data tagihan tidak ditemukan','err');return;}
+  const tr=r._trx||{};
+  const wa=S.wa_center||WA_DEFAULT;
+  const msg=`Assalamualaikum Admin JAWARA, saya mau konfirmasi tagihan saya.\n\nNama: ${U?.nama||'-'}\nRef: ${tr.ref_id||r.ref_id||r.id||'-'}\nProduk: ${tr.nama_produk||r.nama_produk||r.keterangan||'Tagihan'}\nNominal: ${rp(nilaiPiutang(r))}\nStatus: ${statusPiutangLabel(r.status||r.status_bayar)}\n\nMohon dicek ya.`;
+  window.open('https://wa.me/'+normalizeWA(wa)+'?text='+encodeURIComponent(msg),'_blank');
 }
 
 async function fetchPesananHeader(orderId){
@@ -2706,8 +2833,8 @@ async function loadTimeline(){
   const memberIds=[...new Set(posts.map(p=>p.member_id).filter(Boolean))];
   let memberMap={};
   if(memberIds.length){
-    const{data:mems}=await SB.from('ppob_member').select('id,nama').in('id',memberIds);
-    (mems||[]).forEach(m=>memberMap[m.id]={nama:m.nama});
+    const{data:mems}=await SB.from('ppob_member').select('id,nama,no_hp').in('id',memberIds);
+    (mems||[]).forEach(m=>memberMap[m.id]={nama:m.nama,no_hp:m.no_hp});
   }
   // Ambil kelompok dari ubnb_anggota
   const angIds=[...new Set(posts.map(p=>p.anggota_id).filter(Boolean))];
@@ -2761,6 +2888,7 @@ function renderTimeline(list,memberMap,angMap,prodMap,userLikes){
     const kelompok=p.anggota_id&&angMap[p.anggota_id]?'Anggota '+esc(angMap[p.anggota_id]):p.jamaah_did?'Jamaah':'';
     p._author_name=m.nama||'User';
     p._author_meta=kelompok||'JAWARA';
+    p._author_wa=m.no_hp||'';
     const postIdArg=JSON.stringify(p.id);
     const time=relativeTime(p.created_at);
     const judul=p.judul?`<div class="tl-jud">${esc(p.judul)}</div>`:'';
@@ -2813,6 +2941,7 @@ function renderTimeline(list,memberMap,angMap,prodMap,userLikes){
       <div class="tl-act">
         <button class="tl-btn ${liked}" onclick="toggleLike(${postIdArg},this)">❤ <span>${p.like_count||0}</span></button>
         <button class="tl-btn" data-comment-post="${esc(p.id)}" onclick="bukaKomentar(${postIdArg},this)">💬 <span>${p.comment_count||0}</span></button>
+        ${p.jenis==='produk'?`<button class="tl-btn" onclick="chatPostProdukWA(${postIdArg})">📲 WA</button>`:''}
         <button class="tl-btn" onclick="sharePost(${postIdArg})">↗ Bagikan</button>
       </div>
     </div>`;
@@ -2894,6 +3023,8 @@ function bukaKomentar(postId,btn){
   activeCommentBtn=btn||null;
   const input=document.getElementById('comment-input');
   if(input)input.value='';
+  const waBtn=document.getElementById('comment-wa-btn');
+  if(waBtn)waBtn.style.display=(activeCommentPost&&activeCommentPost.jenis==='produk')?'inline-flex':'none';
   openOv('ov-comment');
   renderCommentShell('<div style="text-align:center;padding:30px;color:var(--muted)">Memuat komentar...</div>');
   loadKomentar(postId);
@@ -2940,15 +3071,14 @@ async function loadKomentar(postId){
     (mres.data||[]).forEach(m=>memMap[m.id]=m.nama);
   }
 
-  const localRows=readLocalComments(postId);
-  const allRows=[...rows.map(r=>({...r,_local:false})),...localRows.map(r=>({...r,_local:true}))]
+  const allRows=rows.map(r=>({...r,_local:false}))
     .sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
-  const note=dbOk?'':`<div class="comment-note">Komentar database belum tersedia atau belum diizinkan. Komentar tetap bisa disimpan di HP ini, atau pakai tombol WA untuk chat admin. Detail: ${esc(lastErr||'table tidak ditemukan')}</div>`;
+  const note=dbOk?'':`<div class="comment-note">Komentar publik belum bisa dimuat. Pastikan tabel komentar dan RLS Supabase sudah tersedia. Detail: ${esc(lastErr||'table tidak ditemukan')}</div>`;
   const list=allRows.length?`<div class="comment-list">`+allRows.map(c=>{
     const nm=esc(c.nama||c.name||memMap[c.member_id]||(U&&c.member_id===U.id?firstName(U.nama):'Anggota'));
     const txt=escMultiline(c.isi||c.komentar||c.comment||c.text||'');
     const ini=esc((firstName(nm)[0]||'A').toUpperCase());
-    const when=c._local?'Tersimpan lokal':relativeTime(c.created_at)||'';
+    const when=relativeTime(c.created_at)||'';
     return `<div class="comment-row">
       <div class="comment-ava">${ini}</div>
       <div class="comment-bubble"><div class="comment-name">${nm}</div><div class="comment-text">${txt}</div><div class="comment-time">${when}</div></div>
@@ -2992,13 +3122,15 @@ async function submitKomentar(){
   }
   if(!saved){
     commentDbReady=false;
-    saveLocalComment(activeCommentPostId,{id:'local-'+Date.now(),post_id:activeCommentPostId,member_id:U.id,nama:firstName(U.nama||'Anggota'),isi:txt,created_at:now});
+    toast('Komentar publik gagal disimpan. Cek tabel komentar/RLS Supabase.','err');
+    console.warn('[JAWARA] komentar DB gagal:',lastErr);
+    if(btn)btn.disabled=false;
+    return;
   }
   if(input)input.value='';
   bumpCommentCount(activeCommentPostId);
   await loadKomentar(activeCommentPostId);
-  toast(saved?'Komentar terkirim':'Komentar tersimpan lokal','ok');
-  if(!saved)console.warn('[JAWARA] komentar DB gagal:',lastErr);
+  toast('Komentar publik terkirim','ok');
   if(btn)btn.disabled=false;
 }
 
@@ -3011,13 +3143,27 @@ function bumpCommentCount(postId){
 
 function chatKomentarWA(){
   if(!activeCommentPostId){toast('Post belum dipilih','err');return;}
+  const p=activeCommentPost||{};
+  if(p.jenis!=='produk'){toast('Post info tidak memakai tombol WA','err');return;}
+  const no=normalizeWA(p._author_wa);
+  if(!no){toast('Nomor WA pemilik post belum tersedia','err');return;}
   const input=document.getElementById('comment-input');
   const komentar=(input?.value||'').trim();
-  const p=activeCommentPost||{};
   const ringkas=postPreviewText(p)||('Post #'+activeCommentPostId);
-  let msg=`Halo Admin JAWARA, saya ingin tanya/komentar untuk post timeline #${activeCommentPostId}\n\n${ringkas}`;
-  if(komentar)msg+=`\n\nKomentar saya:\n${komentar}`;
-  window.open('https://wa.me/'+WA_DEFAULT+'?text='+encodeURIComponent(msg),'_blank');
+  let msg=`Assalamualaikum, saya mau tanya tentang produk/postingan JAWARA ini:\n\n${ringkas}`;
+  if(komentar)msg+=`\n\nPesan saya:\n${komentar}`;
+  window.open('https://wa.me/'+no+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+function chatPostProdukWA(postId){
+  const p=posts.find(x=>String(x.id)===String(postId));
+  if(!p){toast('Post tidak ditemukan','err');return;}
+  if(p.jenis!=='produk'){toast('Post info tidak memakai tombol WA','err');return;}
+  const no=normalizeWA(p._author_wa);
+  if(!no){toast('Nomor WA pemilik produk belum tersedia','err');return;}
+  const ringkas=postPreviewText(p)||('Post #'+postId);
+  const msg=`Assalamualaikum, saya tertarik dan mau tanya tentang produk/postingan JAWARA ini:\n\n${ringkas}`;
+  window.open('https://wa.me/'+no+'?text='+encodeURIComponent(msg),'_blank');
 }
 
 function sharePost(postId){
