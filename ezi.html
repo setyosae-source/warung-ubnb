@@ -2162,6 +2162,33 @@ function isKategoriEToll(){
   return (currentKat?.kode||'').toUpperCase()==='ETOLL';
 }
 
+// ── Harga khusus anggota untuk produk prabayar ─────────────────
+// Kebijakan: member/anggota tidak memakai biaya QRIS, tetapi total tagihan
+// produk prabayar dibulatkan ke atas ke kelipatan Rp500.
+function ceilKelipatan500(val){
+  const n=Number(val)||0;
+  if(n<=0) return 0;
+  return Math.ceil(n/500)*500;
+}
+function isMemberPrabayarCeil500(){
+  return currentMember?.tipe==='member' && !isKategoriPasca();
+}
+function hargaJualAktifProduk(p){
+  const hj=Number(p?.harga_jual||0);
+  return isMemberPrabayarCeil500() ? ceilKelipatan500(hj) : hj;
+}
+function normalisasiProdukCheckout(p){
+  if(!p) return p;
+  const hargaJual=hargaJualAktifProduk(p);
+  const hargaModal=Number(p.harga_modal||0);
+  return {
+    ...p,
+    harga_jual:hargaJual,
+    markup:hargaJual-hargaModal,
+    harga_jual_db:Number(p.harga_jual||0)
+  };
+}
+
 // ── NFC SCAN ─────────────────────────────────
 let nfcReader=null;
 
@@ -2503,7 +2530,7 @@ function renderProdukList(nomor){
     <div class="produk-section-title">${currentKat?.icon||'📦'} ${title}${adminMode?' <span style="font-size:11px;color:var(--muted);font-weight:600">· harga modal, markup di konfirmasi</span>':''}</div>
     <div class="produk-grid2">
       ${list.map((p,i)=>{
-        const hargaTampil = adminMode ? Number(p.harga_modal||0) : Number(p.harga_jual||0);
+        const hargaTampil = adminMode ? Number(p.harga_modal||0) : hargaJualAktifProduk(p);
         return `<div class="pc ${(!adminMode && i===0)?'popular':''}" id="pc-${p.id}" onclick="pilihProduk(${p.id})">
           <div class="pc-check">✓</div>
           <div class="pc-nama">${p.nama_produk}</div>
@@ -2520,7 +2547,8 @@ function renderProdukList(nomor){
 function pilihProduk(id){
   // Deselect semua
   document.querySelectorAll('.pc').forEach(el=>{el.classList.remove('selected')});
-  selectedProduk=allProduk.find(p=>p.id===id);
+  const produkRaw=allProduk.find(p=>p.id===id);
+  selectedProduk=normalisasiProdukCheckout(produkRaw);
   if(!selectedProduk) return;
 
   document.getElementById('pc-'+id)?.classList.add('selected');
@@ -2550,6 +2578,9 @@ function showKonfirmasi(){
   if(isKategoriEToll() && !validasiNomorEToll(nomor)){
     toast('Nomor kartu E-Toll tidak valid (16-20 digit)','e');return;
   }
+
+  // Pastikan harga anggota prabayar sudah dibulatkan ke atas kelipatan Rp500
+  if(currentMember?.tipe==='member') selectedProduk=normalisasiProdukCheckout(selectedProduk);
 
   // ── MODE ADMIN: langsung buka modal admin checkout (skip QRIS) ──
   if(typeof isAdminMode==='function' && isAdminMode()){
@@ -3107,6 +3138,7 @@ async function submitOrder(){
 
   try{
     const isMember=currentMember?.tipe==='member';
+    if(isMember) selectedProduk=normalisasiProdukCheckout(selectedProduk);
     const now=new Date().toISOString();
     const refId=genRef();
 
