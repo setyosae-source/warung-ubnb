@@ -5216,7 +5216,7 @@ const EZI_RWT_RULES = [
   // PDAM duluan karena "PAM" / "air minum" jelas
   {kode:'PDAM',        re:/pdam|\bpam\b|air\s*minum/i},
   // Internet Pascabayar (sebelum PAKET_DATA agar "indihome" tidak ketangkap data)
-  {kode:'INTERNET',    re:/indihome|first\s*media|telkom\s*\/\s*i|xl\s*satu|biznet|myrepublic|iconnet/i},
+  {kode:'INTERNET',    re:/indihome|first\s*media|telkom\s*\/\s*i|xl\s*satu|xl\s*home|xlhome|xl\s*home\s*fiber|biznet|myrepublic|iconnet|mnc\s*play|cbn|oxygen|internet\s*rumah/i},
   // Paket Data (data internet HP) sebelum PULSA
   {kode:'PAKET_DATA',  re:/paket\s*data|data\s*flash|freedom\s*internet|\d+\s*gb\b|data\s*mini|kuota/i},
   // Token PLN (prabayar)
@@ -5265,11 +5265,21 @@ function eziRwtParseCatatan(catatan, kodeKat){
     const m = c.match(/No\s*Kartu\s*:\s*(\d+)/i);
     if(m) nomor = m[1];
   } else if(kodeKat==='INTERNET'){
-    const m = c.match(/No\s*Telp\/?\s*IndiHome\s*:\s*(\d+)/i) || c.match(/No\s*Pelanggan\s*:\s*(\d+)/i);
+    const m = c.match(/No\s*Telp\/?\s*IndiHome\s*:\s*(\d+)/i)
+      || c.match(/No\s*Pelanggan\s*:\s*(\d+)/i)
+      || c.match(/ID\s*Pelanggan\s*:\s*(\d+)/i)
+      || c.match(/No\s*Tujuan\s*:\s*(\d+)/i)
+      || c.match(/Customer\s*No\s*:\s*(\d+)/i);
     if(m) nomor = m[1];
   } else if(kodeKat==='TV' || kodeKat==='BPJS' || kodeKat==='PAJAK'){
     const m = c.match(/(?:No\.?\s*Pelanggan|VA|NOP|IDPEL|Smartcard|No\s*Kartu)\s*:\s*(\d+)/i);
     if(m) nomor = m[1];
+  }
+
+  // Fallback nomor umum: beberapa transaksi pascabayar (mis. XL Home) bisa memakai label berbeda
+  if(!nomor){
+    const mg = c.match(/(?:No\.?\s*(?:Pelanggan|Tujuan|Kartu|Meter)|IDPEL|ID\s*Pelanggan|VA|NOP|Customer\s*No|Smartcard)\s*:\s*(\d{4,})/i);
+    if(mg) nomor = mg[1];
   }
 
   // NAMA PELANGGAN (dari inquiry, mis. Nama: NGADIMAN H, Nama meter:, Nama Rekening:)
@@ -5295,6 +5305,11 @@ function eziRwtBuildItem(row){
   const kat = (allKategori||[]).find(k=>k.kode===kode);
   if(!kat) return null;
   const parsed = eziRwtParseCatatan(row.catatan||'', kode);
+  // Fallback penting: transaksi baru menyimpan nomor utama di ppob_transaksi.tujuan,
+  // sedangkan catatan/struk tiap provider tidak selalu memakai label yang sama.
+  if(!parsed.nomor && row.tujuan) parsed.nomor = String(row.tujuan).replace(/\D/g,'');
+  if(!parsed.nomor && row.nomor_tujuan) parsed.nomor = String(row.nomor_tujuan).replace(/\D/g,'');
+  if(!parsed.nomor && row.customer_no) parsed.nomor = String(row.customer_no).replace(/\D/g,'');
   if(!parsed.nomor) return null;
   return {
     kategori_id: kat.id,
