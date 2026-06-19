@@ -800,14 +800,14 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 
 
 
-/* ═══════════ EZi v3 AI-FIRST FINAL UI ═══════════ */
+/* ═══════════ EZi v3 UI — MANUAL INPUT FINAL ═══════════ */
 .ezi-v3-admin-dash{display:none;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 16px;margin-top:-16px;margin-bottom:12px;position:relative;z-index:6}
 .ezi-v3-admin-dash.show{display:grid}
 .ezi-v3-dash-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:11px 10px;box-shadow:var(--sh);min-width:0}
 .ezi-v3-dash-label{font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
 .ezi-v3-dash-val{font-size:15px;font-weight:900;color:var(--g2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ezi-v3-ai{display:none;margin:0 16px 14px;background:linear-gradient(135deg,#ecfdf5,#eff6ff);border:1.5px solid #bfdbfe;border-radius:20px;padding:14px;box-shadow:0 10px 26px rgba(15,110,86,.12);position:relative;z-index:6}
-.ezi-v3-ai.show{display:block}
+.ezi-v3-ai.show{display:none!important}
 .ezi-v3-ai-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .ezi-v3-ai-title{font-size:16px;font-weight:900;color:var(--navy)}
 .ezi-v3-ai-safe{font-size:10px;font-weight:900;color:#065f46;background:#d1fae5;border-radius:99px;padding:4px 9px;white-space:nowrap}
@@ -1014,26 +1014,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     <div class="ezi-v3-dash-card"><div class="ezi-v3-dash-label">Piutang</div><div class="ezi-v3-dash-val" id="dash-piutang">Rp 0</div></div>
   </div>
 
-  <!-- EZi v3 AI Assistant -->
-  <div class="ezi-v3-ai" id="ezi-v3-ai">
-    <div class="ezi-v3-ai-head">
-      <div class="ezi-v3-ai-title">🤖 EZi AI</div>
-      <div class="ezi-v3-ai-safe">SEMI OTOMATIS · AMAN</div>
-    </div>
-    <div class="ezi-v3-ai-row">
-      <input class="ezi-v3-ai-input" id="ezi-ai-input" placeholder="Ketik: cek tagihan PAM Dwi Setyo / Token PLN Masjid Desa" onkeydown="if(event.key==='Enter')eziAiRun()">
-      <button class="ezi-v3-ai-mic" onclick="eziAiVoice()" title="Voice input">🎤</button>
-      <button class="ezi-v3-ai-btn" id="ezi-ai-btn" onclick="eziAiRun()">Kirim</button>
-    </div>
-    <div class="ezi-v3-ai-chips">
-      <button class="ezi-v3-ai-chip" onclick="eziAiFill('Token PLN Masjid Desa')">Token PLN Masjid</button>
-      <button class="ezi-v3-ai-chip" onclick="eziAiFill('Cek tagihan PAM Dwi Setyo')">PAM Dwi Setyo</button>
-      <button class="ezi-v3-ai-chip" onclick="eziAiFill('Tampilkan piutang')">Piutang</button>
-      <button class="ezi-v3-ai-chip" onclick="eziAiFill('Keuntungan hari ini')">Keuntungan</button>
-      <button class="ezi-v3-ai-chip" onclick="eziAiFill('Laporan hari ini')">Laporan</button>
-    </div>
-    <div class="ezi-v3-ai-result" id="ezi-ai-result"></div>
-  </div>
+  <!-- EZi AI removed: kembali ke input manual -->
 
   <!-- EZi v3 Admin Tools -->
   <div class="ezi-v3-tools" id="ezi-v3-tools">
@@ -2208,25 +2189,13 @@ async function goKategori(katId){
     .order('nama_produk');
   allProduk=data||[];
 
-  // Cek apakah pascabayar dengan >1 produk — tampilkan dropdown
-  const isPascaMulti = isPascaKat && allProduk.length > 1;
+  // Pascabayar: tidak ada dropdown pilih layanan. Admin cukup masukkan nomor.
+  // Sistem akan mencoba inquiry ke semua produk/provider dalam kategori sampai ada yang berhasil.
   const wrapEl = document.getElementById('pasca-produk-wrap');
   const inputBox = document.getElementById('input-box-nomor');
-
-  if(isPascaMulti){
-    // Tampilkan dropdown, sembunyikan input nomor dulu
-    wrapEl.classList.add('show');
-    inputBox.style.display='none';
-    document.getElementById('pasca-produk-select').innerHTML =
-      '<option value="">— Pilih Layanan —</option>' +
-      allProduk.map(p=>`<option value="${p.id}">${p.nama_produk}</option>`).join('');
-    selectedProduk=null;
-  } else {
-    // Langsung tampilkan input nomor
-    wrapEl.classList.remove('show');
-    inputBox.style.display='block';
-    if(allProduk.length===1) selectedProduk=allProduk[0];
-  }
+  wrapEl.classList.remove('show');
+  inputBox.style.display='block';
+  selectedProduk = (!isPascaKat && allProduk.length===1) ? allProduk[0] : null;
 
   showScreen('screen-kat');
 }
@@ -2359,9 +2328,12 @@ async function doInquiryPasca(nomor){
   if(!currentKat||!isKategoriPasca()) return;
   if(!nomor||nomor.length<5) return;
 
-  // Pakai selectedProduk yang sudah dipilih dari dropdown, atau produk pertama kalau 1 produk
-  const produk=selectedProduk||allProduk[0];
-  if(!produk) return;
+  // Pascabayar manual-final: tidak memilih layanan/provider.
+  // Urutan coba: provider dari transaksi ulang/riwayat (kalau ada) lalu semua produk aktif kategori ini.
+  const kandidatAwal = selectedProduk ? [selectedProduk] : [];
+  const kandidatLain = (allProduk||[]).filter(p=>!selectedProduk || String(p.id)!==String(selectedProduk.id));
+  const kandidat = [...kandidatAwal, ...kandidatLain];
+  if(!kandidat.length) return;
 
   pascaInquiryData=null;
   selectedProduk=null;
@@ -2371,69 +2343,86 @@ async function doInquiryPasca(nomor){
   const inner=document.getElementById('inquiry-pasca-inner');
   box.style.display='block';
   inner.className='inquiry-box loading';
-  inner.innerHTML='<div class="inquiry-spinner">Mengecek tagihan...</div>';
+  inner.innerHTML='<div class="inquiry-spinner">Mengecek tagihan otomatis...</div><div style="font-size:11px;color:var(--muted);margin-top:8px">Sistem mencoba provider yang sesuai. Tidak perlu pilih layanan.</div>';
 
-  try{
-    const refId='INQ-'+Date.now().toString(36).toUpperCase();
-    const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/inquiry-pasca',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
-      body:JSON.stringify({customer_no:nomor,buyer_sku_code:produk.sku_supplier,ref_id:refId})
-    });
-    const json=await res.json();
-    const d=json?.data||{};
+  let hasil=null;
+  let pesanGagal='Tagihan tidak ditemukan';
 
-    if(d.response_code==='00'||d.message?.toLowerCase().includes('inquiry success')||d.message?.toLowerCase().includes('sukses')||(d.tr_name&&d.price)){
-      // Hitung harga jual pasca: floor((price + layanan*lembar) / 500) * 500
-      const _lembarPasca = Number(d.desc?.lembar_tagihan||1);
-      const _pricePasca  = Number(d.price||d.selling_price||0);
-      const _hjPasca     = adminHargaJualDefault(_pricePasca, _lembarPasca);
-      const _layananPasca= _hjPasca - _pricePasca;
+  for(const produk of kandidat){
+    try{
+      inner.innerHTML=`<div class="inquiry-spinner">Mengecek ${produk.nama_produk||'provider'}...</div><div style="font-size:11px;color:var(--muted);margin-top:8px">Nomor: ${nomor}</div>`;
+      const refId='INQ-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,5).toUpperCase();
+      const res=await fetch('https://proxy.ubnb.pw/api/digiflazz/inquiry-pasca',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-proxy-secret':'ff5df76d658e9aa0323fef16513a4aefca715b9abb337e532fde39d374e1369f'},
+        body:JSON.stringify({customer_no:nomor,buyer_sku_code:produk.sku_supplier,ref_id:refId})
+      });
+      const json=await res.json();
+      const d=json?.data||{};
+      const sukses = d.response_code==='00' ||
+        d.rc==='00' ||
+        d.status==='Sukses' ||
+        d.message?.toLowerCase().includes('inquiry success') ||
+        d.message?.toLowerCase().includes('sukses') ||
+        (d.tr_name&&d.price);
 
-      pascaInquiryData={
-        tr_name:d.tr_name||d.customer_name||'—',
-        nominal:d.nominal||0,
-        admin:d.admin||0,
-        price:_pricePasca,
-        price_markup:_hjPasca,
-        markup:_layananPasca,
-        lembar:_lembarPasca,
-        period:d.period||d.periode||'—',
-        tr_id:d.tr_id||d.tr_id_str||null,
-        buyer_sku_code:produk.sku_supplier,
-        customer_no:nomor,
-        ref_id:refId,
-        produk_id:produk.id,
-        sku_supplier:produk.sku_supplier,
-        nama_produk:produk.nama_produk
-      };
-
-      inner.className='inquiry-box sukses';
-      const nominalTagihan = pascaInquiryData.price - pascaInquiryData.admin;
-      inner.innerHTML=`
-        <div class="inquiry-label">📋 Detail Tagihan</div>
-        <div class="inquiry-row"><span class="inquiry-row-label">Nama</span><span class="inquiry-row-val">${pascaInquiryData.tr_name}</span></div>
-        <div class="inquiry-row"><span class="inquiry-row-label">Periode</span><span class="inquiry-row-val">${pascaInquiryData.period}</span></div>
-        <div class="inquiry-row"><span class="inquiry-row-label">Tagihan</span><span class="inquiry-row-val">${rp(nominalTagihan>0?nominalTagihan:pascaInquiryData.nominal)}</span></div>
-        <div class="inquiry-row"><span class="inquiry-row-label">Admin</span><span class="inquiry-row-val">${rp(pascaInquiryData.admin)}</span></div>
-        <div class="inquiry-row"><span class="inquiry-row-label">Layanan EZi</span><span class="inquiry-row-val">${rp(pascaInquiryData.markup)}</span></div>
-        <div class="inquiry-total"><span>Total Bayar</span><span>${rp(pascaInquiryData.price_markup)}</span></div>`;
-
-      selectedProduk={...produk,harga_jual:pascaInquiryData.price_markup};
-      document.getElementById('bb-harga').textContent=rp(pascaInquiryData.price_markup);
-      document.getElementById('bottom-bar').classList.add('show');
-      document.getElementById('btn-bayar').innerHTML='💳 Bayar Tagihan';
-      // Issue 3: Hide riwayat-kat setelah tagihan tampil — fokus ke pembayaran
-      if(typeof eziRwtToggleKat==='function') eziRwtToggleKat(false);
-
-    } else {
-      inner.className='inquiry-box error';
-      inner.innerHTML=`<div style="color:var(--red);font-size:13px;font-weight:600">❌ ${d.message||'Tagihan tidak ditemukan'}</div>`;
+      if(sukses){
+        hasil={produk,d,refId};
+        break;
+      }
+      if(d.message) pesanGagal=d.message;
+    }catch(e){
+      pesanGagal=e.message||pesanGagal;
     }
-  }catch(e){
-    inner.className='inquiry-box error';
-    inner.innerHTML=`<div style="color:var(--red);font-size:13px;font-weight:600">❌ Koneksi bermasalah: ${e.message}</div>`;
   }
+
+  if(!hasil){
+    inner.className='inquiry-box error';
+    inner.innerHTML=`<div style="color:var(--red);font-size:13px;font-weight:700">❌ ${pesanGagal}</div><div style="font-size:12px;color:var(--muted);margin-top:6px">Semua provider di kategori ini sudah dicoba otomatis.</div>`;
+    return;
+  }
+
+  const {produk,d,refId}=hasil;
+  const _lembarPasca = Number(d.desc?.lembar_tagihan||d.lembar_tagihan||1);
+  const _pricePasca  = Number(d.price||d.selling_price||0);
+  const _hjPasca     = adminHargaJualDefault(_pricePasca, _lembarPasca);
+  const _layananPasca= _hjPasca - _pricePasca;
+
+  pascaInquiryData={
+    tr_name:d.tr_name||d.customer_name||d.name||'—',
+    nominal:d.nominal||0,
+    admin:d.admin||0,
+    price:_pricePasca,
+    price_markup:_hjPasca,
+    markup:_layananPasca,
+    lembar:_lembarPasca,
+    period:d.period||d.periode||d.desc?.periode||'—',
+    tr_id:d.tr_id||d.tr_id_str||null,
+    buyer_sku_code:produk.sku_supplier,
+    customer_no:nomor,
+    ref_id:refId,
+    produk_id:produk.id,
+    sku_supplier:produk.sku_supplier,
+    nama_produk:produk.nama_produk
+  };
+
+  inner.className='inquiry-box sukses';
+  const nominalTagihan = pascaInquiryData.price - pascaInquiryData.admin;
+  inner.innerHTML=`
+    <div class="inquiry-label">📋 Detail Tagihan</div>
+    <div class="inquiry-row"><span class="inquiry-row-label">Layanan</span><span class="inquiry-row-val">${pascaInquiryData.nama_produk}</span></div>
+    <div class="inquiry-row"><span class="inquiry-row-label">Nama</span><span class="inquiry-row-val">${pascaInquiryData.tr_name}</span></div>
+    <div class="inquiry-row"><span class="inquiry-row-label">Periode</span><span class="inquiry-row-val">${pascaInquiryData.period}</span></div>
+    <div class="inquiry-row"><span class="inquiry-row-label">Tagihan</span><span class="inquiry-row-val">${rp(nominalTagihan>0?nominalTagihan:pascaInquiryData.nominal)}</span></div>
+    <div class="inquiry-row"><span class="inquiry-row-label">Admin</span><span class="inquiry-row-val">${rp(pascaInquiryData.admin)}</span></div>
+    <div class="inquiry-row"><span class="inquiry-row-label">Layanan EZi</span><span class="inquiry-row-val">${rp(pascaInquiryData.markup)}</span></div>
+    <div class="inquiry-total"><span>Total Bayar</span><span>${rp(pascaInquiryData.price_markup)}</span></div>`;
+
+  selectedProduk={...produk,harga_jual:pascaInquiryData.price_markup};
+  document.getElementById('bb-harga').textContent=rp(pascaInquiryData.price_markup);
+  document.getElementById('bottom-bar').classList.add('show');
+  document.getElementById('btn-bayar').innerHTML='💳 Bayar Tagihan';
+  if(typeof eziRwtToggleKat==='function') eziRwtToggleKat(false);
 }
 
 function resetPlnInfo(){
@@ -5707,110 +5696,6 @@ async function eziRwtKlik(jsonEnc){
   }
 }
 
-
-// ═══════════════════════════════════════════════════════
-// EZi v3 AI-FIRST FINAL JS — dashboard + assistant tampil di home admin
-// ═══════════════════════════════════════════════════════
-function eziV3IsAdmin(){ try{return !!currentAdmin;}catch(_){return false;} }
-function eziV3SetShow(id, show){ const el=document.getElementById(id); if(el) el.classList.toggle('show', !!show); }
-function eziAiFill(txt){ const inp=document.getElementById('ezi-ai-input'); if(inp){ inp.value=txt; inp.focus(); } }
-function eziAiShow(html){ const el=document.getElementById('ezi-ai-result'); if(!el) return; el.innerHTML=html; el.classList.add('show'); }
-function eziAiEsc(x){ return String(x??'').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[m])); }
-async function eziV3HomeRefresh(){
-  const admin=eziV3IsAdmin();
-  eziV3SetShow('ezi-v3-ai', admin);
-  eziV3SetShow('ezi-v3-admin-dash', admin);
-  eziV3SetShow('ezi-v3-tools', admin);
-  if(admin) await eziV3LoadDashboard();
-}
-async function eziV3LoadDashboard(){
-  try{
-    const start=new Date(); start.setHours(0,0,0,0);
-    const {data}=await sb.from('ppob_transaksi').select('harga_jual,markup,status,status_bayar,created_at').gte('created_at', start.toISOString()).order('created_at',{ascending:false}).limit(500);
-    const rows=data||[];
-    const omzet=rows.reduce((a,r)=>a+Number(r.harga_jual||0),0);
-    const margin=rows.reduce((a,r)=>a+Number(r.markup||0),0);
-    const piutang=rows.filter(r=>String(r.status_bayar||'').toLowerCase()!=='lunas').reduce((a,r)=>a+Number(r.harga_jual||0),0);
-    const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
-    set('dash-omzet',rp(omzet)); set('dash-margin',rp(margin)); set('dash-trx',String(rows.length)); set('dash-piutang',rp(piutang));
-  }catch(e){ console.warn('[EZi v3 dashboard]',e); }
-}
-function goAdminSaldo(){
-  if(!eziV3IsAdmin()){ toast('Login admin dulu','e'); return; }
-  if(typeof goAdminRiwayat==='function') goAdminRiwayat();
-  setTimeout(()=>{ try{ arSetFilter('saldo'); arLoadSaldo(); }catch(e){ try{arLoadSaldo();}catch(_){}} },150);
-}
-function goAdminPiutang(){
-  if(!eziV3IsAdmin()){ toast('Login admin dulu','e'); return; }
-  if(typeof goAdminRiwayat==='function') goAdminRiwayat();
-  setTimeout(()=>{ try{ _arFilter='pending'; arLoad(); }catch(_){} },150);
-}
-function goAdminLaporan(){
-  if(!eziV3IsAdmin()){ toast('Login admin dulu','e'); return; }
-  if(typeof goAdminRiwayat==='function') goAdminRiwayat();
-  setTimeout(()=>{ try{ _arFilter='today'; arLoad(); }catch(_){} },150);
-}
-function eziAiExtractNomor(txt){ const m=String(txt||'').match(/(?:\+?62|0)\d{8,14}|\b\d{6,22}\b/); return m ? m[0].replace(/\s/g,'') : ''; }
-function eziAiDetectKategori(txt){
-  const t=String(txt||'').toLowerCase();
-  if(/token|pln\s*prabayar|listrik\s*token/.test(t)) return 'TOKEN_PLN';
-  if(/tagihan.*pln|pln.*pasca|listrik.*pasca/.test(t)) return 'TAGIHAN_PLN';
-  if(/pdam|\bpam\b|air\s*minum/.test(t)) return 'PDAM';
-  if(/bpjs/.test(t)) return 'BPJS';
-  if(/internet|indihome|first\s*media|biznet|iconnet|myrepublic|aetra/.test(t)) return 'INTERNET';
-  if(/pulsa/.test(t)) return 'PULSA';
-  if(/paket|kuota|data\b|gb\b/.test(t)) return 'PAKET_DATA';
-  if(/e-?money|e-?toll|toll|saldo kartu|dana|ovo|gopay/.test(t)) return 'E_MONEY';
-  if(/tv|k-?vision|transvision/.test(t)) return 'TV';
-  if(/pajak|pbb|nop/.test(t)) return 'PAJAK';
-  return null;
-}
-async function eziAiFindCustomerName(txt){
-  const raw=String(txt||'');
-  const clean=raw.toLowerCase().replace(/token|pln|pdam|pam|bpjs|internet|pulsa|paket|data|tagihan|bayar|cek|untuk|atas nama|nomor|no\.?|idpel|pelanggan|proses|transaksi|dengan|yang|biasa/gi,' ').replace(/(?:\+?62|0)\d{8,14}|\b\d{6,22}\b/g,' ').replace(/\s+/g,' ').trim();
-  if(clean.length<3) return null;
-  try{ let {data}=await sb.from('ubnb_anggota').select('id,nama,no_hp,kelompok').ilike('nama','%'+clean+'%').limit(1); if(data&&data[0]) return {tipe:'anggota', id_anggota:data[0].id, jamaah_did:null, nama:data[0].nama, no_hp:data[0].no_hp||'', meta:'Anggota · Kel '+(data[0].kelompok||'-')}; }catch(_){ }
-  try{ let {data}=await sb.from('jamaah_desa').select('did,nama_kk,nomor_wa,kelompok').ilike('nama_kk','%'+clean+'%').limit(1); if(data&&data[0]) return {tipe:'jamaah', id_anggota:null, jamaah_did:data[0].did, nama:data[0].nama_kk, no_hp:data[0].nomor_wa||'', meta:'Jamaah · Kel '+(data[0].kelompok||'-')}; }catch(_){ }
-  return clean ? {tipe:'umum', id_anggota:null, jamaah_did:null, nama:clean.replace(/\b\w/g,c=>c.toUpperCase()), no_hp:'', meta:'Umum'} : null;
-}
-async function eziAiAskServer(q){
-  try{
-    const ctx={kategori:(allKategori||[]).map(k=>({id:k.id,kode:k.kode,nama:k.nama})).slice(0,80), produk:(allProduk||[]).map(p=>({id:p.id,nama_produk:p.nama_produk,sku:p.sku_supplier,kategori_id:p.kategori_id})).slice(0,120)};
-    const {data,error}=await sb.functions.invoke('ezi-ai-assistant',{body:{message:q,context:ctx}});
-    if(error) throw error; return data;
-  }catch(e){ console.warn('[EZi AI server fallback]',e); return null; }
-}
-async function eziAiRun(){
-  const inp=document.getElementById('ezi-ai-input'); const q=(inp?.value||'').trim();
-  if(!q){ toast('Ketik perintah dulu','w'); return; }
-  const btn=document.getElementById('ezi-ai-btn'); if(btn){btn.disabled=true;btn.textContent='...';}
-  eziAiShow('<div class="ttl">🤖 EZi AI menganalisa...</div><div>Membaca maksud perintah dan menyiapkan aksi. Transaksi tetap harus dikonfirmasi admin.</div>');
-  try{ let plan=await eziAiAskServer(q); if(!plan || plan.error){ plan={intent:'transaksi',kategori_kode:eziAiDetectKategori(q),nomor:eziAiExtractNomor(q),message:'Mode lokal aktif. Edge Function/OpenAI belum tersambung sempurna.'}; } await eziAiExecutePlan(plan,q); }
-  catch(e){ eziAiShow('<div class="ttl">⚠️ AI gagal</div><div>'+eziAiEsc(e.message||e)+'</div>'); }
-  finally{ if(btn){btn.disabled=false;btn.textContent='Kirim';} }
-}
-async function eziAiExecutePlan(plan, originalText){
-  const intent=String(plan.intent||'').toLowerCase();
-  if(intent==='saldo'){ goAdminSaldo(); return; }
-  if(intent==='piutang'){ goAdminPiutang(); return; }
-  if(intent==='laporan'){ goAdminLaporan(); return; }
-  if(intent==='riwayat'){ if(typeof eziRwtSwitchTab==='function') eziRwtSwitchTab('riwayat'); return; }
-  if(intent==='clarify'){ eziAiShow('<div class="ttl">❓ Perlu diperjelas</div><div>'+eziAiEsc(plan.clarify||'Tulis layanan dan nomor pelanggan.')+'</div>'); return; }
-  const kode=plan.kategori_kode || eziAiDetectKategori(originalText);
-  if(!kode){ eziAiShow('<div class="ttl">⚠️ Layanan belum jelas</div><div>Contoh: cek tagihan PAM Dwi Setyo, Token PLN Masjid Desa, Pulsa 0812 50rb.</div>'); return; }
-  const kat=(allKategori||[]).find(k=>String(k.kode||'').toUpperCase()===String(kode).toUpperCase() || String(k.nama||'').toUpperCase().includes(String(kode).toUpperCase()));
-  if(!kat){ eziAiShow('<div class="ttl">⚠️ Kategori belum aktif</div><div>Kategori '+eziAiEsc(kode)+' belum ditemukan di ppob_kategori.</div>'); return; }
-  const nomor=plan.nomor || eziAiExtractNomor(originalText); const pelanggan= await eziAiFindCustomerName(originalText);
-  if(eziV3IsAdmin() && pelanggan) _adminPickedPelanggan=pelanggan;
-  await goKategori(kat.id);
-  const inp=document.getElementById('input-nomor');
-  if(nomor && inp){ inp.value=String(nomor).replace(/\s+/g,''); document.getElementById('btn-clear')?.classList.add('show'); onNomorInput(inp.value); eziAiShow('<div class="ttl">✅ Transaksi disiapkan</div><div>Layanan: <b>'+eziAiEsc(kat.nama)+'</b><br>Nomor: <b>'+eziAiEsc(inp.value)+'</b><br>Pelanggan: <b>'+eziAiEsc(pelanggan?.nama||plan.nama_pelanggan||'Umum')+'</b><br><br>Periksa hasil inquiry, lalu admin tekan eksekusi manual.</div>'); }
-  else { eziAiShow('<div class="ttl">✅ Layanan dibuka</div><div>Layanan: <b>'+eziAiEsc(kat.nama)+'</b><br>Masukkan nomor/ID pelanggan untuk lanjut.</div>'); setTimeout(()=>document.getElementById('input-nomor')?.focus(),200); }
-}
-function eziAiVoice(){ const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ toast('Voice belum didukung browser ini','w'); return; } const rec=new SR(); rec.lang='id-ID'; rec.interimResults=false; rec.maxAlternatives=1; rec.onresult=e=>{ const txt=e.results?.[0]?.[0]?.transcript||''; if(txt) eziAiFill(txt); }; rec.onerror=()=>toast('Gagal membaca suara','e'); rec.start(); }
-try{ const _oldShowScreenV3=showScreen; showScreen=function(id){ _oldShowScreenV3(id); if(id==='screen-home') setTimeout(eziV3HomeRefresh,80); }; }catch(_){ }
-try{ const _oldInitV3=init; init=async function(){ const r=await _oldInitV3.apply(this,arguments); setTimeout(eziV3HomeRefresh,120); return r; }; }catch(_){ }
-try{ document.addEventListener('DOMContentLoaded',()=>setTimeout(eziV3HomeRefresh,300)); }catch(_){ }
 
 </script>
 </body>
