@@ -2828,6 +2828,26 @@ async function autoEksekusiDigiflazz(refId){
     const d=json?.data||{};
     const status=(d.status||'').toLowerCase();
     if(status==='sukses'||status==='success'){
+      // FIX BUG: update DB dulu sebagai defense-in-depth (kalau webhook telat/gagal)
+      try{
+        const nowIso = new Date().toISOString();
+        const updPayload = {
+          status:'sukses',
+          sn: d.sn || null,
+          message: d.message || null,
+          raw_response: d,
+          completed_at: nowIso,
+          updated_at: nowIso
+        };
+        // QRIS umum: tandai lunas otomatis jika belum
+        if(!isAdminMode() && currentMember?.tipe!=='member'){
+          updPayload.status_bayar = 'lunas';
+          updPayload.paid_at = nowIso;
+        }
+        await sb.from('ppob_transaksi').update(updPayload).eq('id', trx.id);
+      }catch(updErr){
+        console.warn('[autoEksekusiDigiflazz] gagal update DB sukses, webhook diharapkan menambal:', updErr);
+      }
       tampilResultSukses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual,sn:d.sn||null,message:d.message||null,raw_response:d});
     } else if(status==='pending'||status==='proses'){
       tampilResultProses({ref_id:refId,nama_produk:trx.nama_produk,tujuan:trx.tujuan,harga_jual:trx.harga_jual});
@@ -2899,7 +2919,9 @@ function tampilResultSukses(d){
     </div>
     <div class="result-btns">
       <button class="result-btn result-btn-wa" onclick='shareHasilWA(${JSON.stringify(d)})'>📱 Bagikan via WhatsApp</button>
-      <button class="result-btn" style="background:#3b82f6;color:#fff" onclick="simpanJPG('result-inner','struk-${d.ref_id}')">💾 Simpan JPG</button>
+      ${isAdminMode()
+        ? `<button class="result-btn" style="background:#3b82f6;color:#fff" onclick="arOpenStruk('${d.ref_id}')">🧾 Cetak Struk Lengkap</button>`
+        : `<button class="result-btn" style="background:#3b82f6;color:#fff" onclick="simpanJPG('result-inner','struk-${d.ref_id}')">💾 Simpan JPG</button>`}
       <button class="result-btn result-btn-secondary" onclick="tutupResult()">🏠 Transaksi Lagi</button>
     </div>`;
 }
@@ -5026,7 +5048,7 @@ function renderStrukAdmin(d){
     <div id="sp-qr-wrap" style="margin:10px auto 4px;display:inline-block"></div>
     <div style="font-size:10px;color:#aaa;margin-top:2px">ubnb.pw/ezi.html</div>
     <div style="display:inline-block;background:#e1f5ee;color:#0f6e56;font-size:11px;padding:3px 10px;border-radius:99px;margin-top:6px">${fmtTgl(d.created_at)}</div>
-    <div style="font-size:9px;color:#ccc;margin-top:4px">v.ezi-20260612-r4</div>
+    <div style="font-size:9px;color:#ccc;margin-top:4px">v.ezi-20260620-r1</div>
   </div>`;
 
   document.getElementById('struk-admin-print').innerHTML = h;
