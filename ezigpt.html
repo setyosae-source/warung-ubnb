@@ -3832,48 +3832,85 @@ function maSetBayar(b){
 
 async function maSearchPelanggan(val){
   const dd=document.getElementById('ma-dd');
-  if(!val||val.length<2){ dd.style.display='none'; return; }
-  try{
-    // Prioritas: cari di data anggota dulu. Jika tidak ada, baru fallback ke data jamaah.
-    const ra = await sb.from('ubnb_anggota')
-      .select('id,nama,kelompok,no_hp,jamaah_did')
-      .ilike('nama','%'+val+'%')
-      .limit(8);
+  const q=(val||'').trim();
+  if(!q || q.length<2){ dd.style.display='none'; return; }
 
-    let rows=(ra.data||[]).map(a=>({
-      tipe:'anggota',
-      id_anggota:a.id,
-      jamaah_did:a.jamaah_did||null,
-      nama:a.nama,
-      no_hp:a.no_hp||'',
-      meta:'Anggota · Kel '+(a.kelompok||'-')
-    }));
-
-    if(!rows.length){
-      const rj = await sb.from('jamaah_desa')
-        .select('did,nama_kk,kelompok,no_hp')
-        .ilike('nama_kk','%'+val+'%')
-        .limit(8);
-      rows=(rj.data||[]).map(j=>({
-        tipe:'jamaah',
-        id_anggota:null,
-        jamaah_did:j.did,
-        nama:j.nama_kk,
-        no_hp:j.no_hp||'',
-        meta:'Jamaah · Kel '+(j.kelompok||'-')
-      }));
-    }
-
+  const render=(rows)=>{
     if(!rows.length){
       dd.innerHTML='<div class="ma-dd-item" style="color:var(--muted)">Tidak ditemukan</div>';
-      dd.style.display='block'; return;
+      dd.style.display='block';
+      return;
     }
     dd.innerHTML=rows.map(r=>`<div class="ma-dd-item" onclick='maPilihPelanggan(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
       <div class="ma-dd-nama">${r.nama}</div>
       <div class="ma-dd-meta">${r.meta}</div>
     </div>`).join('');
     dd.style.display='block';
-  }catch(e){ dd.style.display='none'; }
+  };
+
+  try{
+    // WAJIB PRIORITAS: ambil dari tabel anggota dulu.
+    // Supabase .or() dipisah dari jamaah agar error kolom di jamaah tidak menggagalkan hasil anggota.
+    let anggota=[];
+    const ra = await sb.from('ubnb_anggota')
+      .select('id,nama,kelompok,no_hp,jamaah_did')
+      .or(`nama.ilike.%${q}%,no_hp.ilike.%${q}%`)
+      .limit(10);
+
+    if(ra.error){
+      // fallback jika kolom no_hp tidak tersedia di struktur tertentu
+      const ra2 = await sb.from('ubnb_anggota')
+        .select('id,nama,kelompok,jamaah_did')
+        .ilike('nama','%'+q+'%')
+        .limit(10);
+      anggota = ra2.data || [];
+    }else{
+      anggota = ra.data || [];
+    }
+
+    if(anggota.length){
+      render(anggota.map(a=>({
+        tipe:'anggota',
+        id_anggota:a.id,
+        jamaah_did:a.jamaah_did||null,
+        nama:a.nama,
+        no_hp:a.no_hp||'',
+        meta:'Anggota · Kel '+(a.kelompok||'-')
+      })));
+      return; // jika ada anggota, jangan tampilkan jamaah
+    }
+
+    // Jika anggota tidak ada, baru cari di data jamaah.
+    let jamaah=[];
+    const rj = await sb.from('jamaah_desa')
+      .select('did,nama_kk,nomor_wa,kelompok')
+      .or(`nama_kk.ilike.%${q}%,nomor_wa.ilike.%${q}%`)
+      .limit(10);
+
+    if(rj.error){
+      // fallback jika kolom nomor_wa berbeda/tidak tersedia
+      const rj2 = await sb.from('jamaah_desa')
+        .select('did,nama_kk,kelompok')
+        .ilike('nama_kk','%'+q+'%')
+        .limit(10);
+      jamaah = rj2.data || [];
+    }else{
+      jamaah = rj.data || [];
+    }
+
+    render(jamaah.map(j=>({
+      tipe:'jamaah',
+      id_anggota:null,
+      jamaah_did:j.did,
+      nama:j.nama_kk,
+      no_hp:j.nomor_wa||'',
+      meta:'Jamaah · Kel '+(j.kelompok||'-')
+    })));
+  }catch(e){
+    console.warn('maSearchPelanggan error:', e);
+    dd.innerHTML='<div class="ma-dd-item" style="color:var(--muted)">Pencarian gagal, coba ketik ulang</div>';
+    dd.style.display='block';
+  }
 }
 
 function maPilihPelanggan(r){
