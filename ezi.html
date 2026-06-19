@@ -828,6 +828,12 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .pasca-produk-wrap.show{display:none!important}
 @media(max-width:480px){.ezi-v3-admin-dash{grid-template-columns:repeat(2,1fr)}.ezi-v3-tools{grid-template-columns:repeat(2,1fr)}.ezi-v3-ai-row{flex-wrap:wrap}.ezi-v3-ai-input{min-width:100%}.ezi-v3-ai-mic,.ezi-v3-ai-btn{flex:1}}
 
+
+/* PATCH-AUDIT-001: safe UI cleanup */
+.history-row{display:none!important}
+.recent-strip{margin:12px 16px 0!important}
+.ezi-v3-ai,.ezi-v3-ai.show{display:none!important}
+
 </style>
 </head>
 <body>
@@ -2067,6 +2073,11 @@ function homeSearch(val){
 // ═══════════════════════════════════════════
 async function loadRecentOrders(){
   try {
+    if(isAdminMode() || (currentMember && currentMember.tipe==='member')){
+      const card=document.getElementById('recent-card');
+      if(card) card.style.display='none';
+      return;
+    }
     const {data}=await sb.from('ppob_transaksi')
       .select('id,ref_id,nama_produk,tujuan,harga_jual,status,created_at,produk_id')
       .eq('status','pending')
@@ -3890,48 +3901,77 @@ function maSetBayar(b){
 
 async function maSearchPelanggan(val){
   const dd=document.getElementById('ma-dd');
-  if(!val||val.length<2){ dd.style.display='none'; return; }
-  try{
-    // Prioritas: cari di data anggota dulu. Jika tidak ada, baru fallback ke data jamaah.
-    const ra = await sb.from('ubnb_anggota')
-      .select('id,nama,kelompok,no_hp,jamaah_did')
-      .ilike('nama','%'+val+'%')
-      .limit(8);
+  const q=(val||'').trim();
+  if(!dd) return;
+  if(!q || q.length<2){ dd.style.display='none'; dd.innerHTML=''; return; }
 
-    let rows=(ra.data||[]).map(a=>({
+  const safeTxt = (s)=>String(s??'').replace(/[&<>"']/g, c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+
+  try{
+    // ADMIN CHECKOUT:
+    // 1) Cari dulu di DATA ANGGOTA (ubnb_anggota).
+    // 2) Jika tidak ditemukan, baru cari di DATA JAMAAH (jamaah_desa).
+    // Catatan audit: pakai kolom minimal yang sudah dipakai fitur daftar member
+    // agar tidak error jika kolom opsional seperti no_hp/jamaah_did belum ada di tabel.
+    let rows=[];
+
+    const ra = await sb.from('ubnb_anggota')
+      .select('id,nama,kelompok')
+      .ilike('nama','%'+q+'%')
+      .order('nama',{ascending:true})
+      .limit(10);
+
+    if(ra.error) throw ra.error;
+
+    rows=(ra.data||[]).map(a=>({
       tipe:'anggota',
       id_anggota:a.id,
-      jamaah_did:a.jamaah_did||null,
-      nama:a.nama,
-      no_hp:a.no_hp||'',
+      jamaah_did:null,
+      nama:a.nama||'-',
+      no_hp:'',
       meta:'Anggota · Kel '+(a.kelompok||'-')
     }));
 
     if(!rows.length){
       const rj = await sb.from('jamaah_desa')
-        .select('did,nama_kk,kelompok,no_hp')
-        .ilike('nama_kk','%'+val+'%')
-        .limit(8);
+        .select('did,nama_kk,kelompok')
+        .ilike('nama_kk','%'+q+'%')
+        .order('nama_kk',{ascending:true})
+        .limit(10);
+
+      if(rj.error) throw rj.error;
+
       rows=(rj.data||[]).map(j=>({
         tipe:'jamaah',
         id_anggota:null,
         jamaah_did:j.did,
-        nama:j.nama_kk,
-        no_hp:j.no_hp||'',
+        nama:j.nama_kk||'-',
+        no_hp:'',
         meta:'Jamaah · Kel '+(j.kelompok||'-')
       }));
     }
 
     if(!rows.length){
-      dd.innerHTML='<div class="ma-dd-item" style="color:var(--muted)">Tidak ditemukan</div>';
-      dd.style.display='block'; return;
+      dd.innerHTML='<div class="ma-dd-item" style="color:var(--muted)">Tidak ditemukan di data anggota/jamaah</div>';
+      dd.style.display='block';
+      return;
     }
-    dd.innerHTML=rows.map(r=>`<div class="ma-dd-item" onclick='maPilihPelanggan(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
-      <div class="ma-dd-nama">${r.nama}</div>
-      <div class="ma-dd-meta">${r.meta}</div>
-    </div>`).join('');
+
+    dd.innerHTML=rows.map(r=>{
+      const payload=safeTxt(JSON.stringify(r));
+      return `<div class="ma-dd-item" onclick="maPilihPelanggan(JSON.parse('${payload}'))">
+        <div class="ma-dd-nama">${safeTxt(r.nama)}</div>
+        <div class="ma-dd-meta">${safeTxt(r.meta)}</div>
+      </div>`;
+    }).join('');
     dd.style.display='block';
-  }catch(e){ dd.style.display='none'; }
+  }catch(e){
+    console.error('[maSearchPelanggan]', e);
+    dd.innerHTML='<div class="ma-dd-item" style="color:var(--red)">Gagal membaca data anggota/jamaah</div>';
+    dd.style.display='block';
+  }
 }
 
 function maPilihPelanggan(r){
@@ -4177,6 +4217,48 @@ function goAdminSaldo(){
   const search = document.getElementById('ar-search');
   if(search) search.style.display = 'none';
   arSetFilter('saldo');
+}
+
+function goAdminPiutang(){
+  if(!isAdminMode()){ toast('Login admin dulu','e'); return; }
+  showScreen('screen-admin-riwayat');
+  const title = document.getElementById('admin-riwayat-title');
+  if(title) title.textContent = '📌 Piutang';
+  const search = document.getElementById('ar-search');
+  if(search) search.style.display='';
+  const saldoPanel = document.getElementById('ar-saldo-panel');
+  const arList = document.getElementById('ar-list');
+  const arSummary = document.getElementById('ar-summary');
+  if(saldoPanel) saldoPanel.style.display='none';
+  if(arList) arList.style.display='block';
+  if(arSummary) arSummary.style.display='';
+  _arFilter='all'; _arSearch='';
+  arLoad().then(()=>{
+    const rows = (_arAllData||[]).filter(t=>['utang','belum','belum_bayar','menunggu'].includes(String(t.status_bayar||'').toLowerCase()));
+    const list = document.getElementById('ar-list');
+    if(!list) return;
+    if(!rows.length){ list.innerHTML='<div class="empty-state"><div class="ico">✅</div><p>Tidak ada piutang terbuka</p></div>'; return; }
+    list.innerHTML = rows.map(t=>`<div class="ar-item" onclick="arOpenStruk('${t.ref_id}')"><div class="ar-item-icon">📌</div><div class="ar-item-body"><div class="ar-item-produk">${t.ppob_pelanggan?.nama||'—'}</div><div class="ar-item-tujuan">${t.nama_produk||'—'} · ${t.tujuan||'—'}</div><div class="ar-item-meta"><span>${new Date(t.created_at).toLocaleString('id-ID')}</span></div></div><div class="ar-item-right"><div class="ar-item-harga">${rp(t.harga_jual)}</div><div><span class="ar-item-status pending">BELUM BAYAR</span></div></div></div>`).join('');
+  });
+}
+
+function goAdminLaporan(){
+  if(!isAdminMode()){ toast('Login admin dulu','e'); return; }
+  showScreen('screen-admin-riwayat');
+  const title = document.getElementById('admin-riwayat-title');
+  if(title) title.textContent = '📊 Laporan Hari Ini';
+  const search = document.getElementById('ar-search');
+  if(search) search.style.display='';
+  const saldoPanel = document.getElementById('ar-saldo-panel');
+  const arList = document.getElementById('ar-list');
+  const arSummary = document.getElementById('ar-summary');
+  if(saldoPanel) saldoPanel.style.display='none';
+  if(arList) arList.style.display='block';
+  if(arSummary) arSummary.style.display='';
+  _arFilter='today'; _arSearch='';
+  const sel=document.getElementById('ar-filter-select');
+  if(sel) sel.value='today';
+  arLoad();
 }
 
 async function arLoad(){
@@ -5216,7 +5298,7 @@ const EZI_RWT_RULES = [
   // PDAM duluan karena "PAM" / "air minum" jelas
   {kode:'PDAM',        re:/pdam|\bpam\b|air\s*minum/i},
   // Internet Pascabayar (sebelum PAKET_DATA agar "indihome" tidak ketangkap data)
-  {kode:'INTERNET',    re:/indihome|first\s*media|telkom\s*\/\s*i|xl\s*satu|biznet|myrepublic|iconnet/i},
+  {kode:'INTERNET',    re:/indihome|first\s*media|telkom\s*\/\s*i|xl\s*(satu|home)|xlhome|biznet|myrepublic|iconnet|internet\s*pascabayar|home\s*internet/i},
   // Paket Data (data internet HP) sebelum PULSA
   {kode:'PAKET_DATA',  re:/paket\s*data|data\s*flash|freedom\s*internet|\d+\s*gb\b|data\s*mini|kuota/i},
   // Token PLN (prabayar)
@@ -5265,7 +5347,9 @@ function eziRwtParseCatatan(catatan, kodeKat){
     const m = c.match(/No\s*Kartu\s*:\s*(\d+)/i);
     if(m) nomor = m[1];
   } else if(kodeKat==='INTERNET'){
-    const m = c.match(/No\s*Telp\/?\s*IndiHome\s*:\s*(\d+)/i) || c.match(/No\s*Pelanggan\s*:\s*(\d+)/i);
+    const m = c.match(/No\s*Telp\/?\s*IndiHome\s*:\s*(\d+)/i)
+      || c.match(/(?:No\.?\s*Pelanggan|ID\s*Pelanggan|Customer\s*No|No\s*Tujuan)\s*:\s*(\d+)/i)
+      || c.match(/(\d{5,20})/);
     if(m) nomor = m[1];
   } else if(kodeKat==='TV' || kodeKat==='BPJS' || kodeKat==='PAJAK'){
     const m = c.match(/(?:No\.?\s*Pelanggan|VA|NOP|IDPEL|Smartcard|No\s*Kartu)\s*:\s*(\d+)/i);
@@ -5287,25 +5371,53 @@ function eziRwtParseCatatan(catatan, kodeKat){
   return {nomor, namaPel, extras};
 }
 
+// Normalisasi row transaksi langsung dari ppob_transaksi ke format riwayat EZi
+function eziRwtRowFromTransaksi(t, fallbackNama){
+  const produk = t.nama_produk || t.produk || '';
+  const tujuan = String(t.tujuan || t.customer_no || '').trim();
+  let catatan = t.catatan || '';
+  if(!catatan && tujuan){
+    const p = produk.toLowerCase();
+    if(/pdam|\bpam\b/.test(p)) catatan = `No Pelanggan: ${tujuan}`;
+    else if(/token|pln|listrik/.test(p)) catatan = `IDPEL: ${tujuan}`;
+    else if(/indihome|internet|xl\s*home|xlhome|biznet|myrepublic|first\s*media|iconnet/.test(p)) catatan = `No Pelanggan: ${tujuan}`;
+    else catatan = `No Tujuan: ${tujuan}`;
+  }
+  const pel = t.ppob_pelanggan || t.pelanggan || {};
+  return {
+    produk,
+    catatan,
+    tujuan,
+    nama_resolved: fallbackNama || pel.nama || t.nama_resolved || t.nama || '',
+    nama: fallbackNama || pel.nama || t.nama || '',
+    anggota_id: t.anggota_id || pel.anggota_id || null,
+    jamaah_did: t.jamaah_did || pel.jamaah_did || null,
+    created_at: t.created_at,
+    raw: t
+  };
+}
+
 // Build item dari row ppob (return null kalau gak bisa dipakai)
 function eziRwtBuildItem(row){
-  const kode = eziRwtClassify(row.produk, row.catatan);
+  const produkTxt = row.produk || row.nama_produk || '';
+  const catatanTxt = row.catatan || row.tujuan || '';
+  const kode = row.kategori_kode || eziRwtClassify(produkTxt, catatanTxt);
   if(!kode) return null;
-  // Skip kalau kategori tidak ada produk aktif di EZi
-  const kat = (allKategori||[]).find(k=>k.kode===kode);
+  const kat = (allKategori||[]).find(k=>String(k.kode).toUpperCase()===String(kode).toUpperCase());
   if(!kat) return null;
-  const parsed = eziRwtParseCatatan(row.catatan||'', kode);
+  const parsed = eziRwtParseCatatan(catatanTxt||'', kode);
+  if(!parsed.nomor && row.tujuan) parsed.nomor = String(row.tujuan).trim();
   if(!parsed.nomor) return null;
   return {
     kategori_id: kat.id,
-    kategori_kode: kode,
+    kategori_kode: kat.kode || kode,
     kategori_nama: kat.nama,
     kategori_icon: kat.icon || '📋',
     nomor: parsed.nomor,
     namaPelanggan: parsed.namaPel,
     extras: parsed.extras,
     namaPembeli: row.nama_resolved || row.nama || '',
-    produkTxt: row.produk || '',  // untuk auto-pick dropdown pasca-multi
+    produkTxt: produkTxt || '',
     anggota_id: row.anggota_id,
     jamaah_did: row.jamaah_did,
     created_at: row.created_at,
@@ -5403,18 +5515,31 @@ async function eziRwtLoad(){
       if(error) throw error;
       rows = data||[];
     } else if(currentMember && currentMember.tipe==='member'){
-      // Resolve jamaah_did: kalau currentMember.jamaah_did ada → pakai
-      // kalau cuma anggota_id → lookup dulu
+      rows = [];
+      try{
+        const {data: trxRows, error: trxErr} = await sb.from('ppob_transaksi')
+          .select('id,ref_id,nama_produk,tujuan,status,created_at,produk_id,ppob_member_id,pelanggan_id,ppob_pelanggan(nama,anggota_id,jamaah_did)')
+          .eq('ppob_member_id', currentMember.id)
+          .in('status', ['sukses','pending'])
+          .order('created_at',{ascending:false})
+          .limit(100);
+        if(!trxErr && trxRows){
+          rows.push(...trxRows.map(t=>eziRwtRowFromTransaksi(t, currentMember.nama)));
+        }
+      }catch(_){}
+
       let jdid = currentMember.jamaah_did;
       if(!jdid && currentMember.anggota_id){
         const {data} = await sb.from('ubnb_anggota').select('jamaah_did').eq('id', currentMember.anggota_id).maybeSingle();
         jdid = data?.jamaah_did;
         if(jdid){ currentMember.jamaah_did=jdid; sessionStorage.setItem(MEMBER_KEY, JSON.stringify(currentMember)); }
       }
-      if(!jdid){ _eziRwtCache=[]; return _eziRwtCache; }
-      const {data, error} = await sb.rpc('jw_ezi_riwayat_anggota', {p_jamaah_did: jdid});
-      if(error) throw error;
-      rows = data||[];
+      if(jdid){
+        try{
+          const {data: rpcRows, error: rpcErr} = await sb.rpc('jw_ezi_riwayat_anggota', {p_jamaah_did: jdid});
+          if(!rpcErr && rpcRows) rows.push(...rpcRows);
+        }catch(_){}
+      }
     } else {
       _eziRwtCache = [];
       return _eziRwtCache;
