@@ -780,9 +780,9 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .ezi-rwt-section{padding:0 16px;margin-bottom:18px}
 .ezi-rwt-section-title{font-weight:800;font-size:16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .ezi-rwt-section-title .ezi-rwt-count{font-size:11px;font-weight:600;color:var(--muted);background:#f1f5f9;padding:3px 8px;border-radius:99px}
-.ezi-rwt-tabs{display:flex;gap:6px;padding:0 16px;margin-bottom:14px;border-bottom:1px solid #e5e7eb}
-.ezi-rwt-tab{flex:1;padding:10px 8px;font-size:13px;font-weight:700;color:var(--muted);background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;transition:all .15s}
-.ezi-rwt-tab.active{color:var(--g4);border-bottom-color:var(--g4)}
+.ezi-rwt-tabs{display:flex;gap:6px;padding:8px 16px 0;margin:0 0 14px;border-bottom:1px solid #e5e7eb;background:#fff;position:relative;z-index:20;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+.ezi-rwt-tab{flex:1;padding:11px 8px;font-size:13px;font-weight:800;color:#4b5563;background:#fff;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;transition:all .15s;border-radius:10px 10px 0 0}
+.ezi-rwt-tab.active{color:var(--g2);border-bottom-color:var(--g1);background:var(--g3)}
 .ezi-rwt-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:all .15s;display:flex;align-items:flex-start;gap:12px}
 .ezi-rwt-card:hover{border-color:var(--g4);box-shadow:0 2px 8px rgba(29,158,117,.1)}
 .ezi-rwt-card:active{transform:scale(.985)}
@@ -793,8 +793,8 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .ezi-rwt-l2 .ezi-rwt-nomor{font-weight:600;color:#0f172a}
 .ezi-rwt-l2 .ezi-rwt-info{color:var(--muted);font-size:12px}
 .ezi-rwt-l3{font-size:11px;color:var(--muted);display:flex;gap:6px;align-items:center}
-.ezi-rwt-l3 .ezi-rwt-kat{background:#ecfdf5;color:var(--g4);padding:2px 7px;border-radius:99px;font-weight:600}
-.ezi-rwt-group-hdr{font-size:12px;font-weight:800;color:var(--g4);background:#ecfdf5;padding:5px 12px;border-radius:99px;display:inline-block;margin:14px 0 8px}
+.ezi-rwt-l3 .ezi-rwt-kat{background:#ecfdf5;color:var(--g2);padding:2px 7px;border-radius:99px;font-weight:700}
+.ezi-rwt-group-hdr{font-size:12px;font-weight:800;color:var(--g2);background:#ecfdf5;padding:5px 12px;border-radius:99px;display:inline-block;margin:14px 0 8px}
 .ezi-rwt-sub-hdr{font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.5px}
 .ezi-rwt-empty{text-align:center;padding:30px 20px;color:var(--muted);font-size:13px}
 
@@ -3832,26 +3832,85 @@ function maSetBayar(b){
 
 async function maSearchPelanggan(val){
   const dd=document.getElementById('ma-dd');
-  if(!val||val.length<2){ dd.style.display='none'; return; }
-  try{
-    const [ra,rj]=await Promise.all([
-      sb.from('ubnb_anggota').select('id,nama,kelompok,no_hp').ilike('nama','%'+val+'%').limit(5),
-      sb.from('jamaah_desa').select('did,nama_kk,kelompok,no_hp').ilike('nama_kk','%'+val+'%').limit(5)
-    ]);
-    const rows=[
-      ...(ra.data||[]).map(a=>({tipe:'anggota',id_anggota:a.id,jamaah_did:null,nama:a.nama,no_hp:a.no_hp||'',meta:'Anggota · Kel '+a.kelompok})),
-      ...(rj.data||[]).map(j=>({tipe:'jamaah',id_anggota:null,jamaah_did:j.did,nama:j.nama_kk,no_hp:j.no_hp||'',meta:'Jamaah · Kel '+j.kelompok}))
-    ];
+  const q=(val||'').trim();
+  if(!q || q.length<2){ dd.style.display='none'; return; }
+
+  const render=(rows)=>{
     if(!rows.length){
       dd.innerHTML='<div class="ma-dd-item" style="color:var(--muted)">Tidak ditemukan</div>';
-      dd.style.display='block'; return;
+      dd.style.display='block';
+      return;
     }
     dd.innerHTML=rows.map(r=>`<div class="ma-dd-item" onclick='maPilihPelanggan(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
       <div class="ma-dd-nama">${r.nama}</div>
       <div class="ma-dd-meta">${r.meta}</div>
     </div>`).join('');
     dd.style.display='block';
-  }catch(e){ dd.style.display='none'; }
+  };
+
+  try{
+    // WAJIB PRIORITAS: ambil dari tabel anggota dulu.
+    // Supabase .or() dipisah dari jamaah agar error kolom di jamaah tidak menggagalkan hasil anggota.
+    let anggota=[];
+    const ra = await sb.from('ubnb_anggota')
+      .select('id,nama,kelompok,no_hp,jamaah_did')
+      .or(`nama.ilike.%${q}%,no_hp.ilike.%${q}%`)
+      .limit(10);
+
+    if(ra.error){
+      // fallback jika kolom no_hp tidak tersedia di struktur tertentu
+      const ra2 = await sb.from('ubnb_anggota')
+        .select('id,nama,kelompok,jamaah_did')
+        .ilike('nama','%'+q+'%')
+        .limit(10);
+      anggota = ra2.data || [];
+    }else{
+      anggota = ra.data || [];
+    }
+
+    if(anggota.length){
+      render(anggota.map(a=>({
+        tipe:'anggota',
+        id_anggota:a.id,
+        jamaah_did:a.jamaah_did||null,
+        nama:a.nama,
+        no_hp:a.no_hp||'',
+        meta:'Anggota · Kel '+(a.kelompok||'-')
+      })));
+      return; // jika ada anggota, jangan tampilkan jamaah
+    }
+
+    // Jika anggota tidak ada, baru cari di data jamaah.
+    let jamaah=[];
+    const rj = await sb.from('jamaah_desa')
+      .select('did,nama_kk,nomor_wa,kelompok')
+      .or(`nama_kk.ilike.%${q}%,nomor_wa.ilike.%${q}%`)
+      .limit(10);
+
+    if(rj.error){
+      // fallback jika kolom nomor_wa berbeda/tidak tersedia
+      const rj2 = await sb.from('jamaah_desa')
+        .select('did,nama_kk,kelompok')
+        .ilike('nama_kk','%'+q+'%')
+        .limit(10);
+      jamaah = rj2.data || [];
+    }else{
+      jamaah = rj.data || [];
+    }
+
+    render(jamaah.map(j=>({
+      tipe:'jamaah',
+      id_anggota:null,
+      jamaah_did:j.did,
+      nama:j.nama_kk,
+      no_hp:j.nomor_wa||'',
+      meta:'Jamaah · Kel '+(j.kelompok||'-')
+    })));
+  }catch(e){
+    console.warn('maSearchPelanggan error:', e);
+    dd.innerHTML='<div class="ma-dd-item" style="color:var(--muted)">Pencarian gagal, coba ketik ulang</div>';
+    dd.style.display='block';
+  }
 }
 
 function maPilihPelanggan(r){
@@ -5400,10 +5459,22 @@ function eziRwtRenderAdminHome(items){
 
   let html='';
 
-  // ━━━ Top section: ⚡ Ulangi Transaksi (5 terakhir) ━━━
-  const top5 = dedup.slice(0, 5);  // dedup sudah sorted DESC dari items
+  // ━━━ Top section: ⚡ Ulangi Transaksi (5 paling sering) ━━━
+  const freqMap = new Map();
+  for(const it of items){
+    const key = it.kategori_kode + '|' + it.nomor;
+    freqMap.set(key, (freqMap.get(key)||0)+1);
+  }
+  const top5 = [...dedup]
+    .sort((a,b)=>{
+      const fa = freqMap.get(a.kategori_kode+'|'+a.nomor)||0;
+      const fb = freqMap.get(b.kategori_kode+'|'+b.nomor)||0;
+      if(fb!==fa) return fb-fa;
+      return new Date(b.created_at)-new Date(a.created_at);
+    })
+    .slice(0,5);
   if(top5.length){
-    html += `<div class="ezi-rwt-sub-hdr">⚡ Ulangi Transaksi</div>`;
+    html += `<div class="ezi-rwt-sub-hdr">⚡ Ulangi Transaksi · 5 Paling Sering</div>`;
     html += top5.map(it=>eziRwtRenderCard(it,{showKat:true,showNama:true})).join('');
   }
 
