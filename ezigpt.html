@@ -737,7 +737,6 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .sp-footer-sub{text-align:center;font-size:11px;color:var(--muted);margin-top:4px;}
 .sp-date-chip{display:inline-block;background:var(--g3);color:var(--g2);padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;margin-top:8px;}
 
-.ar-tabbar{display:flex;gap:8px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--border)}.ar-tabbtn{flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;background:#f1f5f9;color:#64748b}.ar-tabbtn.active{background:var(--g3);color:var(--g2);border:2px solid var(--g1)}
 /* ── MEMBER HOME ─────────────────────────── */
 .member-chip{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:99px;padding:6px 14px 6px 6px;margin-left:auto}
 .member-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:var(--navy)}
@@ -1551,11 +1550,6 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
       <div class="topbar-title" id="admin-riwayat-title">📋 Riwayat Transaksi</div>
       <button class="btn-back" onclick="arRefresh()" title="Refresh" style="min-width:60px;justify-content:center">🔄</button>
     </div>
-  </div>
-
-  <div class="ar-tabbar">
-    <button id="admin-tab-saldo" class="ar-tabbtn active" onclick="goAdminSaldo()">💰 Saldo</button>
-    <button id="admin-tab-transaksi" class="ar-tabbtn" onclick="goAdminTransaksi()">🧾 Transaksi</button>
   </div>
 
   <!-- Filter & Search -->
@@ -3477,7 +3471,7 @@ function tutupStruk(){
 async function tampilStrukAnggota(t){
   // Ambil data lengkap termasuk raw_response dari DB
   const {data}=await sb.from('ppob_transaksi')
-    .select('ref_id,nama_produk,tujuan,harga_jual,harga_modal,status,status_bayar,sn,message,raw_response,created_at,completed_at,dibuat_oleh,ppob_pelanggan(nama,tipe)')
+    .select('ref_id,nama_produk,tujuan,harga_jual,harga_modal,status,status_bayar,sn,message,raw_response,created_at,completed_at,dibuat_oleh,jenis_pelanggan,ppob_pelanggan(nama,tipe)')
     .eq('ref_id',t.ref_id).single();
   const d=data||t;
 
@@ -3493,6 +3487,16 @@ async function tampilStrukAnggota(t){
   const isPra=isPLN&&!(d.nama_produk||'').toLowerCase().includes('pasca');  const statusCls=d.status==='sukses'?'sukses':d.status==='gagal'?'gagal':'pending';
   const statusTxt=d.status==='sukses'?'✅ SUKSES':d.status==='gagal'?'❌ GAGAL':'⏳ PROSES';
   const bayarTxt=d.status_bayar==='lunas'?'✅ Lunas':d.status_bayar==='batal'?'🚫 Batal':'⏳ Belum Lunas';
+  const pelNama = d.ppob_pelanggan?.nama || '';
+  const pelTipe = String(d.jenis_pelanggan || d.ppob_pelanggan?.tipe || '').toLowerCase();
+  const isAnggota = pelTipe === 'anggota';
+  const isJamaah = pelTipe === 'jamaah';
+  const pelangganHtml = pelNama
+    ? `<div style="font-size:12px;font-weight:700;color:var(--g2);margin-top:4px">Pelanggan: ${isAnggota?'⭐ ':''}${pelNama}</div>`
+    : '';
+  const pelangganBadge = isAnggota
+    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:11px;color:#15803d;font-weight:600;line-height:1.4">⭐ Transaksi anggota ini akan dihitung dalam pembagian SHU tahunan.</div>`
+    : (isJamaah ? `<div style="background:#f0fdf4;border:1px dashed #22c55e;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:11px;color:#166534;font-weight:600;line-height:1.4">🌱 Anda belum memiliki saham UBNB.<br>Dengan memiliki saham UBNB, Anda tidak hanya menjadi pengguna layanan, tetapi juga menjadi bagian dari pemilik usaha bersama, sehingga transaksi Anda dapat ikut diperhitungkan dalam pembagian SHU tahunan.</div>` : '');
 
   // Token PLN prabayar
   const snClean=d.sn||'';
@@ -3521,9 +3525,8 @@ async function tampilStrukAnggota(t){
       <div style="font-size:11px;color:var(--muted);margin-top:4px">${tgl(d.created_at)}</div>
       <div style="font-size:11px;color:var(--muted)">No: ${d.ref_id}</div>
       ${namaOp ? `<div style="font-size:11px;color:var(--muted)">Op: ${namaOp}</div>` : ''}
-      ${d.ppob_pelanggan?.nama ? `<div style="font-size:12px;font-weight:700;color:var(--g2);margin-top:4px">Pelanggan: ${d.ppob_pelanggan?.tipe==='anggota'?'⭐ ':''}${d.ppob_pelanggan.nama}</div>` : ''}
-      ${d.ppob_pelanggan?.tipe==='anggota' ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:5px 10px;margin-top:6px;font-size:11px;color:#78350f;font-weight:600">⭐ Transaksi anggota ini akan dihitung dalam pembagian SHU tahunan.</div>` : ''}
-      ${d.ppob_pelanggan?.tipe==='jamaah' ? `<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:6px;padding:8px 10px;margin-top:6px;font-size:11px;color:#166534;line-height:1.5;font-weight:600">🌱 Anda belum memiliki saham UBNB. Dengan memiliki saham UBNB, Anda tidak hanya menjadi pengguna layanan, tetapi juga menjadi bagian dari pemilik usaha bersama, sehingga transaksi Anda dapat ikut diperhitungkan dalam pembagian SHU tahunan.</div>` : ''}
+      ${pelangganHtml}
+      ${pelangganBadge}
       <div class="struk-status ${statusCls}">${statusTxt}</div>
     </div>
     ${tokenBlock}
@@ -3677,6 +3680,7 @@ async function submitOrder(){
       tujuan:nomor, harga_modal:selectedProduk.harga_modal,
       harga_jual:hargaJual, markup:selectedProduk.markup,
       status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayar,
+      jenis_pelanggan:isMember?(currentMember.anggota_id?'anggota':'jamaah'):'umum',
       created_at:now, updated_at:now
     };
     if(isMember) trxIns.ppob_member_id=currentMember.id;
@@ -4529,6 +4533,7 @@ window.submitOrder = async function(){
       tujuan:nomor, harga_modal:hargaModalTrx,
       harga_jual:adm.harga_jual, markup:adm.harga_jual - hargaModalTrx,
       status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayarTrx,
+      jenis_pelanggan:pel.tipe==='anggota'?'anggota':(pel.tipe==='jamaah'?'jamaah':'umum'),
       dibuat_oleh:adm.id,
       created_at:now, updated_at:now,
       paid_at: statusBayarTrx==='lunas' ? now : null
@@ -4593,29 +4598,10 @@ function goAdminSaldo(){
   if(!isAdminMode()){ toast('Login admin dulu','e'); return; }
   showScreen('screen-admin-riwayat');
   const title = document.getElementById('admin-riwayat-title');
-  if(title) title.textContent = '💰 Saldo';document.getElementById('admin-tab-saldo')?.classList.add('active');document.getElementById('admin-tab-transaksi')?.classList.remove('active');
+  if(title) title.textContent = '💰 Saldo';
   const search = document.getElementById('ar-search');
   if(search) search.style.display = 'none';
   arSetFilter('saldo');
-}
-
-function goAdminTransaksi(){
-  if(!isAdminMode()){ toast('Login admin dulu','e'); return; }
-  showScreen('screen-admin-riwayat');
-  const title=document.getElementById('admin-riwayat-title');
-  if(title) title.textContent='🧾 Transaksi';
-  document.getElementById('admin-tab-saldo')?.classList.remove('active');
-  document.getElementById('admin-tab-transaksi')?.classList.add('active');
-  const search=document.getElementById('ar-search');
-  if(search) search.style.display='';
-  const saldoPanel=document.getElementById('ar-saldo-panel');
-  const arList=document.getElementById('ar-list');
-  const arSummary=document.getElementById('ar-summary');
-  if(saldoPanel) saldoPanel.style.display='none';
-  if(arList) arList.style.display='block';
-  if(arSummary) arSummary.style.display='';
-  _arFilter='all';_arSearch='';
-  arLoad();
 }
 
 function goAdminPiutang(){
@@ -4666,7 +4652,7 @@ async function arLoad(){
   try{
     const { data, error } = await sb
       .from('ppob_transaksi')
-      .select('id,ref_id,nama_produk,tujuan,harga_modal,harga_jual,markup,status,status_bayar,metode_bayar,sn,created_at,completed_at,ppob_pelanggan(nama)')
+      .select('id,ref_id,nama_produk,tujuan,harga_modal,harga_jual,markup,status,status_bayar,metode_bayar,sn,created_at,completed_at,jenis_pelanggan,ppob_pelanggan(nama)')
       .order('created_at', { ascending: false })
       .limit(200);
     if(error) throw error;
@@ -5311,9 +5297,10 @@ function renderStrukAdmin(d){
 
   /* ── info pelanggan ── */
   const pelNama    = d.ppob_pelanggan?.nama || null;
-  const noAnggota  = d.ppob_pelanggan?.no_anggota || d.ppob_pelanggan?.anggota_id || null;
-  const pelTipe    = (d.ppob_pelanggan?.tipe||'').toLowerCase();
-  const isAnggota  = pelTipe==='anggota' || pelTipe==='jamaah';
+  const pelTipe    = String(d.jenis_pelanggan || d.ppob_pelanggan?.tipe || '').toLowerCase();
+  const isAnggota  = pelTipe === 'anggota';
+  const isJamaah   = pelTipe === 'jamaah';
+  const noAnggota  = isAnggota ? (d.ppob_pelanggan?.no_anggota || d.ppob_pelanggan?.anggota_id || null) : null;
 
   /* ── harga & status ── */
   const hargaJual  = Number(d.harga_jual||0);
@@ -5387,8 +5374,8 @@ function renderStrukAdmin(d){
 
   /* ── anggota badge ── */
   const anggotaBadge = isAnggota
-    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>`
-    : '';
+    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi anggota ini akan dihitung dalam pembagian SHU tahunan.</div>`
+    : (isJamaah ? `<div style="background:#f0fdf4;border:1px dashed #22c55e;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#166534;text-align:center;line-height:1.4">🌱 Anda belum memiliki saham UBNB.<br>Dengan memiliki saham UBNB, Anda tidak hanya menjadi pengguna layanan, tetapi juga menjadi bagian dari pemilik usaha bersama, sehingga transaksi Anda dapat ikut diperhitungkan dalam pembagian SHU tahunan.</div>` : '');
 
   /* ── build HTML ── */
   let h = '';
