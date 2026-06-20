@@ -955,6 +955,7 @@ img{display:block;}
   <div class="co-bar" style="padding:8px 12px;gap:6px;border-bottom:1px solid var(--bdr)">
     <button class="btn-fil" id="adm-tab-post" onclick="switchAdmTab('post')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--bdr);background:var(--g)">📝 Post</button>
     <button class="btn-fil" id="adm-tab-toko" onclick="switchAdmTab('toko')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--bdr);background:#fff">🏪 Toko</button>
+    <button class="btn-fil" id="adm-tab-pesanan" onclick="switchAdmTab('pesanan')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--bdr);background:#fff">📦 Pesanan</button>
   </div>
   <div class="co-body" id="approval-body" style="padding:12px">
     <div style="text-align:center;padding:30px;color:var(--muted)">Memuat...</div>
@@ -966,6 +967,10 @@ img{display:block;}
   <div class="co-bar">
     <button class="btn-back" onclick="closeOv('ov-toko')">←</button>
     <div class="co-ttl">🏪 Toko Saya</div>
+  </div>
+  <div class="tabbar" id="toko-tabbar" style="display:none">
+    <div class="ptab on" onclick="switchTokoTab('produk',this)">Produk</div>
+    <div class="ptab" onclick="switchTokoTab('pesanan',this)" style="position:relative">Pesanan Masuk<span class="tb-num" id="toko-pesanan-badge" style="position:static;display:none;margin-left:5px"></span></div>
   </div>
   <div class="co-body" id="toko-body" style="padding:12px">
     <div style="text-align:center;padding:30px;color:var(--muted)">Memuat...</div>
@@ -1165,7 +1170,7 @@ const SB={
 let U=null,S={},cart=[],aB=[],aMK=[],aKat=[];
 let cTab='a',curP=null,payMode='cod';
 let posts=[],postFilter='semua';
-let activeCommentPostId=null,activeCommentPost=null,activeCommentBtn=null,activeCommentTable='jawara_post_comment',commentDbReady=null;
+let activeCommentPostId=null,activeCommentPost=null,activeCommentBtn=null,commentDbReady=null;
 let activePiutangMap={};
 let bpState={jenis:'info',produk:null,media:[]}; // buat post state
 let pmItems=[]; // pesan manual items state
@@ -1628,17 +1633,29 @@ async function prosesOrder(){
         btn.disabled=false;btn.textContent='Buat Pesanan';
         return;
       }
-      const{data:items,error:errItem}=await SB.from('ubnb_mk_pesanan_item').insert(cart.map(item=>({
-        pesanan_id:ord.id,
-        produk_id:item.id.startsWith('a_')?parseInt(item.id.replace('a_',''),10):null,
-        barang_id:item.id.startsWith('w_')?parseInt(item.id.replace('w_',''),10):null,
-        nama_produk:item.nama,
-        foto_url:item.foto||null,
-        harga_saat_order:item.harga,
-        qty:item.qty,
-        subtotal:item.harga*item.qty,
-        catatan_item:item.tip
-      })));
+      // Ambil toko_id tiap item produk anggota (RPC mengisi otomatis; fallback manual perlu query manual)
+      const prodIds=cart.filter(c=>c.id.toString().startsWith('a_')).map(c=>parseInt(c.id.replace('a_',''),10));
+      let tokoMap={};
+      if(prodIds.length){
+        const{data:prodRows}=await SB.from('ubnb_mk_produk').select('id,toko_id').in('id',prodIds);
+        (prodRows||[]).forEach(pr=>tokoMap[pr.id]=pr.toko_id);
+      }
+      const{data:items,error:errItem}=await SB.from('ubnb_mk_pesanan_item').insert(cart.map(item=>{
+        const isAnggota=item.id.toString().startsWith('a_');
+        const pid=isAnggota?parseInt(item.id.replace('a_',''),10):null;
+        return{
+          pesanan_id:ord.id,
+          produk_id:pid,
+          barang_id:item.id.toString().startsWith('w_')?parseInt(item.id.replace('w_',''),10):null,
+          toko_id:pid?(tokoMap[pid]||null):null,
+          nama_produk:item.nama,
+          foto_url:item.foto||null,
+          harga_saat_order:item.harga,
+          qty:item.qty,
+          subtotal:item.harga*item.qty,
+          catatan_item:item.tip
+        };
+      }));
       if(errItem){
         // Rollback: hapus header pesanan supaya tidak orphan
         try{
@@ -1654,10 +1671,25 @@ async function prosesOrder(){
       btn.disabled=false;btn.textContent='Buat Pesanan';
       return;
     }
-    if(payMode==='cod'){
-      const wa=S.wa_center||WA_DEFAULT;
-      window.open(`https://wa.me/${wa}?text=${encodeURIComponent('Halo Admin JAWARA!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nTotal: '+rp(total)+'\n\nMohon dikonfirmasi. Terima kasih! 🙏')}`, '_blank');
-    }
+    // Notifikasi WA: untuk COD & transfer. Kalau pesanan berisi produk dari 1 toko anggota saja,
+    // kirim ke WA toko tersebut. Kalau campuran (produk UB + anggota, atau multi-toko), kirim ke admin pusat.
+    try{
+      const prodIdsForWa=cart.filter(c=>c.id.toString().startsWith('a_')).map(c=>parseInt(c.id.replace('a_',''),10));
+      const hasBarangUB=cart.some(c=>c.id.toString().startsWith('w_'));
+      let targetWa=S.wa_center||WA_DEFAULT;
+      let targetLabel='Admin JAWARA';
+      if(prodIdsForWa.length&&!hasBarangUB){
+        const{data:prodRows}=await SB.from('ubnb_mk_produk').select('toko_id').in('id',prodIdsForWa);
+        const tokoIds=[...new Set((prodRows||[]).map(p=>p.toko_id).filter(Boolean))];
+        if(tokoIds.length===1){
+          const{data:tokoRows}=await SB.from('ubnb_mk_toko').select('nama_toko,no_wa').eq('id',tokoIds[0]).limit(1);
+          const tk=tokoRows?.[0];
+          if(tk?.no_wa){targetWa=normalizeWA(tk.no_wa);targetLabel=tk.nama_toko||'Toko';}
+        }
+      }
+      const pesanText='Halo '+targetLabel+'!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nTotal: '+rp(total)+'\nMetode: '+(payMode==='cod'?'Bayar Nanti':'Transfer')+'\n\nMohon dikonfirmasi. Terima kasih! 🙏';
+      window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(pesanText)}`, '_blank');
+    }catch(e){}
     cart=[];saveCart();syncCart();closeOv('ov-co');
     toast('✅ Pesanan berhasil dibuat!','ok');showPage('pesanan');
   }catch(e){
@@ -1681,16 +1713,10 @@ async function loadPesanan(){
   if(pf==='menunggu')q=q.eq('status','menunggu');
   else if(pf==='proses')q=q.in('status',['dikonfirmasi','diproses','siap']);
   else if(pf==='selesai')q=q.eq('status','selesai');
-  else if(pf==='tagihan')q=q.eq('status_bayar','belum');
   // pf==='semua' atau lainnya: tidak filter status
   const{data,error}=await q;
   if(error){toast('Gagal memuat pesanan','err');renderPesanan([]);return;}
-  let list=data||[];
-  if(pf==='tagihan'){
-    // Jaga-jaga jika DB mengembalikan status batal juga, filter di client.
-    list=list.filter(p=>!['dibatalkan','batal','cancel'].includes(String(p.status||'').toLowerCase()));
-  }
-  renderPesanan(list);
+  renderPesanan(data||[]);
 }
 
 function bukaTagihan(){
@@ -1709,94 +1735,61 @@ function bukaTagihan(){
   window.scrollTo(0,0);
 }
 
-function nilaiPiutang(r){
-  return Number(r.sisa||r.jumlah_sisa||r.jumlah||r.nominal||r.total||0);
-}
-function statusPiutangLabel(s){
-  const v=String(s||'belum_bayar').toLowerCase();
-  if(['belum_bayar','belum','utang','hutang','pending'].includes(v))return 'Belum bayar';
-  if(['sebagian','cicil','parsial'].includes(v))return 'Bayar sebagian';
-  if(['lunas','dibayar','selesai','paid'].includes(v))return 'Lunas';
-  return s||'Belum bayar';
-}
-function isPiutangBelumLunas(r){
-  const v=String(r.status||r.status_bayar||'belum_bayar').toLowerCase();
-  return !['lunas','dibayar','selesai','paid'].includes(v);
-}
-async function getPelangganLogin(){
-  if(!U)return [];
-  const jobs=[];
-  const hp=U.no_hp||U.wa||'';
-  const formats=hp?allHPFormats(hp):[];
-  if(formats.length)jobs.push(SB.from('ppob_pelanggan').select('id,nama,no_hp,tipe,anggota_id,jamaah_did').in('no_hp',formats).limit(20));
-  if(U.anggota_id)jobs.push(SB.from('ppob_pelanggan').select('id,nama,no_hp,tipe,anggota_id,jamaah_did').eq('anggota_id',U.anggota_id).limit(20));
-  if(U.jamaah_did)jobs.push(SB.from('ppob_pelanggan').select('id,nama,no_hp,tipe,anggota_id,jamaah_did').eq('jamaah_did',U.jamaah_did).limit(20));
-  const out=[];
-  const seen=new Set();
-  const res=await Promise.allSettled(jobs);
-  res.forEach(r=>{
-    if(r.status==='fulfilled'&&!r.value.error){
-      (r.value.data||[]).forEach(x=>{if(x&&x.id&&!seen.has(x.id)){seen.add(x.id);out.push(x);}});
-    }
-  });
-  return out;
-}
 async function loadTagihanPiutang(){
   const body=document.getElementById('pesanan-list');
   if(!body)return;
   body.innerHTML='<div style="text-align:center;padding:36px;color:var(--muted)">Memuat tagihan hutang piutang...</div>';
   try{
-    const pelanggan=await getPelangganLogin();
-    const pelIds=pelanggan.map(p=>p.id).filter(Boolean);
-    if(!pelIds.length){renderTagihanPiutang([],{},pelanggan);return;}
-    const r=await SB.from('ppob_piutang').select('*').in('pelanggan_id',pelIds).order('created_at',{ascending:false}).limit(300);
-    if(r.error){throw new Error(r.error);}
-    const rows=(r.data||[]).filter(isPiutangBelumLunas);
-    const trxIds=[...new Set(rows.map(x=>x.transaksi_id).filter(Boolean))];
-    let trxMap={};
-    if(trxIds.length){
-      const tr=await SB.from('ppob_transaksi').select('id,ref_id,nama_produk,tujuan,harga_jual,status,status_bayar,created_at').in('id',trxIds).limit(300);
-      if(!tr.error)(tr.data||[]).forEach(t=>trxMap[t.id]=t);
-    }
-    renderTagihanPiutang(rows,trxMap,pelanggan);
+    const jobs=[];
+    const namaTrim=(U?.nama||'').trim();
+    if(namaTrim)jobs.push(SB.from('hutang').select('*').ilike('nama',namaTrim).eq('lunas',false).eq('tipe','piutang').order('tgl',{ascending:false}).limit(300));
+    if(U?.jamaah_did)jobs.push(SB.from('hutang').select('*').eq('jamaah_did',U.jamaah_did).eq('lunas',false).eq('tipe','piutang').order('tgl',{ascending:false}).limit(300));
+    if(!jobs.length){renderTagihanPiutang([]);return;}
+    const res=await Promise.allSettled(jobs);
+    const seen=new Set();
+    let rows=[];
+    res.forEach(r=>{
+      if(r.status==='fulfilled'&&!r.value.error){
+        (r.value.data||[]).forEach(x=>{if(x&&x.id&&!seen.has(x.id)){seen.add(x.id);rows.push(x);}});
+      }
+    });
+    rows.sort((a,b)=>new Date(b.tgl||0)-new Date(a.tgl||0));
+    renderTagihanPiutang(rows);
   }catch(e){
     body.innerHTML=`<div class="empty"><div class="empty-ico">⚠️</div><div class="empty-title">Gagal memuat tagihan</div><div class="empty-sub">${esc(e.message||e)}</div></div>`;
   }
 }
-function renderTagihanPiutang(rows,trxMap,pelanggan){
+function renderTagihanPiutang(rows){
   const body=document.getElementById('pesanan-list');
   if(!body)return;
   activePiutangMap={};
   rows=rows||[];
-  const total=rows.reduce((a,r)=>a+nilaiPiutang(r),0);
+  const total=rows.reduce((a,r)=>a+Number(r.jml||0),0);
   const nama=firstName(U?.nama||'Anggota');
-  const summary=`<div class="tagihan-summary"><div class="tagihan-lbl">Total hutang/piutang atas nama ${esc(nama)}</div><div class="tagihan-total">${rp(total)}</div><div class="tagihan-sub">${rows.length} catatan belum lunas dari tabel ppob_piutang</div></div>`;
+  const summary=`<div class="tagihan-summary"><div class="tagihan-lbl">Total hutang/piutang atas nama ${esc(nama)}</div><div class="tagihan-total">${rp(total)}</div><div class="tagihan-sub">${rows.length} catatan belum lunas</div></div>`;
   if(!rows.length){
     body.innerHTML=summary+`<div class="empty" style="padding:36px 20px"><div class="empty-ico">✅</div><div class="empty-title">Tidak ada tagihan</div><div class="empty-sub">Belum ada hutang/piutang yang masih terbuka untuk akun ini.</div></div>`;
     return;
   }
   body.innerHTML=summary+rows.map(r=>{
-    const tr=trxMap[r.transaksi_id]||{};
-    const id=String(r.id||r.transaksi_id||Math.random());
-    activePiutangMap[id]={...r,_trx:tr};
-    const ref=tr.ref_id||r.ref_id||('PIUTANG-'+(r.id||''));
-    const prod=tr.nama_produk||r.nama_produk||r.keterangan||'Tagihan';
-    const tujuan=tr.tujuan||r.tujuan||'';
-    const tgl=r.created_at||tr.created_at||'';
-    const amt=nilaiPiutang(r);
+    const id=String(r.id);
+    activePiutangMap[id]=r;
+    const ref=r.ref_type?(r.ref_type.toUpperCase()+'-'+(r.ref_id||r.id)):('HUTANG-'+r.id);
+    const ket=r.ket||'Tagihan';
+    const tgl=r.tgl||'';
     return `<div class="tagihan-card">
-      <div class="tagihan-head"><div><div class="tagihan-ref">${esc(ref)}</div><div class="tagihan-date">${tgl?new Date(tgl).toLocaleString('id-ID'):''}</div></div><div class="tagihan-status">${esc(statusPiutangLabel(r.status||r.status_bayar))}</div></div>
-      <div class="tagihan-body"><div class="tagihan-prod">${esc(prod)}</div>${tujuan?`<div class="tagihan-meta">Tujuan: ${esc(tujuan)}</div>`:''}<div class="tagihan-amt">${rp(amt)}</div></div>
-      <div class="tagihan-actions"><button class="btn-s bs-out" onclick="chatTagihan('${esc(id)}')">Chat Admin</button><button class="btn-s bs-fill" onclick="window.location.href='https://ubnb.pw/ezi.html'">Buka EZI</button></div>
+      <div class="tagihan-head"><div><div class="tagihan-ref">${esc(ref)}</div><div class="tagihan-date">${tgl?new Date(tgl).toLocaleString('id-ID'):''}</div></div><div class="tagihan-status">Belum bayar</div></div>
+      <div class="tagihan-body"><div class="tagihan-prod">${esc(ket)}</div><div class="tagihan-amt">${rp(r.jml)}</div></div>
+      <div class="tagihan-actions"><button class="btn-s bs-out" onclick="chatTagihan('${esc(id)}')">Chat Admin</button></div>
     </div>`;
   }).join('');
 }
 function chatTagihan(id){
   const r=activePiutangMap[String(id)];
   if(!r){toast('Data tagihan tidak ditemukan','err');return;}
-  const tr=r._trx||{};
   const wa=S.wa_center||WA_DEFAULT;
-  const msg=`Assalamualaikum Admin JAWARA, saya mau konfirmasi tagihan saya.\n\nNama: ${U?.nama||'-'}\nRef: ${tr.ref_id||r.ref_id||r.id||'-'}\nProduk: ${tr.nama_produk||r.nama_produk||r.keterangan||'Tagihan'}\nNominal: ${rp(nilaiPiutang(r))}\nStatus: ${statusPiutangLabel(r.status||r.status_bayar)}\n\nMohon dicek ya.`;
+  const ref=r.ref_type?(r.ref_type.toUpperCase()+'-'+(r.ref_id||r.id)):('HUTANG-'+r.id);
+  const msg=`Assalamualaikum Admin JAWARA, saya mau konfirmasi tagihan saya.\n\nNama: ${U?.nama||'-'}\nRef: ${ref}\nKeterangan: ${r.ket||'Tagihan'}\nNominal: ${rp(r.jml)}\nStatus: Belum bayar\n\nMohon dicek ya.`;
   window.open('https://wa.me/'+normalizeWA(wa)+'?text='+encodeURIComponent(msg),'_blank');
 }
 
@@ -1966,21 +1959,12 @@ async function submitBuktiBayar(){
   }
 }
 async function simpanLinkBukti(orderId,url){
-  // Schema tiap instalasi bisa berbeda. Coba beberapa nama kolom umum; jika gagal tetap lanjut via WA.
-  const payloads=[
-    {bukti_bayar_url:url},
-    {bukti_transfer_url:url},
-    {bukti_bayar:url}
-  ];
-  for(const body of payloads){
-    try{
-      const r=await fetch(`${_SB_URL}/rest/v1/ubnb_mk_pesanan?id=eq.${orderId}`,{
-        method:'PATCH',headers:{..._H,'Prefer':'return=minimal'},body:JSON.stringify(body)
-      });
-      if(r.ok)return true;
-    }catch(e){}
-  }
-  return false;
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/ubnb_mk_pesanan?id=eq.${orderId}`,{
+      method:'PATCH',headers:{..._H,'Prefer':'return=minimal'},body:JSON.stringify({bukti_bayar:url})
+    });
+    return r.ok;
+  }catch(e){return false;}
 }
 function renderPesanan(list){
   const el=document.getElementById('pesanan-list');
@@ -2424,8 +2408,11 @@ function switchAdmTab(tab){
   _admTab=tab;
   const tp=document.getElementById('adm-tab-post');
   const tt=document.getElementById('adm-tab-toko');
-  if(tab==='post'){tp.style.background='var(--g)';tp.style.color='white';tt.style.background='#fff';tt.style.color='';loadPendingPosts();}
-  else{tt.style.background='var(--g)';tt.style.color='white';tp.style.background='#fff';tp.style.color='';loadPendingTokos();}
+  const tpes=document.getElementById('adm-tab-pesanan');
+  [tp,tt,tpes].forEach(b=>{b.style.background='#fff';b.style.color='';});
+  if(tab==='post'){tp.style.background='var(--g)';tp.style.color='white';loadPendingPosts();}
+  else if(tab==='toko'){tt.style.background='var(--g)';tt.style.color='white';loadPendingTokos();}
+  else{tpes.style.background='var(--g)';tpes.style.color='white';loadAdminPesanan();}
 }
 
 async function loadPendingPosts(){
@@ -2599,6 +2586,84 @@ async function rejectToko(tokoId){
   }catch(e){toast('Error: '+e.message,'err');}
 }
 
+// ===== ADMIN: KELOLA PESANAN (lintas semua toko + toko UB) =====
+let _admPesananFilter=null; // null = semua status
+let _admPesananList=[];
+async function loadAdminPesanan(){
+  const body=document.getElementById('approval-body');
+  body.innerHTML=`<div style="text-align:center;padding:30px;color:var(--muted)">Memuat...</div>`;
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_admin_list_pesanan`,{
+      method:'POST',headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify({p_admin_user_id:Adm.id,p_admin_password_hash:Adm.pass_hash,p_status:_admPesananFilter})
+    });
+    const j=await r.json();
+    if(!r.ok||!j?.ok)throw new Error(j?.message||j?.error||'Gagal');
+    _admPesananList=j.data||[];
+    renderAdminPesanan();
+  }catch(e){
+    body.innerHTML=`<div class="empty" style="padding:30px"><div class="empty-ico">⚠️</div><div class="empty-title">Gagal Memuat</div><div class="empty-sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+function filterAdminPesanan(status){
+  _admPesananFilter=status||null;
+  loadAdminPesanan();
+}
+
+function renderAdminPesanan(){
+  const body=document.getElementById('approval-body');
+  const list=_admPesananList;
+  const statusBdg={menunggu:'⏳ Menunggu',dikonfirmasi:'✅ Dikonfirmasi',diproses:'⚙️ Diproses',siap:'📦 Siap',selesai:'✅ Selesai',dibatalkan:'❌ Dibatalkan'};
+  const statusColor={menunggu:'#f59e0b',dikonfirmasi:'#0ea5e9',diproses:'#0ea5e9',siap:'#8b5cf6',selesai:'#10b981',dibatalkan:'#ef4444'};
+  const filterBar=`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px">
+    ${['',...Object.keys(statusBdg)].map(s=>`<button class="btn-s ${(_admPesananFilter||'')===s?'bs-fill':'bs-out'}" style="white-space:nowrap;font-size:11px;padding:6px 10px" onclick="filterAdminPesanan('${s}')">${s?statusBdg[s]:'Semua'}</button>`).join('')}
+  </div>`;
+  if(!list.length){
+    body.innerHTML=filterBar+`<div class="empty" style="padding:30px"><div class="empty-ico">📦</div><div class="empty-title">Tidak Ada Pesanan</div><div class="empty-sub">Belum ada pesanan untuk filter ini.</div></div>`;
+    return;
+  }
+  body.innerHTML=filterBar+list.map(p=>{
+    const items=p.items||[];
+    const tokoNames=[...new Set(items.map(it=>it.nama_toko||'UBNB Pusat'))];
+    const itemsHtml=items.map(it=>`<div style="font-size:12px;color:#475569;display:flex;justify-content:space-between;padding:3px 0"><div>${esc(it.nama_produk)} ${it.qty}× <span style="color:var(--muted)">(${esc(it.nama_toko||'UBNB Pusat')})</span></div><div>${rp(it.subtotal)}</div></div>`).join('');
+    const allStatus=['menunggu','dikonfirmasi','diproses','siap','selesai','dibatalkan'];
+    const selectOpts=allStatus.map(s=>`<option value="${s}" ${p.status===s?'selected':''}>${statusBdg[s]}</option>`).join('');
+    return `<div class="menu-card" style="padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div><div style="font-size:13px;font-weight:700">${esc(p.kode_pesanan)}</div><div style="font-size:11px;color:var(--muted)">${esc(p.pembeli_nama)} · ${esc(p.pembeli_wa||'-')} · ${relativeTime(p.created_at)||''}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Toko: ${esc(tokoNames.join(', '))}</div></div>
+        <div style="font-size:11px;font-weight:700;color:${statusColor[p.status]||'#64748b'}">${statusBdg[p.status]||p.status}</div>
+      </div>
+      <div style="border-top:1px dashed var(--bdr);padding-top:8px;margin-top:6px">${itemsHtml}</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)">
+        <div>Total · ${metodeBayarLabel(p.metode_bayar)} · ${statusBayarLabel(p.status_bayar)}</div><div>${rp(p.total)}</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
+        <select id="adm-pes-status-${p.id}" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--bdr);font-size:12px;font-family:inherit">${selectOpts}</select>
+        <button class="btn-fil" onclick="ubahStatusPesananAdmin(${p.id})" style="padding:8px 14px;border-radius:8px;border:none;background:var(--g);color:#fff;font-weight:700;font-size:12px">Simpan</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function ubahStatusPesananAdmin(pesananId){
+  if(!Adm){toast('Login admin dulu','err');return;}
+  const sel=document.getElementById('adm-pes-status-'+pesananId);
+  const status=sel?.value;
+  if(!status)return;
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_admin_update_pesanan_status`,{
+      method:'POST',headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify({p_admin_user_id:Adm.id,p_admin_password_hash:Adm.pass_hash,p_pesanan_id:pesananId,p_status:status})
+    });
+    const j=await r.json();
+    if(!r.ok||!j?.ok)throw new Error(j?.message||j?.error||'Gagal update status');
+    toast('Status pesanan diperbarui','ok');
+    loadAdminPesanan();
+  }catch(e){toast('Error: '+e.message,'err');}
+}
+
 function updateUI(){
   if(!U)return;
   const ico=esc(firstName(U.nama)[0]?.toUpperCase()||'U');
@@ -2662,7 +2727,7 @@ function renderAkun(){
         </div>
         <div class="mrow" onclick="bukaToko()">
           <div class="mico" style="background:var(--o2)">🏪</div>
-          <div class="mbody"><div class="mtitle">Toko Saya</div><div class="msub">Kelola toko & produk</div></div>
+          <div class="mbody"><div class="mtitle">Toko Saya<span class="tb-num" id="akun-toko-badge" style="position:static;display:none;margin-left:6px"></span></div><div class="msub">Kelola toko & produk</div></div>
           <div class="marr">›</div>
         </div>
         <div class="mrow" onclick="bukaTagihan()">
@@ -2694,10 +2759,21 @@ function renderAkun(){
   SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_member_id',U.id).then(({count})=>{
     const el=document.getElementById('ac-p');if(el)el.textContent=count||0;
   });
-  // Tagihan: pesanan yg status_bayar='belum' dan status != 'batal'
-  SB.from('ubnb_mk_pesanan').select('id',{count:'exact',head:true}).eq('pembeli_member_id',U.id).eq('status_bayar','belum').then(({count})=>{
-    const el=document.getElementById('ac-t');if(el)el.textContent=count||0;
-  });
+  // Tagihan: dari tabel hutang (match nama + jamaah_did), konsisten dengan halaman Tagihan Saya
+  (async()=>{
+    const el=document.getElementById('ac-t');
+    if(!el)return;
+    const namaTrim=(U.nama||'').trim();
+    const jobs=[];
+    if(namaTrim)jobs.push(SB.from('hutang').select('id').ilike('nama',namaTrim).eq('lunas',false).eq('tipe','piutang').limit(300));
+    if(U.jamaah_did)jobs.push(SB.from('hutang').select('id').eq('jamaah_did',U.jamaah_did).eq('lunas',false).eq('tipe','piutang').limit(300));
+    if(!jobs.length){el.textContent=0;return;}
+    const res=await Promise.allSettled(jobs);
+    const seen=new Set();
+    res.forEach(r=>{if(r.status==='fulfilled'&&!r.value.error)(r.value.data||[]).forEach(x=>seen.add(x.id));});
+    el.textContent=seen.size;
+  })();
+  refreshTokoPesananBadge();
 }
 function doLogout(){
   if(!confirm('Yakin mau keluar?'))return;
@@ -3004,19 +3080,6 @@ function renderCommentShell(msg){
   body.innerHTML=msg;
 }
 
-function localCommentKey(postId){return 'jw_comments_'+postId;}
-function readLocalComments(postId){
-  try{
-    const arr=JSON.parse(localStorage.getItem(localCommentKey(postId))||'[]');
-    return Array.isArray(arr)?arr:[];
-  }catch(e){return [];}
-}
-function saveLocalComment(postId,row){
-  const arr=readLocalComments(postId);
-  arr.push(row);
-  localStorage.setItem(localCommentKey(postId),JSON.stringify(arr.slice(-100)));
-}
-
 function bukaKomentar(postId,btn){
   activeCommentPostId=postId;
   activeCommentPost=posts.find(x=>String(x.id)===String(postId))||null;
@@ -3046,37 +3109,24 @@ async function loadKomentar(postId){
     <div class="comment-post-text">${preview}</div>
   </div>`;
 
-  let rows=[];
-  let dbOk=false;
-  let lastErr='';
-  const tables=[activeCommentTable,'jawara_post_comment','jawara_post_komentar','jawara_comment'].filter((v,i,a)=>v&&a.indexOf(v)===i);
-  for(const tbl of tables){
-    const r=await SB.from(tbl).select('*').eq('post_id',postId).order('created_at',{ascending:true}).limit(100);
-    if(!r.error){
-      rows=r.data||[];
-      activeCommentTable=tbl;
-      commentDbReady=true;
-      dbOk=true;
-      break;
-    }
-    lastErr=r.error;
-  }
-  if(!dbOk)commentDbReady=false;
+  const r=await SB.from('jawara_post_comment').select('*').eq('post_id',postId).order('created_at',{ascending:true}).limit(100);
+  const dbOk=!r.error;
+  const rows=dbOk?(r.data||[]):[];
+  commentDbReady=dbOk;
 
-  // Lengkapi nama member dari ppob_member kalau komentar menyimpan member_id.
-  const mids=[...new Set(rows.map(r=>r.member_id).filter(Boolean))];
+  // Lengkapi nama member dari ppob_member.
+  const mids=[...new Set(rows.map(row=>row.member_id).filter(Boolean))];
   let memMap={};
   if(mids.length){
     const mres=await SB.from('ppob_member').select('id,nama').in('id',mids);
     (mres.data||[]).forEach(m=>memMap[m.id]=m.nama);
   }
 
-  const allRows=rows.map(r=>({...r,_local:false}))
-    .sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
-  const note=dbOk?'':`<div class="comment-note">Komentar publik belum bisa dimuat. Pastikan tabel komentar dan RLS Supabase sudah tersedia. Detail: ${esc(lastErr||'table tidak ditemukan')}</div>`;
+  const allRows=rows.slice().sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
+  const note=dbOk?'':`<div class="comment-note">Komentar publik belum bisa dimuat. Detail: ${esc(r.error||'gagal memuat')}</div>`;
   const list=allRows.length?`<div class="comment-list">`+allRows.map(c=>{
-    const nm=esc(c.nama||c.name||memMap[c.member_id]||(U&&c.member_id===U.id?firstName(U.nama):'Anggota'));
-    const txt=escMultiline(c.isi||c.komentar||c.comment||c.text||'');
+    const nm=esc(memMap[c.member_id]||(U&&c.member_id===U.id?firstName(U.nama):'Anggota'));
+    const txt=escMultiline(c.isi||'');
     const ini=esc((firstName(nm)[0]||'A').toUpperCase());
     const when=relativeTime(c.created_at)||'';
     return `<div class="comment-row">
@@ -3097,40 +3147,26 @@ async function submitKomentar(){
   if(txt.length>500){toast('Komentar maksimal 500 karakter','err');return;}
   if(!U){openOv('ov-login');return;}
   if(btn)btn.disabled=true;
-  const now=new Date().toISOString();
-  let saved=false, lastErr='';
-  const base={post_id:activeCommentPostId,member_id:U.id,isi:txt};
-  const tryPayloads=[
-    base,
-    {...base,nama:firstName(U.nama||'Anggota')},
-    {post_id:activeCommentPostId,anggota_id:U.anggota_id||null,member_id:U.id,isi:txt},
-    {post_id:activeCommentPostId,nama:firstName(U.nama||'Anggota'),komentar:txt}
-  ];
-  const tables=[activeCommentTable,'jawara_post_comment','jawara_post_komentar','jawara_comment'].filter((v,i,a)=>v&&a.indexOf(v)===i);
-  for(const tbl of tables){
-    for(const payload of tryPayloads){
-      const r=await SB.from(tbl).insert(payload);
-      if(!r.error){
-        activeCommentTable=tbl;
-        commentDbReady=true;
-        saved=true;
-        break;
-      }
-      lastErr=r.error;
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_create_comment`,{
+      method:'POST',headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify({p_member_id:U.id,p_post_id:activeCommentPostId,p_isi:txt})
+    });
+    if(!r.ok){
+      const t=await r.text();
+      toast('Komentar gagal dikirim: '+t,'err');
+      if(btn)btn.disabled=false;
+      return;
     }
-    if(saved)break;
-  }
-  if(!saved){
-    commentDbReady=false;
-    toast('Komentar publik gagal disimpan. Cek tabel komentar/RLS Supabase.','err');
-    console.warn('[JAWARA] komentar DB gagal:',lastErr);
+  }catch(e){
+    toast('Komentar gagal dikirim: '+(e.message||'unknown'),'err');
     if(btn)btn.disabled=false;
     return;
   }
   if(input)input.value='';
   bumpCommentCount(activeCommentPostId);
   await loadKomentar(activeCommentPostId);
-  toast('Komentar publik terkirim','ok');
+  toast('Komentar terkirim','ok');
   if(btn)btn.disabled=false;
 }
 
@@ -3451,15 +3487,27 @@ async function submitPesananManual(){
 let _mineToko=null; // cache toko + produk milik user
 let _bpUpload={foto:null}; // staged foto toko file
 let _prState={editId:null, fotoStaged:[], fotoExisting:[]}; // produk form state
+let _tokoTab='produk'; // tab aktif di overlay Toko Saya
+let _tokoPesanan=null; // cache pesanan masuk toko
 
 async function bukaToko(){
   if(!U){openOv('ov-login');return;}
   openOv('ov-toko');
+  _tokoTab='produk';
   await loadMineToko();
+}
+
+function switchTokoTab(tab,el){
+  _tokoTab=tab;
+  document.querySelectorAll('#toko-tabbar .ptab').forEach(t=>t.classList.remove('on'));
+  el?.classList.add('on');
+  if(tab==='produk')renderToko();
+  else loadTokoPesananMasuk();
 }
 
 async function loadMineToko(){
   const body=document.getElementById('toko-body');
+  const tabbar=document.getElementById('toko-tabbar');
   body.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">Memuat...</div>';
   try{
     const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_toko_get_mine`,{
@@ -3469,9 +3517,93 @@ async function loadMineToko(){
     const j=await r.json();
     if(!j?.ok){throw new Error(j?.error||'Gagal load toko');}
     _mineToko=j;
+    if(tabbar)tabbar.style.display=(j.has_toko&&j.toko?.status==='aktif')?'flex':'none';
     renderToko();
+    if(j.has_toko&&j.toko?.status==='aktif')refreshTokoPesananBadge();
   }catch(e){
     body.innerHTML=`<div class="empty" style="padding:30px"><div class="empty-ico">⚠️</div><div class="empty-title">Gagal Memuat</div><div class="empty-sub">${esc(e.message)}</div><button class="btn-primary" style="margin-top:14px" onclick="loadMineToko()">Coba Lagi</button></div>`;
+  }
+}
+
+async function refreshTokoPesananBadge(){
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_toko_pesanan_masuk`,{
+      method:'POST',headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify({p_member_id:U.id})
+    });
+    const j=await r.json();
+    if(!j?.ok)return;
+    _tokoPesanan=j;
+    const n=j.pending_count||0;
+    [document.getElementById('toko-pesanan-badge'),document.getElementById('akun-toko-badge')].forEach(badge=>{
+      if(!badge)return;
+      badge.textContent=n;
+      badge.style.display=n>0?'inline-flex':'none';
+    });
+  }catch(e){}
+}
+
+async function loadTokoPesananMasuk(){
+  const body=document.getElementById('toko-body');
+  body.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">Memuat pesanan...</div>';
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_toko_pesanan_masuk`,{
+      method:'POST',headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify({p_member_id:U.id})
+    });
+    const j=await r.json();
+    if(!j?.ok)throw new Error(j?.error||'Gagal load pesanan');
+    _tokoPesanan=j;
+    renderTokoPesananMasuk();
+    const badge=document.getElementById('toko-pesanan-badge');
+    if(badge){
+      const n=j.pending_count||0;
+      badge.textContent=n;
+      badge.style.display=n>0?'inline-flex':'none';
+    }
+  }catch(e){
+    body.innerHTML=`<div class="empty" style="padding:30px"><div class="empty-ico">⚠️</div><div class="empty-title">Gagal Memuat</div><div class="empty-sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+function renderTokoPesananMasuk(){
+  const body=document.getElementById('toko-body');
+  const list=_tokoPesanan?.data||[];
+  if(!list.length){
+    body.innerHTML=`<div class="empty" style="padding:30px"><div class="empty-ico">📥</div><div class="empty-title">Belum Ada Pesanan</div><div class="empty-sub">Pesanan yang masuk ke toko Anda akan muncul di sini.</div></div>`;
+    return;
+  }
+  const statusBdg={menunggu:'⏳ Menunggu',dikonfirmasi:'✅ Dikonfirmasi',diproses:'⚙️ Diproses',siap:'📦 Siap',selesai:'✅ Selesai',dibatalkan:'❌ Dibatalkan'};
+  const statusColor={menunggu:'#f59e0b',dikonfirmasi:'#0ea5e9',diproses:'#0ea5e9',siap:'#8b5cf6',selesai:'#10b981',dibatalkan:'#ef4444'};
+  body.innerHTML=list.map(p=>{
+    const items=p.items_toko||[];
+    const itemsHtml=items.map(it=>`<div style="font-size:12px;color:#475569;display:flex;justify-content:space-between;padding:3px 0"><div>${esc(it.nama_produk)} ${it.qty}×</div><div>${rp(it.subtotal)}</div></div>`).join('');
+    const nextActions=p.status==='menunggu'?[['diproses','⚙️ Proses']]:p.status==='diproses'?[['siap','📦 Siap'],['selesai','✅ Selesai']]:p.status==='siap'?[['selesai','✅ Selesai']]:[];
+    const actionsHtml=nextActions.length?`<div style="display:flex;gap:6px;margin-top:10px">${nextActions.map(([st,lbl])=>`<button class="btn-fil" onclick="ubahStatusPesananToko(${p.id},'${st}')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--bdr);background:#fff;font-weight:600;font-size:12px">${lbl}</button>`).join('')}</div>`:'';
+    return `<div class="menu-card" style="padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div><div style="font-size:13px;font-weight:700">${esc(p.kode_pesanan)}</div><div style="font-size:11px;color:var(--muted)">${esc(p.pembeli_nama)} · ${relativeTime(p.created_at)||''}</div></div>
+        <div style="font-size:11px;font-weight:700;color:${statusColor[p.status]||'#64748b'}">${statusBdg[p.status]||p.status}</div>
+      </div>
+      <div style="border-top:1px dashed var(--bdr);padding-top:8px;margin-top:6px">${itemsHtml}</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)"><div>Subtotal toko</div><div>${rp(p.subtotal_toko||0)}</div></div>
+      ${actionsHtml}
+    </div>`;
+  }).join('');
+}
+
+async function ubahStatusPesananToko(pesananId,status){
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_toko_update_pesanan_status`,{
+      method:'POST',headers:{..._H,'Content-Type':'application/json'},
+      body:JSON.stringify({p_member_id:U.id,p_pesanan_id:pesananId,p_status:status})
+    });
+    const j=await r.json();
+    if(!j?.ok)throw new Error(j?.error||j?.message||'Gagal update status');
+    toast('Status pesanan diperbarui','ok');
+    await loadTokoPesananMasuk();
+  }catch(e){
+    toast(e.message,'err');
   }
 }
 
