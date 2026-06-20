@@ -62,7 +62,8 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 ══════════════════════════════════════════ */
 .home-header{
   background:linear-gradient(160deg,var(--g2) 0%,var(--g1) 60%,#2bb888 100%);
-  color:#fff;padding:20px 16px 32px;
+  color:#fff;padding:20px 16px 18px;
+  position:relative;z-index:1;
 }
 .home-brand{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .home-logo{
@@ -691,7 +692,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .ar-item-status.pending{background:#fef3c7;color:#92400e}
 .ar-item-status.gagal{background:#fee2e2;color:#991b1b}
 .ar-item-status.proses{background:#dbeafe;color:#1e40af}
-.struk-admin-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
+.struk-admin-overlay{display:none;position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
 .struk-admin-overlay.show{display:flex}
 .struk-admin-wrap{background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:95vh;overflow-y:auto;}
 .struk-admin-actions{display:flex;gap:8px;padding:14px 16px;border-top:1px solid var(--border);position:sticky;bottom:0;background:#fff;flex-wrap:wrap;}
@@ -777,7 +778,7 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .struk-admin-wrap .sfooter .thx{font-size:13px;color:#15803d;font-weight:700;margin-bottom:4px;line-height:1.5}
 
 /* ═══════════ EZi Riwayat Akun ═══════════ */
-.ezi-rwt-section{padding:0 16px;margin-bottom:18px}
+.ezi-rwt-section{padding:14px 16px 0;margin-bottom:18px;position:relative;z-index:2;background:var(--bg);border-radius:20px 20px 0 0}
 .ezi-rwt-section-title{font-weight:800;font-size:16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .ezi-rwt-section-title .ezi-rwt-count{font-size:11px;font-weight:600;color:var(--muted);background:#f1f5f9;padding:3px 8px;border-radius:99px}
 .ezi-rwt-tabs{display:flex;gap:6px;padding:8px 16px 0;margin:0 0 14px;border-bottom:1px solid #e5e7eb;background:#fff;position:relative;z-index:20;box-shadow:0 1px 0 rgba(0,0,0,.03)}
@@ -875,6 +876,42 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
 .history-row{display:none!important}
 .recent-strip{margin:12px 16px 0!important}
 .ezi-v3-ai,.ezi-v3-ai.show{display:none!important}
+
+
+
+/* ── ADMIN TAB SALDO / TRANSAKSI (FIX UI v6) ───────────────── */
+.ar-tabbar{
+  display:flex;
+  gap:10px;
+  padding:12px 16px 10px;
+  background:linear-gradient(135deg,#9a3412,#c2410c);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.ar-tabbtn{
+  flex:1;
+  height:44px;
+  border:1.5px solid rgba(255,255,255,.28);
+  border-radius:14px;
+  background:rgba(255,255,255,.16);
+  color:#fff;
+  font-family:inherit;
+  font-size:15px;
+  font-weight:900;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16);
+  transition:.15s;
+}
+.ar-tabbtn.active{
+  background:var(--gold);
+  color:var(--navy);
+  border-color:var(--gold);
+  box-shadow:0 8px 18px rgba(245,197,24,.22);
+}
+.ar-tabbtn:active{transform:scale(.98)}
 
 </style>
 </head>
@@ -1549,6 +1586,11 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
       <div class="topbar-title" id="admin-riwayat-title">📋 Riwayat Transaksi</div>
       <button class="btn-back" onclick="arRefresh()" title="Refresh" style="min-width:60px;justify-content:center">🔄</button>
     </div>
+  </div>
+
+  <div class="ar-tabbar">
+    <button id="admin-tab-saldo" class="ar-tabbtn active" onclick="goAdminSaldo()">💰 Saldo</button>
+    <button id="admin-tab-transaksi" class="ar-tabbtn" onclick="goAdminTransaksi()">🧾 Transaksi</button>
   </div>
 
   <!-- Filter & Search -->
@@ -3470,7 +3512,7 @@ function tutupStruk(){
 async function tampilStrukAnggota(t){
   // Ambil data lengkap termasuk raw_response dari DB
   const {data}=await sb.from('ppob_transaksi')
-    .select('ref_id,nama_produk,tujuan,harga_jual,harga_modal,status,status_bayar,sn,message,raw_response,created_at,completed_at,dibuat_oleh,ppob_pelanggan(nama,tipe)')
+    .select('ref_id,nama_produk,tujuan,harga_jual,harga_modal,status,status_bayar,sn,message,raw_response,created_at,completed_at,dibuat_oleh,jenis_pelanggan,ppob_pelanggan(nama,tipe)')
     .eq('ref_id',t.ref_id).single();
   const d=data||t;
 
@@ -3486,6 +3528,16 @@ async function tampilStrukAnggota(t){
   const isPra=isPLN&&!(d.nama_produk||'').toLowerCase().includes('pasca');  const statusCls=d.status==='sukses'?'sukses':d.status==='gagal'?'gagal':'pending';
   const statusTxt=d.status==='sukses'?'✅ SUKSES':d.status==='gagal'?'❌ GAGAL':'⏳ PROSES';
   const bayarTxt=d.status_bayar==='lunas'?'✅ Lunas':d.status_bayar==='batal'?'🚫 Batal':'⏳ Belum Lunas';
+  const pelNama = d.ppob_pelanggan?.nama || '';
+  const pelTipe = String(d.jenis_pelanggan || d.ppob_pelanggan?.tipe || '').toLowerCase();
+  const isAnggota = pelTipe === 'anggota';
+  const isJamaah = pelTipe === 'jamaah';
+  const pelangganHtml = pelNama
+    ? `<div style="font-size:12px;font-weight:700;color:var(--g2);margin-top:4px">Pelanggan: ${isAnggota?'⭐ ':''}${pelNama}</div>`
+    : '';
+  const pelangganBadge = isAnggota
+    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:11px;color:#15803d;font-weight:600;line-height:1.4">⭐ Transaksi anggota ini akan dihitung dalam pembagian SHU tahunan.</div>`
+    : (isJamaah ? `<div style="background:#f0fdf4;border:1px dashed #22c55e;border-radius:6px;padding:6px 8px;margin-top:6px;font-size:11px;color:#166534;font-weight:600;line-height:1.4">🌱 Anda belum memiliki saham UBNB.<br>Dengan memiliki saham UBNB, Anda tidak hanya menjadi pengguna layanan, tetapi juga menjadi bagian dari pemilik usaha bersama, sehingga transaksi Anda dapat ikut diperhitungkan dalam pembagian SHU tahunan.</div>` : '');
 
   // Token PLN prabayar
   const snClean=d.sn||'';
@@ -3514,8 +3566,8 @@ async function tampilStrukAnggota(t){
       <div style="font-size:11px;color:var(--muted);margin-top:4px">${tgl(d.created_at)}</div>
       <div style="font-size:11px;color:var(--muted)">No: ${d.ref_id}</div>
       ${namaOp ? `<div style="font-size:11px;color:var(--muted)">Op: ${namaOp}</div>` : ''}
-      ${d.ppob_pelanggan?.nama ? `<div style="font-size:12px;font-weight:700;color:var(--g2);margin-top:4px">Pelanggan: ⭐ ${d.ppob_pelanggan.nama}</div>` : ''}
-      ${d.ppob_pelanggan?.nama ? `<div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:5px 10px;margin-top:6px;font-size:11px;color:#78350f;font-weight:600">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>` : ''}
+      ${pelangganHtml}
+      ${pelangganBadge}
       <div class="struk-status ${statusCls}">${statusTxt}</div>
     </div>
     ${tokenBlock}
@@ -3669,6 +3721,7 @@ async function submitOrder(){
       tujuan:nomor, harga_modal:selectedProduk.harga_modal,
       harga_jual:hargaJual, markup:selectedProduk.markup,
       status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayar,
+      jenis_pelanggan:isMember?(currentMember.anggota_id?'anggota':'jamaah'):'umum',
       created_at:now, updated_at:now
     };
     if(isMember) trxIns.ppob_member_id=currentMember.id;
@@ -4521,6 +4574,7 @@ window.submitOrder = async function(){
       tujuan:nomor, harga_modal:hargaModalTrx,
       harga_jual:adm.harga_jual, markup:adm.harga_jual - hargaModalTrx,
       status:'pending', metode_bayar:metodeBayar, status_bayar:statusBayarTrx,
+      jenis_pelanggan:pel.tipe==='anggota'?'anggota':(pel.tipe==='jamaah'?'jamaah':'umum'),
       dibuat_oleh:adm.id,
       created_at:now, updated_at:now,
       paid_at: statusBayarTrx==='lunas' ? now : null
@@ -4573,6 +4627,8 @@ function goAdminRiwayat(){
   showScreen('screen-admin-riwayat');
   const title = document.getElementById('admin-riwayat-title');
   if(title) title.textContent = '📋 Riwayat Transaksi';
+  document.getElementById('admin-tab-saldo')?.classList.remove('active');
+  document.getElementById('admin-tab-transaksi')?.classList.add('active');
   const search = document.getElementById('ar-search');
   if(search) search.style.display = '';
   _arFilter='today';
@@ -4586,9 +4642,32 @@ function goAdminSaldo(){
   showScreen('screen-admin-riwayat');
   const title = document.getElementById('admin-riwayat-title');
   if(title) title.textContent = '💰 Saldo';
+  document.getElementById('admin-tab-saldo')?.classList.add('active');
+  document.getElementById('admin-tab-transaksi')?.classList.remove('active');
   const search = document.getElementById('ar-search');
   if(search) search.style.display = 'none';
   arSetFilter('saldo');
+}
+
+function goAdminTransaksi(){
+  if(!isAdminMode()){ toast('Login admin dulu','e'); return; }
+  showScreen('screen-admin-riwayat');
+  const title=document.getElementById('admin-riwayat-title');
+  if(title) title.textContent='🧾 Transaksi';
+  document.getElementById('admin-tab-saldo')?.classList.remove('active');
+  document.getElementById('admin-tab-transaksi')?.classList.add('active');
+  const search=document.getElementById('ar-search');
+  if(search) search.style.display='';
+  const saldoPanel=document.getElementById('ar-saldo-panel');
+  const arList=document.getElementById('ar-list');
+  const arSummary=document.getElementById('ar-summary');
+  if(saldoPanel) saldoPanel.style.display='none';
+  if(arList) arList.style.display='block';
+  if(arSummary) arSummary.style.display='';
+  _arFilter='all'; _arSearch='';
+  const sel=document.getElementById('ar-filter-select');
+  if(sel) sel.value='all';
+  arLoad();
 }
 
 function goAdminPiutang(){
@@ -4639,7 +4718,7 @@ async function arLoad(){
   try{
     const { data, error } = await sb
       .from('ppob_transaksi')
-      .select('id,ref_id,nama_produk,tujuan,harga_modal,harga_jual,markup,status,status_bayar,metode_bayar,sn,created_at,completed_at,ppob_pelanggan(nama)')
+      .select('id,ref_id,nama_produk,tujuan,harga_modal,harga_jual,markup,status,status_bayar,metode_bayar,sn,created_at,completed_at,jenis_pelanggan,ppob_pelanggan(nama)')
       .order('created_at', { ascending: false })
       .limit(200);
     if(error) throw error;
@@ -5228,7 +5307,14 @@ function parseRawDetail(d){
 }
 
 async function arOpenStruk(refId){
-  // Ambil data lengkap
+  // Pastikan struk lengkap muncul di atas layar hasil transaksi, bukan di belakang overlay sukses.
+  const resultOverlay = document.getElementById('result-overlay');
+  if(resultOverlay){
+    resultOverlay.classList.remove('show');
+    resultOverlay.style.pointerEvents = 'none';
+  }
+
+  // Ambil data lengkap dari tabel transaksi agar struk sama seperti di Riwayat Transaksi.
   const { data, error } = await sb
     .from('ppob_transaksi')
     .select('*,ppob_pelanggan(nama,no_hp,tipe)')
@@ -5284,9 +5370,10 @@ function renderStrukAdmin(d){
 
   /* ── info pelanggan ── */
   const pelNama    = d.ppob_pelanggan?.nama || null;
-  const noAnggota  = d.ppob_pelanggan?.no_anggota || d.ppob_pelanggan?.anggota_id || null;
-  const pelTipe    = (d.ppob_pelanggan?.tipe||'').toLowerCase();
-  const isAnggota  = pelTipe==='anggota' || pelTipe==='jamaah';
+  const pelTipe    = String(d.jenis_pelanggan || d.ppob_pelanggan?.tipe || '').toLowerCase();
+  const isAnggota  = pelTipe === 'anggota';
+  const isJamaah   = pelTipe === 'jamaah';
+  const noAnggota  = isAnggota ? (d.ppob_pelanggan?.no_anggota || d.ppob_pelanggan?.anggota_id || null) : null;
 
   /* ── harga & status ── */
   const hargaJual  = Number(d.harga_jual||0);
@@ -5360,8 +5447,8 @@ function renderStrukAdmin(d){
 
   /* ── anggota badge ── */
   const anggotaBadge = isAnggota
-    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi Anggota dihitung untuk SHU tahunan</div>`
-    : '';
+    ? `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Transaksi anggota ini akan dihitung dalam pembagian SHU tahunan.</div>`
+    : (isJamaah ? `<div style="background:#f0fdf4;border:1px dashed #22c55e;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#166534;text-align:center;line-height:1.4">🌱 Anda belum memiliki saham UBNB.<br>Dengan memiliki saham UBNB, Anda tidak hanya menjadi pengguna layanan, tetapi juga menjadi bagian dari pemilik usaha bersama, sehingga transaksi Anda dapat ikut diperhitungkan dalam pembagian SHU tahunan.</div>` : '');
 
   /* ── build HTML ── */
   let h = '';
