@@ -2520,12 +2520,17 @@ async function searchAnggotaReg(val){
   if(!val||val.length<2){dd.style.display='none';return;}
   try{
     const[ra,rj]=await Promise.all([
-      SB.from('ubnb_anggota').select('id,nama,kelompok').ilike('nama','%'+val+'%').limit(5),
-      SB.from('jamaah_desa').select('did,nama_kk,kelompok').ilike('nama_kk','%'+val+'%').limit(5)
+      SB.from('ubnb_anggota').select('id,nama,kelompok').ilike('nama','%'+val+'%').limit(6),
+      SB.from('jamaah_desa').select('did,nama,nama_kk,kelompok').ilike('nama','%'+val+'%').limit(8)
     ]);
     const rows=[
       ...(ra.data||[]).map(a=>({tip:'a',anggota_id:a.id,jamaah_did:null,nama:a.nama,kelompok:a.kelompok,meta:'⭐ Anggota · Kel '+(a.kelompok||'-')})),
-      ...(rj.data||[]).map(j=>({tip:'j',anggota_id:null,jamaah_did:j.did,nama:j.nama_kk,kelompok:j.kelompok,meta:'🕌 Jamaah · Kel '+(j.kelompok||'-')}))
+      ...(rj.data||[]).map(j=>{
+        const namaIndividu=j.nama||j.nama_kk;
+        const isKK=(j.nama||'').trim()===(j.nama_kk||'').trim();
+        const ket=isKK?'Kepala Keluarga':'Anggota keluarga '+(j.nama_kk||'-');
+        return{tip:'j',anggota_id:null,jamaah_did:j.did,nama:namaIndividu,kelompok:j.kelompok,meta:'🕌 Jamaah · '+ket+' · Kel '+(j.kelompok||'-')};
+      })
     ];
     if(!rows.length){
       dd.innerHTML=`<div style="padding:12px;font-size:12px;color:var(--muted)">Nama tidak ditemukan. <span style="color:var(--g);font-weight:700;cursor:pointer" onclick="pilihUmumReg('${esc(val)}')">Daftar sebagai Pengguna Umum →</span></div>`;
