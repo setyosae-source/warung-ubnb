@@ -1335,7 +1335,48 @@ html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(
     <div class="popup-warning">⚠️ Jika salah, transaksi tidak dapat dibatalkan!</div>
     <div class="popup-btns">
       <button class="popup-btn-perbaiki" onclick="tutupPopupNomor()">✏️ Perbaiki</button>
-      <button class="popup-btn-proses" id="popup-btn-proses" onclick="prosesAnggota()">✅ Ya, Proses</button>
+      <button class="popup-btn-proses" id="popup-btn-proses" onclick="lanjutKeKodeBayar()">✅ Ya, Proses</button>
+    </div>
+  </div>
+</div>
+
+<!-- POPUP SET KODE BAYAR (pertama kali, dipaksa sebelum transaksi pertama) -->
+<div class="popup-overlay" id="popup-set-kode-bayar">
+  <div class="popup-card">
+    <div class="popup-icon">🔐</div>
+    <div class="popup-title">Buat Kode Bayar</div>
+    <div class="popup-body">Sebelum transaksi pertama, buat Kode Bayar 6 digit. Kode ini <b>beda dari PIN login</b> dan akan diminta setiap kali bertransaksi, untuk melindungi akun jika HP dipakai orang lain.</div>
+    <div style="margin:14px 0 6px">
+      <label style="font-size:12px;font-weight:700;color:var(--muted)">PIN Login (verifikasi)</label>
+      <input type="password" id="skb-pin" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" style="width:100%;height:48px;border:2px solid var(--border);border-radius:var(--r2);text-align:center;font-size:20px;letter-spacing:6px;margin-top:6px;font-family:inherit">
+    </div>
+    <div style="margin-bottom:6px">
+      <label style="font-size:12px;font-weight:700;color:var(--muted)">Kode Bayar Baru</label>
+      <input type="password" id="skb-kode1" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" style="width:100%;height:48px;border:2px solid var(--border);border-radius:var(--r2);text-align:center;font-size:20px;letter-spacing:6px;margin-top:6px;font-family:inherit">
+    </div>
+    <div style="margin-bottom:6px">
+      <label style="font-size:12px;font-weight:700;color:var(--muted)">Ulangi Kode Bayar</label>
+      <input type="password" id="skb-kode2" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" onkeydown="if(event.key==='Enter')simpanKodeBayarBaru()" style="width:100%;height:48px;border:2px solid var(--border);border-radius:var(--r2);text-align:center;font-size:20px;letter-spacing:6px;margin-top:6px;font-family:inherit">
+    </div>
+    <div id="skb-err" style="display:none;color:#dc2626;font-size:12px;text-align:center;font-weight:700;margin-bottom:8px"></div>
+    <div class="popup-btns">
+      <button class="popup-btn-perbaiki" onclick="batalSetKodeBayar()">Batal</button>
+      <button class="popup-btn-proses" id="skb-btn-simpan" onclick="simpanKodeBayarBaru()">Simpan & Lanjut</button>
+    </div>
+  </div>
+</div>
+
+<!-- POPUP INPUT KODE BAYAR (tiap transaksi) -->
+<div class="popup-overlay" id="popup-input-kode-bayar">
+  <div class="popup-card">
+    <div class="popup-icon">🔐</div>
+    <div class="popup-title">Masukkan Kode Bayar</div>
+    <div class="popup-body">Untuk melanjutkan transaksi, masukkan Kode Bayar 6 digit Anda.</div>
+    <input type="password" id="ikb-kode" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" onkeydown="if(event.key==='Enter')verifikasiKodeBayarTransaksi()" style="width:100%;height:52px;border:2px solid var(--border);border-radius:var(--r2);text-align:center;font-size:24px;letter-spacing:8px;margin:14px 0 6px;font-family:inherit">
+    <div id="ikb-err" style="display:none;color:#dc2626;font-size:12px;text-align:center;font-weight:700;margin-bottom:8px"></div>
+    <div class="popup-btns">
+      <button class="popup-btn-perbaiki" onclick="batalInputKodeBayar()">Batal</button>
+      <button class="popup-btn-proses" id="ikb-btn-proses" onclick="verifikasiKodeBayarTransaksi()">✅ Konfirmasi</button>
     </div>
   </div>
 </div>
@@ -1814,7 +1855,7 @@ async function doLogin(){
   try{
     const pinHash=await sha256(pin);
     const {data,error}=await sb.from('ppob_member')
-      .select('id,nama,no_hp,status,total_piutang,anggota_id,jamaah_did')
+      .select('id,nama,no_hp,status,total_piutang,anggota_id,jamaah_did,kode_bayar_hash')
       .eq('no_hp',hp).eq('pin_hash',pinHash).maybeSingle();
     if(error) throw error;
     if(!data){err.textContent='No HP atau PIN salah';err.style.display='block';return;}
@@ -3127,6 +3168,94 @@ function onKlikKonfirm(){
 
 function tutupPopupNomor(){
   document.getElementById('popup-nomor').classList.remove('show');
+}
+
+// ── ALUR KODE BAYAR (lapisan keamanan terpisah dari PIN login) ──
+function lanjutKeKodeBayar(){
+  tutupPopupNomor();
+  if(!currentMember?.kode_bayar_hash){
+    // Belum pernah set kode bayar — wajib buat dulu sebelum transaksi pertama
+    document.getElementById('skb-pin').value='';
+    document.getElementById('skb-kode1').value='';
+    document.getElementById('skb-kode2').value='';
+    document.getElementById('skb-err').style.display='none';
+    document.getElementById('popup-set-kode-bayar').classList.add('show');
+  }else{
+    document.getElementById('ikb-kode').value='';
+    document.getElementById('ikb-err').style.display='none';
+    document.getElementById('popup-input-kode-bayar').classList.add('show');
+    setTimeout(()=>document.getElementById('ikb-kode')?.focus(),200);
+  }
+}
+
+function batalSetKodeBayar(){
+  document.getElementById('popup-set-kode-bayar').classList.remove('show');
+}
+
+async function simpanKodeBayarBaru(){
+  const pin=document.getElementById('skb-pin').value.trim();
+  const k1=document.getElementById('skb-kode1').value.trim();
+  const k2=document.getElementById('skb-kode2').value.trim();
+  const err=document.getElementById('skb-err');
+  err.style.display='none';
+  if(pin.length!==6){err.textContent='PIN login harus 6 digit';err.style.display='block';return;}
+  if(k1.length!==6){err.textContent='Kode bayar harus 6 digit';err.style.display='block';return;}
+  if(k1!==k2){err.textContent='Kode bayar tidak sama, ulangi lagi';err.style.display='block';return;}
+  if(k1===pin){err.textContent='Kode bayar tidak boleh sama dengan PIN login';err.style.display='block';return;}
+  const btn=document.getElementById('skb-btn-simpan');
+  btn.disabled=true;btn.textContent='⏳ Menyimpan...';
+  try{
+    const pinHash=await sha256(pin);
+    const kodeHash=await sha256(k1);
+    const {data,error}=await sb.rpc('ppob_set_kode_bayar',{
+      p_member_id:currentMember.id, p_pin_hash:pinHash, p_kode_bayar_hash:kodeHash
+    });
+    if(error||!data?.ok) throw new Error(error?.message||'PIN login salah');
+    currentMember.kode_bayar_hash=kodeHash;
+    sessionStorage.setItem(MEMBER_KEY,JSON.stringify(currentMember));
+    document.getElementById('popup-set-kode-bayar').classList.remove('show');
+    toast('Kode Bayar berhasil dibuat','s');
+    await prosesAnggota();
+  }catch(e){
+    err.textContent=e.message||'Gagal menyimpan kode bayar';
+    err.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='Simpan & Lanjut';
+  }
+}
+
+function batalInputKodeBayar(){
+  document.getElementById('popup-input-kode-bayar').classList.remove('show');
+}
+
+async function verifikasiKodeBayarTransaksi(){
+  const kode=document.getElementById('ikb-kode').value.trim();
+  const err=document.getElementById('ikb-err');
+  err.style.display='none';
+  if(kode.length!==6){err.textContent='Kode bayar harus 6 digit';err.style.display='block';return;}
+  const btn=document.getElementById('ikb-btn-proses');
+  btn.disabled=true;btn.textContent='⏳ Memeriksa...';
+  try{
+    const kodeHash=await sha256(kode);
+    const {data,error}=await sb.rpc('ppob_verify_kode_bayar',{
+      p_member_id:currentMember.id, p_kode_bayar_hash:kodeHash
+    });
+    if(error) throw error;
+    if(!data?.ok){
+      err.textContent='Kode bayar salah';
+      err.style.display='block';
+      document.getElementById('ikb-kode').value='';
+      document.getElementById('ikb-kode').focus();
+      return;
+    }
+    document.getElementById('popup-input-kode-bayar').classList.remove('show');
+    await prosesAnggota();
+  }catch(e){
+    err.textContent='Gagal memeriksa kode bayar, coba lagi';
+    err.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='✅ Konfirmasi';
+  }
 }
 
 async function prosesAnggota(){
