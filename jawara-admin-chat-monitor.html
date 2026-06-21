@@ -256,7 +256,12 @@ async function muatData(){
   const messages=await sb(`sopram_chat_message?select=*&room_id=in.(${roomIds.join(',')})&order=created_at.asc&limit=2000`);
   const reports=await sb(`sopram_report?select=*&target_type=eq.chat_message`);
 
-  const flaggedMsgIds=new Set(reports.filter(r=>r.status!=='rejected').map(r=>r.target_id));
+  // map: msg_id -> id report aktif (terbaru) yang masih nge-flag pesan itu
+  const reportIdByMsg={};
+  reports.filter(r=>r.status!=='rejected').forEach(r=>{
+    if(!reportIdByMsg[r.target_id]||r.id>reportIdByMsg[r.target_id])reportIdByMsg[r.target_id]=r.id;
+  });
+  const flaggedMsgIds=new Set(Object.keys(reportIdByMsg).map(Number));
 
   allThreads=rooms.map(room=>{
     const mem=members.filter(m=>m.room_id===room.id);
@@ -266,7 +271,7 @@ async function muatData(){
     const last=msgs[msgs.length-1];
     return{
       room_id:room.id,
-      messages:msgs.map(m=>({...m,flagged:flaggedMsgIds.has(m.id)})),
+      messages:msgs.map(m=>({...m,flagged:flaggedMsgIds.has(m.id),reportId:reportIdByMsg[m.id]||null})),
       last,
       userLain:nonAdminMember,
       admin:adminMember,
@@ -330,7 +335,7 @@ function render(){
             <div class="bubble ${m.sender_id===t.userLain?.id?'kiri':'kanan'} ${m.flagged?'flagged':''} ${m.deleted_at?'deleted':''}">
               ${m.deleted_at?'[pesan dihapus admin]':(m.isi||'[foto]')}
               <span class="ts">${jamMenit(m.created_at)}</span>
-              ${!m.deleted_at?`<div style="margin-top:5px"><button class="btn btn-flag" style="padding:3px 8px;font-size:10.5px" onclick="event.stopPropagation();tandaiPesan(${m.id})">🚩 Tandai</button></div>`:''}
+              ${!m.deleted_at?`<div style="margin-top:5px">${m.flagged?`<button class="btn btn-buka" style="padding:3px 8px;font-size:10.5px" onclick="event.stopPropagation();batalkanTanda(${m.reportId})">↩️ Batalkan tanda</button>`:`<button class="btn btn-flag" style="padding:3px 8px;font-size:10.5px" onclick="event.stopPropagation();tandaiPesan(${m.id})">🚩 Tandai</button>`}</div>`:''}
             </div>
           `).join('')}
         </div>
@@ -353,6 +358,16 @@ async function tandaiPesan(msgId){
   })});
   muatData();
 }
+
+async function batalkanTanda(reportId){
+  if(!reportId){toast0('Tidak ada tanda untuk dibatalkan');muatData();return;}
+  if(!confirm('Batalkan tanda mencurigakan pada pesan ini?'))return;
+  await sb(`sopram_report?id=eq.${reportId}`,{method:'PATCH',body:JSON.stringify({
+    status:'rejected',reviewed_by:myAdminSopramId,reviewed_at:new Date().toISOString()
+  })});
+  muatData();
+}
+function toast0(msg){console.warn(msg);}
 
 async function blokirUser(userId,nama){
   if(!userId){alert('User tidak ditemukan');return;}
