@@ -1,17 +1,16 @@
-// Service Worker - Warung UBNB PWA
-const CACHE_NAME = 'warung-ubnb-v1';
+// JAWARA Service Worker — minimal, hanya untuk syarat PWA installability.
+// Tidak melakukan caching agresif supaya data selalu fresh dari Supabase.
+const SW_VERSION = 'jawara-sw-v1';
 
-// Install - cache minimal
-self.addEventListener('install', e => {
+self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate
-self.addEventListener('activate', e => {
-  self.clients.claim();
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
 });
 
-// Fetch - network first (selalu online)
-self.addEventListener('fetch', e => {
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+// Pass-through fetch: tidak meng-cache apapun, biar data selalu real-time.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });
