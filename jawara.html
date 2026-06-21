@@ -940,6 +940,15 @@ img{display:block;}
         </div>
         <button class="btn-s bs-out" style="width:100%;margin-top:12px" onclick="dismissInstallPrompt()">Mengerti</button>
       </div>
+      <div id="install-manual-actions" style="display:none;margin-top:20px;text-align:left;background:var(--bg);border-radius:12px;padding:14px">
+        <div style="font-size:12px;color:var(--ink2);line-height:1.7">
+          Instal manual lewat menu Chrome:<br>
+          1. Tap ikon titik tiga (<b>⋮</b>) di pojok kanan atas<br>
+          2. Pilih <b>"Install app"</b> atau <b>"Add to Home screen"</b><br>
+          3. Tap <b>"Install"</b>
+        </div>
+        <button class="btn-s bs-out" style="width:100%;margin-top:12px" onclick="dismissInstallPrompt()">Mengerti</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1396,20 +1405,26 @@ function showInstallPrompt(){
   try{localStorage.setItem('jw_install_last_shown',String(Date.now()));}catch(e){}
   const androidActions=document.getElementById('install-android-actions');
   const iosActions=document.getElementById('install-ios-actions');
+  const manualActions=document.getElementById('install-manual-actions');
   if(isIOS()){
     // iOS tidak punya beforeinstallprompt API; tampilkan instruksi manual saja.
     androidActions.style.display='none';
+    manualActions.style.display='none';
     iosActions.style.display='block';
     openOv('ov-install');
   }else if(_deferredInstallPrompt){
     androidActions.style.display='flex';
     iosActions.style.display='none';
+    manualActions.style.display='none';
     openOv('ov-install');
-  }
-  // Kalau bukan iOS dan belum ada deferredInstallPrompt (browser belum fire event/sudah pernah dipakai),
-  // jangan tampilkan modal kosong — cukup coba lagi nanti.
-  else{
-    scheduleInstallPrompt(INSTALL_RETRY_MS);
+  }else{
+    // Chrome tidak (lagi) fire beforeinstallprompt otomatis untuk origin ini (sering terjadi
+    // kalau prompt sebelumnya pernah muncul/di-dismiss). Opsi instal manual via menu browser
+    // tetap valid karena syarat installability sudah terpenuhi — tampilkan caranya.
+    androidActions.style.display='none';
+    iosActions.style.display='none';
+    manualActions.style.display='block';
+    openOv('ov-install');
   }
 }
 // Hitung sisa waktu sejak terakhir kali modal ditampilkan, supaya jadwal retry 2 menit
@@ -1418,13 +1433,15 @@ function resumeInstallScheduleIfNeeded(){
   if(isPwaInstalled())return;
   let lastShown=0;
   try{lastShown=parseInt(localStorage.getItem('jw_install_last_shown')||'0',10);}catch(e){}
-  const elapsed=Date.now()-lastShown;
-  const remaining=lastShown?Math.max(0,INSTALL_RETRY_MS-elapsed):0;
   if(!lastShown){
-    // Belum pernah ditampilkan sama sekali — tunggu event beforeinstallprompt (Android) atau
-    // tampilkan setelah jeda singkat (iOS), ditangani terpisah di INIT.
+    // Belum pernah ditampilkan sama sekali (kunjungan pertama). Beri jeda singkat supaya
+    // beforeinstallprompt (kalau memang akan fire) sempat ditangkap dulu, baru tampilkan modal
+    // (otomatis pakai jalur manual kalau event tidak datang — lihat showInstallPrompt).
+    scheduleInstallPrompt(2500);
     return;
   }
+  const elapsed=Date.now()-lastShown;
+  const remaining=Math.max(0,INSTALL_RETRY_MS-elapsed);
   scheduleInstallPrompt(remaining);
 }
 async function doInstallApp(){
@@ -4207,14 +4224,7 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/sw.js').catch(e=>console.warn('[JAWARA] SW register gagal:',e));
 }
 if(!isPwaInstalled()){
-  if(isIOS()){
-    // iOS tidak punya event beforeinstallprompt — tampilkan instruksi manual sejak awal.
-    scheduleInstallPrompt(2500);
-  }else{
-    // Android/desktop: lanjutkan jadwal retry yang tersisa dari sesi sebelumnya (kalau ada).
-    resumeInstallScheduleIfNeeded();
-  }
-  // Selain itu: ditangani oleh listener 'beforeinstallprompt' (lihat di atas) untuk kemunculan pertama.
+  resumeInstallScheduleIfNeeded();
 }
 
 </script>
