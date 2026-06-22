@@ -1325,6 +1325,20 @@ img{display:block;}
   </button>
 </div>
 
+<!-- Panel search user untuk chat baru -->
+<div class="akt-chatroom" id="ov-search-user" style="z-index:470">
+  <div class="akt-cr-bar">
+    <button class="akt-cr-back" onclick="closeOv('ov-search-user')">‹</button>
+    <div class="akt-cr-nama">Chat Baru</div>
+  </div>
+  <div style="padding:10px 16px;border-bottom:1px solid #efefef">
+    <input type="text" id="search-user-input" placeholder="Cari nama pengguna..."
+      oninput="filterSearchUser(this.value)"
+      style="width:100%;padding:10px 16px;border:1.5px solid #dbdbdb;border-radius:24px;font-family:inherit;font-size:15px;outline:none;box-sizing:border-box">
+  </div>
+  <div id="search-user-list" style="overflow-y:auto;flex:1"></div>
+</div>
+
 <!-- Chat Room -->
 <div class="akt-chatroom" id="ov-chatroom">
   <div class="akt-cr-bar">
@@ -1759,12 +1773,7 @@ function switchOATab(tab){
   if(fab){
     if(tab==='chat'){
       fab.style.display='flex';
-      // FAB diklik → scroll ke bagian "Mulai percakapan baru"
-      fab.onclick=()=>{
-        const divider=document.getElementById('oa-body')?.querySelector('[data-section="baru"]');
-        if(divider)divider.scrollIntoView({behavior:'smooth'});
-        else{const b=document.getElementById('oa-body');if(b)b.scrollTop=b.scrollHeight;}
-      };
+      fab.onclick=()=>openSearchUserPanel();
     }else{
       fab.style.display='none';
     }
@@ -1901,8 +1910,8 @@ function renderChatTab(q=''){
     return{...r,nama,last:lastByRoom[r.id],unread:unreadByRoom[r.id]||0};
   }).sort((a,b)=>new Date(b.last.created_at)-new Date(a.last.created_at));
 
-  // user yang belum pernah diajak chat
-  const chattedUserIds=new Set((allMemsData||[]).filter(m=>m.user?.id!==sid).map(m=>m.user?.id));
+  // user yang belum pernah diajak chat - pakai user_id langsung dari member data
+  const chattedUserIds=new Set((allMemsData||[]).filter(m=>m.user_id!==sid).map(m=>m.user_id));
   const newUsers=(allUsers||[]).filter(u=>u.id!==sid&&!chattedUserIds.has(u.id));
 
   // filter search
@@ -2065,7 +2074,39 @@ async function startChatDengan(targetSid,targetNama){
 async function openChatInbox(){openSopramPanel('chat');}
 async function openNotifPanel(){openSopramPanel('notif');}
 async function openChatAdmin(){openSopramPanel('chat');}
-function openUserPicker(){openSopramPanel('chat');}
+function openUserPicker(){openSearchUserPanel();}
+
+let _allUsersForSearch=[];
+
+async function openSearchUserPanel(){
+  document.getElementById('ov-search-user').classList.add('show');
+  document.getElementById('search-user-input').value='';
+  const list=document.getElementById('search-user-list');
+  list.innerHTML='<div class="akt-empty">Memuat...</div>';
+  const r=await fetch(`${_SB_URL}/rest/v1/sopram_user?select=id,username&status=eq.aktif&order=username.asc&limit=300`,{headers:_H});
+  const sid=await getMySopramId();
+  _allUsersForSearch=(await r.json()||[]).filter(u=>u.id!==sid);
+  renderSearchUserList(_allUsersForSearch);
+}
+
+function renderSearchUserList(users){
+  const list=document.getElementById('search-user-list');
+  if(!users.length){list.innerHTML='<div class="akt-empty">Tidak ada pengguna ditemukan.</div>';return;}
+  const avaColors=['#0095f6','#833ab4','#fd1d1d','#e1306c','#f77737','#fcaf45','#4caf50','#009688'];
+  const colorFor=s=>avaColors[Math.abs([...s].reduce((a,c)=>a+c.charCodeAt(0),0))%avaColors.length];
+  list.innerHTML=users.map(u=>`
+    <div class="akt-row" onclick="closeOv('ov-search-user');startChatDengan(${u.id},'${esc(u.username)}')">
+      <div class="akt-ava" style="background:${colorFor(u.username)}">${u.username[0].toUpperCase()}</div>
+      <div class="akt-info">
+        <div class="akt-nama">${esc(u.username)}</div>
+      </div>
+    </div>`).join('');
+}
+
+function filterSearchUser(q){
+  const filtered=_allUsersForSearch.filter(u=>u.username?.toLowerCase().includes(q.toLowerCase()));
+  renderSearchUserList(filtered);
+}
 
 // ---- Web Push ----
 const _VAPID_PUBLIC_KEY='BFsnhsU9_8_bhgexhV4h8bzVkskJPYDyzQmHkjN4EpNpsGhzCLqPWgFn_NduzOPQMMlks4ud04zKvUbf-DzYCIY'; // VAPID public key JAWARA
