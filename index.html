@@ -1367,6 +1367,68 @@ img{display:block;}
   </div>
 </div>
 
+<!-- OV RESET PIN (Admin) -->
+<div class="ov" id="ov-reset-pin">
+  <div class="sheet" style="max-height:85vh;overflow-y:auto">
+    <div class="sh-handle"></div>
+    <div class="sh-body" style="padding-bottom:32px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px">🔑 Reset PIN User</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Cari user berdasarkan nama atau nomor HP, lalu set PIN baru.</div>
+      <div class="ferr" id="rpin-err" style="display:none"></div>
+
+      <!-- Step 1: Cari user -->
+      <div id="rpin-step1">
+        <div class="fg">
+          <label class="fl">Cari Nama / Nomor HP</label>
+          <input class="fi" type="text" id="rpin-cari" placeholder="Ketik nama atau nomor HP..." oninput="cariUserRpin(this.value)">
+        </div>
+        <div id="rpin-hasil" style="margin-top:4px"></div>
+        <div style="text-align:center;margin-top:16px">
+          <span onclick="closeOv('ov-reset-pin')" style="font-size:13px;color:var(--muted);cursor:pointer">Batal</span>
+        </div>
+      </div>
+
+      <!-- Step 2: Set PIN baru -->
+      <div id="rpin-step2" style="display:none">
+        <div style="background:#fce7f3;border-radius:12px;padding:14px;margin-bottom:16px">
+          <div style="font-weight:700;font-size:15px" id="rpin-nama-sel"></div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:2px" id="rpin-hp-sel"></div>
+        </div>
+        <div class="fg">
+          <label class="fl">PIN Baru (6 digit)</label>
+          <div style="display:flex;gap:8px;justify-content:center" id="rpin-boxes">
+            <input class="pin-box" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input class="pin-box" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input class="pin-box" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input class="pin-box" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input class="pin-box" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input class="pin-box" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          </div>
+        </div>
+        <button class="btn-masuk" style="background:#be185d;margin-top:8px" onclick="eksekusiResetPin()">Reset PIN</button>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="resetRpinStep()" style="font-size:13px;color:var(--muted);cursor:pointer">← Cari user lain</span>
+        </div>
+      </div>
+
+      <!-- Step 3: Sukses -->
+      <div id="rpin-step3" style="display:none;text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">✅</div>
+        <div style="font-weight:800;font-size:16px;margin-bottom:6px">PIN berhasil direset!</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:16px" id="rpin-sukses-info"></div>
+        <button class="btn-masuk" style="background:#25D366" id="rpin-wa-btn" onclick="kirimWaRpinBaru()">
+          💬 Beritahu via WhatsApp
+        </button>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="resetRpinStep()" style="font-size:13px;color:var(--muted);cursor:pointer">Reset user lain</span>
+          &nbsp;·&nbsp;
+          <span onclick="closeOv('ov-reset-pin')" style="font-size:13px;color:var(--muted);cursor:pointer">Selesai</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- OV LUPA PIN -->
 <div class="ov" id="ov-lupa-pin">
   <div class="sheet">
@@ -3210,6 +3272,109 @@ async function classifyUser(memberRow){
   return result;
 }
 
+// ---- RESET PIN (Admin) ----
+let _rpinSelected=null,_rpinBaru='';
+
+function bukaResetPin(){
+  if(!Adm){toast('Harus login sebagai admin','err');return;}
+  _rpinSelected=null;_rpinBaru='';
+  document.getElementById('rpin-cari').value='';
+  document.getElementById('rpin-hasil').innerHTML='';
+  document.getElementById('rpin-err').style.display='none';
+  document.getElementById('rpin-step1').style.display='block';
+  document.getElementById('rpin-step2').style.display='none';
+  document.getElementById('rpin-step3').style.display='none';
+  openOv('ov-reset-pin');
+}
+
+function resetRpinStep(){
+  document.getElementById('rpin-cari').value='';
+  document.getElementById('rpin-hasil').innerHTML='';
+  document.getElementById('rpin-err').style.display='none';
+  document.getElementById('rpin-step1').style.display='block';
+  document.getElementById('rpin-step2').style.display='none';
+  document.getElementById('rpin-step3').style.display='none';
+  // clear pin boxes
+  document.querySelectorAll('#rpin-boxes .pin-box').forEach(b=>b.value='');
+}
+
+let _rpinTimer=null;
+async function cariUserRpin(q){
+  const hasil=document.getElementById('rpin-hasil');
+  if(!q||q.length<2){hasil.innerHTML='';return;}
+  clearTimeout(_rpinTimer);
+  _rpinTimer=setTimeout(async()=>{
+    hasil.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0">Mencari...</div>';
+    const r=await fetch(`${_SB_URL}/rest/v1/ppob_member?select=id,nama,no_hp&or=(nama.ilike.*${encodeURIComponent(q)}*,no_hp.ilike.*${encodeURIComponent(q)}*)&limit=10`,{headers:_H});
+    const rows=await r.json()||[];
+    if(!rows.length){hasil.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0">Tidak ditemukan.</div>';return;}
+    hasil.innerHTML=rows.map(m=>`
+      <div onclick="pilihUserRpin(${m.id},'${esc(m.nama)}','${esc(m.no_hp)}')"
+        style="display:flex;align-items:center;gap:12px;padding:11px 10px;border:1.5px solid var(--bdr);border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff">
+        <div style="width:38px;height:38px;border-radius:50%;background:#be185d;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;flex-shrink:0">${(m.nama||'?')[0].toUpperCase()}</div>
+        <div>
+          <div style="font-weight:700;font-size:14px">${esc(m.nama)}</div>
+          <div style="font-size:12px;color:var(--muted)">${esc(m.no_hp)}</div>
+        </div>
+      </div>`).join('');
+  },400);
+}
+
+function pilihUserRpin(id,nama,hp){
+  _rpinSelected={id,nama,no_hp:hp};
+  document.getElementById('rpin-nama-sel').textContent=nama;
+  document.getElementById('rpin-hp-sel').textContent=hp;
+  document.getElementById('rpin-step1').style.display='none';
+  document.getElementById('rpin-step2').style.display='block';
+  // init PIN boxes
+  const boxes=document.querySelectorAll('#rpin-boxes .pin-box');
+  boxes.forEach((b,i)=>{
+    b.value='';
+    b.oninput=()=>{b.value=b.value.replace(/[^0-9]/g,'');if(b.value&&i<5)boxes[i+1].focus();};
+    b.onkeydown=(e)=>{if(e.key==='Backspace'&&!b.value&&i>0)boxes[i-1].focus();};
+  });
+  boxes[0].focus();
+}
+
+async function eksekusiResetPin(){
+  if(!_rpinSelected)return;
+  const boxes=document.querySelectorAll('#rpin-boxes .pin-box');
+  const pin=[...boxes].map(b=>b.value).join('');
+  const errEl=document.getElementById('rpin-err');
+  errEl.style.display='none';
+  if(pin.length!==6||!/^\d{6}$/.test(pin)){
+    errEl.textContent='Masukkan PIN 6 digit angka.';errEl.style.display='block';return;
+  }
+  const btn=document.querySelector('#rpin-step2 .btn-masuk');
+  btn.disabled=true;btn.textContent='Menyimpan...';
+  try{
+    // hash PIN sama seperti doLogin
+    const enc=new TextEncoder().encode(pin);
+    const buf=await crypto.subtle.digest('SHA-256',enc);
+    const pinHash=Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const r=await fetch(`${_SB_URL}/rest/v1/ppob_member?id=eq.${_rpinSelected.id}`,{
+      method:'PATCH',headers:{..._H,'Prefer':'return=minimal'},
+      body:JSON.stringify({pin_hash:pinHash})
+    });
+    if(!r.ok)throw new Error('Gagal update');
+    _rpinBaru=pin;
+    document.getElementById('rpin-sukses-info').textContent=`PIN untuk ${_rpinSelected.nama} sudah diubah. Beritahu user PIN barunya via WhatsApp.`;
+    document.getElementById('rpin-step2').style.display='none';
+    document.getElementById('rpin-step3').style.display='block';
+  }catch(e){
+    errEl.textContent='Gagal reset PIN. Coba lagi.';errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='Reset PIN';
+  }
+}
+
+function kirimWaRpinBaru(){
+  if(!_rpinSelected||!_rpinBaru)return;
+  const wa=(_rpinSelected.no_hp||'').replace(/^0/,'62').replace(/^\+/,'').replace(/[^0-9]/g,'');
+  const pesan=`Halo *${_rpinSelected.nama}*,\n\nPIN JAWARA Anda telah direset oleh admin.\n\nPIN baru Anda: *${_rpinBaru}*\n\nSilahkan login di ubnb.pw dan segera ganti PIN Anda setelah masuk.\n\nTerima kasih 🙏`;
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(pesan)}`, '_blank');
+}
+
 // ---- LUPA PIN ----
 let _lupaPinMember=null;
 
@@ -3795,7 +3960,8 @@ function renderAkun(){
       <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:24px">Login untuk belanja dan akses<br>semua fitur JAWARA Market</div>
       <button class="btn-primary" onclick="openOv('ov-login')">Login Sekarang</button>
       ${Adm?`<button class="btn-primary" style="background:#1f2937;margin-top:10px" onclick="bukaApproval()">🔐 Approval Admin (${esc(Adm.username)})</button>
-      <button class="btn-primary" style="background:#5b21b6;margin-top:10px" onclick="window.open('jawara-admin-chat-monitor.html','_blank')">🛡️ Pemantauan Chat User</button>`:''}
+      <button class="btn-primary" style="background:#5b21b6;margin-top:10px" onclick="window.open('jawara-admin-chat-monitor.html','_blank')">🛡️ Pemantauan Chat User</button>
+      <button class="btn-primary" style="background:#be185d;margin-top:10px" onclick="bukaResetPin()">🔑 Reset PIN User</button>`:''}
     </div>`;return;
   }
   el.innerHTML=`
@@ -3859,6 +4025,11 @@ function renderAkun(){
         <div class="mrow" onclick="window.open('jawara-admin-chat-monitor.html','_blank')">
           <div class="mico" style="background:#ede9fe">🛡️</div>
           <div class="mbody"><div class="mtitle">Pemantauan Chat User</div><div class="msub">Lihat & awasi semua percakapan</div></div>
+          <div class="marr">›</div>
+        </div>
+        <div class="mrow" onclick="bukaResetPin()">
+          <div class="mico" style="background:#fce7f3">🔑</div>
+          <div class="mbody"><div class="mtitle">Reset PIN User</div><div class="msub">Bantu user yang lupa PIN</div></div>
           <div class="marr">›</div>
         </div>`:''}
         <div class="mrow" onclick="doLogout()">
