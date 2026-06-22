@@ -1631,6 +1631,17 @@ function tanyaAdmin(){
 let _mySopramId=null,_currentRoomId=null,_chatPoll=null,_allSopramUsers=[];
 let _sopramTab='notif',_sopramChatData={rooms:[],allUsers:[]};
 
+function waktuRelatif(ts){
+  const diff=(Date.now()-new Date(ts).getTime())/1000;
+  if(diff<60)return'baru saja';
+  if(diff<3600)return Math.floor(diff/60)+' mnt';
+  if(diff<86400)return Math.floor(diff/3600)+' jam';
+  return Math.floor(diff/86400)+' hari';
+}
+function notifIcon(tipe){
+  return{post_baru:'📰',user_baru:'🙋',barang_baru:'🛍️',like:'❤️',comment:'💬',pesan:'✉️',admin_broadcast:'📢',marketplace_msg:'🛒'}[tipe]||'🔔';
+}
+
 async function getMySopramId(){
   if(_mySopramId)return _mySopramId;
   if(!U?.jamaah_did)return null;
@@ -1651,25 +1662,28 @@ async function refreshBadge(){
     const sid=await getMySopramId();
     if(!sid)return;
 
-    // notif unread
-    const rN=await fetch(`${_SB_URL}/rest/v1/sopram_notif?user_id=eq.${sid}&dibaca=eq.false&select=id`,{headers:{..._H,'Prefer':'count=exact','Range':'0-0'}});
-    const notifCount=parseInt(rN.headers.get('Content-Range')?.split('/')[1]||'0');
+    // notif unread — pakai RPC yang sudah ada
+    const rN=await fetch(`${_SB_URL}/rest/v1/rpc/fn_hitung_badge_jamaah`,{
+      method:'POST',headers:_H,body:JSON.stringify({p_jamaah_did:U.jamaah_did})
+    });
+    const notifCount=await rN.json()||0;
 
-    // chat unread: pesan di room saya yang bukan dari saya, lebih dari last_read
-    const rM=await fetch(`${_SB_URL}/rest/v1/sopram_chat_member?user_id=eq.${sid}&select=room_id`,{headers:_H});
+    // chat unread — pakai last_read_msg_id di sopram_chat_member
+    const rM=await fetch(`${_SB_URL}/rest/v1/sopram_chat_member?user_id=eq.${sid}&status=eq.active&select=room_id,last_read_msg_id`,{headers:_H});
     const mems=await rM.json()||[];
     let chatUnread=0;
-    if(mems.length){
-      const rIds=mems.map(m=>m.room_id).join(',');
-      const rC=await fetch(`${_SB_URL}/rest/v1/sopram_chat_message?room_id=in.(${rIds})&sender_id=neq.${sid}&dibaca=eq.false&select=id`,{headers:{..._H,'Prefer':'count=exact','Range':'0-0'}});
-      chatUnread=parseInt(rC.headers.get('Content-Range')?.split('/')[1]||'0');
+    for(const m of mems){
+      const after=m.last_read_msg_id?`&id=gt.${m.last_read_msg_id}`:'';
+      const rC=await fetch(`${_SB_URL}/rest/v1/sopram_chat_message?room_id=eq.${m.room_id}&sender_id=neq.${sid}${after}&select=id`,{
+        headers:{..._H,'Prefer':'count=exact','Range':'0-0'}
+      });
+      chatUnread+=parseInt(rC.headers.get('Content-Range')?.split('/')[1]||'0');
     }
 
     const total=notifCount+chatUnread;
     const b=document.getElementById('notifbadge');
     if(b){
       if(total>0){b.textContent=total>99?'99+':total;b.style.display='flex';
-        // isi tombol jadi hati merah kalau ada notif
         b.parentElement.childNodes[0].textContent='❤️';
       }else{b.style.display='none';b.parentElement.childNodes[0].textContent='🤍';}
     }
@@ -1730,6 +1744,7 @@ async function loadNotifTab(){
     `).join('');
   }catch(e){body.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">Gagal memuat.</div>';}
 }
+
 
 function groupByDate(items,field){
   const today=new Date().toDateString();
@@ -1793,10 +1808,13 @@ function renderChatTab(q=''){
   const lastByRoom={};
   (lastMsgs||[]).forEach(m=>{if(!lastByRoom[m.room_id])lastByRoom[m.room_id]=m;});
 
-  // hitung unread per room
+  // hitung unread per room pakai last_read_msg_id
   const unreadByRoom={};
+  const myMemsByRoom={};
+  (allMemsData||[]).filter(m=>m.user_id===sid||m.user?.id===sid).forEach(m=>{myMemsByRoom[m.room_id]=m.last_read_msg_id||0;});
   (lastMsgs||[]).forEach(m=>{
-    if(m.sender_id!==sid&&m.dibaca===false){unreadByRoom[m.room_id]=(unreadByRoom[m.room_id]||0)+1;}
+    const lastRead=myMemsByRoom[m.room_id]||0;
+    if(m.sender_id!==sid&&m.id>lastRead){unreadByRoom[m.room_id]=(unreadByRoom[m.room_id]||0)+1;}
   });
 
   // broadcast room — pinned di atas
@@ -1884,9 +1902,20 @@ async function openChatRoom(roomId,nama){
   openOv('ov-chat-room');
   await loadChatRoomMessages();
   _chatPoll=setInterval(loadChatRoomMessages,6000);
-  // tandai dibaca
+  // tandai dibaca: update last_read_msg_id ke id pesan terakhir
   const sid=await getMySopramId();
   if(sid){
+    // ambil id pesan terakhir di room ini
+    fetch(`${_SB_URL}/rest/v1/sopram_chat_message?room_id=eq.${roomId}&order=id.desc&limit=1&select=id`,{headers:_H})
+      .then(r=>r.json()).then(msgs=>{
+        const lastId=msgs?.[0]?.id;
+        if(lastId){
+          fetch(`${_SB_URL}/rest/v1/sopram_chat_member?room_id=eq.${roomId}&user_id=eq.${sid}`,{
+            method:'PATCH',headers:{..._H,'Prefer':'return=minimal'},body:JSON.stringify({last_read_msg_id:lastId})
+          }).catch(()=>{});
+        }
+      }).catch(()=>{});
+    // tandai notif sopram juga
     fetch(`${_SB_URL}/rest/v1/sopram_notif?user_id=eq.${sid}&tipe=eq.pesan&ref_id=eq.${roomId}&dibaca=eq.false`,{
       method:'PATCH',headers:{..._H,'Prefer':'return=minimal'},body:JSON.stringify({dibaca:true})
     }).catch(()=>{});
