@@ -934,6 +934,9 @@ img{display:block;}
           </div>
         </div>
         <button class="btn-masuk" id="btn-masuk" onclick="doLogin()">Masuk ke JAWARA</button>
+        <div style="text-align:center;margin-top:10px">
+          <span onclick="bukaLupaPin()" style="font-size:13px;color:var(--g);font-weight:700;cursor:pointer;text-decoration:underline">Lupa PIN?</span>
+        </div>
         <div style="margin-top:14px;text-align:center;background:#f0fdf4;border-radius:10px;padding:12px 14px">
           <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Sudah pernah akses? <strong style="color:var(--ink)">Silahkan login</strong> di atas.</div>
           <div style="font-size:14px;font-weight:700;color:var(--g)">Baru pertama? Daftar dulu 👇</div>
@@ -1299,6 +1302,14 @@ img{display:block;}
 .bbl.out{align-self:flex-end;background:#0095f6;color:#fff;border-bottom-right-radius:4px;}
 .bbl.in{align-self:flex-start;background:#efefef;color:#111;border-bottom-left-radius:4px;}
 .bbl-time{font-size:11px;opacity:.65;margin-top:4px;text-align:right;}
+/* Context menu bubble */
+.bbl-ctx{position:fixed;z-index:500;background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:6px 0;min-width:160px;display:none;}
+.bbl-ctx.show{display:block;}
+.bbl-ctx-item{display:flex;align-items:center;gap:10px;padding:13px 18px;font-size:15px;font-weight:500;cursor:pointer;color:#111;}
+.bbl-ctx-item:active{background:#f5f5f5;}
+.bbl-ctx-item.red{color:#e00;}
+.bbl-ctx-overlay{position:fixed;inset:0;z-index:499;display:none;}
+.bbl-ctx-overlay.show{display:block;}
 </style>
 
 <div class="ov-akt" id="ov-aktivitas">
@@ -1354,6 +1365,61 @@ img{display:block;}
       <button class="akt-cr-send" onclick="submitChatRoom()">➤</button>
     </div>
   </div>
+</div>
+
+<!-- OV LUPA PIN -->
+<div class="ov" id="ov-lupa-pin">
+  <div class="sheet">
+    <div class="sh-handle"></div>
+    <div class="sh-body" style="padding-bottom:32px">
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px">🔑 Lupa PIN</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Masukkan nomor HP terdaftar. Admin JAWARA akan menghubungi Anda via WhatsApp untuk verifikasi dan reset PIN.</div>
+      <div class="ferr" id="lupa-err" style="display:none"></div>
+
+      <!-- Step 1: Input nomor HP -->
+      <div id="lupa-step1">
+        <div class="fg">
+          <label class="fl">Nomor HP Terdaftar</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:var(--bg);border:1.5px solid var(--bdr);border-radius:var(--r8);padding:11px 12px;font-size:13px;font-weight:700;color:var(--sub);flex-shrink:0">🇮🇩 +62</div>
+            <input class="fi" type="tel" id="lupa-hp" placeholder="81234567890" style="flex:1" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+          </div>
+        </div>
+        <button class="btn-masuk" onclick="cekLupaPin()">Lanjutkan</button>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="closeOv('ov-lupa-pin')" style="font-size:13px;color:var(--muted);cursor:pointer">Batal</span>
+        </div>
+      </div>
+
+      <!-- Step 2: Konfirmasi identitas & instruksi WA -->
+      <div id="lupa-step2" style="display:none">
+        <div style="background:#f0fdf4;border-radius:12px;padding:16px;margin-bottom:16px;text-align:center">
+          <div style="font-size:22px;margin-bottom:8px">✅</div>
+          <div style="font-size:15px;font-weight:700;color:var(--g)" id="lupa-nama-confirm"></div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px">Akun ditemukan</div>
+        </div>
+        <div style="font-size:14px;color:var(--ink);margin-bottom:16px;line-height:1.6">
+          Klik tombol di bawah untuk mengirim pesan WhatsApp ke Admin JAWARA. Admin akan memverifikasi identitas Anda dan mereset PIN dalam waktu singkat.
+        </div>
+        <button class="btn-masuk" id="lupa-wa-btn" onclick="kirimWaLupaPin()" style="background:#25D366">
+          💬 Hubungi Admin via WhatsApp
+        </button>
+        <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted)">
+          Setelah PIN direset oleh admin, silahkan login kembali.
+        </div>
+        <div style="text-align:center;margin-top:12px">
+          <span onclick="resetLupaPin()" style="font-size:13px;color:var(--muted);cursor:pointer">← Kembali</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Context menu bubble chat -->
+<div class="bbl-ctx-overlay" id="bbl-ctx-overlay" onclick="hideBubbleMenu()"></div>
+<div class="bbl-ctx" id="bubble-ctx-menu">
+  <div class="bbl-ctx-item" onclick="ctxSalin()">📋 Salin pesan</div>
+  <div class="bbl-ctx-item red" id="bctx-hapus" onclick="ctxHapus()" style="display:none">🗑️ Hapus pesan</div>
 </div>
 
 <!-- TOAST -->
@@ -1687,7 +1753,7 @@ function tanyaAdmin(){
 
 
 
-let _mySopramId=null,_currentRoomId=null,_chatPoll=null,_allSopramUsers=[];
+let _mySopramId=null,_currentRoomId=null,_currentRoomIsBroadcast=false,_chatPoll=null,_allSopramUsers=[];
 let _sopramTab='notif',_sopramChatData={rooms:[],allUsers:[]};
 
 function waktuRelatif(ts){
@@ -1924,7 +1990,7 @@ function renderChatTab(q=''){
 
   // broadcast
   fBroad.forEach(r=>{
-    html+=chatRowHtml(r.id,r.nama||'Pengumuman UBNB','📣','#e8f0fe',r.last?.isi||'Belum ada pesan',r.last?.created_at,r.unread,'BROADCAST');
+    html+=chatRowHtml(r.id,r.nama||'Pengumuman UBNB','📣','#e8f0fe',r.last?.isi||'Belum ada pesan',r.last?.created_at,r.unread,'BROADCAST','',true);
   });
 
   // percakapan aktif
@@ -1949,12 +2015,12 @@ function renderChatTab(q=''){
   body.innerHTML=html;
 }
 
-function chatRowHtml(roomId,nama,ico,icoColor,preview,ts,unread,tag,newUserId=''){
+function chatRowHtml(roomId,nama,ico,icoColor,preview,ts,unread,tag,newUserId='',isBroadcast=false){
   const avaColors=['#0095f6','#833ab4','#fd1d1d','#e1306c','#f77737','#fcaf45','#4caf50','#009688'];
   const colorFor=s=>avaColors[Math.abs([...s].reduce((a,c)=>a+c.charCodeAt(0),0))%avaColors.length];
   const col=ico.length>2?icoColor:colorFor(nama||'x');
   const avaContent=ico.length>2?`<span style="font-size:24px">${ico}</span>`:`<span style="font-weight:800;font-size:20px">${ico}</span>`;
-  const action=roomId?`openChatRoom(${roomId},'${esc(nama)}')`:`startChatDengan(${newUserId},'${esc(nama)}')`;
+  const action=roomId?`openChatRoom(${roomId},'${esc(nama)}',${isBroadcast})`:`startChatDengan(${newUserId},'${esc(nama)}')`;
   const isUnread=unread>0;
   return `<div class="akt-row" onclick="${action}">
     <div class="akt-ava" style="background:${col}">${avaContent}</div>
@@ -1972,16 +2038,30 @@ function chatRowHtml(roomId,nama,ico,icoColor,preview,ts,unread,tag,newUserId=''
 function filterSopramChat(q){renderChatTab(q);}
 
 // ---- Chat Room ----
-async function openChatRoom(roomId,nama){
+async function openChatRoom(roomId,nama,isBroadcast=false){
   if(!U?.jamaah_did){openOv('ov-login');return;}
   if(_chatPoll){clearInterval(_chatPoll);_chatPoll=null;}
   _currentRoomId=roomId;
+  _currentRoomIsBroadcast=isBroadcast;
   document.getElementById('chat-room-ttl').textContent=nama;
   // set avatar warna
   const avaColors=['#0095f6','#833ab4','#fd1d1d','#e1306c','#f77737','#fcaf45','#4caf50','#009688'];
   const col=avaColors[Math.abs([...(nama||'x')].reduce((a,c)=>a+c.charCodeAt(0),0))%avaColors.length];
   const crAva=document.getElementById('cr-ava');
   if(crAva){crAva.style.background=col;crAva.textContent=(nama||'?')[0].toUpperCase();}
+  // sembunyikan/tampilkan input sesuai hak akses broadcast
+  const foot=document.querySelector('.akt-cr-foot');
+  if(foot){
+    if(isBroadcast&&!Adm){
+      foot.innerHTML='<div style="text-align:center;padding:10px;font-size:13px;color:#aaa">Hanya admin yang dapat mengirim pengumuman</div>';
+    }else{
+      foot.innerHTML=`<div class="akt-cr-inp-row">
+        <textarea class="akt-cr-inp" id="chat-room-input" rows="1" placeholder="${isBroadcast?'Tulis pengumuman...':'Tulis pesan...'}"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitChatRoom();}"></textarea>
+        <button class="akt-cr-send" onclick="submitChatRoom()">➤</button>
+      </div>`;
+    }
+  }
   // tutup panel & buka chat room
   document.getElementById('ov-aktivitas').classList.remove('show');
   document.getElementById('ov-chatroom').classList.add('show');
@@ -2008,21 +2088,75 @@ async function openChatRoom(roomId,nama){
   }
 }
 
+// Context menu untuk bubble chat
+let _ctxMsgId=null,_ctxMsgIsi='',_ctxMsgMine=false;
+
+function showBubbleMenu(msgId,isi,isMine,isBroadcast,event){
+  _ctxMsgId=msgId;_ctxMsgIsi=isi;_ctxMsgMine=isMine;
+  const menu=document.getElementById('bubble-ctx-menu');
+  const overlay=document.getElementById('bbl-ctx-overlay');
+  if(!menu)return;
+  document.getElementById('bctx-hapus').style.display=(isMine||Adm)?'flex':'none';
+  // posisi menu di dekat tap/klik
+  const x=event?.clientX||window.innerWidth/2;
+  const y=event?.clientY||window.innerHeight/2;
+  menu.style.left=Math.min(x,window.innerWidth-170)+'px';
+  menu.style.top=Math.min(y+10,window.innerHeight-120)+'px';
+  menu.classList.add('show');
+  if(overlay)overlay.classList.add('show');
+}
+
+function hideBubbleMenu(){
+  document.getElementById('bubble-ctx-menu')?.classList.remove('show');
+  document.getElementById('bbl-ctx-overlay')?.classList.remove('show');
+}
+
+async function ctxSalin(){
+  try{await navigator.clipboard.writeText(_ctxMsgIsi);toast('Pesan disalin','ok');}
+  catch(e){toast('Gagal salin','err');}
+  hideBubbleMenu();
+}
+
+async function ctxHapus(){
+  if(!_ctxMsgId)return;
+  if(!confirm('Hapus pesan ini?')){hideBubbleMenu();return;}
+  await fetch(`${_SB_URL}/rest/v1/sopram_chat_message?id=eq.${_ctxMsgId}`,{
+    method:'PATCH',headers:{..._H,'Prefer':'return=minimal'},
+    body:JSON.stringify({deleted_at:new Date().toISOString()})
+  });
+  hideBubbleMenu();
+  loadChatRoomMessages();
+}
+
 async function loadChatRoomMessages(){
   if(!_currentRoomId)return;
   const body=document.getElementById('chat-room-body');
   const sid=await getMySopramId();
+
+  // cek apakah ini broadcast room
+  const isBroadcast=_currentRoomIsBroadcast||false;
+
   const r=await fetch(`${_SB_URL}/rest/v1/sopram_chat_message?room_id=eq.${_currentRoomId}&order=created_at.asc&limit=300`,{headers:_H});
   const msgs=await r.json();
   if(!msgs?.length){
-    body.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">Belum ada pesan. Mulai percakapan!</div>';
+    body.innerHTML='<div style="text-align:center;padding:30px;color:#aaa;font-size:14px">Belum ada pesan. Mulai percakapan!</div>';
     return;
   }
   const wasAtBottom=body.scrollHeight-body.scrollTop-body.clientHeight<80;
   body.innerHTML=msgs.map(m=>{
+    if(m.deleted_at){
+      return `<div style="align-self:center;font-size:12px;color:#aaa;font-style:italic;padding:4px 0">⊘ Pesan dihapus</div>`;
+    }
     const kanan=m.sender_id===sid;
-    return `<div class="bbl ${kanan?'out':'in'}">
-      ${esc(m.isi||'[foto]')}
+    const isi=esc(m.isi||'');
+    const msgId=m.id;
+    const isMine=kanan;
+    return `<div class="bbl ${kanan?'out':'in'}"
+      oncontextmenu="event.preventDefault();showBubbleMenu(${msgId},'${isi.replace(/'/g,"\\'")}',${isMine},${isBroadcast},event)"
+      ontouchstart="(()=>{const e=event;window._bblTimer=setTimeout(()=>showBubbleMenu(${msgId},'${isi.replace(/'/g,"\\'")}',${isMine},${isBroadcast},e),500)})()"
+      ontouchend="clearTimeout(window._bblTimer)"
+      ontouchmove="clearTimeout(window._bblTimer)">
+      ${isi}
       <div class="bbl-time">${new Date(m.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</div>
     </div>`;
   }).join('');
@@ -3074,6 +3208,64 @@ async function classifyUser(memberRow){
     }catch(e){}
   }
   return result;
+}
+
+// ---- LUPA PIN ----
+let _lupaPinMember=null;
+
+function bukaLupaPin(){
+  closeOv('ov-login');
+  _lupaPinMember=null;
+  document.getElementById('lupa-hp').value='';
+  document.getElementById('lupa-err').style.display='none';
+  document.getElementById('lupa-step1').style.display='block';
+  document.getElementById('lupa-step2').style.display='none';
+  openOv('ov-lupa-pin');
+}
+
+function resetLupaPin(){
+  document.getElementById('lupa-step1').style.display='block';
+  document.getElementById('lupa-step2').style.display='none';
+  document.getElementById('lupa-err').style.display='none';
+}
+
+async function cekLupaPin(){
+  const hp=document.getElementById('lupa-hp').value.trim();
+  const errEl=document.getElementById('lupa-err');
+  errEl.style.display='none';
+  if(!hp||hp.length<8){errEl.textContent='Masukkan nomor HP yang valid';errEl.style.display='block';return;}
+
+  const btn=document.querySelector('#lupa-step1 .btn-masuk');
+  btn.disabled=true;btn.textContent='Mencari...';
+
+  // normalize HP sama seperti doLogin
+  const formats=['0'+hp,'62'+hp,'+62'+hp,hp];
+  try{
+    const r=await fetch(`${_SB_URL}/rest/v1/ppob_member?select=id,nama,no_hp&no_hp=in.(${formats.map(f=>`"${f}"`).join(',')})&limit=1`,{headers:_H});
+    const rows=await r.json();
+    if(!rows?.length){
+      errEl.textContent='Nomor HP tidak ditemukan. Pastikan nomor yang Anda masukkan sudah benar.';
+      errEl.style.display='block';
+      return;
+    }
+    _lupaPinMember=rows[0];
+    document.getElementById('lupa-nama-confirm').textContent=_lupaPinMember.nama||'Anggota JAWARA';
+    document.getElementById('lupa-step1').style.display='none';
+    document.getElementById('lupa-step2').style.display='block';
+  }catch(e){
+    errEl.textContent='Terjadi kesalahan. Coba lagi.';errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='Lanjutkan';
+  }
+}
+
+function kirimWaLupaPin(){
+  if(!_lupaPinMember)return;
+  const wa=S.wa_center||WA_DEFAULT;
+  const nama=_lupaPinMember.nama||'Anggota';
+  const hp=_lupaPinMember.no_hp||'-';
+  const pesan=`Halo Admin JAWARA,\n\nSaya *${nama}* (No HP: ${hp}) lupa PIN JAWARA saya.\n\nMohon bantu reset PIN saya. Terima kasih 🙏`;
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(pesan)}`, '_blank');
 }
 
 function bukaRegister(){
