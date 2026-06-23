@@ -78,11 +78,12 @@ body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:v
 .op-stat .osl{font-size:10px;color:var(--muted);margin-top:2px}
 
 /* filter bar */
-.op-filter{padding:10px 16px;background:#fff;border-bottom:1px solid var(--border);
-  display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:106px;z-index:88}
-.op-filter select{padding:6px 10px;border:1px solid var(--border);border-radius:20px;
-  font-size:12px;background:var(--bg);outline:none;cursor:pointer}
-.op-filter .export-btn{margin-left:auto;background:var(--pri);color:#fff;border:none;
+.op-filter{padding:8px 16px;background:#fff;border-bottom:1px solid var(--border);
+  display:flex;gap:6px;align-items:center;flex-wrap:nowrap;position:sticky;top:106px;z-index:88}
+.filter-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:20px;
+  padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;color:var(--txt)}
+.filter-btn.active{background:var(--pri);color:#fff;border-color:var(--pri)}
+.export-btn{background:var(--pri);color:#fff;border:none;
   border-radius:20px;padding:6px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px}
 
 /* tabel */
@@ -287,18 +288,15 @@ table.op-table td.td-c{text-align:center}
       <option value="angsur">Angsur</option>
       <option value="belum">Belum</option>
     </select>
-    <button class="export-btn" onclick="showExportPanel()">📊 Export</button>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="export-btn" onclick="doExport('excel')">⬇ XLS</button>
+      <button class="export-btn" style="background:#555" onclick="doExport('pdf')">🖨 PDF</button>
+    </div>
   </div>
 
   <!-- Tabel -->
   <div class="op-table-wrap">
-    <div id="exportPanel" class="hide" style="padding:12px 0">
-      <div class="export-panel">
-        <button class="btn btn-ghost btn-sm" onclick="doExport('excel')">⬇ Excel / CSV</button>
-        <button class="btn btn-ghost btn-sm" onclick="doExport('pdf')">🖨 Print PDF</button>
-        <button class="btn btn-ghost btn-sm" onclick="hide('exportPanel')">✕</button>
-      </div>
-    </div>
+
     <table class="op-table" id="opTable">
       <thead>
         <tr>
@@ -625,22 +623,36 @@ async function refreshData(){
   let jPool=allJamaah;
   if(curOp.scope!=='Desa') jPool=allJamaah.filter(j=>j.pw===curOp.scope);
 
-  // Ambil kesanggupan + pembayaran
-  const {data:ksAll}=await sb.from('aj_kesanggupan').select('*,aj_pembayaran(id,tanggal,jumlah,penerima,operator)').order('jamaah_id');
-  const ksMap={};
-  (ksAll||[]).forEach(k=>{if(k.jamaah_id)ksMap[k.jamaah_id]=k;});
+  // Ambil semua kesanggupan — tanpa filter scope di DB (filter di client)
+  const [kesRes, payRes] = await Promise.all([
+    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nilai,status,operator').not('jamaah_id','is',null),
+    sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator').not('jamaah_id','is',null).order('tanggal',{ascending:true})
+  ]);
+  const ksAll = kesRes.data||[];
+  const payAll = payRes.data||[];
 
-  // Build tableData
+  // Group pembayaran per jamaah_id
+  const payMap={};
+  payAll.forEach(p=>{
+    if(!payMap[p.jamaah_id]) payMap[p.jamaah_id]=[];
+    payMap[p.jamaah_id].push(p);
+  });
+
+  // Build ksMap
+  const ksMap={};
+  ksAll.forEach(k=>{if(k.jamaah_id) ksMap[k.jamaah_id]=k;});
+
+  // Build tableData — semua jamaah dalam scope, ada kesanggupan atau tidak
   tableData=jPool.map(j=>{
     const ks=ksMap[j.id];
-    const pays=ks?.aj_pembayaran||[];
-    const totalPay=pays.reduce((s,p)=>s+p.jumlah,0);
+    const pays=payMap[j.id]||[];
+    const totalPay=pays.reduce((s,p)=>s+Number(p.jumlah),0);
     const lembar=ks?.jumlah_lembar||0;
     const nilai=lembar*HARGA;
-    const sisa=nilai-totalPay;
+    const sisa=Math.max(0,nilai-totalPay);
     return{
       id:j.id, nama:j.nama, pw:j.pw, gender:j.gender, no_urut:j.no_urut,
-      lembar, nilai, status:ks?.status||'belum', terbayar:totalPay, sisa:Math.max(0,sisa),
+      lembar, nilai, status:ks?.status||'belum', terbayar:totalPay, sisa,
       pays
     };
   });
@@ -680,6 +692,7 @@ function applyFilter(){
     if(status && r.status!==status) return false;
     return true;
   });
+  updateFilterTag();
   renderTable();
 }
 
@@ -867,10 +880,31 @@ async function savePay(){
 }
 
 // ══════════════════════════════════
+// FILTER TOGGLE
+// ══════════════════════════════════
+function toggleFilterPanel(){
+  const p=$('filterPanel'), btn=$('filterToggleBtn');
+  const open=p.classList.toggle('hide')==false;
+  btn.classList.toggle('active', open);
+  btn.textContent=open?'🔼 Filter':'🔽 Filter';
+}
+function resetFilter(){
+  $('fPW').value=''; $('fGender').value=''; $('fStatus').value='';
+  hide('filterActiveTag');
+  applyFilter();
+}
+function updateFilterTag(){
+  const pw=$('fPW').value, g=$('fGender').value, s=$('fStatus').value;
+  const active=pw||g||s;
+  active?show('filterActiveTag'):hide('filterActiveTag');
+  const tags=[];
+  if(pw)tags.push(pw); if(g)tags.push(g==='L'?'L':'P'); if(s)tags.push(s);
+  $('filterActiveTag').textContent=tags.length?'Filter: '+tags.join(', '):'';
+}
+
+// ══════════════════════════════════
 // EXPORT
 // ══════════════════════════════════
-function showExportPanel(){$('exportPanel').classList.toggle('hide');}
-
 function doExport(type){
   hide('exportPanel');
   const d=filteredData;
