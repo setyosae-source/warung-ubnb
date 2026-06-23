@@ -21,7 +21,7 @@
     <div class="salam"><i>Assalaamu'alaikum Warahmatullaahi Wabarakaatuh</i><br>Silakan input nama untuk melihat status kesanggupan dan pembayaran.</div>
     <div class="login-card">
       <h3>Masukkan Nama</h3>
-      <div class="fg"><input id="wlcSearch" placeholder="Ketik nama jamaah..." autocomplete="off" oninput="searchWelcome()"></div>
+      <div class="fg"><input id="wlcSearch" placeholder="Ketik nama jamaah / ID..." autocomplete="off" onfocus="showWelcomeList()" oninput="searchWelcome()"></div>
       <div id="wlcResult" class="search-res hide"></div>
       <div id="wlcLoad" class="hint" style="text-align:center;margin-top:9px">Memuat data...</div>
     </div>
@@ -81,7 +81,7 @@
 </section>
 
 <div id="inputModal" class="modal-ov hide" onclick="if(event.target===this)closeInput()"><div class="modal"><div class="modal-h"><h3 id="inputTitle">Input</h3><button class="x" onclick="closeInput()">×</button></div>
-  <div class="fg"><label>Cari Jamaah</label><input id="mSearch" placeholder="Ketik nama..." autocomplete="off" oninput="searchModalName()"><div id="mResult" class="search-res hide"></div></div>
+  <div class="fg"><label>Cari Jamaah</label><input id="mSearch" placeholder="Ketik nama / ID..." autocomplete="off" onfocus="searchModalName(true)" oninput="searchModalName()"><div id="mResult" class="search-res hide"></div></div>
   <div id="mSelected" class="info-box hide"></div>
   <div id="formKes" class="hide">
     <div class="fg"><label>Nilai Kesanggupan (Rp)</label><input id="kesNilai" type="number" inputmode="numeric" placeholder="Contoh: 500000" oninput="updateNilaiHint('kesNilai','kesHint')"><div class="hint" id="kesHint"></div></div>
@@ -107,9 +107,9 @@
     <div class="hint" style="margin-top:8px">Kode awal di file ini: <b>SETYO-UBNB</b>. Ganti nilai <b>ADMIN_SECRET</b> di kode HTML sebelum dipakai umum.</div>
   </div>
   <div id="adminFormBox" class="hide">
-    <div class="fg"><label>Cari Jamaah yang akan dijadikan Operator</label><input id="adminOpSearch" placeholder="Ketik nama jamaah..." oninput="searchAdminOperator()"><div id="adminOpResult" class="search-res hide"></div></div>
+    <div class="fg"><label>Cari Jamaah yang akan dijadikan Operator</label><input id="adminOpSearch" placeholder="Ketik nama jamaah / ID..." onfocus="searchAdminOperator(true)" oninput="searchAdminOperator()"><div id="adminOpResult" class="search-res hide"></div></div>
     <div id="adminOpSelected" class="info-box hide"></div>
-    <div class="split"><div class="fg"><label>Scope</label><select id="adminScope" onchange="onAdminScopeChange()"><option value="kelompok">Kelompok</option><option value="desa">Desa</option></select></div><div class="fg" id="adminKelBox"><label>Kelompok</label><select id="adminKel"></select></div></div>
+    <div class="split"><div class="fg"><label>Scope</label><select id="adminScope" onchange="onAdminScopeChange()"><option value="Kelompok">Kelompok</option><option value="Desa">Desa</option></select></div><div class="fg" id="adminKelBox"><label>Kelompok</label><select id="adminKel"></select></div></div>
     <button class="btn btn-ok btn-full" onclick="saveOperator()">Simpan Operator</button>
   </div>
 </div></div>
@@ -119,11 +119,18 @@
 // KONFIGURASI SUPABASE
 // ══════════════════════════════════════════════
 const SB_URL = 'https://skltbmcrqutevmtcxqxj.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzabHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A'.replace('zab','skl');
 const ADMIN_SECRET = 'SETYO-UBNB';
 const HARGA_LEMBAR = 50000;
 const ADMIN_WA = '6285718264782';
-const sb = supabase.createClient(SB_URL, SB_KEY);
+let sb = null;
+try {
+  if(!window.supabase) throw new Error('Library Supabase belum termuat. Cek koneksi internet/CDN.');
+  sb = window.supabase.createClient(SB_URL, SB_KEY);
+} catch(e) {
+  console.error(e);
+  window.__SUPABASE_INIT_ERROR = e;
+}
 
 let jamaah = [], operators = [], kesanggupan = [], pembayaran = [];
 let picked = null, activeOperator = null, selectedInputJamaah = null, adminSelectedOperator = null;
@@ -139,7 +146,19 @@ function show(id){ $(id)?.classList.remove('hide'); } function hide(id){ $(id)?.
 function screen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.add('hide')); show(id); scrollTo(0,0); }
 function kelompokOf(j){ return j?.kelompok || j?.kelompok_nama || j?.pw || '-'; }
 function genderOf(j){ return (j?.gender || j?.jk || '').toUpperCase().startsWith('P') ? 'P' : ((j?.gender || j?.jk || '').toUpperCase().startsWith('L') ? 'L' : '-'); }
+function scopeNorm(v){ const x=norm(v); return x==='desa' ? 'desa' : (x==='kelompok' ? 'kelompok' : x); }
+function opIsDesa(op){ return scopeNorm(op?.scope)==='desa'; }
 function isSetyoName(n){ return /setyo/i.test(String(n||'')); }
+function matchJamaah(j,q){
+  if(!q) return true;
+  return norm(j?.nama).includes(q) || String(j?.id||'').includes(q) || norm(kelompokOf(j)).includes(q);
+}
+function renderNameItems(res, emptyMsg='Nama tidak ditemukan'){
+  return res.length ? res.map(j=>{
+    const op = operatorFor(j);
+    return `<div class="search-item" onclick="pickName(${Number(j.id)})"><div class="si-name">${esc(j.nama)} ${op?'<span class="badge b-op">Operator</span>':''}</div><div class="si-meta">ID ${Number(j.id)} • ${esc(kelompokOf(j))} • ${genderOf(j)==='L'?'Laki-laki':genderOf(j)==='P'?'Perempuan':'-'}</div></div>`;
+  }).join('') : `<div class="empty">${emptyMsg}</div>`;
+}
 function fmtDate(v){ if(!v) return '-'; const [y,m,d]=String(v).slice(0,10).split('-'); return d&&m&&y ? `${d}/${m}/${y}` : String(v); }
 function valKes(k){ return Number(k?.nilai || ((k?.jumlah_lembar || 0) * HARGA_LEMBAR) || 0); }
 function lembarFromNilai(nilai){ return Math.ceil(Number(nilai||0) / HARGA_LEMBAR); }
@@ -147,16 +166,42 @@ function byName(a,b){ return String(a.nama||'').localeCompare(String(b.nama||'')
 
 async function init(){
   screen('scrWelcome');
-  await Promise.all([loadJamaah(), loadOperators()]);
+  if(!sb){
+    $('wlcLoad').innerHTML = `Gagal memuat Supabase: ${esc(window.__SUPABASE_INIT_ERROR?.message || 'library tidak tersedia')}`;
+    return;
+  }
+  $('wlcLoad').textContent = 'Mengambil data jamaah dari Supabase...';
+  await loadJamaah();
+  await loadOperators();
   fillKelompokSelects();
-  $('wlcLoad').textContent = jamaah.length ? `${jamaah.length} nama siap dicari` : 'Data jamaah belum terbaca dari Supabase';
+  if(jamaah.length){
+    $('wlcLoad').textContent = `${jamaah.length} nama jamaah berhasil dibaca dari Supabase`;
+    showWelcomeList();
+  } else {
+    $('wlcLoad').innerHTML = 'Data jamaah belum terbaca dari Supabase. Cek RLS/policy SELECT tabel aj_jamaah atau koneksi.';
+  }
 }
 async function loadJamaah(){
-  const {data,error} = await sb.from('aj_jamaah').select('*').order('nama',{ascending:true});
-  if(error){ console.warn(error); $('wlcLoad').textContent='Gagal memuat aj_jamaah: '+error.message; jamaah=[]; return; }
-  jamaah = data || [];
+  try{
+    let r = await sb.from('aj_jamaah').select('*').order('nama',{ascending:true});
+    if(r.error){
+      console.warn('Query aj_jamaah order nama gagal, coba tanpa order:', r.error.message);
+      r = await sb.from('aj_jamaah').select('*');
+    }
+    if(r.error){
+      console.warn(r.error);
+      $('wlcLoad').innerHTML='Gagal memuat aj_jamaah: '+esc(r.error.message);
+      jamaah=[]; return;
+    }
+    jamaah = (r.data || []).filter(j=>j && j.id != null && j.nama).sort(byName);
+  }catch(e){
+    console.error(e);
+    $('wlcLoad').innerHTML='Gagal koneksi Supabase: '+esc(e.message || e);
+    jamaah=[];
+  }
 }
 async function loadOperators(){
+  if(!sb) return;
   const {data,error} = await sb.from('aj_operators').select('*').eq('is_active',true);
   if(error){ console.warn('aj_operators belum ada/terbaca:', error.message); operators=[]; return; }
   operators = data || [];
@@ -175,19 +220,24 @@ function fillKelompokSelects(){
   $('adminKel').innerHTML = groups.map(g=>`<option>${esc(g)}</option>`).join('');
 }
 
+function showWelcomeList(){
+  if(!jamaah.length){ hide('wlcResult'); return; }
+  const q = norm($('wlcSearch').value);
+  const res = (q ? jamaah.filter(j=>matchJamaah(j,q)) : jamaah).sort(byName).slice(0,25);
+  $('wlcResult').innerHTML = renderNameItems(res, q ? 'Nama tidak ditemukan' : 'Data jamaah kosong');
+  show('wlcResult');
+}
 function searchWelcome(){
   const q = norm($('wlcSearch').value);
-  if(q.length < 2){ hide('wlcResult'); $('wlcResult').innerHTML=''; return; }
-  const res = jamaah.filter(j => norm(j.nama).includes(q)).slice(0,15);
-  $('wlcResult').innerHTML = res.length ? res.map(j=>{
-    const op = operatorFor(j);
-    return `<div class="search-item" onclick="pickName(${Number(j.id)})"><div class="si-name">${esc(j.nama)} ${op?'<span class="badge b-op">Operator</span>':''}</div><div class="si-meta">${esc(kelompokOf(j))} • ${genderOf(j)==='L'?'Laki-laki':genderOf(j)==='P'?'Perempuan':'-'}</div></div>`;
-  }).join('') : '<div class="empty">Nama tidak ditemukan</div>';
+  if(!jamaah.length){ $('wlcResult').innerHTML='<div class="empty">Data jamaah belum terbaca</div>'; show('wlcResult'); return; }
+  if(q.length < 1){ showWelcomeList(); return; }
+  const res = jamaah.filter(j => matchJamaah(j,q)).sort(byName).slice(0,25);
+  $('wlcResult').innerHTML = renderNameItems(res);
   show('wlcResult');
 }
 function operatorFor(j){
   if(!j) return null;
-  if(isSetyoName(j.nama)) return {jamaah_id:j.id, scope:'desa', scope_kelompok:null, is_active:true, is_super:true};
+  if(isSetyoName(j.nama)) return {jamaah_id:j.id, scope:'Desa', scope_kelompok:null, is_active:true, is_super:true};
   return operators.find(o => Number(o.jamaah_id) === Number(j.id) && o.is_active !== false) || null;
 }
 function pickName(id){
@@ -197,7 +247,7 @@ function pickName(id){
   $('modeName').textContent = picked.nama;
   $('modeMeta').textContent = `${kelompokOf(picked)} • ${genderOf(picked)==='L'?'Laki-laki':genderOf(picked)==='P'?'Perempuan':'-'}`;
   if(op){
-    const scopeLabel = op.scope === 'desa' ? 'Desa / Semua Kelompok' : `Kelompok ${op.scope_kelompok || kelompokOf(picked)}`;
+    const scopeLabel = opIsDesa(op) ? 'Desa / Semua Kelompok' : `Kelompok ${op.scope_kelompok || kelompokOf(picked)}`;
     $('modeRoleBox').innerHTML = `<b>Anda teridentifikasi sebagai operator.</b><br>Silakan masuk sebagai operator. Scope: <b>${esc(scopeLabel)}</b>.`;
     $('modeActions').innerHTML = `<button class="btn btn-pri btn-full" onclick="enterOperator()">Masuk sebagai Operator</button><button class="btn btn-outline btn-full" onclick="enterSelf()">Lihat Data Pribadi</button>`;
   } else {
@@ -253,8 +303,8 @@ async function enterOperator(){
   if(!activeOperator){ toast('Nama ini belum terdaftar sebagai operator'); return; }
   screen('scrOperator');
   $('opTitle').textContent = picked.nama;
-  $('opSub').textContent = activeOperator.scope === 'desa' ? 'Scope Desa / semua kelompok' : `Scope Kelompok ${activeOperator.scope_kelompok || kelompokOf(picked)}`;
-  if(activeOperator.scope !== 'desa'){
+  $('opSub').textContent = opIsDesa(activeOperator) ? 'Scope Desa / semua kelompok' : `Scope Kelompok ${activeOperator.scope_kelompok || kelompokOf(picked)}`;
+  if(!opIsDesa(activeOperator)){
     $('fgKel').classList.add('hide'); $('fKel').value = activeOperator.scope_kelompok || kelompokOf(picked);
   } else { $('fgKel').classList.remove('hide'); $('fKel').value=''; }
   await refreshOperator();
@@ -273,7 +323,7 @@ function buildRows(){
   }).filter(Boolean).filter(inOperatorScope);
 }
 function inOperatorScope(r){
-  if(!activeOperator || activeOperator.scope === 'desa') return true;
+  if(!activeOperator || opIsDesa(activeOperator)) return true;
   return r.kelompok === (activeOperator.scope_kelompok || kelompokOf(picked));
 }
 function renderDashboard(){
@@ -285,7 +335,7 @@ function renderDashboard(){
   $('dashStats').innerHTML = `<div class="stat"><div class="lbl">Total Nama</div><div class="val">${rows.length}</div></div><div class="stat"><div class="lbl">Total Kesanggupan</div><div class="val">${rp(totalKes)}</div></div><div class="stat"><div class="lbl">Total Bayar</div><div class="val ok">${rp(totalPay)}</div></div><div class="stat"><div class="lbl">Total Belum Bayar</div><div class="val red">${rp(totalSisa)}</div></div>`;
 }
 function applyFilters(){
-  const kel = $('fKel').value || (activeOperator?.scope !== 'desa' ? (activeOperator?.scope_kelompok || kelompokOf(picked)) : '');
+  const kel = $('fKel').value || (!opIsDesa(activeOperator) ? (activeOperator?.scope_kelompok || kelompokOf(picked)) : '');
   const gen = $('fGender').value, st = $('fStatus').value, q = norm($('fSearch').value);
   filteredRows = tableRows.filter(r=>{
     if(kel && r.kelompok !== kel) return false;
@@ -336,7 +386,7 @@ function openInput(mode){
 function closeInput(){ hide('inputModal'); }
 function searchModalName(){
   const q=norm($('mSearch').value); if(q.length<2){ hide('mResult'); return; }
-  const pool = activeOperator?.scope === 'desa' ? jamaah : jamaah.filter(j=>kelompokOf(j)===(activeOperator?.scope_kelompok || kelompokOf(picked)));
+  const pool = opIsDesa(activeOperator) ? jamaah : jamaah.filter(j=>kelompokOf(j)===(activeOperator?.scope_kelompok || kelompokOf(picked)));
   const res = pool.filter(j=>norm(j.nama).includes(q)).sort(byName).slice(0,15);
   $('mResult').innerHTML = res.length ? res.map(j=>`<div class="search-item" onclick="selectInputJamaah(${Number(j.id)})"><div class="si-name">${esc(j.nama)}</div><div class="si-meta">${esc(kelompokOf(j))} • ${esc(genderOf(j))}</div></div>`).join('') : '<div class="empty">Nama tidak ditemukan dalam scope operator</div>';
   show('mResult');
@@ -396,7 +446,7 @@ async function updateStatusAfterPay(jid){
   await sb.from('aj_kesanggupan').update({status,operator:picked.nama,operator_jamaah_id:picked.id}).eq('id',k.id);
 }
 async function logAction(jid,aksi,detail){
-  try{ await sb.from('aj_log').insert({jamaah_id:jid,aksi,detail,operator:picked?.nama||'-',operator_jamaah_id:picked?.id||null,scope:activeOperator?.scope==='desa'?'Desa':(activeOperator?.scope_kelompok||kelompokOf(picked))}); }catch(e){}
+  try{ await sb.from('aj_log').insert({jamaah_id:jid,aksi,detail,operator:picked?.nama||'-',operator_jamaah_id:picked?.id||null,scope:opIsDesa(activeOperator)?'Desa':(activeOperator?.scope_kelompok||kelompokOf(picked))}); }catch(e){}
 }
 
 function exportExcel(){
@@ -418,10 +468,10 @@ function adminLogin(){
   if($('adminCode').value !== ADMIN_SECRET){ toast('Kode admin salah'); return; }
   hide('adminLoginBox'); show('adminFormBox'); toast('Admin Setyo aktif');
 }
-function searchAdminOperator(){
-  const q=norm($('adminOpSearch').value); if(q.length<2){ hide('adminOpResult'); return; }
-  const res=jamaah.filter(j=>norm(j.nama).includes(q)).sort(byName).slice(0,15);
-  $('adminOpResult').innerHTML = res.length ? res.map(j=>`<div class="search-item" onclick="selectAdminOperator(${Number(j.id)})"><div class="si-name">${esc(j.nama)}</div><div class="si-meta">${esc(kelompokOf(j))} • ${esc(genderOf(j))}</div></div>`).join('') : '<div class="empty">Nama tidak ditemukan</div>';
+function searchAdminOperator(force=false){
+  const q=norm($('adminOpSearch').value); if(q.length<1 && !force){ hide('adminOpResult'); return; }
+  const res=(q ? jamaah.filter(j=>matchJamaah(j,q)) : jamaah).sort(byName).slice(0,25);
+  $('adminOpResult').innerHTML = res.length ? res.map(j=>`<div class="search-item" onclick="selectAdminOperator(${Number(j.id)})"><div class="si-name">${esc(j.nama)}</div><div class="si-meta">ID ${Number(j.id)} • ${esc(kelompokOf(j))} • ${esc(genderOf(j))}</div></div>`).join('') : '<div class="empty">Nama tidak ditemukan</div>';
   show('adminOpResult');
 }
 function selectAdminOperator(id){
@@ -430,10 +480,10 @@ function selectAdminOperator(id){
   $('adminOpSelected').innerHTML=`<b>${esc(adminSelectedOperator.nama)}</b><br>${esc(kelompokOf(adminSelectedOperator))} • ${esc(genderOf(adminSelectedOperator))}`; show('adminOpSelected');
   $('adminKel').value = kelompokOf(adminSelectedOperator);
 }
-function onAdminScopeChange(){ $('adminKelBox').classList.toggle('hide', $('adminScope').value==='desa'); }
+function onAdminScopeChange(){ $('adminKelBox').classList.toggle('hide', scopeNorm($('adminScope').value)==='desa'); }
 async function saveOperator(){
   if(!adminSelectedOperator){ toast('Pilih nama operator dulu'); return; }
-  const payload={jamaah_id:adminSelectedOperator.id,scope:$('adminScope').value,scope_kelompok:$('adminScope').value==='desa'?null:$('adminKel').value,is_active:true,created_by:'Setyo'};
+  const payload={jamaah_id:adminSelectedOperator.id,scope:$('adminScope').value,scope_kelompok:scopeNorm($('adminScope').value)==='desa'?null:$('adminKel').value,is_active:true,created_by:'Setyo'};
   const ex = await sb.from('aj_operators').select('id').eq('jamaah_id',adminSelectedOperator.id).maybeSingle();
   let r;
   if(ex.error && /relation|does not exist|schema cache/i.test(ex.error.message)){ toast('Tabel aj_operators belum ada. Jalankan SQL yang saya sertakan.'); return; }
