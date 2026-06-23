@@ -609,52 +609,49 @@ function bukaTanyaWA(){
 // OPERATOR DASHBOARD
 // ══════════════════════════════════
 async function showOpDash(){
+  if(!curOp){showJamaahView(); return;} // guard: non-operator tidak bisa akses
   showScreen('scrOp');
   $('opHdrName').textContent=curUser.nama;
   $('opHdrScope').textContent=curOp.scope;
-  // Sembunyikan filter PW jika bukan Desa
-  if(curOp.scope!=='Desa') $('fPW').closest('.op-filter').querySelector('#fPW').style.display='none';
+  // Sembunyikan filter PW jika scope bukan Desa
+  const pwWrap=$('fPWWrap'); if(pwWrap) pwWrap.style.display=curOp.scope==='Desa'?'block':'none';
   await refreshData();
 }
 
 async function refreshData(){
   $('opTbody').innerHTML=`<tr><td colspan="9"><div class="loading"><div class="spin"></div></div></td></tr>`;
-  // Query jamaah sesuai scope
-  let jPool=allJamaah;
-  if(curOp.scope!=='Desa') jPool=allJamaah.filter(j=>j.pw===curOp.scope);
+  // Pool jamaah sesuai scope
+  let jPool = curOp.scope==='Desa' ? allJamaah : allJamaah.filter(j=>j.pw===curOp.scope);
+  const jIds = jPool.map(j=>j.id);
 
-  // Ambil semua kesanggupan — tanpa filter scope di DB (filter di client)
-  const [kesRes, payRes] = await Promise.all([
-    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nilai,status,operator').not('jamaah_id','is',null),
-    sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator').not('jamaah_id','is',null).order('tanggal',{ascending:true})
-  ]);
-  const ksAll = kesRes.data||[];
-  const payAll = payRes.data||[];
+  // Fetch kesanggupan
+  const {data:ksAll, error:ksErr} = await sb.from('aj_kesanggupan')
+    .select('id,jamaah_id,jumlah_lembar,status')
+    .in('jamaah_id', jIds);
+  if(ksErr){ console.error('ksErr',ksErr.message); toast('Error load kesanggupan: '+ksErr.message); return; }
 
-  // Group pembayaran per jamaah_id
-  const payMap={};
-  payAll.forEach(p=>{
-    if(!payMap[p.jamaah_id]) payMap[p.jamaah_id]=[];
-    payMap[p.jamaah_id].push(p);
-  });
+  // Fetch pembayaran
+  const {data:payAll, error:pyErr} = await sb.from('aj_pembayaran')
+    .select('id,jamaah_id,tanggal,jumlah,penerima,operator')
+    .in('jamaah_id', jIds)
+    .order('tanggal', {ascending:true});
+  if(pyErr){ console.error('pyErr',pyErr.message); }
 
-  // Build ksMap
-  const ksMap={};
-  ksAll.forEach(k=>{if(k.jamaah_id) ksMap[k.jamaah_id]=k;});
+  // Build maps
+  const ksMap={}, payMap={};
+  (ksAll||[]).forEach(k=>{ if(k.jamaah_id) ksMap[k.jamaah_id]=k; });
+  (payAll||[]).forEach(p=>{ if(p.jamaah_id){ if(!payMap[p.jamaah_id])payMap[p.jamaah_id]=[]; payMap[p.jamaah_id].push(p); } });
 
-  // Build tableData — semua jamaah dalam scope, ada kesanggupan atau tidak
-  tableData=jPool.map(j=>{
-    const ks=ksMap[j.id];
-    const pays=payMap[j.id]||[];
-    const totalPay=pays.reduce((s,p)=>s+Number(p.jumlah),0);
-    const lembar=ks?.jumlah_lembar||0;
-    const nilai=lembar*HARGA;
-    const sisa=Math.max(0,nilai-totalPay);
-    return{
-      id:j.id, nama:j.nama, pw:j.pw, gender:j.gender, no_urut:j.no_urut,
-      lembar, nilai, status:ks?.status||'belum', terbayar:totalPay, sisa,
-      pays
-    };
+  // Build tableData
+  tableData = jPool.map(j=>{
+    const ks = ksMap[j.id];
+    const pays = payMap[j.id]||[];
+    const totalPay = pays.reduce((s,p)=>s+Number(p.jumlah),0);
+    const lembar = ks?.jumlah_lembar||0;
+    const nilai = lembar*HARGA;
+    const sisa = Math.max(0, nilai-totalPay);
+    return { id:j.id, nama:j.nama, pw:j.pw, gender:j.gender, no_urut:j.no_urut,
+             lembar, nilai, status:ks?.status||'belum', terbayar:totalPay, sisa, pays };
   });
 
   updateStats();
@@ -883,24 +880,23 @@ async function savePay(){
 // FILTER TOGGLE
 // ══════════════════════════════════
 function toggleFilterPanel(){
-  const p=$('filterPanel'), btn=$('filterToggleBtn');
-  const open=p.classList.toggle('hide')==false;
-  btn.classList.toggle('active', open);
-  btn.textContent=open?'🔼 Filter':'🔽 Filter';
+  const p=$('filterPanel');
+  const nowOpen=p.classList.toggle('hide')==false;
+  $('filterToggleBtn').querySelector('span:first-of-type')||null;
+  $('filterToggleBtn').childNodes[0].textContent = nowOpen?'🔼 Filter ':'🔽 Filter ';
 }
 function resetFilter(){
   $('fPW').value=''; $('fGender').value=''; $('fStatus').value='';
-  hide('filterActiveTag');
-  applyFilter();
+  updateFilterBtn(); applyFilter();
+  hide('filterPanel');
+  $('filterToggleBtn').childNodes[0].textContent='🔽 Filter ';
 }
-function updateFilterTag(){
-  const pw=$('fPW').value, g=$('fGender').value, s=$('fStatus').value;
-  const active=pw||g||s;
-  active?show('filterActiveTag'):hide('filterActiveTag');
-  const tags=[];
-  if(pw)tags.push(pw); if(g)tags.push(g==='L'?'L':'P'); if(s)tags.push(s);
-  $('filterActiveTag').textContent=tags.length?'Filter: '+tags.join(', '):'';
+function updateFilterBtn(){
+  const n=[$('fPW'),$('fGender'),$('fStatus')].filter(el=>el&&el.value).length;
+  const badge=$('filterBadge');
+  if(n>0){badge.textContent=n;show('filterBadge');}else hide('filterBadge');
 }
+function updateFilterTag(){ updateFilterBtn(); }
 
 // ══════════════════════════════════
 // EXPORT
