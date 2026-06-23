@@ -271,26 +271,65 @@ table.op-table td.td-c{text-align:center}
     <div class="op-stat"><div class="osv red" id="stSisa">-</div><div class="osl">Belum Bayar</div></div>
   </div>
 
-  <!-- Filter bar -->
-  <div class="op-filter">
-    <select id="fPW" onchange="applyFilter()">
-      <option value="">Semua PW</option>
-      <option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option>
-    </select>
-    <select id="fGender" onchange="applyFilter()">
-      <option value="">L & P</option>
-      <option value="L">Laki-laki</option>
-      <option value="P">Perempuan</option>
-    </select>
-    <select id="fStatus" onchange="applyFilter()">
-      <option value="">Semua Status</option>
-      <option value="lunas">Lunas</option>
-      <option value="angsur">Angsur</option>
-      <option value="belum">Belum</option>
-    </select>
+  <!-- Action bar: Filter (1 tombol) | XLS | PDF -->
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;
+    border-bottom:1px solid var(--border);position:sticky;top:106px;z-index:88">
+    <button id="filterToggleBtn" onclick="toggleFilterPanel()"
+      style="display:flex;align-items:center;gap:6px;background:var(--bg);
+      border:1.5px solid var(--border);border-radius:20px;padding:7px 14px;
+      font-size:13px;font-weight:600;cursor:pointer;color:var(--txt);white-space:nowrap">
+      <span id="filterArrow">▼</span> Filter
+      <span id="filterBadge" style="display:none;background:var(--pri);color:#fff;
+        border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">0</span>
+    </button>
     <div style="margin-left:auto;display:flex;gap:6px">
-      <button class="export-btn" onclick="doExport('excel')">⬇ XLS</button>
-      <button class="export-btn" style="background:#555" onclick="doExport('pdf')">🖨 PDF</button>
+      <button onclick="doExport('excel')"
+        style="background:var(--pri);color:#fff;border:none;border-radius:20px;
+        padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer">⬇ XLS</button>
+      <button onclick="doExport('pdf')"
+        style="background:#555;color:#fff;border:none;border-radius:20px;
+        padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer">🖨 PDF</button>
+    </div>
+  </div>
+  <!-- Filter panel — tersembunyi default -->
+  <div id="filterPanel" style="display:none;background:#f8f8f8;
+    border-bottom:2px solid var(--pri);padding:12px 16px;position:sticky;top:151px;z-index:87">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div id="fPWWrap">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px">KELOMPOK</div>
+        <select id="fPW" style="width:100%;padding:8px 10px;border:1px solid var(--border);
+          border-radius:8px;font-size:13px;background:#fff;outline:none">
+          <option value="">Semua PW</option>
+          <option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px">GENDER</div>
+        <select id="fGender" style="width:100%;padding:8px 10px;border:1px solid var(--border);
+          border-radius:8px;font-size:13px;background:#fff;outline:none">
+          <option value="">L & P</option>
+          <option value="L">Laki-laki</option>
+          <option value="P">Perempuan</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px">STATUS</div>
+        <select id="fStatus" style="width:100%;padding:8px 10px;border:1px solid var(--border);
+          border-radius:8px;font-size:13px;background:#fff;outline:none">
+          <option value="">Semua Status</option>
+          <option value="lunas">Lunas</option>
+          <option value="angsur">Angsur</option>
+          <option value="belum">Belum</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="applyFilter();closeFilterPanel()"
+        style="background:var(--pri);color:#fff;border:none;border-radius:8px;
+        padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">✅ Terapkan</button>
+      <button onclick="resetFilter()"
+        style="background:#f0f0f0;color:var(--txt);border:none;border-radius:8px;
+        padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">↺ Reset</button>
     </div>
   </div>
 
@@ -682,14 +721,16 @@ function rpShort(v){
 }
 
 function applyFilter(){
-  const pw=$('fPW').value, gender=$('fGender').value, status=$('fStatus').value;
+  const pw=$('fPW')?$('fPW').value:'';
+  const gender=$('fGender')?$('fGender').value:'';
+  const status=$('fStatus')?$('fStatus').value:'';
   filteredData=tableData.filter(r=>{
     if(pw && r.pw!==pw) return false;
     if(gender && r.gender!==gender) return false;
     if(status && r.status!==status) return false;
     return true;
   });
-  updateFilterTag();
+  updateFilterBtn();
   renderTable();
 }
 
@@ -881,20 +922,28 @@ async function savePay(){
 // ══════════════════════════════════
 function toggleFilterPanel(){
   const p=$('filterPanel');
-  const nowOpen=p.classList.toggle('hide')==false;
-  $('filterToggleBtn').querySelector('span:first-of-type')||null;
-  $('filterToggleBtn').childNodes[0].textContent = nowOpen?'🔼 Filter ':'🔽 Filter ';
+  const open = p.style.display==='none'||p.style.display==='';
+  p.style.display = open?'block':'none';
+  $('filterArrow').textContent = open?'▲':'▼';
+  $('filterToggleBtn').style.background = open?'var(--pri)':'var(--bg)';
+  $('filterToggleBtn').style.color = open?'#fff':'var(--txt)';
+  $('filterToggleBtn').style.borderColor = open?'var(--pri)':'var(--border)';
+}
+function closeFilterPanel(){
+  $('filterPanel').style.display='none';
+  $('filterArrow').textContent='▼';
+  $('filterToggleBtn').style.background='var(--bg)';
+  $('filterToggleBtn').style.color='var(--txt)';
+  $('filterToggleBtn').style.borderColor='var(--border)';
 }
 function resetFilter(){
   $('fPW').value=''; $('fGender').value=''; $('fStatus').value='';
-  updateFilterBtn(); applyFilter();
-  hide('filterPanel');
-  $('filterToggleBtn').childNodes[0].textContent='🔽 Filter ';
+  updateFilterBtn(); applyFilter(); closeFilterPanel();
 }
 function updateFilterBtn(){
   const n=[$('fPW'),$('fGender'),$('fStatus')].filter(el=>el&&el.value).length;
   const badge=$('filterBadge');
-  if(n>0){badge.textContent=n;show('filterBadge');}else hide('filterBadge');
+  if(badge){ badge.textContent=n; badge.style.display=n>0?'inline':'none'; }
 }
 function updateFilterTag(){ updateFilterBtn(); }
 
