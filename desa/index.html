@@ -461,13 +461,32 @@ const sb    = supabase.createClient(SB_URL, SB_KEY);
 // STATE
 // ════════════════════════════════════════════════════════
 let allJamaah = [];
-let selfTarget = null;   // {jamaah_id, luar_id, nama, pw, gender}
-let opUser     = null;   // jamaah object operator
-let opScope    = '';     // 'PW1'..'PW4' | 'Desa'
-let opBatch    = [];     // [{target, lembar, status}]
-let scanMode   = '';     // 'self' | 'op'
+let selfTarget = null;
+let opUser     = null;
+let opScope    = '';
+let opBatch    = [];
+let scanMode   = '';
 let scanStream = null;
-let editTarget = null;   // kesanggupan row being edited
+let editTarget = null;
+
+// Session keys
+const SK_MODE  = 'aj_mode';
+const SK_SELF  = 'aj_self';
+const SK_OP_ID = 'aj_op_id';
+const SK_OP_SC = 'aj_op_scope';
+
+function saveSession(mode){
+  localStorage.setItem(SK_MODE, mode);
+  if(mode==='self' && selfTarget)
+    localStorage.setItem(SK_SELF, JSON.stringify(selfTarget));
+  if(mode==='op' && opUser){
+    localStorage.setItem(SK_OP_ID, String(opUser.id));
+    localStorage.setItem(SK_OP_SC, opScope);
+  }
+}
+function clearSession(){
+  [SK_MODE,SK_SELF,SK_OP_ID,SK_OP_SC].forEach(k=>localStorage.removeItem(k));
+}
 
 // ════════════════════════════════════════════════════════
 // UTILS
@@ -510,18 +529,50 @@ function confirm2(title, body, cb){
 }
 
 // ════════════════════════════════════════════════════════
-// INIT — load jamaah once
+// INIT
 // ════════════════════════════════════════════════════════
 async function init(){
   const {data} = await sb.from('aj_jamaah').select('*').order('pw').order('gender').order('no_urut');
   allJamaah = data || [];
 
-  // QR param?
+  // QR param → selalu prioritas tertinggi
   const params = new URLSearchParams(location.search);
   const qid = params.get('jid');
   if(qid){
     const j = allJamaah.find(x=>x.id==qid);
-    if(j){ selfTarget={jamaah_id:j.id,nama:j.nama,pw:j.pw,gender:j.gender}; goSelfForm(); return; }
+    if(j){
+      selfTarget={jamaah_id:j.id,nama:j.nama,pw:j.pw,gender:j.gender};
+      saveSession('self');
+      goSelfForm(); return;
+    }
+  }
+
+  // Restore session
+  const savedMode = localStorage.getItem(SK_MODE);
+  if(savedMode==='self'){
+    const st = localStorage.getItem(SK_SELF);
+    if(st){
+      try{
+        selfTarget = JSON.parse(st);
+        goSelfForm(); return;
+      } catch(e){ clearSession(); }
+    }
+  }
+  if(savedMode==='op'){
+    const oid   = localStorage.getItem(SK_OP_ID);
+    const osc   = localStorage.getItem(SK_OP_SC);
+    if(oid && osc){
+      const j = allJamaah.find(x=>x.id==oid);
+      if(j){
+        opUser  = j;
+        opScope = osc;
+        $('opHdrName').textContent = opUser.nama;
+        $('opHdrScope').textContent = opScope;
+        showScreen('scrOpDash');
+        loadReport(); loadOpDash(); return;
+      }
+    }
+    clearSession();
   }
 }
 init();
@@ -529,7 +580,7 @@ init();
 // ════════════════════════════════════════════════════════
 // HOME
 // ════════════════════════════════════════════════════════
-function goSelf(){ showScreen('scrSelfMethod') }
+function goSelf(){ saveSession('self'); showScreen('scrSelfMethod') }
 function goOperator(){ showScreen('scrOpLogin') }
 
 // ════════════════════════════════════════════════════════
@@ -606,6 +657,7 @@ function doSelfSearch(){
 function selfPickJamaah(id){
   const j = allJamaah.find(x=>x.id===id);
   selfTarget = {jamaah_id:j.id, nama:j.nama, pw:j.pw, gender:j.gender};
+  saveSession('self');
   goSelfForm();
 }
 
@@ -688,19 +740,33 @@ async function sfSaveKesanggupan(){
   const status = $('sfCaraBayar').value;
   const ttd = getTtdData('ttdCanvas');
 
-  const payload = {jumlah_lembar:lembar, status, operator:'self:'+t.nama, ttd_data:ttd};
-  if(t.jamaah_id) payload.jamaah_id = t.jamaah_id;
-  else payload.luar_id = t.luar_id;
+  // Cek existing dulu
+  let existQ = sb.from('aj_kesanggupan').select('id');
+  if(t.jamaah_id) existQ = existQ.eq('jamaah_id', t.jamaah_id);
+  else existQ = existQ.eq('luar_id', t.luar_id);
+  const {data:existing} = await existQ.maybeSingle();
 
-  const {error} = await sb.from('aj_kesanggupan').upsert(payload,
-    {onConflict: t.jamaah_id?'jamaah_id':'luar_id'});
-  if(error){ toast('Error: '+error.message); return; }
+  let error;
+  if(existing){
+    // UPDATE
+    ({error} = await sb.from('aj_kesanggupan')
+      .update({jumlah_lembar:lembar, status, operator:'self:'+t.nama, ttd_data:ttd})
+      .eq('id', existing.id));
+  } else {
+    // INSERT
+    const payload = {jumlah_lembar:lembar, status, operator:'self:'+t.nama, ttd_data:ttd};
+    if(t.jamaah_id) payload.jamaah_id = t.jamaah_id;
+    else payload.luar_id = t.luar_id;
+    ({error} = await sb.from('aj_kesanggupan').insert(payload));
+  }
+  if(error){ toast('Gagal simpan: '+error.message); return; }
   await sb.from('aj_log').insert({
     jamaah_id:t.jamaah_id||null, luar_id:t.luar_id||null,
-    aksi:'kesanggupan', detail:`${lembar} lembar, ${status}`, operator:t.nama
+    aksi: existing?'update_kesanggupan':'set_kesanggupan',
+    detail:`${lembar} lembar, ${status}`, operator:t.nama
   });
-  toast('✅ Kesanggupan tersimpan! Jazaakumullaahu khoiron');
-  setTimeout(()=>showScreen('scrHome'),2000);
+  toast('✅ Tersimpan! Jazaakumullaahu khoiron');
+  setTimeout(()=>{ clearSession(); showScreen('scrHome'); },2000);
 }
 
 async function sfSavePay(){
@@ -781,6 +847,7 @@ function opLogin(){
   opBatch = [];
   $('opHdrName').textContent = opUser.nama;
   $('opHdrScope').textContent = opScope;
+  saveSession('op');
   showScreen('scrOpDash');
   loadReport();
   loadOpDash();
@@ -788,6 +855,7 @@ function opLogin(){
 
 function opLogout(){
   opUser=null; opScope=''; opBatch=[];
+  clearSession();
   showScreen('scrHome');
 }
 
@@ -884,18 +952,34 @@ async function opSaveBatch(){
   const total = opBatch.length;
   let saved=0;
   for(const b of opBatch){
-    const payload={jamaah_id:b.jamaah_id,jumlah_lembar:b.lembar,status:b.status,
-      operator:opUser.nama, operator_jamaah_id:opUser.id, scope:opScope};
-    const {error} = await sb.from('aj_kesanggupan').upsert(payload,{onConflict:'jamaah_id'});
+    // Cek existing
+    const {data:existing} = await sb.from('aj_kesanggupan')
+      .select('id').eq('jamaah_id',b.jamaah_id).maybeSingle();
+    let error;
+    if(existing){
+      ({error} = await sb.from('aj_kesanggupan')
+        .update({jumlah_lembar:b.lembar, status:b.status,
+                 operator:opUser.nama, operator_jamaah_id:opUser.id})
+        .eq('id', existing.id));
+    } else {
+      ({error} = await sb.from('aj_kesanggupan')
+        .insert({jamaah_id:b.jamaah_id, jumlah_lembar:b.lembar, status:b.status,
+                 operator:opUser.nama, operator_jamaah_id:opUser.id}));
+    }
     if(!error){
-      await sb.from('aj_log').insert({jamaah_id:b.jamaah_id,aksi:'kesanggupan',
-        detail:`${b.lembar} lembar, ${b.status}`, operator:opUser.nama,
-        operator_jamaah_id:opUser.id, scope:opScope});
+      await sb.from('aj_log').insert({
+        jamaah_id:b.jamaah_id,
+        aksi: existing?'update_kesanggupan':'set_kesanggupan',
+        detail:`${b.lembar} lembar, ${b.status}`,
+        operator:opUser.nama, operator_jamaah_id:opUser.id, scope:opScope
+      });
       saved++;
+    } else {
+      console.error('Batch error:', error.message);
     }
   }
   opBatch=[];
-  toast(`✅ ${saved}/${total} data tersimpan`);
+  toast(saved===total ? `✅ ${saved} data tersimpan` : `⚠️ ${saved}/${total} berhasil`);
   hide('opBatchBox'); loadReport();
 }
 
@@ -992,9 +1076,15 @@ async function editSaveKes(){
   const lembar=parseInt($('editLembar').value)||0;
   if(lembar<1){ toast('Masukkan jumlah lembar'); return; }
   const status=$('editStatus').value;
-  const {error}=await sb.from('aj_kesanggupan').update({jumlah_lembar:lembar,status,operator:opUser.nama})
+  const {error}=await sb.from('aj_kesanggupan')
+    .update({jumlah_lembar:lembar, status, operator:opUser.nama, operator_jamaah_id:opUser.id})
     .eq('id',editTarget.id);
   if(error){ toast('Error: '+error.message); return; }
+  await sb.from('aj_log').insert({
+    jamaah_id:editTarget.jamaah_id||null,
+    aksi:'update_kesanggupan', detail:`${lembar} lembar, ${status}`,
+    operator:opUser.nama, operator_jamaah_id:opUser.id, scope:opScope
+  });
   toast('✅ Tersimpan'); closeModal('modalEdit'); loadReport();
 }
 
