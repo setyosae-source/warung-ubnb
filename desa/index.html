@@ -6,6 +6,7 @@
 <title>UBNB - Shodaqoh Jariyah Masjid Baiturrohim</title>
 <!-- FIX 2026-06-23: Supabase anon key restored exactly from original index (40).html -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--pri:#1a6b3c;--pri2:#145530;--acc:#e8a820;--bg:#f4f4ef;--card:#fff;--txt:#212121;--muted:#676767;--line:#deded6;--ok:#239b56;--warn:#df8b17;--red:#c0392b;--blue:#2467d1;--shadow:0 10px 28px rgba(0,0,0,.12);--r:14px}
@@ -160,6 +161,16 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   #scrOperator #dashStats .stat-line-item{font-size:11.4px!important}
 }
 
+
+/* QR + SESSION + LEMBAR PATCH 2026-06-23 */
+.scan-body{min-height:calc(100vh - 58px);display:flex;align-items:center;justify-content:center;padding:18px;background:var(--bg)}
+.scan-card{width:100%;max-width:390px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:var(--shadow);text-align:center}
+.scan-box{position:relative;width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#000;margin-bottom:10px}
+.scan-box video{width:100%;height:100%;object-fit:cover;display:block}.scan-box canvas{display:none}
+.scan-layer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}.scan-frame{width:64%;height:64%;border:3px solid var(--acc);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.42)}
+.wlc-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.wlc-actions .btn{font-size:12px;padding:10px 8px}.self-kes-form{border-left:4px solid var(--pri);background:#fff}.lembar-mini{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}.hint-strong{font-weight:900;color:var(--pri)}
+@media(max-width:420px){.wlc-actions{grid-template-columns:1fr}.scan-body{padding:10px}.scan-card{border-radius:16px}}
+
 </style>
 </head>
 <body>
@@ -175,6 +186,10 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
       <div class="fg"><input id="wlcSearch" placeholder="Ketik nama jamaah / ID..." autocomplete="off" onfocus="searchWelcome()" oninput="searchWelcome()"></div>
       <div id="wlcResult" class="search-res hide"></div>
       <div id="wlcLoad" class="hint" style="text-align:center;margin-top:9px">Memuat data...</div>
+      <div class="wlc-actions">
+        <button class="btn btn-outline" onclick="startScan('self')">📷 Scan QR</button>
+        <button class="btn btn-ghost" onclick="searchWelcome()">🔍 Cari Nama</button>
+      </div>
     </div>
     <button class="admin-small" onclick="openAdminModal()">Daftarkan operator</button>
   </div>
@@ -192,15 +207,29 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   </div>
 </section>
 
+<section id="scrScan" class="screen hide">
+  <div class="hdr no-print"><div class="hdr-in"><button class="back" onclick="stopScan(true)">‹</button><div><h2>Scan QR Code</h2><small>Arahkan QR ke dalam kotak</small></div><div class="hdr-spacer"></div><button class="hdr-btn" onclick="stopScan(true)">Batal</button></div></div>
+  <div class="scan-body">
+    <div class="scan-card">
+      <div class="scan-box">
+        <video id="scanVideo" playsinline autoplay muted></video>
+        <canvas id="scanCanvas"></canvas>
+        <div class="scan-layer"><div class="scan-frame"></div></div>
+      </div>
+      <div class="hint">QR harus berisi link dengan parameter <b>jid</b>, contoh: <b>?jid=343</b>.</div>
+    </div>
+  </div>
+</section>
+
 <section id="scrSelf" class="screen hide">
-  <div class="hdr no-print"><div class="hdr-in"><button class="back" onclick="backWelcome()">‹</button><div><h2>Status Jamaah</h2><small>Data hanya dapat diupdate oleh operator</small></div><div class="hdr-spacer"></div><button class="hdr-btn" onclick="backWelcome()">Keluar</button></div></div>
+  <div class="hdr no-print"><div class="hdr-in"><button class="back" onclick="logout()">‹</button><div><h2>Status Jamaah</h2><small>Kesanggupan dapat diinput sendiri, pembayaran diupdate operator</small></div><div class="hdr-spacer"></div><button class="hdr-btn" onclick="logout()">Keluar</button></div></div>
   <div class="wrap narrow">
     <div id="selfBox" class="loading"><span class="spin"></span> Memuat data...</div>
   </div>
 </section>
 
 <section id="scrOperator" class="screen hide">
-  <div class="hdr no-print"><div class="hdr-in"><button class="back" onclick="backWelcome()">‹</button><div><h2 id="opTitle">Dashboard Operator</h2><small id="opSub">-</small></div><div class="hdr-spacer"></div><button class="hdr-btn" onclick="refreshOperator()">Refresh</button><button class="hdr-btn" onclick="backWelcome()">Keluar</button></div></div>
+  <div class="hdr no-print"><div class="hdr-in"><button class="back" onclick="logout()">‹</button><div><h2 id="opTitle">Dashboard Operator</h2><small id="opSub">-</small></div><div class="hdr-spacer"></div><button class="hdr-btn" onclick="refreshOperator()">Refresh</button><button class="hdr-btn" onclick="logout()">Keluar</button></div></div>
   <div class="wrap">
     <div class="print-only"><h2>Laporan Shodaqoh Jariyah Masjid Baiturrohim</h2><p id="printInfo"></p></div>
     <div class="stat-grid" id="dashStats"><div class="loading"><span class="spin"></span> Memuat dashboard...</div></div>
@@ -245,7 +274,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   <div class="fg"><label>Cari Jamaah</label><input id="mSearch" placeholder="Ketik nama / ID..." autocomplete="off" onfocus="searchModalName(true)" oninput="searchModalName()"><div id="mResult" class="search-res hide"></div></div>
   <div id="mSelected" class="info-box hide"></div>
   <div id="formKes" class="hide">
-    <div class="fg"><label>Nilai Kesanggupan (Rp)</label><input id="kesNilai" type="number" inputmode="numeric" placeholder="Contoh: 500000" oninput="updateNilaiHint('kesNilai','kesHint')"><div class="hint" id="kesHint"></div></div>
+    <div class="fg"><label>Jumlah Lembar (@ Rp 50.000)</label><input id="kesLembar" type="number" inputmode="numeric" min="1" step="1" placeholder="Contoh: 10" oninput="updateLembarHint('kesLembar','kesHint')"><div class="hint" id="kesHint"></div></div>
     <div class="fg"><label>Status Awal</label><select id="kesStatus"><option value="belum">Belum Bayar</option><option value="angsur">Angsur</option><option value="lunas">Lunas</option></select></div>
     <div class="fg"><label>Catatan</label><textarea id="kesNote" rows="2" placeholder="Opsional"></textarea></div>
     <button class="btn btn-pri btn-full" onclick="saveKesanggupan()">Simpan Kesanggupan</button>
@@ -290,6 +319,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const ADMIN_SECRET = 'SETYO-UBNB';
 const HARGA_LEMBAR = 50000;
 const ADMIN_WA = '6285718264782';
+const SESSION_KEY = 'ubnb_shodaqoh_login_v1';
 let sb = null;
 try {
   if(!window.supabase) throw new Error('Library Supabase belum termuat. Cek koneksi internet/CDN.');
@@ -301,6 +331,7 @@ try {
 
 let jamaah = [], operators = [], kesanggupan = [], pembayaran = [];
 let picked = null, activeOperator = null, selectedInputJamaah = null, adminSelectedOperator = null, adminLoggedIn = false;
+let scanMode = 'self', scanStream = null, selfOpenKesForm = false;
 let tableRows = [], filteredRows = [], openDetailId = null;
 let sortKey = 'nama', sortDir = 1, inputMode = 'kes';
 const $ = id => document.getElementById(id);
@@ -330,6 +361,31 @@ function fmtDate(v){ if(!v) return '-'; const [y,m,d]=String(v).slice(0,10).spli
 function valKes(k){ return Number(k?.nilai || ((k?.jumlah_lembar || 0) * HARGA_LEMBAR) || 0); }
 function lembarFromNilai(nilai){ return Math.ceil(Number(nilai||0) / HARGA_LEMBAR); }
 function byName(a,b){ return String(a.nama||'').localeCompare(String(b.nama||''),'id'); }
+function saveSession(mode, jid){
+  if(!jid) return;
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify({mode, jid:Number(jid), saved_at:new Date().toISOString()})); }catch(e){}
+}
+function getSession(){
+  try{ return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }catch(e){ return null; }
+}
+function clearSession(){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
+function logout(){ clearSession(); backWelcome(); }
+async function tryAutoLogin(){
+  const params = new URLSearchParams(location.search);
+  const qrJid = params.get('jid') || params.get('id') || params.get('jamaah_id');
+  if(qrJid){
+    const j = jamaah.find(x=>Number(x.id)===Number(qrJid));
+    if(j){ picked=j; saveSession('self', j.id); await enterSelf({fromRestore:true, fromQr:true}); return true; }
+  }
+  const ss = getSession();
+  if(!ss || !ss.jid || !ss.mode) return false;
+  const j = jamaah.find(x=>Number(x.id)===Number(ss.jid));
+  if(!j){ clearSession(); return false; }
+  picked = j;
+  if(ss.mode === 'op' && operatorFor(j)){ await enterOperator({fromRestore:true}); return true; }
+  await enterSelf({fromRestore:true});
+  return true;
+}
 
 async function init(){
   screen('scrWelcome');
@@ -343,6 +399,8 @@ async function init(){
   fillKelompokSelects();
   if(jamaah.length){
     $('wlcLoad').textContent = `${jamaah.length} nama jamaah berhasil dibaca dari Supabase`;
+    const restored = await tryAutoLogin();
+    if(restored) return;
     showWelcomeList();
   } else {
     $('wlcLoad').innerHTML = 'Data jamaah belum terbaca dari Supabase. Cek RLS/policy SELECT tabel aj_jamaah atau koneksi.';
@@ -422,12 +480,15 @@ function pickName(id){
   screen('scrMode');
 }
 function backWelcome(){
-  picked=null; activeOperator=null; selectedInputJamaah=null; openDetailId=null;
+  if(scanStream) stopScan(false);
+  picked=null; activeOperator=null; selectedInputJamaah=null; openDetailId=null; selfOpenKesForm=false;
   $('wlcSearch').value=''; hide('wlcResult'); screen('scrWelcome');
 }
 
-async function enterSelf(){
+async function enterSelf(opts={}){
   if(!picked) return backWelcome();
+  selfOpenKesForm = !!opts.fromQr;
+  if(!opts.fromRestore) saveSession('self', picked.id);
   screen('scrSelf'); $('selfBox').innerHTML='<div class="loading"><span class="spin"></span> Memuat data...</div>';
   try{ await loadTransaksi(); renderSelf(); }catch(e){ $('selfBox').innerHTML=`<div class="card"><b style="color:var(--red)">Gagal memuat data:</b><br>${esc(e.message)}</div>`; }
 }
@@ -439,6 +500,7 @@ function renderSelf(){
   const sisa = Math.max(0,totalKes-totalPay);
   const lunas = totalKes>0 && sisa<=0;
   const statusHtml = lunas ? '<span class="status-pill ok">✓ Lunas</span>' : '<span class="status-pill due">Belum Lunas</span>';
+  const lembar = Number(k?.jumlah_lembar || (totalKes ? lembarFromNilai(totalKes) : 0));
   const msg = lunas ? lunasInfo() : paymentInfo(picked, sisa, totalKes);
   $('selfBox').innerHTML = `<div class="self-panel">
     <div class="self-hero">
@@ -450,15 +512,55 @@ function renderSelf(){
         ${statusHtml}
       </div>
       <div class="summary-grid">
-        <div class="summary-item"><div class="k">Kesanggupan</div><div class="v">${totalKes?rp(totalKes):'Belum terdata'}</div></div>
+        <div class="summary-item"><div class="k">Kesanggupan</div><div class="v">${totalKes?`${lembar} lembar`:'Belum terdata'}</div><div class="lembar-mini">${totalKes?rp(totalKes):'@ Rp 50.000 / lembar'}</div></div>
         <div class="summary-item"><div class="k">Pembayaran</div><div class="v ok">${rp(totalPay)}</div></div>
         <div class="summary-item"><div class="k">Sisa</div><div class="v ${sisa>0?'red':'ok'}">${rp(sisa)}</div></div>
         <div class="summary-item"><div class="k">Status</div><div class="v ${lunas?'ok':'red'}">${lunas?'Lunas':(totalKes?'Belum Lunas':'Belum Data')}</div></div>
       </div>
     </div>
+    ${selfKesForm(k)}
     ${msg}
     ${pays.length ? `<div class="card"><div class="section-title">Riwayat Pembayaran</div><div class="pay-list clean">${pays.map(p=>`<div class="pay-line"><div><b>${fmtDate(p.tanggal)}</b><br><small>${esc(p.metode||p.penerima||'-')}</small></div><b style="color:var(--ok)">${rp(p.jumlah)}</b></div>`).join('')}</div></div>` : ''}
   </div>`;
+  setTimeout(updateSelfLembarHint,0);
+}
+function selfKesForm(k){
+  const lembar = Number(k?.jumlah_lembar || (k ? lembarFromNilai(valKes(k)) : 0));
+  const title = k ? 'Update Kesanggupan Saya' : 'Input Kesanggupan Saya';
+  const note = selfOpenKesForm ? '<div class="hint hint-strong" style="margin-bottom:8px">QR berhasil terbaca. Silakan isi jumlah lembar kesanggupan.</div>' : '';
+  return `<div class="card self-kes-form">
+    <div class="section-title">${title}</div>
+    ${note}
+    <div class="fg">
+      <label>Jumlah Lembar (@ Rp 50.000)</label>
+      <input id="selfLembar" type="number" inputmode="numeric" min="1" step="1" placeholder="Contoh: 10" value="${lembar || ''}" oninput="updateSelfLembarHint()">
+      <div class="hint" id="selfLembarHint"></div>
+    </div>
+    <button class="btn btn-pri btn-full" onclick="saveSelfKesanggupan()">Simpan Kesanggupan Saya</button>
+    <div class="hint" style="margin-top:8px">Jamaah hanya dapat input/update kesanggupan sendiri. Pembayaran tetap diupdate oleh operator.</div>
+  </div>`;
+}
+function updateSelfLembarHint(){
+  const el=$('selfLembar'), hint=$('selfLembarHint'); if(!el||!hint) return;
+  const lembar=Number(el.value||0);
+  hint.innerHTML = lembar>0 ? `${lembar} lembar × Rp 50.000 = <b>${rp(lembar*HARGA_LEMBAR)}</b>` : '';
+}
+async function saveSelfKesanggupan(){
+  if(!picked){ toast('Login jamaah tidak ditemukan'); return; }
+  const lembar = Number($('selfLembar')?.value || 0);
+  if(!Number.isInteger(lembar) || lembar < 1){ toast('Isi jumlah lembar minimal 1'); return; }
+  const nilai = lembar * HARGA_LEMBAR;
+  const existing = kesanggupan.find(k=>Number(k.jamaah_id)===Number(picked.id));
+  const pays = pembayaran.filter(p=>Number(p.jamaah_id)===Number(picked.id));
+  const totalPay = pays.reduce((s,p)=>s+Number(p.jumlah||0),0);
+  const status = totalPay >= nilai ? 'lunas' : (totalPay > 0 ? 'angsur' : 'belum');
+  const payload = {jamaah_id:picked.id, jumlah_lembar:lembar, nilai, status, operator:'self:'+picked.nama, operator_jamaah_id:picked.id};
+  let result = existing ? await safeUpdateKes(existing.id, payload) : await safeInsertKes(payload);
+  if(result.error){ toast('Gagal simpan kesanggupan: '+result.error.message); return; }
+  try{ await sb.from('aj_log').insert({jamaah_id:picked.id, aksi: existing?'update_kesanggupan_self':'input_kesanggupan_self', detail:`${lembar} lembar · ${rp(nilai)}`, operator:'self:'+picked.nama, operator_jamaah_id:picked.id, scope:kelompokOf(picked)}); }catch(e){}
+  toast('Kesanggupan saya tersimpan');
+  selfOpenKesForm=false;
+  await loadTransaksi(); renderSelf();
 }
 function lunasInfo(){
   return `<div class="method-card">
@@ -468,8 +570,8 @@ function lunasInfo(){
 }
 function paymentInfo(j, sisa, totalKes){
   if(!totalKes) return `<div class="method-card">
-    <h3>Data kesanggupan belum terdaftar</h3>
-    <p>Silakan hubungi operator/pengurus untuk input data. Jamaah tidak dapat mengubah data sendiri.</p>
+    <h3>Kesanggupan belum diisi</h3>
+    <p>Silakan isi jumlah lembar kesanggupan di form atas. Nilai otomatis dihitung @ Rp 50.000 per lembar.</p>
     ${waBox(j)}
   </div>`;
   return `<div class="method-card">
@@ -490,10 +592,11 @@ function waBox(j){
   return `<a class="btn btn-ok btn-full wa-clean" target="_blank" href="https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(text)}">WA Admin 085718264782</a><div class="hint" style="margin-top:7px">Format WA: salam, saya nama yang tertera, kelompok yang tertera, mau bertanya...</div>`;
 }
 
-async function enterOperator(){
+async function enterOperator(opts={}){
   if(!picked) return backWelcome();
   activeOperator = operatorFor(picked);
   if(!activeOperator){ toast('Nama ini belum terdaftar sebagai operator'); return; }
+  if(!opts.fromRestore) saveSession('op', picked.id);
   screen('scrOperator');
   $('opTitle').textContent = picked.nama;
   $('opSub').textContent = opIsDesa(activeOperator) ? 'Scope Desa / semua kelompok' : `Scope Kelompok ${activeOperator.scope_kelompok || kelompokOf(picked)}`;
@@ -585,7 +688,7 @@ function openInput(mode){
   $('inputTitle').textContent = mode==='kes' ? 'Input Kesanggupan' : 'Input Pembayaran';
   $('mSearch').value=''; hide('mResult'); hide('mSelected');
   $('formKes').classList.toggle('hide', mode!=='kes'); $('formPay').classList.toggle('hide', mode!=='pay');
-  $('kesNilai').value=''; $('kesHint').textContent=''; $('kesStatus').value='belum'; $('kesNote').value='';
+  $('kesLembar').value=''; $('kesHint').textContent=''; $('kesStatus').value='belum'; $('kesNote').value='';
   $('payDate').value=today(); $('payNilai').value=''; $('payHint').textContent=''; $('payReceiver').value=picked?.nama||''; $('payNote').value='';
   setTimeout(()=>$('mSearch').focus(),100);
 }
@@ -604,21 +707,23 @@ function selectInputJamaah(id){
   $('mSelected').innerHTML = `<b>${esc(selectedInputJamaah.nama)}</b><br>${esc(kelompokOf(selectedInputJamaah))} • ${esc(genderOf(selectedInputJamaah))}${row?`<br>Kesanggupan: ${rp(row.kesanggupan)} · Bayar: ${rp(row.pembayaran)} · Sisa: ${rp(row.sisa)}`:'<br>Belum ada data kesanggupan'}`;
   show('mSelected');
   if(inputMode==='pay' && row){ $('payNilai').value = row.sisa || ''; updateNilaiHint('payNilai','payHint'); }
-  if(inputMode==='kes' && row){ $('kesNilai').value = row.kesanggupan || ''; updateNilaiHint('kesNilai','kesHint'); $('kesStatus').value = row.status==='lunas'?'lunas':row.status==='angsur'?'angsur':'belum'; }
+  if(inputMode==='kes' && row){ $('kesLembar').value = Number(row.rawKes?.jumlah_lembar || lembarFromNilai(row.kesanggupan)); updateLembarHint('kesLembar','kesHint'); $('kesStatus').value = row.status==='lunas'?'lunas':row.status==='angsur'?'angsur':'belum'; }
 }
 function updateNilaiHint(inputId,hintId){ const n=Number($(inputId).value||0); $(hintId).textContent = n ? rp(n) : ''; }
+function updateLembarHint(inputId,hintId){ const n=Number($(inputId).value||0); $(hintId).innerHTML = n ? `${n} lembar × Rp 50.000 = <b>${rp(n*HARGA_LEMBAR)}</b>` : ''; }
 async function saveKesanggupan(){
   if(!selectedInputJamaah){ toast('Pilih jamaah dulu'); return; }
-  const nilai = Number($('kesNilai').value||0); if(nilai<=0){ toast('Isi nilai kesanggupan'); return; }
+  const lembar = Number($('kesLembar').value||0); if(!Number.isInteger(lembar) || lembar<=0){ toast('Isi jumlah lembar minimal 1'); return; }
+  const nilai = lembar * HARGA_LEMBAR;
   const existing = kesanggupan.find(k=>Number(k.jamaah_id)===Number(selectedInputJamaah.id));
   const row = tableRows.find(r=>r.id===Number(selectedInputJamaah.id));
   let status = $('kesStatus').value;
   if(row && row.pembayaran >= nilai) status = 'lunas';
-  const payload = {jamaah_id:selectedInputJamaah.id, jumlah_lembar:lembarFromNilai(nilai), nilai, status, operator:picked.nama, operator_jamaah_id:picked.id};
+  const payload = {jamaah_id:selectedInputJamaah.id, jumlah_lembar:lembar, nilai, status, operator:picked.nama, operator_jamaah_id:picked.id};
   let result;
   if(existing) result = await safeUpdateKes(existing.id,payload); else result = await safeInsertKes(payload);
   if(result.error){ toast('Gagal simpan: '+result.error.message); return; }
-  await logAction(selectedInputJamaah.id,'kesanggupan',`${rp(nilai)} · ${status}`);
+  await logAction(selectedInputJamaah.id,'kesanggupan',`${lembar} lembar · ${rp(nilai)} · ${status}`);
   toast('Kesanggupan tersimpan'); closeInput(); await refreshOperator();
 }
 async function safeInsertKes(payload){
@@ -653,6 +758,57 @@ async function updateStatusAfterPay(jid){
 }
 async function logAction(jid,aksi,detail){
   try{ await sb.from('aj_log').insert({jamaah_id:jid,aksi,detail,operator:picked?.nama||'-',operator_jamaah_id:picked?.id||null,scope:opIsDesa(activeOperator)?'Desa':(activeOperator?.scope_kelompok||kelompokOf(picked))}); }catch(e){}
+}
+
+
+function startScan(mode='self'){
+  scanMode = mode || 'self';
+  if(!window.jsQR){ toast('Library QR belum termuat. Cek koneksi internet.'); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Kamera tidak tersedia di browser ini'); return; }
+  screen('scrScan');
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false})
+    .then(stream=>{
+      scanStream=stream;
+      const video=$('scanVideo');
+      video.srcObject=stream;
+      video.play();
+      requestAnimationFrame(scanTick);
+    })
+    .catch(err=>{ toast('Kamera gagal dibuka: '+(err.message||err)); stopScan(true); });
+}
+function scanTick(){
+  if(!scanStream) return;
+  const video=$('scanVideo'), canvas=$('scanCanvas');
+  if(!video || !canvas || video.readyState < 2){ requestAnimationFrame(scanTick); return; }
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const ctx=canvas.getContext('2d', {willReadFrequently:true});
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const code=jsQR(img.data,img.width,img.height);
+  if(code && code.data){ handleQR(code.data); return; }
+  requestAnimationFrame(scanTick);
+}
+function stopScan(goWelcome=false){
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+  const video=$('scanVideo'); if(video) video.srcObject=null;
+  if(goWelcome) screen('scrWelcome');
+}
+function extractJamaahIdFromQR(data){
+  const txt=String(data||'').trim();
+  const m=txt.match(/[?&#](?:jid|id|jamaah_id)=(\d+)/i) || txt.match(/(?:jid|jamaah_id|id)[:=\s-]+(\d+)/i);
+  if(m) return Number(m[1]);
+  if(/^\d+$/.test(txt)) return Number(txt);
+  return null;
+}
+async function handleQR(data){
+  const jid=extractJamaahIdFromQR(data);
+  if(!jid){ toast('QR tidak valid. Tidak ada ID jamaah.'); return; }
+  const j=jamaah.find(x=>Number(x.id)===Number(jid));
+  if(!j){ toast('ID jamaah dari QR tidak ditemukan: '+jid); return; }
+  stopScan(false);
+  picked=j;
+  saveSession('self', j.id);
+  await enterSelf({fromQr:true, fromRestore:true});
 }
 
 function exportExcel(){
