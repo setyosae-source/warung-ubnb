@@ -240,6 +240,10 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
     <div class="op-header-top">
       <div><h2 id="opHdrName">Operator</h2></div>
       <span class="scope-badge" id="opHdrScope">-</span>
+      <div style="position:relative;margin-left:4px">
+        <button id="alertBtn" class="op-menu-btn hide" onclick="showAlerts()" title="Alert Keamanan">🔔</button>
+        <span id="alertBadge" style="position:absolute;top:-4px;right:-4px;background:#c0392b;color:#fff;border-radius:10px;padding:1px 5px;font-size:9px;font-weight:700;display:none">0</span>
+      </div>
       <button class="op-menu-btn" onclick="showOpMenu()">⋮</button>
     </div>
     <div class="op-hdr-tabs">
@@ -406,6 +410,18 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
   </div>
 </div>
 
+<!-- ══ MODAL: ALERT KEAMANAN ══ -->
+<div id="modalAlert" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalAlert')">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title">🔔 Alert Keamanan</div>
+      <button class="modal-close" onclick="closeModal('modalAlert');markAlertsRead()">&times;</button>
+    </div>
+    <div id="alertList"><div class="loading"><div class="spin"></div></div></div>
+    <button class="btn btn-ghost btn-full" style="margin-top:10px" onclick="closeModal('modalAlert');markAlertsRead()">Tandai Sudah Dibaca</button>
+  </div>
+</div>
+
 <!-- ══ MODAL: DAFTARKAN OPERATOR ══ -->
 <div id="modalRegOp" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalRegOp')">
   <div class="modal-box">
@@ -469,6 +485,57 @@ const WA_ADMIN='6285718264782';
 const TRIYONO_ID=243;
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const SK={UID:'aj4_uid',OP:'aj4_op'};
+const SETYO_ID=343;
+const TRUSTED_IDS=[343,363]; // Setyo + Angripti — operator terpercaya
+let myIP='unknown';
+let myUA=navigator.userAgent;
+
+// ── IP & Security ─────────────────────────────────────────────────────────────
+async function fetchMyIP(){
+  try{
+    const r=await fetch('https://api.ipify.org?format=json');
+    const d=await r.json(); myIP=d.ip||'unknown';
+  }catch(e){myIP='unknown';}
+}
+
+async function logIP(aksi){
+  if(!curUser||!curOp)return;
+  // Simpan ke aj_ip_log
+  const {data:iplog}=await sb.from('aj_ip_log').insert({
+    jamaah_id:curUser.id, nama_operator:curUser.nama,
+    ip_address:myIP, user_agent:myUA.slice(0,200), aksi
+  }).select().single();
+
+  // Cek apakah operator ini pernah login dari IP lain sebelumnya
+  if(TRUSTED_IDS.includes(curUser.id)) return; // Setyo & Angripti bebas
+
+  // Ambil semua IP unik operator ini dalam 30 hari terakhir
+  const {data:prevLogs}=await sb.from('aj_ip_log')
+    .select('ip_address')
+    .eq('jamaah_id',curUser.id)
+    .neq('id',iplog?.id||0)
+    .gte('created_at', new Date(Date.now()-30*24*3600*1000).toISOString())
+    .order('created_at',{ascending:false})
+    .limit(50);
+
+  const prevIPs=[...new Set((prevLogs||[]).map(l=>l.ip_address).filter(ip=>ip&&ip!=='unknown'))];
+
+  // Jika ada IP sebelumnya dan IP sekarang berbeda → flag + alert
+  if(prevIPs.length>0 && !prevIPs.includes(myIP) && myIP!=='unknown'){
+    // Mark as flagged
+    if(iplog) await sb.from('aj_ip_log').update({flagged:true}).eq('id',iplog.id);
+
+    // Kirim alert ke Setyo
+    const pesan=`⚠️ PERINGATAN: ${curUser.nama} (${curUser.pw}) login dari IP baru: ${myIP}. IP sebelumnya: ${prevIPs.slice(0,3).join(', ')}. Aksi: ${aksi}`;
+    await sb.from('aj_alert').insert({
+      tipe:'ip_baru',
+      pesan,
+      data:{jamaah_id:curUser.id,nama:curUser.nama,ip_baru:myIP,ip_lama:prevIPs,aksi,ua:myUA.slice(0,100)},
+      sudah_baca:false
+    });
+    console.warn('IP baru terdeteksi:', pesan);
+  }
+}
 
 let allJamaah=[],allOps=[];
 let curUser=null,curOp=null;
@@ -496,6 +563,7 @@ function clearSession(){Object.values(SK).forEach(k=>localStorage.removeItem(k))
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 async function init(){
+  fetchMyIP(); // mulai fetch IP di background
   const [{data:jm},{data:ops}]=await Promise.all([
     sb.from('aj_jamaah').select('*').order('pw').order('gender').order('no_urut'),
     sb.from('aj_operator').select('*').eq('aktif',true)
@@ -614,8 +682,8 @@ async function showOpDash(){
   $('opHdrScope').textContent=curOp.scope;
   const pwWrap=$('fPWWrap');
   if(pwWrap)pwWrap.style.display=curOp.scope==='Desa'?'block':'none';
-  // Populate penerima dropdown di modal pay
   populateOpDropdowns();
+  if(curUser?.id===SETYO_ID){show('alertBtn');loadAlerts();setupAlertRealtime();}
   await refreshData();
 }
 
@@ -783,6 +851,7 @@ async function buatSetorModal(){
   if(jml<1){toast('Masukkan jumlah');return;}
   const {error}=await sb.from('aj_setor').insert({dari_jamaah_id:curUser.id,ke_jamaah_id:keId,jumlah:jml,catatan:cat,status:'pending'});
   if(error){toast('Gagal: '+error.message);return;}
+  logIP('buat_setoran:'+rp(jml));
   closeModal('modalSetor');
   toast('✅ Setoran dikirim, menunggu konfirmasi');
   if(curTab==='setor')loadSetoran();
@@ -832,6 +901,7 @@ async function saveKes(){
   if(ex){({error:err}=await sb.from('aj_kesanggupan').update({jumlah_lembar:lembar,status,operator:curUser.nama,operator_jamaah_id:curUser.id}).eq('id',ex.id));}
   else{({error:err}=await sb.from('aj_kesanggupan').insert({jamaah_id:kesTarget.id,jumlah_lembar:lembar,status,operator:curUser.nama,operator_jamaah_id:curUser.id}));}
   if(err){toast('Gagal: '+err.message);return;}
+  logIP('input_kesanggupan:'+kesTarget.nama);
   toast(`✅ Tersimpan: ${kesTarget.nama}`);closeModal('modalKes');refreshData();
 }
 
@@ -853,6 +923,7 @@ async function savePay(){
     const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
     await sb.from('aj_kesanggupan').update({status:tot>=ks.jumlah_lembar*HARGA?'lunas':'angsur',operator:curUser.nama}).eq('id',ks.id);
   }
+  logIP('input_pembayaran:'+payTarget.nama+':'+rp(jml));
   toast(`✅ Bayar ${rp(jml)} tercatat`);closeModal('modalPay');refreshData();
   // Update saldo setoran jika sedang di tab setor
   if(curTab==='setor')loadSetoran();
@@ -1036,6 +1107,37 @@ async function doExport(type){
 
 // ── OP MENU ───────────────────────────────────────────────────────────────────
 function showOpMenu(){show('modalOpMenu');}
+
+// ── ALERT KEAMANAN (hanya Setyo) ──────────────────────────────────────────────
+async function loadAlerts(){
+  if(curUser?.id!==SETYO_ID)return;
+  const {data}=await sb.from('aj_alert').select('*').eq('sudah_baca',false).order('created_at',{ascending:false}).limit(20);
+  const cnt=(data||[]).length;
+  const badge=$('alertBadge'),btn=$('alertBtn');
+  if(cnt>0){badge.textContent=cnt;badge.style.display='inline';show('alertBtn');}
+  else{badge.style.display='none';}
+}
+async function showAlerts(){
+  show('modalAlert');
+  const {data}=await sb.from('aj_alert').select('*').order('created_at',{ascending:false}).limit(30);
+  if(!data||!data.length){$('alertList').innerHTML='<p style="font-size:13px;color:var(--muted);text-align:center;padding:20px">Tidak ada alert</p>';return;}
+  $('alertList').innerHTML=data.map(a=>`
+    <div style="padding:10px 0;border-bottom:1px solid var(--border);${a.sudah_baca?'opacity:.6':''}">
+      <div style="font-size:12px;font-weight:${a.sudah_baca?'400':'700'};color:${a.sudah_baca?'var(--muted)':'var(--red)'};margin-bottom:4px">${a.pesan}</div>
+      <div style="font-size:10px;color:var(--muted)">${fmtDt(a.created_at)} ${a.sudah_baca?'· ✅ Sudah dibaca':''}</div>
+    </div>`).join('');
+}
+async function markAlertsRead(){
+  await sb.from('aj_alert').update({sudah_baca:true}).eq('sudah_baca',false);
+  $('alertBadge').style.display='none';
+}
+function setupAlertRealtime(){
+  if(curUser?.id!==SETYO_ID)return;
+  sb.channel('aj-alerts')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'aj_alert'},()=>{
+      loadAlerts();
+    }).subscribe();
+}
 function opLogout(){closeModal('modalOpMenu');clearSession();curUser=null;curOp=null;showScreen('scrWelcome');$('wlcInp').value='';hide('wlcMasukBtn');hide('wlcOpBadge');}
 
 // ── DAFTARKAN OPERATOR ────────────────────────────────────────────────────────
