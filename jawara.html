@@ -2626,6 +2626,8 @@ async function validateCart(){
 }
 
 // CHECKOUT
+let coMetodeKirim='ambil_sendiri', coOngkir=0;
+
 async function bukaCheckout(){
   if(!U){openOv('ov-login');return;}
   if(!cart.length){toast('Keranjang kosong','err');return;}
@@ -2634,6 +2636,32 @@ async function bukaCheckout(){
   if(!cart.length){toast('Semua produk di keranjang sudah tidak tersedia','err');renderCart();return;}
   const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
   const norek=S.norek_nomor||'(Belum diset)',bank=S.norek_bank||'BSI',atas=S.norek_nama||'UBNB Perwira';
+
+  // Ambil setting pengiriman toko + tarif kurir UB
+  let tarifKurirToko=0, adaKurirToko=false, tarifKurirUB=5000;
+  try{
+    const prodIds=cart.filter(c=>c.id?.startsWith('a_')).map(c=>parseInt(c.id.replace('a_',''),10));
+    if(prodIds.length){
+      const{data:pr}=await SB.from('ubnb_mk_produk').select('toko_id').in('id',prodIds);
+      const tokoIds=[...new Set((pr||[]).map(p=>p.toko_id).filter(Boolean))];
+      if(tokoIds.length===1){
+        const{data:tk}=await SB.from('ubnb_mk_toko').select('sediakan_kirim,biaya_kirim_toko').eq('id',tokoIds[0]).single();
+        if(tk){adaKurirToko=tk.sediakan_kirim||false;tarifKurirToko=parseInt(tk.biaya_kirim_toko)||0;}
+      }
+    }
+    const{data:pg}=await SB.from('ubnb_pengaturan').select('value').eq('key','tarif_kurir_ub').single();
+    if(pg?.value)tarifKurirUB=parseInt(pg.value)||5000;
+  }catch(e){}
+
+  // Reset state
+  coMetodeKirim='ambil_sendiri'; coOngkir=0;
+
+  const htmlKurirToko=adaKurirToko?`
+    <div class="popt" id="co-km-kurir-toko" onclick="pilihMetodeKirim('kurir_toko',${tarifKurirToko})">
+      <div class="prad"><div class="praddot"></div></div>
+      <div style="flex:1"><div class="pname">🛵 Kurir Toko</div><div class="psub">Diantar kurir penjual · ${rp(tarifKurirToko)}</div></div>
+    </div>`:'';
+
   document.getElementById('co-body').innerHTML=`
     <div class="co-card">
       <div class="co-ch">📍 Info Pemesan</div>
@@ -2651,6 +2679,22 @@ async function bukaCheckout(){
         <div style="flex:1;min-width:0"><div class="co-inm">${esc(item.nama)}</div><div class="co-isub">${esc(item.toko)} · ${item.qty}× ${rp(item.harga)}</div></div>
         <div class="co-ipr">${rp(item.harga*item.qty)}</div>
       </div>`).join('')}</div>
+    </div>
+    <div class="co-card">
+      <div class="co-ch">🚚 Metode Pengiriman</div>
+      <div class="co-cb">
+        <div class="pay-opts">
+          ${htmlKurirToko}
+          <div class="popt" id="co-km-kurir-ub" onclick="pilihMetodeKirim('kurir_ub',${tarifKurirUB})">
+            <div class="prad"><div class="praddot"></div></div>
+            <div style="flex:1"><div class="pname">🏢 Kurir UB</div><div class="psub">Diantar kurir koperasi · ${rp(tarifKurirUB)}</div></div>
+          </div>
+          <div class="popt on" id="co-km-ambil-sendiri" onclick="pilihMetodeKirim('ambil_sendiri',0)">
+            <div class="prad"><div class="praddot"></div></div>
+            <div style="flex:1"><div class="pname">🏪 Ambil ke Toko</div><div class="psub">Datang langsung · Gratis</div></div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="co-card">
       <div class="co-ch">💳 Metode Bayar</div>
@@ -2679,11 +2723,23 @@ async function bukaCheckout(){
       <div class="co-ch">📋 Ringkasan</div>
       <div class="co-cb">
         <div class="ring-row"><div>Subtotal (${cart.reduce((a,i)=>a+i.qty,0)} produk)</div><div>${rp(total)}</div></div>
-        <div class="ring-row"><div>Ongkos Kirim</div><div style="color:var(--g);font-weight:700">Gratis</div></div>
-        <div class="ring-row"><div>Total Bayar</div><div>${rp(total)}</div></div>
+        <div class="ring-row" id="co-row-ongkir"><div>Ongkos Kirim</div><div style="color:var(--g);font-weight:700">Gratis</div></div>
+        <div class="ring-row" style="font-weight:700"><div>Total Bayar</div><div id="co-total-val">${rp(total)}</div></div>
       </div>
     </div><div style="height:8px"></div>`;
   openOv('ov-co');
+}
+
+function pilihMetodeKirim(metode, ongkir){
+  coMetodeKirim=metode; coOngkir=ongkir;
+  ['kurir_toko','kurir_ub','ambil_sendiri'].forEach(m=>{
+    document.getElementById('co-km-'+m)?.classList.toggle('on',m===metode);
+  });
+  const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
+  const rowOngkir=document.getElementById('co-row-ongkir');
+  const totalEl=document.getElementById('co-total-val');
+  if(rowOngkir)rowOngkir.innerHTML=`<div>Ongkos Kirim</div><div>${ongkir>0?rp(ongkir):'<span style="color:var(--g);font-weight:700">Gratis</span>'}</div>`;
+  if(totalEl)totalEl.textContent=rp(total+ongkir);
 }
 function pickPay(m){
   payMode=m;
@@ -2695,7 +2751,8 @@ async function prosesOrder(){
   if(!U)return;
   if(!cart.length){toast('Keranjang kosong','err');return;}
   const alamat=document.getElementById('co-alamat')?.value.trim()||'';
-  const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
+  const subtotal=cart.reduce((a,i)=>a+i.harga*i.qty,0);
+  const total=subtotal+coOngkir;
   // Idempotent kode: timestamp + random suffix (mengurangi collision pada concurrent submit)
   const kode='ORD-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
   const btn=document.getElementById('btn-order');
@@ -2710,10 +2767,12 @@ async function prosesOrder(){
       p_nama:U.nama,
       p_wa:U.wa||U.no_hp||null,
       p_alamat:alamat,
-      p_subtotal:total,
-      p_biaya_kirim:0,
+      p_subtotal:subtotal,
+      p_biaya_kirim:coOngkir,
       p_total:total,
       p_metode_bayar:payMode,
+      p_metode_kirim:coMetodeKirim,
+      p_sumber_ongkir:coMetodeKirim==='kurir_toko'?'penjual':coMetodeKirim==='kurir_ub'?'ub':'gratis',
       p_items:cart.map(item=>({
         produk_id:item.id.startsWith('a_')?parseInt(item.id.replace('a_',''),10):null,
         barang_id:item.id.startsWith('w_')?parseInt(item.id.replace('w_',''),10):null,
@@ -2743,14 +2802,14 @@ async function prosesOrder(){
         pembeli_nama:U.nama,
         pembeli_wa:U.wa||U.no_hp||null,
         pembeli_alamat:alamat,
-        subtotal:total,
-        biaya_kirim:0,
+        subtotal:subtotal,
+        biaya_kirim:coOngkir,
         total,
         status:'menunggu',
         metode_bayar:payMode,
         status_bayar:'belum',
-        metode_kirim:'ambil_sendiri',
-        sumber_ongkir:'penjual'
+        metode_kirim:coMetodeKirim,
+        sumber_ongkir:coMetodeKirim==='kurir_toko'?'penjual':coMetodeKirim==='kurir_ub'?'ub':'gratis'
       }]).select('id').single();
       if(error||!ord){
         toast('Gagal membuat pesanan: '+(error||'unknown'),'err');
@@ -2811,7 +2870,8 @@ async function prosesOrder(){
           if(tk?.no_wa){targetWa=normalizeWA(tk.no_wa);targetLabel=tk.nama_toko||'Toko';}
         }
       }
-      const pesanText='Halo '+targetLabel+'!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nTotal: '+rp(total)+'\nMetode: '+(payMode==='cod'?'Bayar Nanti':'Transfer')+'\n\nMohon dikonfirmasi. Terima kasih! 🙏';
+      const infoKirim=coMetodeKirim==='kurir_toko'?'Kurir Toko':coMetodeKirim==='kurir_ub'?'Kurir UB':'Ambil ke Toko';
+      const pesanText='Halo '+targetLabel+'!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nSubtotal: '+rp(subtotal)+'\nOngkir: '+(coOngkir>0?rp(coOngkir):'Gratis')+'\nTotal: '+rp(total)+'\nPengiriman: '+infoKirim+'\nMetode: '+(payMode==='cod'?'Bayar Nanti':'Transfer')+'\n\nMohon dikonfirmasi. Terima kasih! 🙏';
       window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(pesanText)}`, '_blank');
     }catch(e){}
     cart=[];saveCart();syncCart();closeOv('ov-co');
