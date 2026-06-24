@@ -330,21 +330,7 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
           <div class="saldo-item"><div class="siv" id="stDiTangan">-</div><div class="sil">Di Tangan</div></div>
         </div>
       </div>
-      <!-- Form Buat Setoran -->
-      <div class="setor-card">
-        <h4>📤 Buat Setoran</h4>
-        <div class="fg"><label>Penerima Setoran</label>
-          <select id="setorKe" style="padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;outline:none;background:#fff">
-            <option value="">Pilih penerima...</option>
-          </select>
-        </div>
-        <div class="row2">
-          <div class="fg"><label>Jumlah (Rp)</label><input type="number" id="setorJml" step="10000" oninput="calcNilaiRaw('setorJml','setorHint')" placeholder="0"></div>
-          <div class="fg"><label>Catatan</label><input type="text" id="setorCat" placeholder="Opsional..."></div>
-        </div>
-        <div class="hint" id="setorHint" style="margin-bottom:8px"></div>
-        <button class="btn btn-blue btn-full" onclick="buatSetor()">📤 Buat Setoran</button>
-      </div>
+      <!-- Tombol buat setoran dipindah ke FAB -->
       <!-- Menunggu Konfirmasi Masuk -->
       <div id="setorMasukCard" class="setor-card hide">
         <h4>📥 Menunggu Konfirmasi Saya</h4>
@@ -363,6 +349,7 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
     <div id="fabMenu" class="fab-menu hide">
       <div class="fab-item" onclick="openModal('modalKes')">📝 Input Kesanggupan</div>
       <div class="fab-item" onclick="openModal('modalPay')">💰 Input Pembayaran</div>
+      <div class="fab-item" id="fabSetorItem" onclick="openModal('modalSetor')">📤 Buat Setoran</div>
     </div>
     <button class="fab-main" id="fabBtn" onclick="toggleFab()">＋</button>
   </div>
@@ -442,6 +429,34 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">OPERATOR AKTIF</div>
       <div id="regOpList"><div class="loading"><div class="spin"></div></div></div>
     </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: BUAT SETORAN ══ -->
+<div id="modalSetor" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalSetor')">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title">📤 Buat Setoran</div>
+      <button class="modal-close" onclick="closeModal('modalSetor')">&times;</button>
+    </div>
+    <div class="fg" style="background:var(--bg);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;text-align:center">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Uang di Tangan Anda</div>
+      <div id="setorSaldoInfo" style="font-size:20px;font-weight:700;color:var(--pri)">-</div>
+    </div>
+    <div class="fg">
+      <label>Penerima Setoran</label>
+      <select id="setorKeModal" style="padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;outline:none;background:#fff"></select>
+    </div>
+    <div class="fg">
+      <label>Jumlah (Rp)</label>
+      <input type="number" id="setorJmlModal" step="10000" placeholder="0" oninput="calcNilaiRaw('setorJmlModal','setorHintModal')">
+      <div class="hint" id="setorHintModal"></div>
+    </div>
+    <div class="fg">
+      <label>Catatan (opsional)</label>
+      <input type="text" id="setorCatModal" placeholder="misal: setoran minggu ini...">
+    </div>
+    <button class="btn btn-blue btn-full" onclick="buatSetorModal()">📤 Kirim Setoran</button>
   </div>
 </div>
 
@@ -614,14 +629,7 @@ function populateOpDropdowns(){
   }).join('');
   $('payPenerima').innerHTML=opts;
 
-  // Dropdown penerima setoran (semua operator kecuali diri sendiri)
-  const setorOpts=allOps.filter(o=>o.jamaah_id!==curUser.id).map(o=>{
-    const j=allJamaah.find(x=>x.id===o.jamaah_id);
-    const nama=j?.nama||'Operator';
-    const sel=o.jamaah_id===TRIYONO_ID?'selected':'';
-    return `<option value="${o.jamaah_id}" ${sel}>${nama} (${o.scope})</option>`;
-  }).join('');
-  $('setorKe').innerHTML=`<option value="">Pilih penerima...</option>${setorOpts}`;
+  // setorKe sekarang di modal FAB, di-init saat modal dibuka
 }
 
 async function refreshData(){
@@ -744,7 +752,40 @@ function openModal(id){
   hide('fabMenu');fabOpen=false;$('fabBtn').textContent='＋';
   if(id==='modalKes'){$('kesSearch').value='';hide('kesSearchRes');hide('kesTarget');kesTarget=null;$('kesLembar').value='';$('kesHint').textContent='';}
   if(id==='modalPay'){$('paySearch').value='';hide('paySearchRes');hide('payTarget');payTarget=null;$('payTgl').value=today();$('payJml').value='';$('payHint').textContent='';}
+  if(id==='modalSetor'){initSetorModal();}
   show(id);
+}
+async function initSetorModal(){
+  // Hitung saldo di tangan
+  const {data:bm}=await sb.from('aj_pembayaran').select('jumlah').eq('penerima_jamaah_id',curUser.id);
+  const masuk=(bm||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+  const {data:sk}=await sb.from('aj_setor').select('jumlah').eq('dari_jamaah_id',curUser.id);
+  const keluar=(sk||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+  const diTangan=Math.max(0,masuk-keluar);
+  $('setorSaldoInfo').textContent=rp(diTangan);
+  $('setorJmlModal').value=diTangan||'';
+  calcNilaiRaw('setorJmlModal','setorHintModal');
+  $('setorCatModal').value='';
+  // Populate dropdown penerima
+  const opts=allOps.filter(o=>o.jamaah_id!==curUser.id).map(o=>{
+    const j=allJamaah.find(x=>x.id===o.jamaah_id);
+    const nama=j?.nama||'Operator';
+    const sel=o.jamaah_id===TRIYONO_ID?'selected':'';
+    return `<option value="${o.jamaah_id}" ${sel}>${nama} (${o.scope})</option>`;
+  }).join('');
+  $('setorKeModal').innerHTML=`<option value="">Pilih penerima...</option>${opts}`;
+}
+async function buatSetorModal(){
+  const keId=parseInt($('setorKeModal').value)||0;
+  const jml=parseInt($('setorJmlModal').value)||0;
+  const cat=$('setorCatModal').value.trim();
+  if(!keId){toast('Pilih penerima');return;}
+  if(jml<1){toast('Masukkan jumlah');return;}
+  const {error}=await sb.from('aj_setor').insert({dari_jamaah_id:curUser.id,ke_jamaah_id:keId,jumlah:jml,catatan:cat,status:'pending'});
+  if(error){toast('Gagal: '+error.message);return;}
+  closeModal('modalSetor');
+  toast('✅ Setoran dikirim, menunggu konfirmasi');
+  if(curTab==='setor')loadSetoran();
 }
 
 // ── MODAL SEARCH ──────────────────────────────────────────────────────────────
@@ -883,18 +924,7 @@ async function loadSetoran(){
   }).join('');
 }
 
-async function buatSetor(){
-  const keId=parseInt($('setorKe').value)||0;
-  const jml=parseInt($('setorJml').value)||0;
-  const cat=$('setorCat').value.trim();
-  if(!keId){toast('Pilih penerima');return;}
-  if(jml<1){toast('Masukkan jumlah');return;}
-  const {error}=await sb.from('aj_setor').insert({dari_jamaah_id:curUser.id,ke_jamaah_id:keId,jumlah:jml,catatan:cat,status:'pending'});
-  if(error){toast('Gagal: '+error.message);return;}
-  $('setorJml').value='';$('setorCat').value='';$('setorHint').textContent='';
-  toast('✅ Setoran dibuat, menunggu konfirmasi');
-  loadSetoran();
-}
+// buatSetor dipindah ke FAB modal
 
 async function konfirmasiSetor(id){
   const now=new Date().toISOString();
