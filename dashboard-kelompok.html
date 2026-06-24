@@ -328,7 +328,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
           <!-- STATUS SAMBUNG -->
           <div>
             <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">STATUS SAMBUNG</div>
-            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_tetap" onchange="onFilterChange()"/> Tetap</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_tetap" onchange="onFilterChange()" checked id="ff-sb-tetap"/> Tetap</label>
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_pindahsambung" onchange="onFilterChange()"/> Pindah Sambung</label>
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_pindahsementara" onchange="onFilterChange()"/> Pindah Sementara</label>
             <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_meninggal" onchange="onFilterChange()"/> Meninggal</label>
@@ -366,6 +366,12 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       </div>
     </div>
 
+    <div id="sb-quickfilter" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px;">Sambung:</span>
+      <button id="qf-tetap" onclick="qfSambung('tetap')" style="padding:4px 13px;border-radius:99px;border:1.5px solid var(--green);background:var(--green);color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Tetap</button>
+      <button id="qf-lainnya" onclick="qfSambung('lainnya')" style="padding:4px 13px;border-radius:99px;border:1.5px solid var(--border);background:white;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⚠️ Lainnya</button>
+      <button id="qf-semua" onclick="qfSambung('semua')" style="padding:4px 13px;border-radius:99px;border:1.5px solid var(--border);background:white;color:var(--text-muted);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">👥 Semua</button>
+    </div>
     <div class="search-box">
       <input type="text" id="search-jamaah" placeholder="Cari nama, KK, alamat..." oninput="renderStats();renderJamaah()"/>
     </div>
@@ -1467,7 +1473,43 @@ document.addEventListener('click',e=>{
 });
 
 // ===== MULTI-FILTER STATE =====
-const FILTER_STATE={};
+const FILTER_STATE={sb_tetap:true}; // default: hanya tampil Tetap
+
+function qfSambung(mode){
+  // Reset semua filter sambung dulu
+  ['sb_tetap','sb_pindahsambung','sb_pindahsementara','sb_meninggal','sb_belum'].forEach(k=>FILTER_STATE[k]=false);
+  // Sync checkbox di panel
+  const syncCb=(id,val)=>{const el=document.getElementById(id);if(el){el.checked=val;}};
+  if(mode==='tetap'){
+    FILTER_STATE.sb_tetap=true;
+    syncCb('ff-sb-tetap',true);
+  } else if(mode==='lainnya'){
+    FILTER_STATE.sb_pindahsambung=true;
+    FILTER_STATE.sb_pindahsementara=true;
+    FILTER_STATE.sb_meninggal=true;
+    FILTER_STATE.sb_belum=true;
+    // Sync checkboxes
+    document.querySelectorAll('.ff').forEach(el=>{
+      const k=el.dataset.f;
+      if(['sb_pindahsambung','sb_pindahsementara','sb_meninggal','sb_belum'].includes(k)) el.checked=true;
+      if(k==='sb_tetap') el.checked=false;
+    });
+  } else { // semua
+    document.querySelectorAll('.ff[data-f^="sb_"]').forEach(el=>{el.checked=false;});
+  }
+  // Update tombol active state
+  ['tetap','lainnya','semua'].forEach(m=>{
+    const btn=document.getElementById('qf-'+m);
+    if(!btn) return;
+    const isActive=m===mode;
+    btn.style.background=isActive?'var(--green)':'white';
+    btn.style.color=isActive?'white':'var(--text-muted)';
+    btn.style.borderColor=isActive?'var(--green)':'var(--border)';
+  });
+  updateFilterCountBadge();
+  renderStats();
+  renderJamaah();
+}
 
 function onFilterChange(){
   // Sync state dari semua input .ff
@@ -1511,13 +1553,26 @@ function resetSemuaFilter(){
   if(fmin) fmin.value='';
   if(fmax) fmax.value='';
   Object.keys(FILTER_STATE).forEach(k=>delete FILTER_STATE[k]);
+  // Kembali ke default: tampil Tetap
+  FILTER_STATE.sb_tetap=true;
+  const cbTetap=document.getElementById('ff-sb-tetap');
+  if(cbTetap) cbTetap.checked=true;
   // Search field juga
   const sj=document.getElementById('search-jamaah');
   if(sj) sj.value='';
+  // Sync quick-filter button
+  ['tetap','lainnya','semua'].forEach(m=>{
+    const btn=document.getElementById('qf-'+m);
+    if(!btn) return;
+    const isActive=m==='tetap';
+    btn.style.background=isActive?'var(--green)':'white';
+    btn.style.color=isActive?'white':'var(--text-muted)';
+    btn.style.borderColor=isActive?'var(--green)':'var(--border)';
+  });
   updateFilterCountBadge();
   renderStats();
   renderJamaah();
-  toast('Filter direset');
+  toast('Filter direset ke default (Tetap)');
 }
 
 // ===== STATS (pill, ikut filter) =====
