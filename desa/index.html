@@ -1071,6 +1071,7 @@ function totalRow(data){
 
 async function doExport(type){
   if(!filteredData.length){toast('Tidak ada data');return;}
+
   if(type==='excel'){
     const sorted=[...filteredData].sort((a,b)=>a.pw.localeCompare(b.pw)||a.gender.localeCompare(b.gender)||a.nama.localeCompare(b.nama));
     const sg=sorted.filter(r=>r.lembar>0),tN=sg.reduce((s,r)=>s+r.nilai,0),tB=sorted.reduce((s,r)=>s+r.terbayar,0);
@@ -1079,55 +1080,158 @@ async function doExport(type){
       [`Scope: ${curOp.scope} | Operator: ${curUser.nama} | Tanggal: ${today()}`],[],
       ['STATISTIK','Total',sorted.length,'Sanggup',sg.length,'Lunas',sorted.filter(r=>r.status==='lunas').length,'Angsur',sorted.filter(r=>r.status==='angsur').length],
       ['','Nilai Sanggup',tN,'Total Bayar',tB,'Sisa',Math.max(0,tN-tB)],[],
-      ['Nama','PW','L/P','Lembar','Status','Nilai','Total Bayar','Sisa','Tgl Bayar','Jumlah Bayar','Penerima']
+      ['Nama','PW','L/P','Lembar','Status','Nilai','Total Bayar','Sisa','Detail Pembayaran']
     ];
     sorted.forEach(r=>{
-      if(!r.pays||!r.pays.length)rows.push([r.nama,r.pw,r.gender,r.lembar||'',r.status,r.nilai||'',r.terbayar||'',r.sisa||'','','','']);
-      else r.pays.forEach((p,i)=>{
-        if(i===0)rows.push([r.nama,r.pw,r.gender,r.lembar,r.status,r.nilai,r.terbayar,r.sisa,p.tanggal,p.jumlah,p.penerima||'']);
-        else rows.push(['','','','','','','','',p.tanggal,p.jumlah,p.penerima||'']);
-      });
+      const payDetail=(r.pays||[]).map(p=>`${fmt(p.tanggal)} · ${p.penerima||'-'} · ${rp(p.jumlah)}`).join(' | ');
+      rows.push([r.nama,r.pw,r.gender,r.lembar||'',r.status,r.nilai||'',r.terbayar||'',r.sisa||'',payDetail]);
     });
-    const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const NL='\n'; const csv=rows.map(r=>r.map(c=>{const v=String(c).replace(/"/g,'""');return '"'+v+'"';}).join(',')).join(NL);
     const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
-    a.download=`AmalJariyah_${curOp.scope}_${today()}.csv`;a.click();
+    a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+    a.download=`ShodaqohJariyah_${curOp.scope}_${today()}.csv`;a.click();
     toast('File CSV diunduh');
-  }else{
+
+  } else {
+    // ── PDF ──────────────────────────────────────────────────────────────────
     const pws=curOp.scope==='Desa'?['PW1','PW2','PW3','PW4']:[curOp.scope];
-    const genders=['L','P'],gL={L:'Laki-laki',P:'Perempuan'};
+    const genders=['L','P'], gL={L:'Laki-laki',P:'Perempuan'};
     let body='';
+
     pws.forEach((pw,pi)=>{
       genders.forEach((g,gi)=>{
         const sub=filteredData.filter(r=>r.pw===pw&&r.gender===g).sort((a,b)=>a.nama.localeCompare(b.nama));
         if(!sub.length)return;
         const isFirst=pi===0&&gi===0;
-        body+=`<div style="${isFirst?'':'page-break-before:always'}">
-          <h3 style="color:#1a6b3c;margin:0 0 6px">${pw} — ${gL[g]}</h3>
-          ${statsBlock(sub,`${pw} ${gL[g]}`)}
-          <table style="width:100%;border-collapse:collapse">
-            <thead><tr>
-              <th ${thStyle()}>Nama</th><th ${thStyle('center')}>PW</th><th ${thStyle('center')}>L/P</th>
-              <th ${thStyle('center')}>Lembar</th><th ${thStyle('center')}>Status</th>
-              <th ${thStyle('right')}>Nilai</th><th ${thStyle('right')}>Terbayar</th><th ${thStyle('right')}>Sisa</th>
-            </tr></thead>
-            <tbody>${dataRows(sub)}</tbody>
-            <tfoot>${totalRow(sub)}</tfoot>
-          </table>
-        </div>`;
+
+        // Stats section
+        const sg=sub.filter(r=>r.lembar>0);
+        const ln=sub.filter(r=>r.status==='lunas').length;
+        const an=sub.filter(r=>r.status==='angsur').length;
+        const tN=sg.reduce((s,r)=>s+r.nilai,0);
+        const tB=sub.reduce((s,r)=>s+r.terbayar,0);
+        const tS=Math.max(0,tN-tB);
+
+        // Stats block — background hijau
+        const statsBlock=`
+          <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:9px">
+            <tr style="background:#1a6b3c;color:#fff">
+              <th style="padding:5px 8px;text-align:left;border:1px solid #145530">${pw} ${gL[g]}</th>
+              <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Total</th>
+              <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Sanggup</th>
+              <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Lunas</th>
+              <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Angsur</th>
+              <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Nilai Sanggup</th>
+              <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Terbayar</th>
+              <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Sisa</th>
+            </tr>
+            <tr style="background:#e8f5e9">
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;font-weight:700">${pw} ${gL[g]}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:center">${sub.length}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:center">${sg.length}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:center;color:#27ae60;font-weight:700">${ln}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:center;color:#e67e22;font-weight:700">${an}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:right">${rp(tN)}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:right;color:#27ae60;font-weight:700">${rp(tB)}</td>
+              <td style="padding:5px 8px;border:1px solid #c8e6c9;text-align:right;color:#c0392b;font-weight:700">${rp(tS)}</td>
+            </tr>
+          </table>`;
+
+        // Data rows — 6 kolom: Nama | PW | L/P | Lembar | Status | Nilai | Terbayar | Sisa
+        // Detail bayar digabung dalam 1 cell di bawah nama
+        const dataRows=sub.map((r,i)=>{
+          const bg=i%2===0?'#ffffff':'#f5f9f5';
+          const statusColor=r.status==='lunas'?'#27ae60':r.status==='angsur'?'#e67e22':'#c0392b';
+          const sisaColor=r.sisa>0?'#c0392b':'#27ae60';
+
+          // Detail pembayaran — 1 baris per transaksi, compact dalam 1 cell
+          const payDetail=(r.pays&&r.pays.length)?
+            r.pays.map(p=>`<div style="color:#555;font-size:8px;padding-top:2px">↳ ${fmt(p.tanggal)} · ${p.penerima||'-'} · <b style="color:#27ae60">${rp(p.jumlah)}</b></div>`).join('')
+            :'';
+
+          return`<tr style="background:${bg}">
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px">
+              <b>${r.nama}</b>${payDetail}
+            </td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.pw}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.gender}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.lembar||'-'}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center;color:${statusColor};font-weight:700">${r.status}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right">${r.lembar?rp(r.nilai):'-'}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right;color:#27ae60;font-weight:${r.terbayar?700:400}">${r.terbayar?rp(r.terbayar):'-'}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right;color:${sisaColor};font-weight:${r.lembar?700:400}">${r.lembar?(r.sisa>0?rp(r.sisa):'✅'):'-'}</td>
+          </tr>`;
+        }).join('');
+
+        // Footer row
+        const footRow=`
+          <tr style="background:#1a6b3c;color:#fff;font-weight:700;font-size:9px">
+            <td style="padding:5px 8px;border:1px solid #145530">TOTAL (${sub.length} orang)</td>
+            <td style="padding:5px 8px;border:1px solid #145530;text-align:center" colspan="3">${sub.reduce((s,r)=>s+r.lembar,0)} lembar</td>
+            <td style="padding:5px 8px;border:1px solid #145530"></td>
+            <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tN)}</td>
+            <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tB)}</td>
+            <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tS)}</td>
+          </tr>`;
+
+        body+=`
+          <div style="${isFirst?'':'page-break-before:always'}">
+            <h3 style="color:#1a6b3c;margin:0 0 6px;font-size:11px">${pw} — ${gL[g]}</h3>
+            ${statsBlock}
+            <table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr style="background:#2e7d52;color:#fff;font-size:9px">
+                  <th style="padding:5px 8px;text-align:left;border:1px solid #145530">Nama & Riwayat Bayar</th>
+                  <th style="padding:5px 8px;text-align:center;border:1px solid #145530">PW</th>
+                  <th style="padding:5px 8px;text-align:center;border:1px solid #145530">L/P</th>
+                  <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Lembar</th>
+                  <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Status</th>
+                  <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Nilai</th>
+                  <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Terbayar</th>
+                  <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Sisa</th>
+                </tr>
+              </thead>
+              <tbody>${dataRows}</tbody>
+              <tfoot>${footRow}</tfoot>
+            </table>
+          </div>`;
       });
     });
+
+    // Header halaman
+    const headerHTML=`
+      <div style="background:#1a6b3c;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:3px">LAPORAN SHODAQOH JARIYAH</div>
+        <div style="font-size:11px;opacity:.9">Masjid Baiturrohim Desa Perwira, Bekasi</div>
+        <div style="display:flex;gap:20px;margin-top:8px;font-size:10px;opacity:.85">
+          <span>Scope: ${curOp.scope}</span>
+          <span>Operator: ${curUser.nama}</span>
+          <span>Dicetak: ${new Date().toLocaleString('id-ID')}</span>
+        </div>
+      </div>`;
+
     const w=window.open('','_blank');
-    w.document.write(`<html><head><title>Laporan Shodaqoh Jariyah</title>
-    <style>body{font-family:Arial,sans-serif;font-size:10px;margin:14px}h2{color:#1a6b3c;margin:0 0 3px}h3{margin:0 0 6px}
-    @media print{.no-print{display:none}}</style></head><body>
-    <h2>LAPORAN SHODAQOH JARIYAH – MASJID BAITURROHIM DESA PERWIRA</h2>
-    <p style="font-size:9px;color:#666;margin:0 0 12px">Scope: ${curOp.scope} · Operator: ${curUser.nama} · Dicetak: ${new Date().toLocaleString('id-ID')}</p>
+    w.document.write(`<!DOCTYPE html><html><head><title>Laporan Shodaqoh Jariyah</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:10px;margin:14px;color:#222}
+      h3{margin:0 0 6px}
+      @media print{
+        .no-print{display:none}
+        body{margin:8px}
+        @page{margin:10mm}
+      }
+    </style></head><body>
+    ${headerHTML}
     ${body}
-    <div class="no-print" style="margin-top:14px;text-align:center">
-      <button onclick="window.print()" style="padding:10px 24px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">🖨 Print / Save PDF</button>
-    </div></body></html>`);
-    w.document.close();setTimeout(()=>w.print(),600);
+    <div class="no-print" style="margin-top:16px;text-align:center;padding:16px;border-top:1px solid #ddd">
+      <button onclick="window.print()"
+        style="padding:12px 32px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">
+        🖨 Print / Simpan PDF
+      </button>
+    </div>
+    </body></html>`);
+    w.document.close();
+    setTimeout(()=>w.print(),700);
   }
 }
 
