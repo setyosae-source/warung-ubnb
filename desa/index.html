@@ -206,6 +206,23 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
         <input type="number" id="jvLembar" min="1" placeholder="misal: 10" oninput="calcNilai('jvLembar','jvNilaiHint')">
         <div class="hint" id="jvNilaiHint"></div>
       </div>
+      <!-- Pesan nominal bebas -->
+      <div style="background:#fff8e1;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:#7d6000;border-left:3px solid var(--warn);line-height:1.5">
+        Jika kesanggupan kurang dari 1 lembar (di bawah Rp 50.000),<br>
+        masukkan nominal bebas 👉
+        <button onclick="toggleNominalBebas('jv')" id="jvToggleNB"
+          style="background:var(--warn);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;margin-left:2px">
+          Nominal Bebas
+        </button>
+      </div>
+      <!-- Form nominal bebas (tersembunyi default) -->
+      <div id="jvNominalBebas" class="hide">
+        <div class="fg">
+          <label>Nominal Bebas (Rp)</label>
+          <input type="number" id="jvNominalVal" min="1000" step="1000" placeholder="misal: 25000" oninput="calcNilaiRaw('jvNominalVal','jvNominalHint')">
+          <div class="hint" id="jvNominalHint"></div>
+        </div>
+      </div>
       <div class="fg"><label>Cara Bayar</label>
         <select id="jvCaraBayar"><option value="lunas">Lunas</option><option value="angsur">Angsur (maks. 3x)</option></select>
       </div>
@@ -370,6 +387,19 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
       <div class="fg"><label>Jumlah Lembar (@ Rp 50.000)</label>
         <input type="number" id="kesLembar" min="1" placeholder="misal: 10" oninput="calcNilai('kesLembar','kesHint')">
         <div class="hint" id="kesHint"></div>
+      </div>
+      <div style="background:#fff8e1;border-radius:8px;padding:8px 11px;margin-bottom:8px;font-size:11px;color:#7d6000;border-left:3px solid var(--warn)">
+        Kurang dari 1 lembar?
+        <button onclick="toggleNominalBebas('kes')" id="kesToggleNB"
+          style="background:var(--warn);color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:600;cursor:pointer;margin-left:4px">
+          Nominal Bebas
+        </button>
+      </div>
+      <div id="kesNominalBebas" class="hide">
+        <div class="fg"><label>Nominal Bebas (Rp)</label>
+          <input type="number" id="kesNominalVal" min="1000" step="1000" placeholder="misal: 25000" oninput="calcNilaiRaw('kesNominalVal','kesNominalHint')">
+          <div class="hint" id="kesNominalHint"></div>
+        </div>
       </div>
       <div class="fg"><label>Status Bayar</label>
         <select id="kesStatus"><option value="lunas">Lunas</option><option value="angsur">Angsur</option><option value="belum">Belum Bayar</option></select>
@@ -625,8 +655,49 @@ function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classL
 function closeModal(id){hide(id);}
 function calcNilai(i,o){const v=parseInt($(i).value)||0;$(o).textContent=v>0?`= ${rp(v*HARGA)}`:''}
 function calcNilaiRaw(i,o){const v=parseInt($(i).value)||0;$(o).textContent=v>0?rp(v):''}
+
+function toggleNominalBebas(prefix){
+  const box=$(prefix+'NominalBebas');
+  const btn=$(prefix+'ToggleNB');
+  const lembarInp=$(prefix+'Lembar');
+  const open=box.classList.toggle('hide')==false;
+  if(open){
+    btn.textContent='Pakai Jumlah Lembar';
+    btn.style.background='var(--muted)';
+    // Kosongkan lembar saat pakai nominal bebas
+    if(lembarInp){lembarInp.value='';$(prefix+'Hint')?$(prefix+'Hint').textContent='':($(prefix+'NilaiHint')?$(prefix+'NilaiHint').textContent='':'');}
+  } else {
+    btn.textContent=prefix==='jv'?'Masukkan Nominal Bebas':'Nominal Bebas';
+    btn.style.background='var(--warn)';
+    $(prefix+'NominalVal').value='';
+    $(prefix+'NominalHint').textContent='';
+  }
+}
+
+// Ambil nilai kesanggupan: lembar*50000 ATAU nominal bebas
+function getKesNilai(prefix){
+  const box=$(prefix+'NominalBebas');
+  const isNB=!box.classList.contains('hide');
+  if(isNB){
+    const nb=parseInt($(prefix+'NominalVal').value)||0;
+    return{lembar:0, nilai:nb, isNominalBebas:true};
+  } else {
+    const lembar=parseInt($(prefix+'Lembar').value)||0;
+    return{lembar, nilai:lembar*HARGA, isNominalBebas:false};
+  }
+}
 function saveSession(){if(curUser)localStorage.setItem(SK.UID,curUser.id);if(curOp)localStorage.setItem(SK.OP,'1');}
 function clearSession(){Object.values(SK).forEach(k=>localStorage.removeItem(k));}
+
+// Hitung nilai efektif kesanggupan (lembar*50000 atau nominal_bebas)
+function nilaiEfektif(row){
+  if(row.nominal_bebas && row.nominal_bebas>0) return row.nominal_bebas;
+  return (row.lembar||row.jumlah_lembar||0)*HARGA;
+}
+function lembarDisplay(row){
+  if(row.nominal_bebas && row.nominal_bebas>0) return `< 1 lembar (${rp(row.nominal_bebas)})`;
+  return `${row.lembar||row.jumlah_lembar||0} lembar`;
+}
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 async function init(){
@@ -695,10 +766,12 @@ async function showJamaahView(){
     $('jvLembar').value='';$('jvNilaiHint').textContent='';show('jvKesForm');return;
   }
   const totalPay=jvPays.reduce((s,p)=>s+Number(p.jumlah),0);
-  const nilai=ks.jumlah_lembar*HARGA;const sisa=nilai-totalPay;
+  const isNB=ks.nominal_bebas&&ks.nominal_bebas>0;
+  const nilai=isNB?Number(ks.nominal_bebas):ks.jumlah_lembar*HARGA;
+  const sisa=nilai-totalPay;
   $('jvRows').innerHTML=`
-    <div class="jv-row"><span class="jv-label">Kesanggupan</span><span class="jv-val">${ks.jumlah_lembar} lembar</span></div>
-    <div class="jv-row"><span class="jv-label">Nilai</span><span class="jv-val">${rp(nilai)}</span></div>
+    <div class="jv-row"><span class="jv-label">Kesanggupan</span><span class="jv-val">${isNB?`Nominal Bebas`:ks.jumlah_lembar+' lembar'}</span></div>
+    <div class="jv-row"><span class="jv-label">Nilai</span><span class="jv-val">${rp(nilai)}${isNB?' <span style="font-size:10px;color:var(--warn)">(< 1 lembar)</span>':''}</span></div>
     <div class="jv-row"><span class="jv-label">Total Bayar</span><span class="jv-val ok">${rp(totalPay)}</span></div>
     <div class="jv-row"><span class="jv-label">Sisa</span><span class="jv-val ${sisa<=0?'ok':'red'}">${sisa<=0?'✅ Lunas':rp(sisa)}</span></div>
     ${jvPays.length?`<div class="jv-row" style="flex-direction:column;gap:3px;align-items:start">
@@ -713,12 +786,16 @@ async function showJamaahView(){
   $('jvCaraBayar').value=ks.status;show('jvKesForm');
 }
 async function jvSaveKes(){
-  const lembar=parseInt($('jvLembar').value)||0;
-  if(lembar<1){toast('Masukkan jumlah lembar');return;}
+  const {lembar,nilai,isNominalBebas}=getKesNilai('jv');
+  if(!isNominalBebas && lembar<1){toast('Masukkan jumlah lembar');return;}
+  if(isNominalBebas && nilai<1000){toast('Masukkan nominal (min. Rp 1.000)');return;}
   const status=$('jvCaraBayar').value;
+  const payload={status,operator:'self:'+curUser.nama,
+    jumlah_lembar:isNominalBebas?0:lembar,
+    nominal_bebas:isNominalBebas?nilai:null};
   let err;
-  if(jvKes){({error:err}=await sb.from('aj_kesanggupan').update({jumlah_lembar:lembar,status,operator:'self:'+curUser.nama}).eq('id',jvKes.id));}
-  else{({error:err}=await sb.from('aj_kesanggupan').insert({jamaah_id:curUser.id,jumlah_lembar:lembar,status,operator:'self:'+curUser.nama}));}
+  if(jvKes){({error:err}=await sb.from('aj_kesanggupan').update(payload).eq('id',jvKes.id));}
+  else{({error:err}=await sb.from('aj_kesanggupan').insert({...payload,jamaah_id:curUser.id}));}
   if(err){toast('Gagal: '+err.message);return;}
   toast('✅ Kesanggupan tersimpan!');showJamaahView();
 }
@@ -787,9 +864,12 @@ async function refreshData(){
   tableData=jPool.map(j=>{
     const ks=ksMap[j.id],pays=payMap[j.id]||[];
     const totalPay=pays.reduce((s,p)=>s+Number(p.jumlah),0);
-    const lembar=ks?.jumlah_lembar||0,nilai=lembar*HARGA;
+    const lembar=ks?.jumlah_lembar||0;
+    const nilai=ks?(ks.nominal_bebas&&ks.nominal_bebas>0?Number(ks.nominal_bebas):lembar*HARGA):0;
+    const isNB=ks?.nominal_bebas&&ks.nominal_bebas>0;
     return{id:j.id,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut,
-           lembar,nilai,status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays};
+           lembar,nilai,isNB,nominalBebas:ks?.nominal_bebas||0,
+           status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays};
   });
   applyFilter();
 }
@@ -857,7 +937,7 @@ function renderTable(){
     const isExp=r.id===expandedId;
     html+=`<tr onclick="toggleExpand(${r.id})" id="tr-${r.id}" ${isExp?'class="expanded-row"':''}>
       <td><b>${r.nama}</b></td><td class="td-c">${r.pw}</td><td class="td-c">${r.gender}</td>
-      <td class="td-r">${r.lembar||'-'}</td><td class="td-c">${st}</td>
+      <td class="td-r">${r.isNB?`<span style="color:var(--warn);font-size:10px">NB</span>`:r.lembar||'-'}</td><td class="td-c">${st}</td>
       <td class="td-r">${r.lembar?rp(r.nilai):'-'}</td>
       <td class="td-r" style="color:var(--ok)">${r.terbayar?rp(r.terbayar):'-'}</td>
       <td class="td-r" style="color:${r.sisa>0?'var(--red)':'var(--ok)'}">${r.lembar?(r.sisa>0?rp(r.sisa):'✅'):'-'}</td>
@@ -943,9 +1023,29 @@ async function kesPickJamaah(id){
   const {data:ks}=await sb.from('aj_kesanggupan').select('*').eq('jamaah_id',id).maybeSingle();
   const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',id);
   const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
-  $('kesTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}<br><span style="color:var(--muted)">Saat ini: </span>${ks?`<span class="badge badge-${ks.status}">${ks.status}</span> ${ks.jumlah_lembar} lembar = ${rp(ks.jumlah_lembar*HARGA)}`:'<span class="badge badge-belum">Belum ada</span>'}${tot?`<br><span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b>`:''}`;
-  if(ks){$('kesLembar').value=ks.jumlah_lembar;$('kesStatus').value=ks.status;calcNilai('kesLembar','kesHint');}
-  else{$('kesLembar').value='';$('kesStatus').value='lunas';}
+  const ksNB=ks?.nominal_bebas&&ks.nominal_bebas>0;
+  const ksNilai=ks?(ksNB?Number(ks.nominal_bebas):ks.jumlah_lembar*HARGA):0;
+  $('kesTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}<br>
+    <span style="color:var(--muted)">Saat ini: </span>
+    ${ks?`<span class="badge badge-${ks.status}">${ks.status}</span> ${ksNB?`Nominal Bebas ${rp(ks.nominal_bebas)}`:ks.jumlah_lembar+' lembar = '+rp(ksNilai)}`:'<span class="badge badge-belum">Belum ada</span>'}
+    ${tot?`<br><span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b>`:''}`;
+  if(ks){
+    if(ksNB){
+      // Aktifkan mode nominal bebas
+      $('kesNominalBebas').classList.remove('hide');
+      $('kesNominalVal').value=ks.nominal_bebas;
+      calcNilaiRaw('kesNominalVal','kesNominalHint');
+      $('kesToggleNB').textContent='Pakai Jumlah Lembar';
+      $('kesToggleNB').style.background='var(--muted)';
+      $('kesLembar').value='';
+    } else {
+      $('kesLembar').value=ks.jumlah_lembar;
+      calcNilai('kesLembar','kesHint');
+    }
+    $('kesStatus').value=ks.status;
+  } else {
+    $('kesLembar').value='';$('kesStatus').value='lunas';
+  }
   show('kesTarget');
 }
 async function payPickJamaah(id){
@@ -1138,7 +1238,7 @@ async function doExport(type){
     ];
     sorted.forEach(r=>{
       const payDetail=(r.pays||[]).map(p=>`${fmt(p.tanggal)} · ${p.penerima||'-'} · ${rp(p.jumlah)}`).join(' | ');
-      rows.push([r.nama,r.pw,r.gender,r.lembar||'',r.status,r.nilai||'',r.terbayar||'',r.sisa||'',payDetail]);
+      rows.push([r.nama,r.pw,r.gender,r.isNB?'NB':r.lembar||'',r.status,r.nilai?rp(r.nilai):'',r.terbayar?rp(r.terbayar):'',r.sisa?rp(r.sisa):'',payDetail]);
     });
     const NL='\n'; const csv=rows.map(r=>r.map(c=>{const v=String(c).replace(/"/g,'""');return '"'+v+'"';}).join(',')).join(NL);
     const a=document.createElement('a');
@@ -1209,9 +1309,9 @@ async function doExport(type){
             </td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.pw}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.gender}</td>
-            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.lembar||'-'}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.isNB?'NB':r.lembar||'-'}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center;color:${statusColor};font-weight:700">${r.status}</td>
-            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right">${r.lembar?rp(r.nilai):'-'}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right">${(r.lembar||r.isNB)?rp(r.nilai):'-'}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right;color:#27ae60;font-weight:${r.terbayar?700:400}">${r.terbayar?rp(r.terbayar):'-'}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right;color:${sisaColor};font-weight:${r.lembar?700:400}">${r.lembar?(r.sisa>0?rp(r.sisa):'✅'):'-'}</td>
           </tr>`;
