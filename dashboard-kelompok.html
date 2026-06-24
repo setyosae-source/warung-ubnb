@@ -190,6 +190,19 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
 .peng-add{background:var(--green);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
 .peng-empty{padding:16px 14px;text-align:center;color:var(--text-muted);font-size:12px;}
 .peng-nonaktif{opacity:0.5;}
+/* FOTO JAMAAH */
+.foto-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--surface2);display:block;cursor:pointer;}
+.foto-avatar-placeholder{width:32px;height:32px;border-radius:50%;background:var(--green-light);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;color:var(--text-muted);flex-shrink:0;}
+.foto-modal-area{padding:12px 16px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px;background:var(--surface2);}
+.foto-modal-img{width:72px;height:72px;border-radius:12px;object-fit:cover;border:2px solid var(--border);background:var(--bg);flex-shrink:0;cursor:pointer;}
+.foto-modal-placeholder{width:72px;height:72px;border-radius:12px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;background:var(--green-light);flex-shrink:0;cursor:pointer;}
+.foto-modal-info{flex:1;min-width:0;}
+.foto-modal-info .nm{font-weight:700;font-size:14px;margin-bottom:2px;}
+.foto-modal-info .meta{font-size:11px;color:var(--text-muted);}
+.btn-foto-ganti{margin-top:6px;padding:5px 12px;background:var(--green);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn-foto-hapus{padding:5px 10px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.foto-upload-progress{font-size:11px;color:var(--green);font-weight:600;margin-top:4px;display:none;}
+
 /* AUTOCOMPLETE */
 .ac-wrap{position:relative;flex:1;}
 .ac-results{position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow:auto;z-index:50;box-shadow:var(--shadow);}
@@ -1681,6 +1694,7 @@ function renderJamaah(){
   let html=`<table class="tbl-jamaah">
     <thead><tr>
       <th style="width:36px;text-align:center;cursor:default;">#</th>
+      <th style="width:44px;text-align:center;cursor:default;">📷</th>
       <th onclick="setSort('nama_kk')" class="${_sortBy==='nama_kk'?'sorted':''}">KK${sortInd('nama_kk')}</th>
       <th onclick="setSort('nama')" class="${_sortBy==='nama'?'sorted':''}">Nama${sortInd('nama')}</th>
       <th onclick="setSort('jk')" class="${_sortBy==='jk'?'sorted':''}" style="text-align:center;">L/P${sortInd('jk')}</th>
@@ -1697,8 +1711,13 @@ function renderJamaah(){
     const umur=umurFromTgl(j.tgl_lahir);
     const umurStr=umur===null?'<span style="color:var(--text-muted);">—</span>':String(umur);
     const safeNm=(j.nama||'').replace(/'/g,"\\'");
+    const fotoCell=j.foto_url
+      ?`<img src="${j.foto_url}" class="foto-avatar" alt="foto" onclick="event.stopPropagation();bukaModalEdit('${j.did}')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`+
+       `<div class="foto-avatar-placeholder" style="display:none;" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`
+      :`<div class="foto-avatar-placeholder" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`;
     html+=`<tr ${isKK?'class="row-iskk"':''} onclick="bukaModalEdit('${j.did}')">
       <td class="tc-num">${idx+1}</td>
+      <td style="text-align:center;padding:5px 6px;">${fotoCell}</td>
       <td>${j.nama_kk||'<span style="color:var(--text-muted);">—</span>'}</td>
       <td class="tc-nama">${pengSet.has(j.did)?'🛡️ ':''}${j.nama||''}</td>
       <td class="tc-jk">${jkIcon}</td>
@@ -1731,6 +1750,26 @@ function bukaModalEdit(did){
     `<option value="${k.singkat}" ${j.kelompok_nama===k.singkat?'selected':''}>${k.singkat} - ${k.lengkap}</option>`
   ).join('');
   document.getElementById('modal-jamaah-body').innerHTML=`
+    <div class="foto-modal-area" id="ej-foto-area">
+      ${j.foto_url
+        ?`<img id="ej-foto-img" src="${j.foto_url}" class="foto-modal-img" onclick="triggerFotoUpload()" onerror="this.style.display='none';document.getElementById('ej-foto-placeholder').style.display='flex'">`+
+          `<div id="ej-foto-placeholder" class="foto-modal-placeholder" style="display:none;" onclick="triggerFotoUpload()">👤</div>`
+        :`<div id="ej-foto-placeholder" class="foto-modal-placeholder" onclick="triggerFotoUpload()">👤</div>`+
+          `<img id="ej-foto-img" src="" class="foto-modal-img" style="display:none;">`
+      }
+      <div class="foto-modal-info">
+        <div class="nm">${(j.nama||'').replace(/</g,'&lt;')}</div>
+        <div class="meta">${j.kelompok_nama||''} · ${j.did}</div>
+        ${!isViewer()?`
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          <button class="btn-foto-ganti" onclick="triggerFotoUpload()">📷 ${j.foto_url?'Ganti':'Upload'} Foto</button>
+          ${j.foto_url?`<button class="btn-foto-hapus" onclick="hapusFotoJamaah()">🗑️ Hapus</button>`:''}
+        </div>
+        <div id="ej-foto-progress" class="foto-upload-progress">⏳ Mengupload foto...</div>
+        `:'<div class="meta" style="margin-top:4px;">📷 View Only</div>'}
+      </div>
+      <input type="file" id="ej-foto-input" accept="image/*" style="display:none;" onchange="onFotoFileChanged(event)">
+    </div>
     <div class="modal-row"><label>Nama</label><input type="text" id="ej-nama" value="${(j.nama||'').replace(/"/g,'&quot;')}"></div>
     <div class="modal-row"><label>Nama KK</label><input type="text" id="ej-kk" value="${(j.nama_kk||'').replace(/"/g,'&quot;')}"></div>
     <div class="modal-row"><label>Kelompok</label>
@@ -4043,7 +4082,109 @@ function exportIsrunExcel(){
   toast('\u2705 File diunduh');
 }
 
-// ── LOGBOOK ────────────────────────────────────────────────────
+
+// ===== FOTO JAMAAH =====
+const FOTO_BUCKET='jamaah-foto';
+
+function triggerFotoUpload(){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
+  const inp=document.getElementById('ej-foto-input');
+  if(inp) inp.click();
+}
+
+async function onFotoFileChanged(event){
+  const file=event.target.files[0];
+  if(!file) return;
+  if(file.size>3*1024*1024){toast('Ukuran foto maksimal 3MB',true);return;}
+  if(!file.type.startsWith('image/')){toast('File harus berupa gambar',true);return;}
+
+  const prog=document.getElementById('ej-foto-progress');
+  if(prog){prog.style.display='block';}
+  const btnGanti=document.querySelector('.btn-foto-ganti');
+  if(btnGanti) btnGanti.disabled=true;
+
+  try{
+    // Hapus foto lama kalau ada
+    const j=aJamaah.find(x=>x.did===_editDid);
+    if(j&&j.foto_url){
+      try{
+        const oldPath=j.foto_url.split('/storage/v1/object/public/'+FOTO_BUCKET+'/').pop();
+        if(oldPath) await sb.storage.from(FOTO_BUCKET).remove([oldPath]);
+      }catch(e){console.warn('Hapus foto lama gagal:',e);}
+    }
+
+    // Upload file baru
+    const ext=file.name.split('.').pop().toLowerCase()||'jpg';
+    const path=`jamaah/${_editDid}_${Date.now()}.${ext}`;
+    const{error:upErr}=await sb.storage.from(FOTO_BUCKET).upload(path,file,{upsert:true,contentType:file.type});
+    if(upErr) throw upErr;
+
+    // Get public URL
+    const{data:urlData}=sb.storage.from(FOTO_BUCKET).getPublicUrl(path);
+    const fotoUrl=urlData.publicUrl;
+
+    // Update jamaah_desa
+    const{error:dbErr}=await sb.from('jamaah_desa').update({foto_url:fotoUrl}).eq('did',_editDid);
+    if(dbErr) throw dbErr;
+
+    // Update UI langsung
+    const imgEl=document.getElementById('ej-foto-img');
+    const phEl=document.getElementById('ej-foto-placeholder');
+    if(imgEl){imgEl.src=fotoUrl;imgEl.style.display='block';}
+    if(phEl){phEl.style.display='none';}
+
+    // Update local data
+    if(j) j.foto_url=fotoUrl;
+    renderJamaah();
+
+    toast('✅ Foto berhasil diupload');
+    // Refresh tombol agar muncul "Hapus"
+    const btnWrap=document.querySelector('.foto-modal-info div[style*="flex"]');
+    if(btnWrap&&!btnWrap.querySelector('.btn-foto-hapus')){
+      const btnH=document.createElement('button');
+      btnH.className='btn-foto-hapus';
+      btnH.textContent='🗑️ Hapus';
+      btnH.onclick=hapusFotoJamaah;
+      btnWrap.appendChild(btnH);
+      const gBtn=btnWrap.querySelector('.btn-foto-ganti');
+      if(gBtn) gBtn.textContent='📷 Ganti Foto';
+    }
+  }catch(e){
+    toast('Gagal upload: '+e.message,true);
+  }finally{
+    if(prog){prog.style.display='none';}
+    if(btnGanti) btnGanti.disabled=false;
+    event.target.value='';
+  }
+}
+
+async function hapusFotoJamaah(){
+  if(!canEdit()){toast('Akses ditolak',true);return;}
+  const j=aJamaah.find(x=>x.did===_editDid);
+  if(!j||!j.foto_url){toast('Tidak ada foto',true);return;}
+  if(!confirm('Hapus foto '+j.nama+'?')) return;
+  try{
+    const oldPath=j.foto_url.split('/storage/v1/object/public/'+FOTO_BUCKET+'/').pop();
+    if(oldPath) await sb.storage.from(FOTO_BUCKET).remove([oldPath]);
+    const{error}=await sb.from('jamaah_desa').update({foto_url:null}).eq('did',_editDid);
+    if(error) throw error;
+    j.foto_url=null;
+    renderJamaah();
+    toast('Foto dihapus');
+    // Update modal UI
+    const imgEl=document.getElementById('ej-foto-img');
+    const phEl=document.getElementById('ej-foto-placeholder');
+    if(imgEl){imgEl.style.display='none';}
+    if(phEl){phEl.style.display='flex';}
+    const btnH=document.querySelector('.btn-foto-hapus');
+    if(btnH) btnH.remove();
+    const btnG=document.querySelector('.btn-foto-ganti');
+    if(btnG) btnG.textContent='📷 Upload Foto';
+  }catch(e){
+    toast('Gagal hapus: '+e.message,true);
+  }
+}
+
 async function renderLogbook() {
   const el = document.getElementById('logbook-content');
   if (!el) return;
