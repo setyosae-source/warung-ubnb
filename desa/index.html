@@ -326,8 +326,8 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
   <div id="tabSetor" class="hide">
     <div class="setor-body">
       <!-- Saldo Operator -->
-      <div class="setor-saldo">
-        <h4>💰 SALDO ANDA</h4>
+      <div class="setor-saldo" onclick="showMutasi()" style="cursor:pointer">
+        <h4>💰 SALDO ANDA <span style="font-size:10px;opacity:.7">· Klik untuk laporan mutasi</span></h4>
         <div class="saldo-grid">
           <div class="saldo-item"><div class="siv" id="stMasuk">-</div><div class="sil">Total Masuk</div></div>
           <div class="saldo-item"><div class="siv" id="stKeluar">-</div><div class="sil">Total Disetor</div></div>
@@ -407,6 +407,20 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
     <button class="btn btn-ghost btn-full" style="margin-bottom:8px" onclick="closeModal('modalOpMenu');refreshData()">🔄 Refresh Data</button>
     <div class="divider"></div>
     <button class="btn btn-full" style="background:#fdecea;color:var(--red)" onclick="opLogout()">⬅ Keluar</button>
+  </div>
+</div>
+
+<!-- ══ MODAL: MUTASI UANG ══ -->
+<div id="modalMutasi" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalMutasi')">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title">📋 Laporan Mutasi Uang</div>
+      <button class="modal-close" onclick="closeModal('modalMutasi')">&times;</button>
+    </div>
+    <!-- Ringkasan saldo -->
+    <div id="mutasiSummary" style="background:var(--pri);color:#fff;border-radius:var(--r);padding:12px;margin-bottom:12px;font-size:12px"></div>
+    <!-- List mutasi -->
+    <div id="mutasiList"><div class="loading"><div class="spin"></div></div></div>
   </div>
 </div>
 
@@ -824,10 +838,13 @@ function openModal(id){
   show(id);
 }
 async function initSetorModal(){
-  // Hitung saldo di tangan
-  const {data:bm}=await sb.from('aj_pembayaran').select('jumlah').eq('penerima_jamaah_id',curUser.id);
-  const masuk=(bm||[]).reduce((s,p)=>s+Number(p.jumlah),0);
-  const {data:sk}=await sb.from('aj_setor').select('jumlah').eq('dari_jamaah_id',curUser.id);
+  // Hitung saldo di tangan (formula sama dgn loadSetoran)
+  const [{data:bm},{data:sm},{data:sk}]=await Promise.all([
+    sb.from('aj_pembayaran').select('jumlah').eq('penerima_jamaah_id',curUser.id),
+    sb.from('aj_setor').select('jumlah').eq('ke_jamaah_id',curUser.id).eq('status','confirmed'),
+    sb.from('aj_setor').select('jumlah').eq('dari_jamaah_id',curUser.id)
+  ]);
+  const masuk=(bm||[]).reduce((s,p)=>s+Number(p.jumlah),0)+(sm||[]).reduce((s,p)=>s+Number(p.jumlah),0);
   const keluar=(sk||[]).reduce((s,p)=>s+Number(p.jumlah),0);
   const diTangan=Math.max(0,masuk-keluar);
   $('setorSaldoInfo').textContent=rp(diTangan);
@@ -933,21 +950,30 @@ async function savePay(){
 async function loadSetoran(){
   $('setorHistori').innerHTML='<div class="loading"><div class="spin"></div></div>';
 
-  // Hitung saldo: total masuk = semua pembayaran yg diterima operator ini
+  // Masuk 1: bayar langsung dari jamaah (sebagai penerima)
   const {data:bayarMasuk}=await sb.from('aj_pembayaran').select('jumlah').eq('penerima_jamaah_id',curUser.id);
-  const totalMasuk=(bayarMasuk||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+  const totalBayarMasuk=(bayarMasuk||[]).reduce((s,p)=>s+Number(p.jumlah),0);
 
-  // Total disetor keluar (setor yg sudah confirmed)
-  const {data:setorKeluar}=await sb.from('aj_setor').select('jumlah').eq('dari_jamaah_id',curUser.id).eq('status','confirmed');
+  // Masuk 2: setoran masuk yang SUDAH dikonfirmasi
+  const {data:setorMasukConf}=await sb.from('aj_setor').select('jumlah').eq('ke_jamaah_id',curUser.id).eq('status','confirmed');
+  const totalSetorMasuk=(setorMasukConf||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+
+  const totalMasuk=totalBayarMasuk+totalSetorMasuk;
+
+  // Keluar: semua setoran keluar (pending + confirmed)
+  const {data:setorKeluar}=await sb.from('aj_setor').select('jumlah,status').eq('dari_jamaah_id',curUser.id);
   const totalKeluar=(setorKeluar||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+  const totalKelConf=(setorKeluar||[]).filter(p=>p.status==='confirmed').reduce((s,p)=>s+Number(p.jumlah),0);
+  const totalKelPend=(setorKeluar||[]).filter(p=>p.status==='pending').reduce((s,p)=>s+Number(p.jumlah),0);
 
-  // Total pending keluar (belum konfirmasi)
-  const {data:setorPending}=await sb.from('aj_setor').select('jumlah').eq('dari_jamaah_id',curUser.id).eq('status','pending');
-  const totalPending=(setorPending||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+  const diTangan=Math.max(0,totalMasuk-totalKeluar);
 
   $('stMasuk').textContent=rp(totalMasuk);
-  $('stKeluar').textContent=rp(totalKeluar+totalPending);
-  $('stDiTangan').textContent=rp(Math.max(0,totalMasuk-totalKeluar-totalPending));
+  $('stKeluar').textContent=rp(totalKeluar);
+  $('stDiTangan').textContent=rp(diTangan);
+
+  // Simpan untuk modal mutasi
+  window._setorData={totalMasuk,totalBayarMasuk,totalSetorMasuk,totalKelConf,totalKelPend,totalKeluar,diTangan};
 
   // Setor masuk menunggu konfirmasi saya
   const {data:masukPending}=await sb.from('aj_setor').select('*').eq('ke_jamaah_id',curUser.id).eq('status','pending').order('created_at',{ascending:false});
@@ -1107,6 +1133,108 @@ async function doExport(type){
 
 // ── OP MENU ───────────────────────────────────────────────────────────────────
 function showOpMenu(){show('modalOpMenu');}
+
+// ── MUTASI UANG ───────────────────────────────────────────────────────────────
+async function showMutasi(){
+  show('modalMutasi');
+  $('mutasiList').innerHTML='<div class="loading"><div class="spin"></div></div>';
+
+  // Fetch semua transaksi uang operator ini
+  const [{data:bayarMasuk},{data:setorMasuk},{data:setorKeluar}]=await Promise.all([
+    // Bayar jamaah masuk (operator sebagai penerima)
+    sb.from('aj_pembayaran')
+      .select('tanggal,jumlah,penerima,operator,jamaah_id,aj_jamaah(nama)')
+      .eq('penerima_jamaah_id',curUser.id)
+      .order('tanggal',{ascending:false}),
+    // Setoran masuk (ke operator ini)
+    sb.from('aj_setor')
+      .select('created_at,jumlah,status,catatan,dari_jamaah_id,confirmed_at,aj_jamaah!aj_setor_dari_jamaah_id_fkey(nama)')
+      .eq('ke_jamaah_id',curUser.id)
+      .order('created_at',{ascending:false}),
+    // Setoran keluar (dari operator ini)
+    sb.from('aj_setor')
+      .select('created_at,jumlah,status,catatan,ke_jamaah_id,confirmed_at,aj_jamaah!aj_setor_ke_jamaah_id_fkey(nama)')
+      .eq('dari_jamaah_id',curUser.id)
+      .order('created_at',{ascending:false})
+  ]);
+
+  const d=window._setorData||{};
+  $('mutasiSummary').innerHTML=`
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span>Bayar jamaah masuk</span><span style="font-weight:700">${rp(d.totalBayarMasuk||0)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span>Setoran masuk (dikonfirmasi)</span><span style="font-weight:700">${rp(d.totalSetorMasuk||0)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;border-top:1px solid rgba(255,255,255,.3);padding-top:6px">
+      <span>Total Masuk</span><span style="font-weight:700;font-size:14px">${rp(d.totalMasuk||0)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span>Setor keluar (dikonfirmasi)</span><span style="font-weight:700;color:#ffcc80">- ${rp(d.totalKelConf||0)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span>Setor keluar (pending)</span><span style="font-weight:700;color:#ffe082">- ${rp(d.totalKelPend||0)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.3);padding-top:6px">
+      <span style="font-size:14px;font-weight:700">💰 DI TANGAN</span>
+      <span style="font-size:16px;font-weight:700">${rp(d.diTangan||0)}</span>
+    </div>`;
+
+  // Gabung semua transaksi jadi 1 timeline, urutkan by tgl desc
+  const timeline=[];
+  (bayarMasuk||[]).forEach(p=>{
+    timeline.push({tgl:p.tanggal,jenis:'masuk',tipe:'bayar',jumlah:Number(p.jumlah),
+      ket:`Bayar: ${p.aj_jamaah?.nama||'-'}`,op:p.operator,status:'done'});
+  });
+  (setorMasuk||[]).forEach(s=>{
+    timeline.push({tgl:s.created_at,jenis:'masuk',tipe:'setor_masuk',jumlah:Number(s.jumlah),
+      ket:`Setor masuk dari: ${s.aj_jamaah?.nama||'-'}${s.catatan?' ('+s.catatan+')':''}`,
+      op:'',status:s.status,conf:s.confirmed_at});
+  });
+  (setorKeluar||[]).forEach(s=>{
+    timeline.push({tgl:s.created_at,jenis:'keluar',tipe:'setor_keluar',jumlah:Number(s.jumlah),
+      ket:`Setor ke: ${s.aj_jamaah?.nama||'-'}${s.catatan?' ('+s.catatan+')':''}`,
+      op:'',status:s.status,conf:s.confirmed_at});
+  });
+  timeline.sort((a,b)=>new Date(b.tgl)-new Date(a.tgl));
+
+  if(!timeline.length){
+    $('mutasiList').innerHTML='<p style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Belum ada transaksi</p>';
+    return;
+  }
+
+  let saldo=d.totalMasuk||0;
+  // Hitung saldo berjalan (running balance) dari atas
+  // Perlu sort ascending dulu untuk hitung, lalu balik
+  const tlAsc=[...timeline].reverse();
+  let running=0;
+  tlAsc.forEach(t=>{
+    if(t.jenis==='masuk'&&(t.tipe==='bayar'||t.status==='confirmed')) running+=t.jumlah;
+    if(t.jenis==='keluar'&&t.status==='confirmed') running-=t.jumlah;
+    t.runSaldo=Math.max(0,running);
+  });
+  tlAsc.reverse(); // balik lagi ke desc
+
+  $('mutasiList').innerHTML=`
+    <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:8px;padding:0 2px">RIWAYAT MUTASI (${timeline.length} transaksi)</div>
+    ${tlAsc.map(t=>{
+      const isMasuk=t.jenis==='masuk'&&(t.tipe==='bayar'||t.status==='confirmed');
+      const isPend=t.status==='pending';
+      const valColor=isPend?'var(--warn)':isMasuk?'var(--ok)':'var(--red)';
+      const valSign=isMasuk?'+':'-';
+      const stBadge=isPend?`<span style="background:#fff3e0;color:var(--warn);border-radius:8px;padding:1px 6px;font-size:9px">⏳ pending</span>`:'';
+      return`<div style="display:flex;justify-content:space-between;align-items:start;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600">${t.ket} ${stBadge}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${fmtDt(t.tgl)}${t.conf?' · ✅ '+fmtDt(t.conf):''}</div>
+        </div>
+        <div style="text-align:right;min-width:90px">
+          <div style="font-weight:700;color:${valColor}">${valSign}${rp(t.jumlah)}</div>
+          <div style="font-size:10px;color:var(--muted)">Saldo: ${rp(t.runSaldo)}</div>
+        </div>
+      </div>`;
+    }).join('')}`;
+}
 
 // ── ALERT KEAMANAN (hanya Setyo) ──────────────────────────────────────────────
 async function loadAlerts(){
