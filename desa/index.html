@@ -405,6 +405,10 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
   <div class="modal-box" style="padding-bottom:18px">
     <div class="modal-hdr"><div class="modal-title">Menu</div><button class="modal-close" onclick="closeModal('modalOpMenu')">&times;</button></div>
     <button class="btn btn-ghost btn-full" style="margin-bottom:8px" onclick="closeModal('modalOpMenu');refreshData()">🔄 Refresh Data</button>
+    <div id="resetDataBtn" class="hide">
+      <div class="divider"></div>
+      <button class="btn btn-full" style="background:#fdecea;color:var(--red);margin-bottom:8px" onclick="closeModal('modalOpMenu');openResetModal()">🗑️ Reset Data</button>
+    </div>
     <div class="divider"></div>
     <button class="btn btn-full" style="background:#fdecea;color:var(--red)" onclick="opLogout()">⬅ Keluar</button>
   </div>
@@ -487,6 +491,55 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
       <input type="text" id="setorCatModal" placeholder="misal: setoran minggu ini...">
     </div>
     <button class="btn btn-blue btn-full" onclick="buatSetorModal()">📤 Kirim Setoran</button>
+  </div>
+</div>
+
+<!-- ══ MODAL: RESET DATA ══ -->
+<div id="modalReset" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalReset')">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title" style="color:var(--red)">⚠️ Reset Data</div>
+      <button class="modal-close" onclick="closeModal('modalReset')">&times;</button>
+    </div>
+    <div id="resetStep1">
+      <div style="background:#fdecea;border-radius:var(--r);padding:12px;margin-bottom:14px;font-size:13px;color:var(--red);line-height:1.6">
+        <b>PERHATIAN!</b><br>
+        Tindakan ini akan menghapus permanen:<br>
+        • Semua data kesanggupan<br>
+        • Semua data pembayaran<br>
+        • Semua data setoran<br>
+        • Semua log aktivitas<br><br>
+        Data jamaah <b>tidak</b> akan terhapus.
+      </div>
+      <div class="fg"><label>Pilih yang ingin direset</label>
+        <label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer">
+          <input type="checkbox" id="resetKes" checked> Kesanggupan & Pembayaran
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer">
+          <input type="checkbox" id="resetSetor" checked> Setoran
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+          <input type="checkbox" id="resetLog" checked> Log Aktivitas & IP
+        </label>
+      </div>
+      <div class="fg" style="margin-top:10px"><label>Konfirmasi PIN Admin</label>
+        <input type="password" id="resetPin" placeholder="Masukkan PIN admin...">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-full" style="background:var(--red);color:#fff" onclick="doReset()">🗑️ Reset Sekarang</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modalReset')">Batal</button>
+      </div>
+    </div>
+    <div id="resetStep2" class="hide" style="text-align:center;padding:20px 0">
+      <div class="spin" style="width:32px;height:32px;border-width:4px;margin:0 auto 12px"></div>
+      <div style="font-size:13px;color:var(--muted)" id="resetProgress">Menghapus data...</div>
+    </div>
+    <div id="resetStep3" class="hide" style="text-align:center;padding:20px 0">
+      <div style="font-size:36px;margin-bottom:8px">✅</div>
+      <div style="font-size:14px;font-weight:700;color:var(--ok);margin-bottom:4px">Reset Berhasil</div>
+      <div style="font-size:12px;color:var(--muted)" id="resetResult"></div>
+      <button class="btn btn-pri btn-full" style="margin-top:14px" onclick="closeModal('modalReset');refreshData()">OK</button>
+    </div>
   </div>
 </div>
 
@@ -697,7 +750,8 @@ async function showOpDash(){
   const pwWrap=$('fPWWrap');
   if(pwWrap)pwWrap.style.display=curOp.scope==='Desa'?'block':'none';
   populateOpDropdowns();
-  if(curUser?.id===SETYO_ID){show('alertBtn');loadAlerts();setupAlertRealtime();}
+  if(curUser?.id===SETYO_ID){show('alertBtn');loadAlerts();setupAlertRealtime();show('resetDataBtn');}
+  else hide('resetDataBtn');
   await refreshData();
 }
 
@@ -1239,6 +1293,83 @@ async function doExport(type){
 
 // ── OP MENU ───────────────────────────────────────────────────────────────────
 function showOpMenu(){show('modalOpMenu');}
+
+// ── RESET DATA ────────────────────────────────────────────────────────────────
+function openResetModal(){
+  // Reset form ke step 1
+  show('resetStep1'); hide('resetStep2'); hide('resetStep3');
+  $('resetPin').value='';
+  $('resetKes').checked=true;
+  $('resetSetor').checked=true;
+  $('resetLog').checked=true;
+  show('modalReset');
+}
+
+async function doReset(){
+  // Validasi PIN
+  if($('resetPin').value !== ADMIN_PIN){ toast('PIN salah'); return; }
+
+  const delKes = $('resetKes').checked;
+  const delSetor = $('resetSetor').checked;
+  const delLog = $('resetLog').checked;
+
+  if(!delKes && !delSetor && !delLog){ toast('Pilih minimal 1 yang direset'); return; }
+
+  // Konfirmasi terakhir
+  if(!confirm('Yakin ingin menghapus data yang dipilih? Tindakan ini tidak bisa dibatalkan!')) return;
+
+  // Tampil loading
+  hide('resetStep1'); show('resetStep2');
+  let results = [];
+
+  try {
+    if(delKes){
+      $('resetProgress').textContent = 'Menghapus pembayaran...';
+      const {error:e1} = await sb.from('aj_pembayaran').delete().neq('id',0);
+      if(e1) throw new Error('Pembayaran: '+e1.message);
+      results.push('Pembayaran dihapus');
+
+      $('resetProgress').textContent = 'Menghapus kesanggupan...';
+      const {error:e2} = await sb.from('aj_kesanggupan').delete().neq('id',0);
+      if(e2) throw new Error('Kesanggupan: '+e2.message);
+      results.push('Kesanggupan dihapus');
+    }
+
+    if(delSetor){
+      $('resetProgress').textContent = 'Menghapus setoran...';
+      const {error:e3} = await sb.from('aj_setor').delete().neq('id',0);
+      if(e3) throw new Error('Setoran: '+e3.message);
+      results.push('Setoran dihapus');
+    }
+
+    if(delLog){
+      $('resetProgress').textContent = 'Menghapus log...';
+      const {error:e4} = await sb.from('aj_log').delete().neq('id',0);
+      if(e4) throw new Error('Log: '+e4.message);
+      const {error:e5} = await sb.from('aj_ip_log').delete().neq('id',0);
+      if(e5) throw new Error('IP Log: '+e5.message);
+      const {error:e6} = await sb.from('aj_alert').delete().neq('id',0);
+      if(e6) throw new Error('Alert: '+e6.message);
+      results.push('Log & alert dihapus');
+    }
+
+    // Catat aksi reset ke log baru
+    await sb.from('aj_log').insert({
+      aksi:'RESET_DATA',
+      detail: results.join(', '),
+      operator: curUser.nama,
+      operator_jamaah_id: curUser.id,
+      ip_address: myIP
+    });
+
+    hide('resetStep2'); show('resetStep3');
+    $('resetResult').textContent = results.join(' · ');
+
+  } catch(err) {
+    hide('resetStep2'); show('resetStep1');
+    toast('Error: ' + err.message);
+  }
+}
 
 // ── MUTASI UANG ───────────────────────────────────────────────────────────────
 async function showMutasi(){
