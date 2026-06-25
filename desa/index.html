@@ -852,7 +852,7 @@ async function refreshData(){
   if(!jIds.length){$('opTbody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Tidak ada jamaah</td></tr>`;return;}
 
   const [{data:ksAll,error:ke},{data:payAll}]=await Promise.all([
-    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,status').filter('jamaah_id','in',`(${jIds.join(',')})`),
+    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nominal_bebas,status').filter('jamaah_id','in',`(${jIds.join(',')})`),
     sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true})
   ]);
   if(ke){toast('Error: '+ke.message);return;}
@@ -865,17 +865,21 @@ async function refreshData(){
     const ks=ksMap[j.id],pays=payMap[j.id]||[];
     const totalPay=pays.reduce((s,p)=>s+Number(p.jumlah),0);
     const lembar=ks?.jumlah_lembar||0;
-    const nilai=ks?(ks.nominal_bebas&&ks.nominal_bebas>0?Number(ks.nominal_bebas):lembar*HARGA):0;
-    const isNB=ks?.nominal_bebas&&ks.nominal_bebas>0;
+    const isNB=ks&&ks.nominal_bebas&&Number(ks.nominal_bebas)>0;
+    // Nilai efektif: nominal_bebas jika NB, atau lembar*50000
+    const nilai=ks?(isNB?Number(ks.nominal_bebas):lembar*HARGA):0;
+    // hasSanggup: true jika ada kesanggupan (baik lembar maupun NB)
+    const hasSanggup=ks&&(lembar>0||isNB);
     return{id:j.id,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut,
-           lembar,nilai,isNB,nominalBebas:ks?.nominal_bebas||0,
+           lembar,nilai,isNB,nominalBebas:Number(ks?.nominal_bebas||0),
+           hasSanggup,
            status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays};
   });
   applyFilter();
 }
 
 function updateStats(data){
-  const sanggup=data.filter(r=>r.lembar>0);
+  const sanggup=data.filter(r=>r.hasSanggup);
   const lunas=data.filter(r=>r.status==='lunas').length;
   const angsur=data.filter(r=>r.status==='angsur').length;
   const belum=data.filter(r=>r.status==='belum').length;
@@ -937,10 +941,10 @@ function renderTable(){
     const isExp=r.id===expandedId;
     html+=`<tr onclick="toggleExpand(${r.id})" id="tr-${r.id}" ${isExp?'class="expanded-row"':''}>
       <td><b>${r.nama}</b></td><td class="td-c">${r.pw}</td><td class="td-c">${r.gender}</td>
-      <td class="td-r">${r.isNB?`<span style="color:var(--warn);font-size:10px">NB</span>`:r.lembar||'-'}</td><td class="td-c">${st}</td>
-      <td class="td-r">${r.lembar?rp(r.nilai):'-'}</td>
-      <td class="td-r" style="color:var(--ok)">${r.terbayar?rp(r.terbayar):'-'}</td>
-      <td class="td-r" style="color:${r.sisa>0?'var(--red)':'var(--ok)'}">${r.lembar?(r.sisa>0?rp(r.sisa):'✅'):'-'}</td>
+      <td class="td-r" style="font-size:11px">${r.isNB?`<span style="color:var(--warn);font-weight:700">NB<br><span style="font-size:9px">${rp(r.nominalBebas)}</span></span>`:r.lembar||'-'}</td><td class="td-c">${st}</td>
+      <td class="td-r">${r.hasSanggup?rp(r.nilai):'-'}</td>
+      <td class="td-r" style="color:var(--ok)">${r.hasSanggup&&r.terbayar?rp(r.terbayar):r.hasSanggup?'-':'-'}</td>
+      <td class="td-r" style="color:${r.sisa>0?'var(--red)':'var(--ok)'}">${r.hasSanggup?(r.sisa>0?rp(r.sisa):'✅'):'-'}</td>
     </tr>`;
     if(isExp){
       html+=`<tr class="detail-row"><td colspan="8"><div class="detail-inner">`;
@@ -1259,7 +1263,7 @@ async function doExport(type){
         const isFirst=pi===0&&gi===0;
 
         // Stats section
-        const sg=sub.filter(r=>r.lembar>0);
+        const sg=sub.filter(r=>r.hasSanggup);
         const ln=sub.filter(r=>r.status==='lunas').length;
         const an=sub.filter(r=>r.status==='angsur').length;
         const tN=sg.reduce((s,r)=>s+r.nilai,0);
@@ -1321,7 +1325,7 @@ async function doExport(type){
         const footRow=`
           <tr style="background:#1a6b3c;color:#fff;font-weight:700;font-size:9px">
             <td style="padding:5px 8px;border:1px solid #145530">TOTAL (${sub.length} orang)</td>
-            <td style="padding:5px 8px;border:1px solid #145530;text-align:center" colspan="3">${sub.reduce((s,r)=>s+r.lembar,0)} lembar</td>
+            <td style="padding:5px 8px;border:1px solid #145530;text-align:center" colspan="3">${sub.filter(r=>!r.isNB).reduce((s,r)=>s+r.lembar,0)} lembar${sub.some(r=>r.isNB)?` + ${sub.filter(r=>r.isNB).length} NB`:''}</td>
             <td style="padding:5px 8px;border:1px solid #145530"></td>
             <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tN)}</td>
             <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tB)}</td>
