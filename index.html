@@ -765,7 +765,7 @@ img{display:block;}
       <div class="cart-bar-lbl">Total Pembayaran</div>
       <div class="cart-bar-val" id="cart-total">Rp 0</div>
     </div>
-    <button class="btn-co" id="btn-co" onclick="bukaCheckout()">Checkout</button>
+    <button class="btn-co" id="btn-co" onclick="showPage('keranjang')" style="background:var(--ink)">Lihat Keranjang</button>
   </div>
 </div>
 
@@ -1235,6 +1235,13 @@ img{display:block;}
       </div>
     </div>
 
+    <!-- SETTING PEMBAYARAN -->
+    <div style="margin-top:18px">
+      <div style="font-size:13px;font-weight:700;color:var(--g2);margin-bottom:10px">💳 Metode Pembayaran Toko</div>
+      <div id="bt-payment-list" style="margin-bottom:10px"></div>
+      <button onclick="tambahPaymentToko()" style="width:100%;padding:10px;border:1.5px dashed var(--bdr);border-radius:10px;background:#fff;color:var(--g);font-weight:700;font-size:13px;cursor:pointer">+ Tambah Rekening / E-Wallet / QRIS</button>
+    </div>
+
     <div style="margin-top:16px;padding:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:10px;font-size:12px;color:#92400e">
       ⚠️ Toko akan masuk ke daftar tunggu admin. Setelah disetujui, baru bisa tambah produk dan tampil di marketplace.
     </div>
@@ -1558,8 +1565,50 @@ img{display:block;}
 <!-- TOAST -->
 <div class="toast-wrap" id="tw"><div class="toast" id="tm"></div></div>
 
-<!-- OV DAFTAR KURIR JAK -->
-<div class="co-ov" id="ov-daftar-kurir">
+<!-- OV FORM PAYMENT TOKO -->
+<div class="co-ov" id="ov-payment-toko">
+  <div class="co-bar">
+    <button class="btn-back" onclick="closeOv('ov-payment-toko')">←</button>
+    <div class="co-ttl">💳 Tambah Metode Bayar</div>
+  </div>
+  <div class="co-body" style="padding:14px">
+    <div class="fg">
+      <label class="fl">Jenis</label>
+      <select class="fi" id="pm-jenis" onchange="onPmJenisChange()">
+        <option value="transfer">🏦 Transfer Bank</option>
+        <option value="ewallet">💳 E-Wallet (GoPay, OVO, ShopeePay, Dana, dll)</option>
+        <option value="qris">📱 QRIS</option>
+      </select>
+    </div>
+    <div id="pm-field-bank">
+      <div class="fg">
+        <label class="fl">Nama Bank / E-Wallet</label>
+        <input class="fi" id="pm-nama-bank" placeholder="Contoh: BCA, BRI, GoPay, OVO...">
+      </div>
+      <div class="fg">
+        <label class="fl">Nomor Rekening / ID Akun</label>
+        <input class="fi" id="pm-no-rek" placeholder="Contoh: 1234567890 atau 08123456789" type="tel">
+      </div>
+      <div class="fg">
+        <label class="fl">Nama Pemilik</label>
+        <input class="fi" id="pm-nama-pemilik" placeholder="Nama sesuai rekening">
+      </div>
+    </div>
+    <div id="pm-field-qris" style="display:none">
+      <div class="fg">
+        <label class="fl">Upload Gambar QRIS</label>
+        <div id="pm-qris-prev" onclick="document.getElementById('pm-qris-file').click()" style="width:160px;height:160px;border-radius:10px;background:var(--bg);border:2px dashed var(--bdr);display:flex;align-items:center;justify-content:center;font-size:36px;cursor:pointer;overflow:hidden">📱</div>
+        <input type="file" id="pm-qris-file" accept="image/*" style="display:none" onchange="onQrisSelect(event)">
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Upload foto QR code toko (max 2MB)</div>
+      </div>
+    </div>
+    <div id="pm-err" style="display:none;color:var(--r);font-size:12px;padding:8px;background:#fee;border-radius:6px"></div>
+  </div>
+  <div class="co-foot">
+    <button class="btn-order" id="btn-pm-save" onclick="simpanPaymentToko()">Simpan</button>
+  </div>
+</div>
+
   <div class="co-bar">
     <button class="btn-back" onclick="closeOv('ov-daftar-kurir')">←</button>
     <div class="co-ttl">🛵 Daftar Kurir JAK</div>
@@ -2606,7 +2655,7 @@ async function qAdd(id){
       mk=data?.[0];
       if(mk)aMK.push(mk);
     }
-    if(mk)p={id,nama:mk.nama,harga:mk.harga,foto:mk.foto_urls?.[0],toko:mk.toko?.nama_toko||'Toko Anggota',tip:'a'};
+    if(mk)p={id,nama:mk.nama,harga:mk.harga,foto:mk.foto_urls?.[0],toko:mk.toko?.nama_toko||'Toko Anggota',toko_id:mk.toko_id||null,tip:'a'};
   }
   if(!p){toast('Produk tidak ditemukan','err');return;}
   const ex=cart.find(k=>k.id===id);
@@ -2617,7 +2666,7 @@ function addCart(buy=false){
   if(!U){openOv('ov-login');return;}
   const p=curP;if(!p)return;
   const ex=cart.find(k=>k.id===p.id);
-  if(ex)ex.qty++;else cart.push({id:p.id,nama:p.nama,harga:p.harga,foto:p.foto,toko:p.toko,tip:p.tip,qty:1});
+  if(ex)ex.qty++;else cart.push({id:p.id,nama:p.nama,harga:p.harga,foto:p.foto,toko:p.toko,toko_id:p.toko_id||null,tip:p.tip,qty:1});
   saveCart();syncCart();toast('✓ Ditambahkan ke keranjang','ok');
   if(buy){closeOv('ov-det');showPage('keranjang');}
 }
@@ -2635,26 +2684,52 @@ function renderCart(){
   const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
   const n=cart.reduce((a,i)=>a+i.qty,0);
   lbl.textContent=n+' produk';
-  body.innerHTML=cart.map((item,idx)=>`
-    <div class="cart-item">
-      <div class="ci-img">${item.foto?`<img src="${esc(item.foto)}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
-      <div class="ci-body">
-        <div class="ci-nm">${esc(item.nama)}</div>
-        <div class="ci-tk">🏪 ${esc(item.toko)}</div>
-        <div class="ci-row">
-          <div class="ci-pr">${rp(item.harga*item.qty)}</div>
-          <div class="qc">
-            <button class="qb m" onclick="chQ(${idx},-1)">−</button>
-            <div class="qn">${item.qty}</div>
-            <button class="qb" onclick="chQ(${idx},1)">+</button>
-            <div class="ci-del" onclick="delI(${idx})">🗑️</div>
+
+  // Group by toko
+  const groups={};
+  cart.forEach((item,idx)=>{
+    const key=item.toko_id?('a_'+item.toko_id):(item.tip==='w'?'__ub__':('__'+item.toko+'__'));
+    if(!groups[key])groups[key]={nama:item.toko,toko_id:item.toko_id||null,tip:item.tip,items:[]};
+    groups[key].items.push({...item,_idx:idx});
+  });
+
+  let html='';
+  Object.values(groups).forEach(g=>{
+    const gTotal=g.items.reduce((a,i)=>a+i.harga*i.qty,0);
+    const gQty=g.items.reduce((a,i)=>a+i.qty,0);
+    const isUB=g.tip==='w'||!g.toko_id;
+    html+=`<div style="background:#fff;border-radius:12px;border:1px solid var(--bdr);margin-bottom:12px;overflow:hidden">
+      <div style="background:var(--bg);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;font-weight:700">🏪 ${esc(g.nama)}</div>
+        <div style="font-size:11px;color:var(--muted)">${gQty} produk · ${rp(gTotal)}</div>
+      </div>
+      ${g.items.map(item=>`<div class="cart-item" style="border-bottom:1px solid var(--bg)">
+        <div class="ci-img">${item.foto?`<img src="${esc(item.foto)}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
+        <div class="ci-body">
+          <div class="ci-nm">${esc(item.nama)}</div>
+          <div class="ci-row">
+            <div class="ci-pr">${rp(item.harga*item.qty)}</div>
+            <div class="qc">
+              <button class="qb m" onclick="chQ(${item._idx},-1)">−</button>
+              <div class="qn">${item.qty}</div>
+              <button class="qb" onclick="chQ(${item._idx},1)">+</button>
+              <div class="ci-del" onclick="delI(${item._idx})">🗑️</div>
+            </div>
           </div>
         </div>
+      </div>`).join('')}
+      <div style="padding:10px 14px">
+        <button onclick="bukaCheckoutToko('${esc(isUB?'__ub__':(g.toko_id?String(g.toko_id):'__'+g.nama+'__'))}')" style="width:100%;padding:10px;background:var(--g);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">
+          Checkout Toko Ini → ${rp(gTotal)}
+        </button>
       </div>
-    </div>`).join('')+'<div style="height:80px"></div>';
+    </div>`;
+  });
+  html+='<div style="height:80px"></div>';
+  body.innerHTML=html;
   bar.style.display='flex';
   document.getElementById('cart-total').textContent=rp(total);
-  document.getElementById('btn-co').textContent=`Checkout (${n})`;
+  document.getElementById('btn-co').textContent=`Total (${n})`;
   syncCart();
 }
 function chQ(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);saveCart();renderCart();syncCart();}
@@ -2699,119 +2774,181 @@ async function validateCart(){
   saveCart();syncCart();
 }
 
-// CHECKOUT
-let coMetodeKirim='ambil_sendiri', coOngkir=0;
+// CHECKOUT PER TOKO
+let coMetodeKirim='ambil_sendiri', coOngkir=0, _coTokoKey=null, _coTokoItems=[], _coTokoId=null;
+let _coPayMode='cod', _coPayDetail=null;
 
-async function bukaCheckout(){
+async function bukaCheckout(){showPage('keranjang');}
+
+async function bukaCheckoutToko(tokoKey){
   if(!U){openOv('ov-login');return;}
-  if(!cart.length){toast('Keranjang kosong','err');return;}
-  // Validasi cart: pastikan semua produk anggota masih ada & harga current
+  let items;
+  if(tokoKey==='__ub__'){
+    items=cart.filter(i=>i.tip==='w'||!i.toko_id);
+  }else if(!isNaN(parseInt(tokoKey))){
+    items=cart.filter(i=>String(i.toko_id)===String(tokoKey));
+  }else{
+    const nm=tokoKey.replace(/^__|__$/g,'');
+    items=cart.filter(i=>i.toko===nm);
+  }
+  if(!items.length){toast('Tidak ada produk untuk toko ini','err');return;}
   await validateCart();
-  if(!cart.length){toast('Semua produk di keranjang sudah tidak tersedia','err');renderCart();return;}
-  const total=cart.reduce((a,i)=>a+i.harga*i.qty,0);
+  items=items.filter(i=>cart.some(c=>c.id===i.id));
+  if(!items.length){toast('Produk tidak tersedia','err');renderCart();return;}
+  _coTokoKey=tokoKey;_coTokoItems=items;
+  _coTokoId=isNaN(parseInt(tokoKey))?null:parseInt(tokoKey);
+  const isUB=tokoKey==='__ub__'||!_coTokoId;
+  const namaToko=items[0].toko;
+  const subtotal=items.reduce((a,i)=>a+i.harga*i.qty,0);
+  let payments=[],adaKurirToko=false,tarifKurirToko=0,noWaToko='',tarifKurirUB=5000;
+  if(!isUB&&_coTokoId){
+    try{
+      const[{data:pm},{data:tk},{data:pg}]=await Promise.all([
+        SB.from('ubnb_mk_toko_payment').select('*').eq('toko_id',_coTokoId).order('urutan'),
+        SB.from('ubnb_mk_toko').select('no_wa,sediakan_kirim,biaya_kirim_toko').eq('id',_coTokoId).single(),
+        SB.from('ubnb_pengaturan').select('value').eq('key','tarif_kurir_ub').single()
+      ]);
+      payments=pm||[];
+      if(tk){adaKurirToko=tk.sediakan_kirim||false;tarifKurirToko=parseInt(tk.biaya_kirim_toko)||0;noWaToko=normalizeWA(tk.no_wa||'');}
+      if(pg?.value)tarifKurirUB=parseInt(pg.value)||5000;
+    }catch(e){}
+  }else{
+    try{const{data:pg}=await SB.from('ubnb_pengaturan').select('value').eq('key','tarif_kurir_ub').single();if(pg?.value)tarifKurirUB=parseInt(pg.value)||5000;}catch(e){}
+  }
+  coMetodeKirim='ambil_sendiri';coOngkir=0;_coPayMode='cod';_coPayDetail=null;
   const norek=S.norek_nomor||'(Belum diset)',bank=S.norek_bank||'BSI',atas=S.norek_nama||'UBNB Perwira';
-
-  // Ambil setting pengiriman toko + tarif kurir UB
-  let tarifKurirToko=0, adaKurirToko=false, tarifKurirUB=5000;
-  try{
-    const prodIds=cart.filter(c=>c.id?.startsWith('a_')).map(c=>parseInt(c.id.replace('a_',''),10));
-    if(prodIds.length){
-      const{data:pr}=await SB.from('ubnb_mk_produk').select('toko_id').in('id',prodIds);
-      const tokoIds=[...new Set((pr||[]).map(p=>p.toko_id).filter(Boolean))];
-      if(tokoIds.length===1){
-        const{data:tk}=await SB.from('ubnb_mk_toko').select('sediakan_kirim,biaya_kirim_toko').eq('id',tokoIds[0]).single();
-        if(tk){adaKurirToko=tk.sediakan_kirim||false;tarifKurirToko=parseInt(tk.biaya_kirim_toko)||0;}
-      }
-    }
-    const{data:pg}=await SB.from('ubnb_pengaturan').select('value').eq('key','tarif_kurir_ub').single();
-    if(pg?.value)tarifKurirUB=parseInt(pg.value)||5000;
-  }catch(e){}
-
-  // Reset state
-  coMetodeKirim='ambil_sendiri'; coOngkir=0;
-
-  const htmlKurirToko=adaKurirToko?`
-    <div class="popt" id="co-km-kurir-toko" data-metode="kurir_toko" data-ongkir="${tarifKurirToko}">
+  let paymentHtml='';
+  if(isUB){
+    paymentHtml=`<div class="popt on" id="po-n" data-pay="cod">
+        <div class="prad"><div class="praddot"></div></div>
+        <div style="flex:1"><div class="pname">Bayar Nanti</div><div class="psub">Tagihan dikirim ke WhatsApp</div></div>
+        <div class="pico">\u{1F4F2}</div>
+      </div>
+      <div class="popt" id="po-t" data-pay="transfer_ub">
+        <div class="prad"><div class="praddot"></div></div>
+        <div style="flex:1"><div class="pname">Transfer Bank</div><div class="psub">Transfer ke rekening UBNB</div></div>
+        <div class="pico">\u{1F3E6}</div>
+      </div>
+      <div id="norek-box" class="norek-box" style="display:none">
+        <div class="norek-bank">${bank}</div>
+        <div class="norek-num">${norek}</div>
+        <div class="norek-nm">a/n ${atas}</div>
+      </div>`;
+  }else if(payments.length){
+    paymentHtml=`<div class="popt on" id="po-n" data-pay="cod">
+        <div class="prad"><div class="praddot"></div></div>
+        <div style="flex:1"><div class="pname">Bayar Nanti</div><div class="psub">Konfirmasi via WhatsApp ke penjual</div></div>
+        <div class="pico">\u{1F4F2}</div>
+      </div>`;
+    payments.forEach((pm,i)=>{
+      const ico=pm.jenis==='qris'?'\u{1F4F1}':(pm.jenis==='ewallet'?'\u{1F4B3}':'\u{1F3E6}');
+      const label=pm.jenis==='qris'?'QRIS':(pm.nama_bank+' \u00B7 '+pm.no_rek);
+      const sub=pm.nama_pemilik?('a/n '+pm.nama_pemilik):(pm.jenis==='qris'?'Scan QR penjual':'');
+      paymentHtml+=`<div class="popt" id="po-pm-${i}" data-pay="pm_${i}" data-pm='${JSON.stringify(pm).replace(/'/g,"&#39;")}'>
+        <div class="prad"><div class="praddot"></div></div>
+        <div style="flex:1"><div class="pname">${ico} ${pm.jenis==='qris'?'QRIS':pm.nama_bank+' - '+pm.no_rek}</div>${sub?`<div class="psub">${sub}</div>`:''}</div>
+      </div>`;
+    });
+    paymentHtml+=`<div id="co-pm-detail" style="display:none;margin-top:10px"></div>`;
+  }else{
+    paymentHtml=`<div class="popt on" id="po-n" data-pay="cod">
+        <div class="prad"><div class="praddot"></div></div>
+        <div style="flex:1"><div class="pname">Bayar Nanti</div><div class="psub">Konfirmasi via WhatsApp ke penjual</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);padding:8px;background:var(--bg);border-radius:8px;margin-top:4px">
+        Penjual belum mengatur metode pembayaran. Koordinasikan via WhatsApp.
+      </div>`;
+  }
+  const htmlKurirToko=adaKurirToko?`<div class="popt" id="co-km-kurir-toko" data-metode="kurir_toko" data-ongkir="${tarifKurirToko}">
       <div class="prad"><div class="praddot"></div></div>
-      <div style="flex:1"><div class="pname">🛵 Kurir Toko</div><div class="psub">Diantar kurir penjual &middot; ${rp(tarifKurirToko)}</div></div>
-    </div>`:'';
-
+      <div style="flex:1"><div class="pname">\u{1F6F5} Kurir Toko</div><div class="psub">Diantar kurir penjual &middot; ${rp(tarifKurirToko)}</div></div>
+    </div>`:'' ;
   document.getElementById('co-body').innerHTML=`
     <div class="co-card">
-      <div class="co-ch">📍 Info Pemesan</div>
+      <div class="co-ch">\u{1F3EA} ${namaToko}</div>
       <div class="co-cb">
-        <div style="font-size:14px;font-weight:700;margin-bottom:2px">${esc(U.nama)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Kelompok ${esc(U.kelompok||'-')} · ${U.tip==='a'?'Anggota UBNB':U.tip==='j'?'Jamaah Perwira':'Pengguna EZI'}</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:2px">${U.nama}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Kelompok ${U.kelompok||'-'}</div>
         <div class="fg" style="margin:0"><label class="fl">Alamat / Catatan</label>
         <input class="fi" type="text" id="co-alamat" placeholder="Alamat pengiriman atau catatan..."></div>
       </div>
     </div>
     <div class="co-card">
-      <div class="co-ch">🛒 Produk</div>
-      <div class="co-cb">${cart.map(item=>`<div class="co-item">
-        <div class="co-iimg">${item.foto?`<img src="${esc(item.foto)}" onerror="this.parentElement.textContent='🛒'">`:'🛒'}</div>
-        <div style="flex:1;min-width:0"><div class="co-inm">${esc(item.nama)}</div><div class="co-isub">${esc(item.toko)} · ${item.qty}× ${rp(item.harga)}</div></div>
+      <div class="co-ch">\u{1F6D2} Produk</div>
+      <div class="co-cb">${items.map(item=>`<div class="co-item">
+        <div class="co-iimg">${item.foto?`<img src="${item.foto}" onerror="this.parentElement.textContent='\u{1F6D2}'">`:'\u{1F6D2}'}</div>
+        <div style="flex:1;min-width:0"><div class="co-inm">${item.nama}</div><div class="co-isub">${item.qty}\u00D7 ${rp(item.harga)}</div></div>
         <div class="co-ipr">${rp(item.harga*item.qty)}</div>
       </div>`).join('')}</div>
     </div>
     <div class="co-card">
-      <div class="co-ch">🚚 Metode Pengiriman</div>
+      <div class="co-ch">\u{1F69A} Metode Pengiriman</div>
+      <div class="co-cb"><div class="pay-opts" id="co-kirim-opts">
+        ${htmlKurirToko}
+        <div class="popt" id="co-km-kurir-ub" data-metode="kurir_ub" data-ongkir="${tarifKurirUB}">
+          <div class="prad"><div class="praddot"></div></div>
+          <div style="flex:1"><div class="pname">\u{1F3E2} Kurir UB</div><div class="psub">Diantar kurir koperasi &middot; ${rp(tarifKurirUB)}</div></div>
+        </div>
+        <div class="popt on" id="co-km-ambil-sendiri" data-metode="ambil_sendiri" data-ongkir="0">
+          <div class="prad"><div class="praddot"></div></div>
+          <div style="flex:1"><div class="pname">\u{1F3EA} Ambil ke Toko</div><div class="psub">Datang langsung &middot; Gratis</div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="co-card">
+      <div class="co-ch">\u{1F4B3} Metode Bayar</div>
+      <div class="co-cb"><div class="pay-opts" id="co-pay-opts">${paymentHtml}</div></div>
+    </div>
+    <div class="co-card" style="border-color:#fbbf24;background:#fffbeb">
       <div class="co-cb">
-        <div class="pay-opts">
-          ${htmlKurirToko}
-          <div class="popt" id="co-km-kurir-ub" data-metode="kurir_ub" data-ongkir="${tarifKurirUB}">
-            <div class="prad"><div class="praddot"></div></div>
-            <div style="flex:1"><div class="pname">🏢 Kurir UB</div><div class="psub">Diantar kurir koperasi &middot; ${rp(tarifKurirUB)}</div></div>
-          </div>
-          <div class="popt on" id="co-km-ambil-sendiri" data-metode="ambil_sendiri" data-ongkir="0">
-            <div class="prad"><div class="praddot"></div></div>
-            <div style="flex:1"><div class="pname">🏪 Ambil ke Toko</div><div class="psub">Datang langsung &middot; Gratis</div></div>
-          </div>
+        <div style="font-size:12px;color:#92400e;line-height:1.7">
+          \u26A0\uFE0F <b>Perhatian:</b> UBNB tidak melakukan pengawasan terhadap transaksi yang terjadi antara penjual dan pembeli. Harap memastikan satu sama lain sebelum dan sesudah transaksi. Jika ada permasalahan, dapat melibatkan Pengurus UBNB Perwira.
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px">
+          <input type="checkbox" id="co-setuju-tnc" style="width:16px;height:16px;flex-shrink:0;margin-top:2px">
+          <label for="co-setuju-tnc" style="font-size:12px;color:var(--ink);cursor:pointer;line-height:1.5">Saya memahami dan menyetujui ketentuan transaksi di atas</label>
         </div>
       </div>
     </div>
     <div class="co-card">
-      <div class="co-ch">💳 Metode Bayar</div>
+      <div class="co-ch">\u{1F4CB} Ringkasan</div>
       <div class="co-cb">
-        <div class="pay-opts">
-          <div class="popt on" id="po-n" onclick="pickPay('cod')">
-            <div class="prad"><div class="praddot"></div></div>
-            <div style="flex:1"><div class="pname">Bayar Nanti</div><div class="psub">Tagihan dikirim ke WhatsApp</div></div>
-            <div class="pico">📲</div>
-          </div>
-          <div class="popt" id="po-t" onclick="pickPay('transfer')">
-            <div class="prad"><div class="praddot"></div></div>
-            <div style="flex:1"><div class="pname">Transfer Bank</div><div class="psub">Transfer ke rekening UBNB</div></div>
-            <div class="pico">🏦</div>
-          </div>
-        </div>
-        <div class="norek-box" id="norek-box">
-          <div class="norek-bank">${esc(bank)}</div>
-          <div class="norek-num">${esc(norek)}</div>
-          <div class="norek-nm">a/n ${esc(atas)}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:8px">Upload bukti transfer ke admin. Konfirmasi dalam 1×24 jam.</div>
-        </div>
-      </div>
-    </div>
-    <div class="co-card">
-      <div class="co-ch">📋 Ringkasan</div>
-      <div class="co-cb">
-        <div class="ring-row"><div>Subtotal (${cart.reduce((a,i)=>a+i.qty,0)} produk)</div><div>${rp(total)}</div></div>
+        <div class="ring-row"><div>Subtotal (${items.reduce((a,i)=>a+i.qty,0)} produk)</div><div>${rp(subtotal)}</div></div>
         <div class="ring-row" id="co-row-ongkir"><div>Ongkos Kirim</div><div style="color:var(--g);font-weight:700">Gratis</div></div>
-        <div class="ring-row" style="font-weight:700"><div>Total Bayar</div><div id="co-total-val">${rp(total)}</div></div>
+        <div class="ring-row" style="font-weight:700"><div>Total Bayar</div><div id="co-total-val">${rp(subtotal)}</div></div>
       </div>
     </div><div style="height:8px"></div>`;
   openOv('ov-co');
-  // Pasang event listener metode kirim via delegation (hindari konflik inline onclick)
   document.getElementById('co-body').addEventListener('click',function(e){
-    const popt=e.target.closest('.popt[data-metode]');
-    if(popt){
-      const metode=popt.dataset.metode;
-      const ongkir=parseInt(popt.dataset.ongkir)||0;
-      pilihMetodeKirim(metode,ongkir);
-    }
-  },{once:false});
+    const km=e.target.closest('.popt[data-metode]');
+    if(km){pilihMetodeKirim(km.dataset.metode,parseInt(km.dataset.ongkir)||0);return;}
+    const pm=e.target.closest('.popt[data-pay]');
+    if(pm) pilihPayToko(pm.dataset.pay,pm.dataset.pm?JSON.parse(pm.dataset.pm.replace(/&#39;/g,"'")):{});
+  });
 }
+
+function pilihPayToko(mode,detail){
+  _coPayMode=mode;_coPayDetail=detail;
+  document.querySelectorAll('#co-pay-opts .popt').forEach(el=>{el.classList.toggle('on',el.dataset.pay===mode);});
+  const norekBox=document.getElementById('norek-box');
+  if(norekBox) norekBox.style.display=mode==='transfer_ub'?'block':'none';
+  const detailEl=document.getElementById('co-pm-detail');
+  if(!detailEl||!detail)return;
+  if(mode.startsWith('pm_')&&detail.jenis){
+    if(detail.jenis==='qris'&&detail.qris_url){
+      detailEl.style.display='block';
+      detailEl.innerHTML=`<div style="text-align:center;padding:10px"><img src="${detail.qris_url}" style="max-width:200px;border-radius:10px"><div style="font-size:11px;color:var(--muted);margin-top:6px">Scan QR untuk bayar</div></div>`;
+    }else if(detail.jenis==='transfer'||detail.jenis==='ewallet'){
+      detailEl.style.display='block';
+      detailEl.innerHTML=`<div style="background:var(--bg);border-radius:10px;padding:12px">
+        <div style="font-weight:700">${detail.nama_bank||''}</div>
+        <div style="font-size:16px;font-weight:800;letter-spacing:1px;margin:4px 0">${detail.no_rek||''}</div>
+        ${detail.nama_pemilik?`<div style="color:var(--muted);font-size:12px">a/n ${detail.nama_pemilik}</div>`:''}
+      </div>`;
+    }else{detailEl.style.display='none';}
+  }else{detailEl.style.display='none';}
+}
+
 
 function pilihMetodeKirim(metode, ongkir){
   coMetodeKirim=metode; coOngkir=ongkir;
@@ -2832,9 +2969,13 @@ function pickPay(m){
 }
 async function prosesOrder(){
   if(!U)return;
-  if(!cart.length){toast('Keranjang kosong','err');return;}
+  if(!_coTokoItems?.length){toast('Keranjang kosong','err');return;}
+  // Cek persetujuan T&C
+  const tncOk=document.getElementById('co-setuju-tnc')?.checked;
+  if(!tncOk){toast('Harap setujui ketentuan transaksi terlebih dahulu','err');return;}
   const alamat=document.getElementById('co-alamat')?.value.trim()||'';
-  const subtotal=cart.reduce((a,i)=>a+i.harga*i.qty,0);
+  const items=_coTokoItems;
+  const subtotal=items.reduce((a,i)=>a+i.harga*i.qty,0);
   const total=subtotal+coOngkir;
   // Idempotent kode: timestamp + random suffix (mengurangi collision pada concurrent submit)
   const kode='ORD-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
@@ -2853,7 +2994,7 @@ async function prosesOrder(){
       p_subtotal:subtotal,
       p_biaya_kirim:coOngkir,
       p_total:total,
-      p_metode_bayar:payMode,
+      p_metode_bayar:_coPayMode==='cod'?'cod':'transfer',
       p_metode_kirim:coMetodeKirim,
       p_sumber_ongkir:coMetodeKirim==='kurir_toko'?'penjual':coMetodeKirim==='kurir_ub'?'ub':'gratis',
       p_items:cart.map(item=>({
@@ -2889,7 +3030,7 @@ async function prosesOrder(){
         biaya_kirim:coOngkir,
         total,
         status:'menunggu',
-        metode_bayar:payMode,
+        metode_bayar:_coPayMode==='cod'?'cod':'transfer',
         status_bayar:'belum',
         metode_kirim:coMetodeKirim,
         sumber_ongkir:coMetodeKirim==='kurir_toko'?'penjual':coMetodeKirim==='kurir_ub'?'ub':'gratis'
@@ -2937,27 +3078,29 @@ async function prosesOrder(){
       btn.disabled=false;btn.textContent='Buat Pesanan';
       return;
     }
-    // Notifikasi WA: untuk COD & transfer. Kalau pesanan berisi produk dari 1 toko anggota saja,
-    // kirim ke WA toko tersebut. Kalau campuran (produk UB + anggota, atau multi-toko), kirim ke admin pusat.
+    // Notifikasi WA ke penjual / admin
     try{
-      const prodIdsForWa=cart.filter(c=>c.id.toString().startsWith('a_')).map(c=>parseInt(c.id.replace('a_',''),10));
-      const hasBarangUB=cart.some(c=>c.id.toString().startsWith('w_'));
+      const isUB=_coTokoKey==='__ub__'||!_coTokoId;
       let targetWa=S.wa_center||WA_DEFAULT;
       let targetLabel='Admin JAWARA';
-      if(prodIdsForWa.length&&!hasBarangUB){
-        const{data:prodRows}=await SB.from('ubnb_mk_produk').select('toko_id').in('id',prodIdsForWa);
-        const tokoIds=[...new Set((prodRows||[]).map(p=>p.toko_id).filter(Boolean))];
-        if(tokoIds.length===1){
-          const{data:tokoRows}=await SB.from('ubnb_mk_toko').select('nama_toko,no_wa').eq('id',tokoIds[0]).limit(1);
-          const tk=tokoRows?.[0];
-          if(tk?.no_wa){targetWa=normalizeWA(tk.no_wa);targetLabel=tk.nama_toko||'Toko';}
-        }
+      if(!isUB&&_coTokoId){
+        const{data:tk}=await SB.from('ubnb_mk_toko').select('nama_toko,no_wa').eq('id',_coTokoId).single();
+        if(tk?.no_wa){targetWa=normalizeWA(tk.no_wa);targetLabel=tk.nama_toko||'Penjual';}
       }
       const infoKirim=coMetodeKirim==='kurir_toko'?'Kurir Toko':coMetodeKirim==='kurir_ub'?'Kurir UB':'Ambil ke Toko';
-      const pesanText='Halo '+targetLabel+'!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nSubtotal: '+rp(subtotal)+'\nOngkir: '+(coOngkir>0?rp(coOngkir):'Gratis')+'\nTotal: '+rp(total)+'\nPengiriman: '+infoKirim+'\nMetode: '+(payMode==='cod'?'Bayar Nanti':'Transfer')+'\n\nMohon dikonfirmasi. Terima kasih! 🙏';
-      window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(pesanText)}`, '_blank');
+      let infoPayment='Bayar Nanti';
+      if(_coPayMode!=='cod'&&_coPayDetail){
+        if(_coPayDetail.jenis==='qris') infoPayment='QRIS';
+        else if(_coPayDetail.jenis==='ewallet') infoPayment='E-Wallet '+(_coPayDetail.nama_bank||'');
+        else if(_coPayDetail.jenis==='transfer') infoPayment='Transfer '+(_coPayDetail.nama_bank||'');
+      }else if(_coPayMode==='transfer_ub') infoPayment='Transfer Bank (UBNB)';
+      const pesanText='Halo '+targetLabel+'!\n\n📦 Pesanan: '+kode+'\nNama: '+U.nama+'\nSubtotal: '+rp(subtotal)+'\nOngkir: '+(coOngkir>0?rp(coOngkir):'Gratis')+'\nTotal: '+rp(total)+'\nPengiriman: '+infoKirim+'\nPembayaran: '+infoPayment+'\n\nMohon dikonfirmasi. Terima kasih! 🙏';
+      window.open(`https://wa.me/${targetWa}?text=${encodeURIComponent(pesanText)}`,'_blank');
     }catch(e){}
-    cart=[];saveCart();syncCart();closeOv('ov-co');
+    // Hapus hanya item toko yang di-checkout dari cart
+    const checkedOutIds=new Set(_coTokoItems.map(i=>i.id));
+    cart=cart.filter(i=>!checkedOutIds.has(i.id));
+    saveCart();syncCart();closeOv('ov-co');
     toast('✅ Pesanan berhasil dibuat!','ok');showPage('pesanan');
     // Jika kurir UB, buat delivery order otomatis
     if(coMetodeKirim==='kurir_ub'){
@@ -5179,6 +5322,7 @@ function formBukaToko(){
   document.getElementById('bt-tarif-kurir-toko').value='';
   _bpUpload.foto=null;
   loadTarifKurirUB();
+  loadPaymentToko();
   openOv('ov-bt');
 }
 
@@ -5201,6 +5345,7 @@ function formEditToko(){
   else{prev.innerHTML='🏪';prev.dataset.url='';}
   _bpUpload.foto=null;
   loadTarifKurirUB();
+  loadPaymentToko();
   openOv('ov-bt');
 }
 
@@ -5615,6 +5760,96 @@ async function simpanTarifKurirUB(){
   try{
     await SB.from('ubnb_pengaturan').upsert({key:'tarif_kurir_ub',value:val,updated_at:new Date().toISOString()},{onConflict:'key'});
     toast('✅ Tarif Kurir UB: '+rp(parseInt(val)),'ok');
+  }catch(e){toast('Gagal: '+e.message,'err');}
+}
+
+// ===== PAYMENT TOKO =====
+let _pmQrisFile=null;
+
+function onPmJenisChange(){
+  const j=document.getElementById('pm-jenis').value;
+  document.getElementById('pm-field-bank').style.display=j==='qris'?'none':'block';
+  document.getElementById('pm-field-qris').style.display=j==='qris'?'block':'none';
+}
+
+function onQrisSelect(e){
+  const f=e.target.files?.[0];if(!f)return;
+  if(f.size>2*1024*1024){toast('Max 2MB','err');return;}
+  _pmQrisFile=f;
+  const reader=new FileReader();
+  reader.onload=ev=>{document.getElementById('pm-qris-prev').innerHTML=`<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover">`;};
+  reader.readAsDataURL(f);
+}
+
+function tambahPaymentToko(){
+  document.getElementById('pm-jenis').value='transfer';
+  document.getElementById('pm-nama-bank').value='';
+  document.getElementById('pm-no-rek').value='';
+  document.getElementById('pm-nama-pemilik').value='';
+  document.getElementById('pm-qris-prev').innerHTML='📱';
+  document.getElementById('pm-err').style.display='none';
+  _pmQrisFile=null;
+  onPmJenisChange();
+  openOv('ov-payment-toko');
+}
+
+async function simpanPaymentToko(){
+  if(!_mineToko?.toko?.id){toast('Simpan toko dulu','err');return;}
+  const jenis=document.getElementById('pm-jenis').value;
+  const errEl=document.getElementById('pm-err');
+  errEl.style.display='none';
+  let payload={toko_id:_mineToko.toko.id,jenis,updated_at:new Date().toISOString()};
+  if(jenis==='qris'){
+    if(!_pmQrisFile){errEl.textContent='Upload gambar QRIS';errEl.style.display='block';return;}
+    const btn=document.getElementById('btn-pm-save');
+    btn.disabled=true;btn.textContent='Upload QRIS...';
+    try{payload.qris_url=await uploadToBucket(_pmQrisFile,'qris');}
+    catch(e){errEl.textContent='Gagal upload: '+e.message;errEl.style.display='block';btn.disabled=false;btn.textContent='Simpan';return;}
+    btn.disabled=false;btn.textContent='Simpan';
+  }else{
+    const namaBank=document.getElementById('pm-nama-bank').value.trim();
+    const noRek=document.getElementById('pm-no-rek').value.trim();
+    const namaPemilik=document.getElementById('pm-nama-pemilik').value.trim();
+    if(!namaBank){errEl.textContent='Nama bank/ewallet wajib diisi';errEl.style.display='block';return;}
+    if(!noRek){errEl.textContent='Nomor rekening/akun wajib diisi';errEl.style.display='block';return;}
+    payload.nama_bank=namaBank;payload.no_rek=noRek;payload.nama_pemilik=namaPemilik;
+  }
+  try{
+    const{error}=await SB.from('ubnb_mk_toko_payment').insert(payload);
+    if(error)throw new Error(error.message);
+    toast('✅ Metode pembayaran ditambahkan!','ok');
+    closeOv('ov-payment-toko');
+    loadPaymentToko();
+  }catch(e){errEl.textContent='Gagal: '+e.message;errEl.style.display='block';}
+}
+
+async function loadPaymentToko(){
+  const el=document.getElementById('bt-payment-list');
+  if(!el||!_mineToko?.toko?.id)return;
+  try{
+    const{data}=await SB.from('ubnb_mk_toko_payment').select('*').eq('toko_id',_mineToko.toko.id).order('urutan');
+    if(!data?.length){el.innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px">Belum ada metode pembayaran</div>';return;}
+    el.innerHTML=data.map(pm=>{
+      const ico=pm.jenis==='qris'?'📱':pm.jenis==='ewallet'?'💳':'🏦';
+      const label=pm.jenis==='qris'?'QRIS':(pm.nama_bank+(pm.no_rek?' · '+pm.no_rek:''));
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px">
+        <div style="font-size:20px">${ico}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${esc(label)}</div>
+          ${pm.nama_pemilik?`<div style="font-size:11px;color:var(--muted)">a/n ${esc(pm.nama_pemilik)}</div>`:''}
+          ${pm.jenis==='qris'&&pm.qris_url?`<img src="${esc(pm.qris_url)}" style="width:50px;height:50px;object-fit:cover;border-radius:6px;margin-top:4px">` :''}
+        </div>
+        <button onclick="hapusPaymentToko(${pm.id})" style="padding:6px 10px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#dc2626;font-size:11px;cursor:pointer">🗑️</button>
+      </div>`;
+    }).join('');
+  }catch(e){}
+}
+
+async function hapusPaymentToko(id){
+  if(!confirm('Hapus metode pembayaran ini?'))return;
+  try{
+    await SB.from('ubnb_mk_toko_payment').delete().eq('id',id);
+    toast('Dihapus','ok');loadPaymentToko();
   }catch(e){toast('Gagal: '+e.message,'err');}
 }
 
