@@ -1884,11 +1884,11 @@ async function searchAnggotaDaftar(val){
   try{
     const [ra,rj]=await Promise.all([
       sb.from('ubnb_anggota').select('id,nama,kelompok').ilike('nama','%'+val+'%').limit(5),
-      sb.from('jamaah_desa').select('did,nama_kk,kelompok').ilike('nama_kk','%'+val+'%').limit(5)
+      sb.from('jamaah_desa').select('did,nama,nama_kk,kelompok').or('nama.ilike.%'+val+'%,nama_kk.ilike.%'+val+'%').limit(5)
     ]);
     const rows=[
       ...(ra.data||[]).map(a=>({tipe:'anggota',id:a.id,nama:a.nama,meta:'Anggota · Kel '+a.kelompok})),
-      ...(rj.data||[]).map(j=>({tipe:'jamaah',id:j.did,nama:j.nama_kk,meta:'Jamaah · Kel '+j.kelompok}))
+      ...(rj.data||[]).map(j=>({tipe:'jamaah',id:j.did,nama:j.nama||j.nama_kk,meta:'Jamaah · Kel '+j.kelompok+((j.nama_kk&&j.nama&&j.nama_kk.toLowerCase()!==j.nama.toLowerCase())?' · KK: '+j.nama_kk:'')}))
     ];
     if(!rows.length){dd.innerHTML='<div class="anggota-dd-item" style="color:var(--muted)">Tidak ditemukan</div>';dd.style.display='block';return;}
     dd.innerHTML=rows.map(r=>`<div class="anggota-dd-item" onclick="pilihAnggotaDaftar(${JSON.stringify(r).replace(/"/g,'&quot;')})">
@@ -3758,13 +3758,15 @@ function searchCustomer(val){
       }
       // 2. Jamaah
       const {data:j}=await sb.from('jamaah_desa')
-        .select('did,nama_kk,nomor_wa,kelompok')
-        .or('nama_kk.ilike.%'+val+'%,nomor_wa.ilike.%'+val+'%')
+        .select('did,nama,nama_kk,nomor_wa,kelompok')
+        .or('nama.ilike.%'+val+'%,nama_kk.ilike.%'+val+'%,nomor_wa.ilike.%'+val+'%')
         .limit(1);
       if(j?.length>0){
-        currentCustomer={tipe:'jamaah',jamaah_did:j[0].did,nama:j[0].nama_kk,no_hp:j[0].nomor_wa};
+        const jnm=j[0].nama||j[0].nama_kk;
+        const jkk=(j[0].nama_kk&&j[0].nama&&j[0].nama_kk.toLowerCase()!==j[0].nama.toLowerCase())?' · KK: '+j[0].nama_kk:'';
+        currentCustomer={tipe:'jamaah',jamaah_did:j[0].did,nama:jnm,no_hp:j[0].nomor_wa};
         found.className='cust-found jamaah show';
-        found.innerHTML='<div class="cf-nama">👥 '+j[0].nama_kk+'</div><div class="cf-meta">'+(j[0].nomor_wa||'—')+' · Kelompok '+(j[0].kelompok||'—')+'</div><span class="cf-tag tag-j">Jamaah Desa Perwira</span><div class="cf-bayar">✅ Bayar nanti — dicatat utang</div>';
+        found.innerHTML='<div class="cf-nama">👥 '+jnm+'</div><div class="cf-meta">'+(j[0].nomor_wa||'—')+' · Kelompok '+(j[0].kelompok||'—')+jkk+'</div><span class="cf-tag tag-j">Jamaah Desa Perwira</span><div class="cf-bayar">✅ Bayar nanti — dicatat utang</div>';
         document.getElementById('bank-section').classList.remove('show');
         return;
       }
@@ -4486,9 +4488,9 @@ async function maSearchPelanggan(val){
 
     if(!rows.length){
       const rj = await sb.from('jamaah_desa')
-        .select('did,nama_kk,kelompok')
-        .ilike('nama_kk','%'+q+'%')
-        .order('nama_kk',{ascending:true})
+        .select('did,nama,nama_kk,kelompok')
+        .or('nama.ilike.%'+q+'%,nama_kk.ilike.%'+q+'%')
+        .order('nama',{ascending:true})
         .limit(10);
 
       if(rj.error) throw rj.error;
@@ -4497,9 +4499,9 @@ async function maSearchPelanggan(val){
         tipe:'jamaah',
         id_anggota:null,
         jamaah_did:j.did,
-        nama:j.nama_kk||'-',
+        nama:j.nama||j.nama_kk||'-',
         no_hp:'',
-        meta:'Jamaah · Kel '+(j.kelompok||'-')
+        meta:'Jamaah · Kel '+(j.kelompok||'-')+((j.nama_kk&&j.nama&&j.nama_kk.toLowerCase()!==j.nama.toLowerCase())?' · KK: '+j.nama_kk:'')
       }));
     }
 
@@ -6395,11 +6397,11 @@ async function eziRwtKlik(jsonEnc){
       }catch(_){}
     } else if(item.jamaah_did){
       try{
-        const {data}=await sb.from('jamaah_desa').select('did,nama_kk,nomor_wa,kelompok').eq('did',item.jamaah_did).maybeSingle();
+        const {data}=await sb.from('jamaah_desa').select('did,nama,nama_kk,nomor_wa,kelompok').eq('did',item.jamaah_did).maybeSingle();
         if(data){
           _adminPickedPelanggan = {
             tipe:'jamaah', id_anggota:null, jamaah_did:data.did,
-            nama:data.nama_kk, no_hp:data.nomor_wa||'',
+            nama:data.nama||data.nama_kk, no_hp:data.nomor_wa||'',
             meta:'Jamaah · Kel '+(data.kelompok||'-')
           };
         }
