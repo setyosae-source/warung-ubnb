@@ -6,6 +6,8 @@
 <title>Shodaqoh Jariyah – Masjid Baiturrohim</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{--pri:#1a6b3c;--pri2:#145530;--bg:#f4f4ef;--card:#fff;--txt:#222;--muted:#666;
       --border:#ddd;--ok:#27ae60;--warn:#e67e22;--red:#c0392b;--blue:#2980b9;--r:10px;--shadow:0 2px 8px rgba(0,0,0,.1)}
@@ -207,6 +209,7 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
   <div class="jv-header">
     <button class="back-btn" onclick="goBack()">‹</button>
     <h2 id="jvTitle">Info Kesanggupan</h2>
+    <button class="wa-btn hide" id="jvLaporanBtn" onclick="openLaporan()" style="margin-right:6px">📊 Laporan</button>
     <button class="wa-btn" onclick="bukaTanyaWA()">💬 WA Admin</button>
   </div>
   <div class="jv-body">
@@ -307,8 +310,10 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
       <button class="op-menu-btn" onclick="showOpMenu()">⋮</button>
     </div>
     <div class="op-hdr-tabs">
+      <button class="op-hdr-tab hide" id="lapKembaliBtn" onclick="showJamaahView()">‹ Kembali</button>
       <button class="op-hdr-tab active" id="tabDashBtn" onclick="switchTab('dash')">📊 Dashboard</button>
       <button class="op-hdr-tab" id="tabSetorBtn" onclick="switchTab('setor')">💸 Setoran</button>
+      <button class="op-hdr-tab hide" id="pdfBtn" onclick="downloadPDF()">📄 PDF</button>
     </div>
   </div>
 
@@ -413,7 +418,7 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
   </div>
 
   <!-- FAB -->
-  <div class="fab">
+  <div class="fab" id="opFab">
     <div id="fabMenu" class="fab-menu hide">
       <div class="fab-item" onclick="openModal('modalKes')">📝 Input Kesanggupan</div>
       <div class="fab-item" onclick="openModal('modalPay')">💰 Input Pembayaran</div>
@@ -618,6 +623,9 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
         <div id="regOpCard" style="background:var(--bg);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:12px"></div>
         <div class="fg"><label>Scope</label>
           <select id="regOpScope"><option value="PW1">PW1</option><option value="PW2">PW2</option><option value="PW3">PW3</option><option value="PW4">PW4</option><option value="Desa">Desa (Semua)</option></select>
+        </div>
+        <div class="fg"><label>Role</label>
+          <select id="regOpRole"><option value="operator">Operator (input & edit)</option><option value="pengurus">Pengurus (lihat laporan saja)</option></select>
         </div>
         <button class="btn btn-pri btn-full" onclick="saveRegOp()">✅ Daftarkan</button>
       </div>
@@ -851,7 +859,7 @@ async function init(){
   if(uid){
     const j=allJamaah.find(x=>x.id==uid);
     if(j){curUser=j;const op=allOps.find(o=>o.jamaah_id==j.id);
-      if(op&&isOp){curOp=op;showOpDash();return;}
+      if(op&&isOp){curOp=op;if(op.role==='pengurus'){showJamaahView();return;}showOpDash();return;}
       showJamaahView();return;}
   }
   showScreen('scrWelcome');
@@ -872,21 +880,24 @@ function wlcPick(id){
   wlcSel=allJamaah.find(j=>j.id===id);
   $('wlcInp').value=wlcSel.nama;hide('wlcRes');
   const op=allOps.find(o=>o.jamaah_id===id);
-  if(op){$('wlcOpText').textContent=`Operator terdaftar (${op.scope})`;show('wlcOpBadge');}
+  if(op){$('wlcOpText').textContent=`${op.role==='pengurus'?'Pengurus':'Operator'} terdaftar (${op.scope})`;show('wlcOpBadge');}
   show('wlcMasukBtn');
 }
 function wlcMasuk(){
   if(!wlcSel){toast('Pilih nama dulu');return;}
   curUser=wlcSel;
   const op=allOps.find(o=>o.jamaah_id===curUser.id);
-  if(op){curOp=op;saveSession();showOpDash();}else{curOp=null;saveSession();showJamaahView();}
+  if(op){curOp=op;saveSession();if(op.role==='pengurus'){showJamaahView();}else{showOpDash();}}else{curOp=null;saveSession();showJamaahView();}
 }
 function goBack(){clearSession();curUser=null;curOp=null;showScreen('scrWelcome');$('wlcInp').value='';hide('wlcMasukBtn');hide('wlcOpBadge');}
 
 // ── JAMAAH VIEW ───────────────────────────────────────────────────────────────
 let jvKes=null,jvPays=[];
+const isPengurus=()=>!!(curOp&&curOp.role==='pengurus');
+function openLaporan(){showOpDash();}
 async function showJamaahView(){
   showScreen('scrJamaah');
+  $('jvLaporanBtn').classList.toggle('hide',!(isPengurus()&&curOp.jamaah_id===curUser.id));
   $('jvNama').textContent=curUser.nama;
   $('jvMeta').textContent=`${curUser.pw} · ${curUser.gender==='L'?'Laki-laki':'Perempuan'}`;
   hide('jvLunasBadge');hide('jvBayarInfo');hide('jvBelumKes');hide('jvKesForm');hide('jvPendingBox');
@@ -962,7 +973,7 @@ async function jvSaveKes(){
 }
 // ── HELPER METODE LUNAS ──────────────────────────────────────────────────────
 function opsiOperator(pw,selId){
-  return allOps.filter(o=>o.scope==='Desa'||o.scope===pw).map(o=>{
+  return allOps.filter(o=>o.role!=='pengurus'&&(o.scope==='Desa'||o.scope===pw)).map(o=>{
     const j=allJamaah.find(x=>x.id===o.jamaah_id);
     return `<option value="${o.jamaah_id}" ${selId===o.jamaah_id?'selected':''}>${j?.nama||'Operator'} (${o.scope})</option>`;
   }).join('');
@@ -998,7 +1009,7 @@ async function uploadBukti(file,jid){
   return sb.storage.from('bukti-tf').getPublicUrl(path).data.publicUrl;
 }
 function renderJvOpsList(){
-  const list=allOps.filter(o=>o.scope==='Desa'||o.scope===curUser.pw).map(o=>{
+  const list=allOps.filter(o=>o.role!=='pengurus'&&(o.scope==='Desa'||o.scope===curUser.pw)).map(o=>{
     const j=allJamaah.find(x=>x.id===o.jamaah_id);
     return `${j?.nama||'Operator'} <span style="color:var(--muted);font-size:10px">(${o.scope})</span>`;
   }).join('<br>');
@@ -1027,15 +1038,21 @@ function switchTab(tab){
 async function showOpDash(){
   if(!curOp){showJamaahView();return;}
   showScreen('scrOp');
+  const pgr=isPengurus();
   $('opHdrName').textContent=curUser.nama;
-  $('opHdrScope').textContent=curOp.scope;
+  $('opHdrScope').textContent=(pgr?'Pengurus · ':'')+curOp.scope;
+  $('tabSetorBtn').classList.toggle('hide',pgr);
+  $('pdfBtn').classList.toggle('hide',!pgr);
+  $('lapKembaliBtn').classList.toggle('hide',!pgr);
+  $('opFab').classList.toggle('hide',pgr);
+  if(pgr){switchTab('dash');hide('konfirmBox');}
   const pwWrap=$('fPWWrap');
   if(pwWrap)pwWrap.style.display=curOp.scope==='Desa'?'block':'none';
-  populateOpDropdowns();
+  if(!pgr)populateOpDropdowns();
   if(curUser?.id===SETYO_ID){show('alertBtn');loadAlerts();setupAlertRealtime();show('resetDataBtn');}
   else hide('resetDataBtn');
   await refreshData();
-  loadKonfirmasi();
+  if(!pgr)loadKonfirmasi();
 }
 
 // ── KONFIRMASI PEMBAYARAN (lunas pending) ────────────────────────────────────
@@ -1079,9 +1096,49 @@ async function terimaKonfirm(id){
   if(curTab==='setor')loadSetoran();
 }
 
+// ── DOWNLOAD PDF LAPORAN (pengurus) ──────────────────────────────────────────
+function downloadPDF(){
+  if(!window.jspdf){toast('Library PDF belum termuat, coba lagi');return;}
+  const d=filteredData&&filteredData.length?filteredData:tableData;
+  if(!d||!d.length){toast('Data belum dimuat');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  const scopeLbl=curOp.scope==='Desa'?'Desa (Semua Kelompok)':curOp.scope;
+  const sanggup=d.filter(r=>r.hasSanggup);
+  const lunas=d.filter(r=>r.status==='lunas').length;
+  const angsur=d.filter(r=>r.status==='angsur').length;
+  const belum=d.filter(r=>r.status==='belum').length;
+  const totNilai=sanggup.reduce((s,r)=>s+r.nilai,0);
+  const totBayar=d.reduce((s,r)=>s+r.terbayar,0);
+  doc.setFontSize(14);doc.setFont(undefined,'bold');
+  doc.text('Laporan Shodaqoh Jariyah Pembangunan Desa',14,15);
+  doc.setFontSize(10);doc.setFont(undefined,'normal');
+  doc.text(`Scope: ${scopeLbl}  ·  Dicetak: ${fmt(today())}  ·  Oleh: ${curUser.nama} (Pengurus)`,14,22);
+  doc.setFontSize(9);
+  doc.text(`Total Jamaah: ${d.length}   Sanggup: ${sanggup.length}   Lunas: ${lunas}   Angsur: ${angsur}   Belum: ${belum}`,14,29);
+  doc.text(`Total Nilai: ${rp(totNilai)}   Terbayar: ${rp(totBayar)}   Sisa: ${rp(Math.max(0,totNilai-totBayar))}`,14,34);
+  const body=[...d].sort((a,b)=>a.pw===b.pw?a.nama.localeCompare(b.nama):a.pw.localeCompare(b.pw))
+    .map((r,i)=>[i+1,r.nama,r.pw,
+      r.hasSanggup?(r.isNB?'NB':r.lembar):'-',
+      r.status,
+      r.hasSanggup?rp(r.nilai):'-',
+      r.terbayar?rp(r.terbayar):'-',
+      r.hasSanggup?(r.sisa>0?rp(r.sisa):'Lunas'):'-']);
+  doc.autoTable({
+    startY:39,
+    head:[['No','Nama','PW','Lembar','Status','Nilai','Terbayar','Sisa']],
+    body,
+    styles:{fontSize:7.5,cellPadding:1.5},
+    headStyles:{fillColor:[26,107,60]},
+    columnStyles:{0:{cellWidth:8},2:{cellWidth:12},3:{cellWidth:14},4:{cellWidth:15},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'}}
+  });
+  doc.save(`Laporan_${curOp.scope}_${today()}.pdf`);
+  logIP('download_pdf_laporan:'+curOp.scope);
+}
+
 function populateOpDropdowns(){
-  // Dropdown penerima pembayaran (semua operator)
-  const opts=allOps.map(o=>{
+  // Dropdown penerima pembayaran (semua operator, tanpa pengurus)
+  const opts=allOps.filter(o=>o.role!=='pengurus').map(o=>{
     const j=allJamaah.find(x=>x.id===o.jamaah_id);
     const nama=j?.nama||'Operator';
     const sel=o.jamaah_id===curUser.id?'selected':'';
@@ -1202,10 +1259,11 @@ function renderTable(){
         });
         html+=`<div style="text-align:right;font-weight:700;font-size:12px;margin-top:5px;color:var(--pri)">Akumulasi: ${rp(r.pays.reduce((s,p)=>s+Number(p.jumlah),0))}</div>`;
       }else html+=`<span style="font-size:12px;color:var(--muted)">Belum ada pembayaran</span>`;
-      html+=`<div style="display:flex;gap:7px;margin-top:9px">
+      if(!isPengurus())html+=`<div style="display:flex;gap:7px;margin-top:9px">
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();prefillKes(${r.id})">✏️ Edit</button>
         <button class="btn btn-warn btn-sm" onclick="event.stopPropagation();prefillPay(${r.id})">💰 Tambah Bayar</button>
-      </div></div></td></tr>`;
+      </div>`;
+      html+=`</div></td></tr>`;
     }
   });
   $('opTbody').innerHTML=html;
@@ -1250,7 +1308,7 @@ async function initSetorModal(){
   calcNilaiRaw('setorJmlModal','setorHintModal');
   $('setorCatModal').value='';
   // Populate dropdown penerima
-  const opts=allOps.filter(o=>o.jamaah_id!==curUser.id).map(o=>{
+  const opts=allOps.filter(o=>o.role!=='pengurus'&&o.jamaah_id!==curUser.id).map(o=>{
     const j=allJamaah.find(x=>x.id===o.jamaah_id);
     const nama=j?.nama||'Operator';
     const sel=o.jamaah_id===TRIYONO_ID?'selected':'';
@@ -2159,7 +2217,7 @@ async function loadOpList(){
   $('regOpList').innerHTML='<div class="loading"><div class="spin"></div></div>';
   const {data}=await sb.from('aj_operator').select('*,aj_jamaah(nama,pw)').eq('aktif',true);
   allOps=data||[];
-  $('regOpList').innerHTML=allOps.length?allOps.map(o=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div><b>${o.aj_jamaah?.nama||'-'}</b><br><span style="font-size:10px;color:var(--muted)">${o.aj_jamaah?.pw||'-'} · ${o.scope}</span></div><button onclick="hapusOp(${o.id})" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer">×</button></div>`).join(''):'<p style="font-size:12px;color:var(--muted)">Belum ada operator</p>';
+  $('regOpList').innerHTML=allOps.length?allOps.map(o=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><div><b>${o.aj_jamaah?.nama||'-'}</b><br><span style="font-size:10px;color:var(--muted)">${o.aj_jamaah?.pw||'-'} · ${o.scope} · ${o.role==='pengurus'?'Pengurus':'Operator'}</span></div><button onclick="hapusOp(${o.id})" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer">×</button></div>`).join(''):'<p style="font-size:12px;color:var(--muted)">Belum ada operator</p>';
 }
 function doRegOpSearch(){
   const q=$('regOpSearch').value.toLowerCase().trim();
@@ -2174,9 +2232,10 @@ function regOpPick(id){
 async function saveRegOp(){
   if(!regOpTarget){toast('Pilih jamaah');return;}
   const scope=$('regOpScope').value;
-  const {error}=await sb.from('aj_operator').upsert({jamaah_id:regOpTarget.id,scope,aktif:true,didaftarkan_oleh:curUser?.nama||'admin'},{onConflict:'jamaah_id'});
+  const role=$('regOpRole').value;
+  const {error}=await sb.from('aj_operator').upsert({jamaah_id:regOpTarget.id,scope,role,aktif:true,didaftarkan_oleh:curUser?.nama||'admin'},{onConflict:'jamaah_id'});
   if(error){toast('Gagal: '+error.message);return;}
-  toast(`✅ ${regOpTarget.nama} → Operator ${scope}`);
+  toast(`✅ ${regOpTarget.nama} → ${role==='pengurus'?'Pengurus':'Operator'} ${scope}`);
   regOpTarget=null;$('regOpSearch').value='';hide('regOpTarget');loadOpList();
   const {data:ops}=await sb.from('aj_operator').select('*').eq('aktif',true);
   allOps=ops||[];populateOpDropdowns();
