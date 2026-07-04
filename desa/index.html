@@ -553,7 +553,22 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
           <input type="number" id="payJml" step="10000" placeholder="0" oninput="calcNilaiRaw('payJml','payHint')" style="padding:7px 9px">
           <div class="hint" id="payHint" style="font-size:10px"></div>
         </div>
+        <div class="fg" style="flex:1;margin-bottom:0">
+          <label>Metode</label>
+          <select id="payMetode" style="padding:7px 9px;width:100%" onchange="payToggleMetode()">
+            <option value="cash" selected>Cash / Tunai</option>
+            <option value="tf">Transfer (TF)</option>
+          </select>
+        </div>
         <button class="btn btn-warn btn-sm" style="margin-top:16px;white-space:nowrap" onclick="payTambahkeBatch()">+ Tambah</button>
+      </div>
+      <div id="payTFBox" class="hide" style="background:#e8f5e9;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:11px;line-height:1.5;border-left:3px solid var(--ok)">
+        Transfer ke: <b>Rek BRI 0122-01-108503-50-2 a.n Triyono</b><br>
+        <span style="color:var(--muted)">Penerima pembayaran ini otomatis: <b>Triyono</b></span>
+        <div class="fg" style="margin-top:6px;margin-bottom:0">
+          <label>Lampirkan Bukti TF (wajib)</label>
+          <input type="file" id="payBukti" accept="image/*">
+        </div>
       </div>
     </div>
     <!-- Batch list -->
@@ -927,7 +942,7 @@ async function showJamaahView(){
     ${jvPays.length?`<div class="jv-row" style="flex-direction:column;gap:3px;align-items:start">
       <span class="jv-label" style="margin-bottom:2px">Riwayat Bayar</span>
       ${jvPays.map(p=>`<div style="display:flex;justify-content:space-between;width:100%;font-size:12px">
-        <span style="color:var(--muted)">${fmt(p.tanggal)} · ${p.penerima||'-'}</span>
+        <span style="color:var(--muted)">${fmt(p.tanggal)} · ${p.penerima||'-'}${p.metode_bayar?` · ${p.metode_bayar==='tf'?'TF':'Cash'}`:''}${p.bukti_tf_url?` · <a href="${p.bukti_tf_url}" target="_blank" style="color:var(--ok);font-weight:700">📎</a>`:''}</span>
         <span style="font-weight:700;color:var(--ok)">${rp(p.jumlah)}</span></div>`).join('')}
     </div>`:''}`;
   if(sisa<=0){show('jvLunasBadge');}
@@ -1157,7 +1172,7 @@ async function refreshData(){
 
   const [{data:ksAll,error:ke},{data:payAll}]=await Promise.all([
     sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nominal_bebas,status').filter('jamaah_id','in',`(${jIds.join(',')})`),
-    sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true})
+    sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator,metode_bayar,bukti_tf_url').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true})
   ]);
   if(ke){toast('Error: '+ke.message);return;}
 
@@ -1255,7 +1270,7 @@ function renderTable(){
       if(r.pays&&r.pays.length){
         html+=`<div style="font-size:11px;font-weight:700;color:var(--pri);margin-bottom:4px">Riwayat Pembayaran:</div>`;
         r.pays.forEach(p=>{
-          html+=`<div class="pay-line"><span class="pl-tgl">${fmt(p.tanggal)}</span><span class="pl-pen">Penerima: ${p.penerima||'-'}</span><span class="pl-val">${rp(p.jumlah)}</span></div>`;
+          html+=`<div class="pay-line"><span class="pl-tgl">${fmt(p.tanggal)}</span><span class="pl-pen">Penerima: ${p.penerima||'-'}${p.metode_bayar?` · ${p.metode_bayar==='tf'?'TF':'Cash'}`:''}${p.bukti_tf_url?` <a href="${p.bukti_tf_url}" target="_blank" onclick="event.stopPropagation()" style="color:var(--ok);font-weight:700">📎 Bukti</a>`:''}</span><span class="pl-val">${rp(p.jumlah)}</span></div>`;
         });
         html+=`<div style="text-align:right;font-weight:700;font-size:12px;margin-top:5px;color:var(--pri)">Akumulasi: ${rp(r.pays.reduce((s,p)=>s+Number(p.jumlah),0))}</div>`;
       }else html+=`<span style="font-size:12px;color:var(--muted)">Belum ada pembayaran</span>`;
@@ -1474,18 +1489,28 @@ async function saveKesBatch(){
 }
 
 // ── BATCH PAY ─────────────────────────────────────────────────────────────────
+function payToggleMetode(){
+  $('payTFBox').classList.toggle('hide',$('payMetode').value!=='tf');
+}
 function payTambahkeBatch(){
   if(!payTarget){toast('Pilih jamaah dulu'); return;}
   const jml=parseInt($('payJml').value)||0;
   if(jml<1){toast('Masukkan jumlah bayar'); return;}
+  const metode=$('payMetode').value||'cash';
+  let buktiFile=null;
+  if(metode==='tf'){
+    buktiFile=$('payBukti').files[0];
+    if(!buktiFile){toast('Lampirkan bukti TF terlebih dahulu');return;}
+  }
   if(payBatch.find(b=>b.jid===payTarget.id)){
     payBatch=payBatch.filter(b=>b.jid!==payTarget.id);
   }
-  payBatch.push({jid:payTarget.id,nama:payTarget.nama,pw:payTarget.pw,jml});
+  payBatch.push({jid:payTarget.id,nama:payTarget.nama,pw:payTarget.pw,jml,metode,buktiFile});
   renderPayBatch();
   // Reset untuk input berikutnya
   $('paySearch').value=''; hide('paySearchRes'); hide('payInlineForm');
   payTarget=null; $('payJml').value=''; $('payHint').textContent='';
+  $('payMetode').value='cash';$('payBukti').value='';payToggleMetode();
   $('paySearch').focus();
 }
 
@@ -1497,7 +1522,8 @@ function renderPayBatch(){
     <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 8px;
       background:${i%2===0?'#fff':'#f9f9f9'};border-radius:6px;margin-bottom:3px;font-size:12px">
       <div>
-        <b>${b.nama}</b> <span style="color:var(--muted);font-size:10px">${b.pw}</span>
+        <b>${b.nama}</b> <span style="color:var(--muted);font-size:10px">${b.pw}</span><br>
+        <span style="font-size:10px;color:${b.metode==='tf'?'var(--blue)':'var(--muted)'}">${b.metode==='tf'?'TF 📎 → Triyono':'Cash'}</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-weight:700;color:var(--warn)">${rp(b.jml)}</span>
@@ -1510,15 +1536,26 @@ async function savePayBatch(){
   if(!payBatch.length){toast('Daftar kosong'); return;}
   const penerima=$('payPenerima').value;
   const tgl=$('payTgl').value;
-  if(!penerima){toast('Pilih penerima'); return;}
+  const adaCash=payBatch.some(b=>b.metode!=='tf');
+  if(adaCash&&!penerima){toast('Pilih penerima'); return;}
   if(!tgl){toast('Isi tanggal'); return;}
   const penOpt=$('payPenerima').options[$('payPenerima').selectedIndex];
   const penJid=penOpt?parseInt(penOpt.dataset.jid)||null:null;
+  const triyono=allJamaah.find(x=>x.id===TRIYONO_ID);
   let ok=0,fail=0;
   for(const b of payBatch){
+    const isTF=b.metode==='tf';
+    let buktiUrl=null;
+    if(isTF&&b.buktiFile){
+      try{buktiUrl=await uploadBukti(b.buktiFile,b.jid);}
+      catch(e){fail++;console.error(b.nama,'upload bukti:',e.message);continue;}
+    }
     const {error:err}=await sb.from('aj_pembayaran').insert({
-      jamaah_id:b.jid,tanggal:tgl,jumlah:b.jml,penerima,
-      penerima_jamaah_id:penJid,operator:curUser.nama,operator_jamaah_id:curUser.id
+      jamaah_id:b.jid,tanggal:tgl,jumlah:b.jml,
+      penerima:isTF?(triyono?.nama||'Triyono'):penerima,
+      penerima_jamaah_id:isTF?TRIYONO_ID:penJid,
+      operator:curUser.nama,operator_jamaah_id:curUser.id,
+      metode_bayar:b.metode,bukti_tf_url:buktiUrl
     });
     if(err){fail++;console.error(b.nama,err.message);continue;}
     // Auto update status
@@ -1590,6 +1627,7 @@ async function payPickJamaah(id){
   const nilai=ks?ks.jumlah_lembar*HARGA:0,sisa=Math.max(0,nilai-tot);
   $('payTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}<br><span style="color:var(--muted)">Nilai: </span><b>${rp(nilai)}</b> &nbsp;<span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b> &nbsp;<span style="font-weight:700;color:${sisa<=0?'var(--ok)':'var(--red)'}">${sisa<=0?'✅ LUNAS':'Sisa: '+rp(sisa)}</span>`;
   $('payJml').value=sisa>0?sisa:'';calcNilaiRaw('payJml','payHint');$('payTgl').value=today();
+  $('payMetode').value='cash';$('payBukti').value='';payToggleMetode();
   show('payInlineForm');
 }
 function prefillKes(id){openModal('modalKes');setTimeout(()=>kesPickJamaah(id),80);}
