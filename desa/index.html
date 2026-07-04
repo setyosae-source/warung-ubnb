@@ -67,7 +67,7 @@ body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:v
 .op-hdr-tab.active{color:#fff;border-bottom-color:#fff}
 
 /* Stats */
-.op-stats{background:#fff;border-bottom:1px solid var(--border);padding:8px 12px;position:sticky;top:88px;z-index:89}
+.op-stats{background:#fff;border-bottom:1px solid var(--border);padding:8px 12px}
 .stats-row{display:flex;gap:6px;margin-bottom:4px}
 .stats-row:last-child{margin-bottom:0}
 .st-box{flex:1;text-align:center;background:var(--bg);border-radius:8px;padding:7px 4px}
@@ -76,13 +76,13 @@ body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:v
 .st-box .sl{font-size:9px;color:var(--muted);margin-top:1px}
 
 /* Action bar */
-.action-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:174px;z-index:88}
-#filterPanel{background:#f8f8f8;border-bottom:2px solid var(--pri);padding:12px 14px;position:sticky;top:220px;z-index:87}
+.action-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:var(--stick1,88px);z-index:88}
+#filterPanel{background:#f8f8f8;border-bottom:2px solid var(--pri);padding:12px 14px;position:sticky;top:var(--stick2,135px);z-index:87}
 
 /* Table */
 .op-table-wrap{padding:0 0 100px;overflow-x:auto}
 table.op-table{width:100%;border-collapse:collapse;min-width:480px;font-size:12px}
-table.op-table thead th{background:var(--pri);color:#fff;padding:8px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;font-size:11px;border:1px solid var(--pri2)}
+table.op-table thead th{background:var(--pri);color:#fff;padding:8px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;font-size:11px;border:1px solid var(--pri2);position:sticky;top:var(--stick2,135px);z-index:86}
 table.op-table thead th:hover{background:var(--pri2)}
 table.op-table thead th .si{opacity:.5;font-size:9px;margin-left:2px}
 table.op-table thead th.sorted .si{opacity:1}
@@ -339,16 +339,22 @@ table.op-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:
     </div>
     <div class="action-bar">
       <button id="filterToggleBtn" onclick="toggleFilterPanel()"
-        style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1.5px solid var(--border);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;color:var(--txt)">
+        style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1.5px solid var(--border);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;color:var(--txt);white-space:nowrap">
         <span id="filterArrow">▼</span> Filter
         <span id="filterBadge" style="display:none;background:var(--pri);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px">0</span>
       </button>
+      <div style="flex:1;position:relative;min-width:0">
+        <input id="fSearchNama" placeholder="🔍 Cari nama..." oninput="applyFilter()" autocomplete="off"
+          style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:20px;padding:6px 30px 6px 13px;font-size:12px;outline:none">
+        <button onclick="$('fSearchNama').value='';applyFilter()"
+          style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:2px 4px">✕</button>
+      </div>
       <div style="margin-left:auto;display:flex;gap:6px">
         <button onclick="doExport('excel')" style="background:var(--pri);color:#fff;border:none;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer">⬇ XLS</button>
         <button onclick="doExport('pdf')" style="background:#555;color:#fff;border:none;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer">🖨 PDF</button>
       </div>
     </div>
-    <div id="filterPanel" style="display:none;background:#f8f8f8;border-bottom:2px solid var(--pri);padding:12px 14px;position:sticky;top:220px;z-index:87">
+    <div id="filterPanel" style="display:none;background:#f8f8f8;border-bottom:2px solid var(--pri);padding:12px 14px;position:sticky;top:var(--stick2,135px);z-index:87">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div id="fPWWrap">
           <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px">KELOMPOK</div>
@@ -1050,9 +1056,17 @@ function switchTab(tab){
   if(tab==='setor')loadSetoran();
 }
 
+function syncStickyTops(){
+  const h=document.querySelector('.op-header')?.offsetHeight||88;
+  const a=document.querySelector('.action-bar')?.offsetHeight||47;
+  document.documentElement.style.setProperty('--stick1',h+'px');
+  document.documentElement.style.setProperty('--stick2',(h+a)+'px');
+}
+window.addEventListener('resize',syncStickyTops);
 async function showOpDash(){
   if(!curOp){showJamaahView();return;}
   showScreen('scrOp');
+  setTimeout(syncStickyTops,50);
   const pgr=isPengurus();
   $('opHdrName').textContent=curUser.nama;
   $('opHdrScope').textContent=(pgr?'Pengurus · ':'')+curOp.scope;
@@ -1214,7 +1228,9 @@ function updateStats(data){
 
 function applyFilter(){
   const pw=$('fPW')?$('fPW').value:'',gender=$('fGender')?$('fGender').value:'',status=$('fStatus')?$('fStatus').value:'';
+  const q=($('fSearchNama')?$('fSearchNama').value:'').toLowerCase().trim();
   filteredData=tableData.filter(r=>{
+    if(q&&!r.nama.toLowerCase().includes(q))return false;
     if(pw&&r.pw!==pw)return false;
     if(gender&&r.gender!==gender)return false;
     if(status&&r.status!==status)return false;
@@ -1234,7 +1250,7 @@ function closeFilterPanel(){
   $('filterPanel').style.display='none';$('filterArrow').textContent='▼';
   const btn=$('filterToggleBtn');btn.style.background='var(--bg)';btn.style.color='var(--txt)';btn.style.borderColor='var(--border)';
 }
-function resetFilter(){$('fPW').value='';$('fGender').value='';$('fStatus').value='';updateFilterBtn();applyFilter();closeFilterPanel();}
+function resetFilter(){$('fPW').value='';$('fGender').value='';$('fStatus').value='';if($('fSearchNama'))$('fSearchNama').value='';updateFilterBtn();applyFilter();closeFilterPanel();}
 function updateFilterBtn(){
   const n=[$('fPW'),$('fGender'),$('fStatus')].filter(el=>el&&el.value).length;
   const b=$('filterBadge');if(b){b.textContent=n;b.style.display=n>0?'inline':'none';}
