@@ -1171,7 +1171,7 @@ async function refreshData(){
   if(!jIds.length){$('opTbody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Tidak ada jamaah</td></tr>`;return;}
 
   const [{data:ksAll,error:ke},{data:payAll}]=await Promise.all([
-    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nominal_bebas,status').filter('jamaah_id','in',`(${jIds.join(',')})`),
+    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nominal_bebas,status,konfirmasi,penerima_jid,metode_bayar,bukti_tf_url').filter('jamaah_id','in',`(${jIds.join(',')})`),
     sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator,metode_bayar,bukti_tf_url').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true})
   ]);
   if(ke){toast('Error: '+ke.message);return;}
@@ -1192,7 +1192,9 @@ async function refreshData(){
     return{id:j.id,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut,
            lembar,nilai,isNB,nominalBebas:Number(ks?.nominal_bebas||0),
            hasSanggup,
-           status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays};
+           status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays,
+           pending:ks?.konfirmasi==='pending',penerimaJid:ks?.penerima_jid||null,
+           metode:ks?.metode_bayar||null,buktiUrl:ks?.bukti_tf_url||null};
   });
   applyFilter();
 }
@@ -1256,7 +1258,9 @@ function renderTable(){
   if(!sorted.length){$('opTbody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Tidak ada data</td></tr>`;return;}
   let html='';
   sorted.forEach(r=>{
-    const st=`<span class="badge badge-${r.status}">${r.status}</span>`;
+    const st=r.pending
+      ?`<span class="badge" style="background:#fff8e1;color:#b7791f;border:1px solid #e0b84f">${r.status} ⏳</span>`
+      :`<span class="badge badge-${r.status}">${r.status}</span>`;
     const isExp=r.id===expandedId;
     html+=`<tr onclick="toggleExpand(${r.id})" id="tr-${r.id}" ${isExp?'class="expanded-row"':''}>
       <td><b>${r.nama}</b></td><td class="td-c">${r.pw}</td><td class="td-c">${r.gender}</td>
@@ -1267,6 +1271,10 @@ function renderTable(){
     </tr>`;
     if(isExp){
       html+=`<tr class="detail-row"><td colspan="8"><div class="detail-inner">`;
+      if(r.pending){
+        const pen=allJamaah.find(x=>x.id===r.penerimaJid);
+        html+=`<div style="background:#fff8e1;border-left:3px solid var(--warn);border-radius:6px;padding:7px 10px;margin-bottom:8px;font-size:11px;color:#7d6000">⏳ <b>Menunggu konfirmasi:</b> ${pen?.nama||'-'} · ${r.metode==='tf'?'Transfer (TF)':'Cash'}${r.buktiUrl?` · <a href="${r.buktiUrl}" target="_blank" onclick="event.stopPropagation()" style="color:var(--ok);font-weight:700">📎 Bukti TF</a>`:''}</div>`;
+      }
       if(r.pays&&r.pays.length){
         html+=`<div style="font-size:11px;font-weight:700;color:var(--pri);margin-bottom:4px">Riwayat Pembayaran:</div>`;
         r.pays.forEach(p=>{
@@ -1482,7 +1490,13 @@ async function saveKesBatch(){
     ok++;
   }
   logIP('batch_kesanggupan:'+kesBatch.length+'x');
-  toast(fail===0?`✅ ${ok} kesanggupan tersimpan`:`✅ ${ok} OK, ⚠️ ${fail} gagal`);
+  const nPendArr=kesBatch.filter(b=>b.status==='lunas'&&b.metode&&b.penerimaJid!==curUser.id);
+  let msg=fail===0?`✅ ${ok} kesanggupan tersimpan`:`✅ ${ok} OK, ⚠️ ${fail} gagal`;
+  if(nPendArr.length>0){
+    const penNames=[...new Set(nPendArr.map(b=>(allJamaah.find(x=>x.id===b.penerimaJid)||{}).nama||'penerima'))].join(', ');
+    msg+=` — ⏳ ${nPendArr.length} menunggu konfirmasi ${penNames}`;
+  }
+  toast(msg);
   closeModal('modalKes');
   refreshData();loadKonfirmasi();
   if(curTab==='setor')loadSetoran();
