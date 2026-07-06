@@ -184,6 +184,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--green);background:whi
 .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
 .tab{padding:6px 16px;border-radius:99px;border:1.5px solid var(--border);background:white;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-muted);font-family:inherit;transition:all 0.15s;}
 .tab.active{background:var(--green);color:white;border-color:var(--green);}
+#sc-beli-riwayat .tab.active{background:var(--amber);color:white;border-color:var(--amber);}
+#sc-beli-riwayat .rw-table th.sort-asc,#sc-beli-riwayat .rw-table th.sort-desc{color:var(--amber)!important}
+#sc-beli-riwayat .rw-table tr.rw-data.rw-selected td{background:#fef3c7!important}
 .page{display:none;}
 .page.active{display:block;}
 #page-pos.active,#page-pos-beli.active{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;}
@@ -401,7 +404,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   <div class="tab-content active" id="tc-jual">
     <div class="sub-tabs">
       <button class="sub-tab active" id="stab-jual-kasir" onclick="showSubTab('jual','kasir')">&#128722; Kasir</button>
-      <button class="sub-tab" id="stab-jual-riwayat" onclick="showSubTab('jual','riwayat');renderRiwayatJual()">&#128203; Riwayat</button>
+      <button class="sub-tab" id="stab-jual-riwayat" onclick="showSubTab('jual','riwayat');renderRiwayatJual()">&#128203; Riwayat Jual</button>
     </div>
     <div class="sub-content active" id="sc-jual-kasir">
       <div id="page-pos"><!-- Pelanggan + Scan Bar -->
@@ -500,7 +503,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   <div class="tab-content" id="tc-beli">
     <div class="sub-tabs">
       <button class="sub-tab amber active" id="stab-beli-input" onclick="showSubTab('beli','input')">&#128230; Input Beli</button>
-      <button class="sub-tab amber" id="stab-beli-riwayat" onclick="showSubTab('beli','riwayat');renderRiwayatBeli()">&#128203; Riwayat</button>
+      <button class="sub-tab amber" id="stab-beli-riwayat" onclick="showSubTab('beli','riwayat');renderRiwayatBeli()">&#128203; Riwayat Beli</button>
     </div>
     <div class="sub-content active" id="sc-beli-input">
       <div id="page-pos-beli"><!-- Sticky top: Supplier + Scan -->
@@ -559,7 +562,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
           <input type="date" id="rb-dari" style="height:30px;font-size:12px;width:120px"/>
           <input type="date" id="rb-sampai" style="height:30px;font-size:12px;width:120px"/>
           <input type="text" id="rb-search" placeholder="🔍 Cari..." style="height:30px;font-size:12px;flex:1;min-width:100px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;outline:none" oninput="renderRiwayatBeli()"/>
-          <button class="btn sm primary" onclick="renderRiwayatBeli()">Filter</button>
+          <button class="btn sm amber" onclick="renderRiwayatBeli()">Filter</button>
         </div>
         <div class="tabs">
           <button class="tab active" onclick="setRbStatus('semua',this)">Semua</button>
@@ -1328,6 +1331,23 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 
 <!-- Modal Simpan / Status Bayar -->
 
+<!-- Modal Struk Riwayat Jual (sama seperti warung.html) -->
+<div class="modal-overlay" id="modal-struk">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="struk-preview" id="struk-preview"></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn" onclick="closeModal('modal-struk')" style="flex:1">Tutup</button>
+      <button class="btn wa" onclick="simpanGambar()" style="flex:2" id="btn-simpan-gambar">📸 Simpan Gambar</button>
+    </div>
+    <div id="img-result" style="display:none;margin-top:12px;text-align:center">
+      <img id="struk-img-modal" style="width:100%;border-radius:10px;border:1px solid #eee"/>
+      <p style="font-size:12px;color:#888;margin-top:8px">Tekan &amp; tahan → "Simpan gambar"</p>
+      <a id="struk-dl-modal" download="struk-ubnb.png" style="display:block;margin-top:8px"><button class="btn primary" style="width:100%">⬇️ Download PNG</button></a>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast-el"></div>
 <div id="struk-capture" style="position:fixed;left:-9999px;top:0;width:360px;background:white;padding:28px 24px;font-family:-apple-system,sans-serif;"></div>
 <div id="struk-beli-capture" style="position:fixed;left:-9999px;top:0;width:360px;background:white;padding:28px 24px;font-family:-apple-system,sans-serif;"></div>
@@ -1446,6 +1466,78 @@ function fmtQty(q) {
 }
 
 const _txMap={};function _showStruk(id){if(_txMap[id])tampilStruk(_txMap[id]);}
+function tampilStruk(tx){
+  if(!tx)return;
+  const _btnSG2=document.getElementById('btn-simpan-gambar');document.getElementById('img-result').style.display='none';_btnSG2.style.display='';_btnSG2.disabled=false;_btnSG2.textContent='📸 Simpan Gambar';
+  const d=new Date(tx.tgl_transaksi||tx.waktu||new Date());
+  const tgl=d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const jam=fJ(d);const no='TX'+String(tx.id||'').slice(-6).padStart(6,'0');
+  window._strukNo = 'struk-trx-' + (tx.id||Date.now()) + '.png';
+  let pelLabel='', pelInfoBawah='', pelInfoBawahCap='';
+  if(tx.anggota_id){
+    const ang = (typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).find(a=>a.id===tx.anggota_id);
+    const noAng = ang?.no_anggota || tx.no_anggota || '-';
+    const namaAng = ang?.nama || tx.pelanggan || tx.nama_anggota || '-';
+    pelLabel = `<p>Pelanggan: <b>⭐ ${namaAng}</b></p><p style="font-size:11px;color:#15803d">No. Anggota: ${noAng}</p>`;
+    pelInfoBawah = `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Belanja Anggota dihitung untuk SHU tahunan</div>`;
+    pelInfoBawahCap = `<div style="background:#f0fdf4;border:1px dashed #15803d;border-radius:6px;padding:7px 10px;margin:10px 0;font-size:11px;color:#15803d;text-align:center;line-height:1.4">⭐ Belanja Anggota dihitung untuk SHU tahunan</div>`;
+  } else if(tx.jamaah_did){
+    const namaJM = tx.pelanggan || tx.nama_jamaah || '-';
+    pelLabel = `<p>Pelanggan: <b>${namaJM}</b></p>`;
+    pelInfoBawah = `<div style="background:#fff7ed;border:1px dashed #c2410c;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:11px;color:#9a3412;text-align:center;line-height:1.4">💎 Yuk jadi Anggota UBNB!<br>Beli saham → dapat SHU tiap tahun</div>`;
+    pelInfoBawahCap = `<div style="background:#fff7ed;border:1px dashed #c2410c;border-radius:6px;padding:7px 10px;margin:10px 0;font-size:11px;color:#9a3412;text-align:center;line-height:1.4">💎 Yuk jadi Anggota UBNB!<br>Beli saham → dapat SHU tiap tahun</div>`;
+  } else if(tx.pelanggan && tx.pelanggan!=='Umum'){
+    pelLabel = `<p>Pelanggan: <b>${tx.pelanggan}</b></p>`;
+  }
+  const sub=tx.items.reduce((a,i)=>a+(i.hE||i.hargaEfektif||i.harga)*i.qty,0);
+  const _totalDiskonItemS=tx.items.reduce((s,i)=>s+(i.diskon_total||i.dI||0),0);
+  const _subBersihS=sub-_totalDiskonItemS;
+  let _dNomS=tx.diskon_nominal||0;
+  if(_dNomS===0&&tx.diskon_tipe&&tx.diskon_tipe!==''){
+    if(tx.diskon_tipe==='persen'&&tx.diskon_nilai>0) _dNomS=Math.round(_subBersihS*tx.diskon_nilai/100);
+    else if(tx.diskon_tipe==='nominal'&&tx.diskon_nilai>0) _dNomS=Math.min(tx.diskon_nilai,_subBersihS);
+  }
+  const _dLabelS=tx.voucher_kode?`Disc (${tx.voucher_kode})`:tx.diskon_tipe==='persen'?`Disc ${tx.diskon_nilai}%`:_dNomS>0?'Diskon':'';
+  let h=`<div class="sh"><div class="logo">🛒</div><h3>WARUNG UBNB</h3><p>${tgl}</p><p>${jam} | No: ${no}</p><p>Kasir: ${tx.kasir||'-'}</p>${pelLabel}</div>${pelInfoBawah}<hr class="sdiv">`;
+  tx.items.forEach(i=>{const hE=i.hE||i.hargaEfektif||i.harga;const diskonI=i.diskon_total||i.dI||i.diskonItem||0;const dT=diskonI>0?` <span style="color:var(--red);font-size:10px">(-${fN(diskonI)})</span>`:'';const grossI=(hE||0)*i.qty;const netI=Math.max(0,grossI-diskonI);const subDisp=diskonI>0?`<s style="opacity:0.4;font-size:10px">${fN(grossI)}</s> ${fN(netI)}`:fN(netI);h+=`<div class="srow" style="font-weight:600">${i.nama}${dT}</div><div class="srow" style="color:#888"><span style="padding-left:10px">${i.qty} × ${fN(hE)}</span><span>${subDisp}</span></div>`;});
+  h+=`<hr class="sdiv">`;
+  if(_dNomS>0||_totalDiskonItemS>0){h+=`<div class="srow" style="color:#888"><span>Subtotal</span><span>${fN(sub)}</span></div>`;if(_totalDiskonItemS>0)h+=`<div class="srow disc"><span>Diskon Item</span><span>-${fN(_totalDiskonItemS)}</span></div>`;if(_dNomS>0)h+=`<div class="srow disc"><span>${_dLabelS||'Diskon'}</span><span>-${fN(_dNomS)}</span></div>`;}
+  if(tx.ongkir>0)h+=`<div class="srow"><span>Ongkir</span><span>${fN(tx.ongkir)}</span></div>`;
+  h+=`<div class="srow bold"><span>TOTAL</span><span>${fN(tx.total)}</span></div>`;
+  if(tx.status_bayar==='belum')h+=`<div class="srow disc"><span>Status</span><span>BELUM BAYAR</span></div>`;
+  else h+=`<div class="srow"><span>Bayar (${tx.metode_bayar||'tunai'})</span><span>${fN(tx.bayar)}</span></div><div class="srow"><span>Kembali</span><span>${fN(tx.kembali)}</span></div>`;
+  h+=`<hr class="sdiv"><div class="sfooter"><div class="thx">Terima kasih, Alhamdulillah Jazaakumullohu khoiro 🙏</div><div>Warung UBNB</div></div>`;
+  document.getElementById('struk-preview').innerHTML=h;
+  let pelLabelCap = '';
+  if(tx.anggota_id){
+    const ang = (typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).find(a=>a.id===tx.anggota_id);
+    const noAng = ang?.no_anggota || tx.no_anggota || '-';
+    const namaAng = ang?.nama || tx.pelanggan || tx.nama_anggota || '-';
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>⭐ ${namaAng}</b></div><div class="sc-sub" style="color:#15803d">No. Anggota: ${noAng}</div>`;
+  } else if(tx.jamaah_did){
+    const namaJM = tx.pelanggan || tx.nama_jamaah || '-';
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>${namaJM}</b></div>`;
+  } else if(tx.pelanggan && tx.pelanggan!=='Umum'){
+    pelLabelCap = `<div class="sc-sub">Pelanggan: <b>${tx.pelanggan}</b></div>`;
+  }
+  let cap=`<div class="sc-logo">🛒</div><div class="sc-name">WARUNG UBNB</div><div class="sc-sub">${tgl}</div><div class="sc-sub">${jam} | No: ${no} | Kasir: ${tx.kasir||'-'}</div>${pelLabelCap}${pelInfoBawahCap}<hr class="sc-divider">`;
+  tx.items.forEach(i=>{const hE=i.hE||i.hargaEfektif||i.harga;const diskonI=i.diskon_total||i.dI||i.diskonItem||0;const netI=Math.max(0,(hE||0)*i.qty-diskonI);const dBadge=diskonI>0?` <span style="color:#dc2626;font-size:9px">-${fN(diskonI)}</span>`:'';cap+=`<div class="sc-row in">${i.nama}${dBadge}</div><div class="sc-row id"><span>${i.qty} × Rp ${fN(hE)}</span><span>Rp ${fN(netI)}</span></div>`;});
+  cap+=`<hr class="sc-divider">`;
+  if(_dNomS>0||_totalDiskonItemS>0){cap+=`<div class="sc-row br"><span>Subtotal</span><span>Rp ${fN(sub)}</span></div>`;if(_totalDiskonItemS>0)cap+=`<div class="sc-row dr" style="color:#dc2626"><span>Diskon Item</span><span>-Rp ${fN(_totalDiskonItemS)}</span></div>`;if(_dNomS>0)cap+=`<div class="sc-row dr"><span>${_dLabelS||'Diskon'}</span><span>-Rp ${fN(_dNomS)}</span></div>`;}
+  if(tx.ongkir>0)cap+=`<div class="sc-row br"><span>Ongkir</span><span>Rp ${fN(tx.ongkir)}</span></div>`;
+  cap+=`<div class="sc-row tot"><span>TOTAL</span><span>Rp ${fN(tx.total)}</span></div>`;
+  if(tx.status_bayar==='belum')cap+=`<div class="sc-row dr"><span>Status</span><span>BELUM BAYAR</span></div>`;
+  else cap+=`<div class="sc-row br"><span>Bayar (${tx.metode_bayar||'tunai'})</span><span>Rp ${fN(tx.bayar)}</span></div><div class="sc-row br"><span>Kembali</span><span>Rp ${fN(tx.kembali)}</span></div>`;
+  cap+=`<hr class="sc-divider"><div class="sc-footer"><div class="sc-thx">Terima kasih, Alhamdulillah Jazaakumullohu khoiro 🙏</div><div class="sc-note">Warung UBNB</div><span class="sc-badge">${tgl}</span></div>`;
+  document.getElementById('struk-capture').innerHTML=cap;
+  openModal('modal-struk');
+}
+async function simpanGambar(){
+  const btn=document.getElementById('btn-simpan-gambar');btn.textContent='⏳ Memproses...';btn.disabled=true;
+  document.getElementById('struk-dl-modal').download = window._strukNo || ('struk-ubnb-' + Date.now() + '.png');
+  try{const c=await html2canvas(document.getElementById('struk-capture'),{scale:3,backgroundColor:'#ffffff',useCORS:true,logging:false});const u=c.toDataURL('image/png');document.getElementById('struk-img-modal').src=u;document.getElementById('struk-dl-modal').href=u;document.getElementById('img-result').style.display='block';btn.style.display='none';toast('Gambar siap!');}
+  catch(e){toast('Gagal buat gambar',true);btn.textContent='📸 Simpan Gambar';btn.disabled=false;}
+}
 const _beliMap={};
 async function _showDetailBeli(id){
   if(_beliMap[id]){tampilDetailBeli(_beliMap[id]);return;}
@@ -5336,9 +5428,6 @@ function renderRiwayatBeli(){
                 ${p.catatan?`<div><div class="rw-detail-label">Catatan</div><div class="rw-detail-val">${p.catatan}</div></div>`:''}
               </div>
               <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px"><strong>Item:</strong> ${(p.items||[]).map(i=>`${i.nama} ×${i.qty} @ ${fmt(i.harga_beli||0)}`).join(' | ')}</div>
-              <div class="rw-action-bar">
-                <button class="btn sm teal" onclick="event.stopPropagation();tampilDetailBeli(_beliMap[${p.id}])">🧾 Struk</button>
-              </div>
             </div>
           </td></tr>`;
         }
