@@ -309,16 +309,6 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 .lap-sub-row:hover{background:var(--green-light);}
 .lap-sub-row:last-child{border-bottom:none;}
 
-  /* PPOB KATEGORI GRID */
-  .ppob-kat-item{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 4px 8px;background:white;border-radius:10px;border:2px solid transparent;cursor:pointer;transition:all .15s;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
-  .ppob-kat-item:active,.ppob-kat-item.ppob-kat-active{border-color:var(--green);background:var(--green-light)}
-  .ppob-kat-item:hover{border-color:var(--green);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,0.1)}
-  .ppob-kat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
-  .ppob-kat-label{font-size:10.5px;font-weight:600;text-align:center;line-height:1.3;color:var(--text)}
-  .ppob-produk-row{padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .1s;font-size:13px}
-  .ppob-produk-row:hover{background:var(--green-light)}
-  .ppob-produk-row.ppob-produk-sel{background:var(--green-light);border-left:3px solid var(--green);font-weight:600}
-  .ppob-match{color:var(--green-dark);font-weight:700}
 
   /* TABEL RIWAYAT */
   .rw-table{width:100%;border-collapse:collapse;font-size:12px}
@@ -365,7 +355,25 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 .sub-content.active{display:flex;}
 .riwayat-scroll{flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch;}
 #page-pos,#page-pos-beli{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
-#sc-ppob-trx{overflow-y:auto;}
+
+  /* === SIDEBAR KASIR === */
+  .sb-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:none;background:transparent;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);font-family:inherit;text-align:left;transition:background 0.15s;margin-bottom:2px}
+  .sb-item:hover{background:var(--green-light);color:var(--green-dark)}
+  .sb-item.active{background:var(--green-light);color:var(--green-dark);font-weight:700}
+  .sb-icon{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+  /* === KPAGE (halaman utama) === */
+  .kpage{display:none;width:100%;height:100%}
+  .kpage.active{display:block}
+  /* Halaman Jual & Beli pakai tab-content existing */
+  .kpage#kpage-jual,.kpage#kpage-beli{overflow:hidden}
+  /* Hapus tab-content padding-top krn sudah ada topbar fixed */
+  .tab-content{height:100%;overflow:hidden}
+  /* Sub-tabs tetap di atas konten */
+  .sub-tabs{position:sticky;top:0;z-index:100;background:var(--surface);border-bottom:1px solid var(--border)}
+  /* Riwayat table responsive */
+  #kpage-riwayat-jual .rw-wrap,#kpage-riwayat-beli .rw-wrap{overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border)}
+  #kpage-riwayat-beli .tab.active{background:var(--amber);color:white;border-color:var(--amber)}
+  #kpage-riwayat-beli tr.rw-data.rw-selected td{background:#fef3c7!important}
 </style>
 </head>
 <body>
@@ -1076,16 +1084,6 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
     </div>
   </div>
 </div>
-<div class="modal-overlay" id="modal-ppob-detail">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div class="modal-title" style="margin-bottom:0">⚡ Detail PPOB</div>
-      <button class="btn sm" onclick="closeModal('modal-ppob-detail')">✕</button>
-    </div>
-    <div id="ppob-detail-content"></div>
-  </div>
-</div>
 
 <!-- STRUK Overlay (full screen) -->
 <div id="pos-struk-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;flex-direction:column;align-items:center;justify-content:flex-start;z-index:1000;padding:20px 12px;overflow-y:auto">
@@ -1168,13 +1166,8 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
 <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 function showMainTab(tab){
-  document.querySelectorAll('.main-tab').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-  document.getElementById('mtab-'+tab).classList.add('active');
-  document.getElementById('tc-'+tab).classList.add('active');
-  localStorage.setItem('kasir_main_tab',tab);
-  if(tab==='jual')setTimeout(()=>{const s=document.getElementById('pos-scan-input');if(s)s.focus();},200);
-  if(tab==='beli')setTimeout(()=>{const s=document.getElementById('posb-scan-input');if(s)s.focus();},200);
+  // Redirect ke sistem sidebar baru
+  if(typeof showKasirPage==='function'){ showKasirPage(tab); return; }
 }
 function showSubTab(mainTab,subTab){
   document.querySelectorAll('#tc-'+mainTab+' .sub-tab').forEach(b=>b.classList.remove('active'));
@@ -1184,10 +1177,10 @@ function showSubTab(mainTab,subTab){
 }
 function showPage(id,btn){}
 function goToPage(id){
-  if(id==='pos')showMainTab('jual');
-  else if(id==='pos-beli')showMainTab('beli');
+  if(id==='pos')showKasirPage('jual');
+  else if(id==='pos-beli')showKasirPage('beli');
 }
-function toggleSidebar(){}function closeSidebar(){}
+function toggleSidebar(){}
 function toggleNavGroup(){}function restoreNavGroups(){}
 let _toastTimer;
 function toast(m,err=false){
@@ -1534,23 +1527,7 @@ function filterSD(k){
     }
     el.innerHTML=html||'<div class="sd-empty">Tidak ditemukan</div>';
   }
-  if(k==='ppob-pel'){
-    const ql2=q.toLowerCase();
-    let html2='';
-    const fa2=aSahamAnggota.filter(a=>!ql2||a.nama.toLowerCase().includes(ql2)||(a.no_anggota||'').toLowerCase().includes(ql2));
-    if(fa2.length){
-      html2+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase">⭐ Anggota Saham</div>`;
-      html2+=fa2.map(a=>`<div class="sd-option" onclick='selSD("ppob-pel",${JSON.stringify({id:null,anggota_id:a.id,jamaah_did:null,label:a.nama,sumber:"anggota"})})'><div class="opt-label">⭐ ${a.nama}</div><div class="opt-sub">${a.no_anggota} · ${a.kelompok}</div></div>`).join('');
-    }
-    const fj2=aJamaah.filter(j=>!ql2||j.nama.toLowerCase().includes(ql2));
-    if(fj2.length){
-      html2+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase">👤 Jamaah Desa</div>`;
-      html2+=fj2.slice(0,20).map(j=>`<div class="sd-option" onclick='selSD("ppob-pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:j.did,label:j.nama,sumber:"jamaah"})})'><div class="opt-label">👤 ${j.nama}</div><div class="opt-sub">${j.kelompok||''}</div></div>`).join('');
-    }
-    html2+=`<div style="padding:4px 12px;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--surface2);text-transform:uppercase">✏️ Lainnya</div>`;
-    html2+=`<div class="sd-option" onclick='selSD("ppob-pel",${JSON.stringify({id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:"umum"})})'><div class="opt-label">Umum</div><div class="opt-sub">Tidak masuk SHU</div></div>`;
-    el.innerHTML=html2||'<div class="sd-empty">Tidak ditemukan</div>';
-  }else if(k==='prod'){
+  if(k==='prod'){
     const f=aB.filter(b=>b.nama.toLowerCase().includes(q));
     el.innerHTML=f.map(b=>{const d=b.diskon_tipe?` [-${b.diskon_nilai}${b.diskon_tipe==='persen'?'%':'Rp'}]`:'';return `<div class="sd-option" onclick='selSD("prod",${JSON.stringify({id:b.id,label:b.nama,harga:b.harga,stok:b.stok})})'><div><div>${b.nama}${d}</div><div class="opt-sub">${fmt(b.harga)} · Stok: ${b.stok}</div></div></div>`;}).join('')||'<div class="sd-empty">Tidak ditemukan</div>';
   }else if(k==='sup'){
@@ -2401,10 +2378,6 @@ const statusPesanan={
 
 /* SETTING TOKO */
 
-/* PPOB */
-const PPOB_PRODUK = ['Pulsa','Token Listrik','Tagihan Listrik','PDAM','PAM','BPJS','Internet','IndiHome','Telkom/Indihome','First Media','Freedom Internet','GoPay','OVO','Dana','Shopee Pay','PULSA PASCABAYAR','Paket Data','Lainnya'];
-let aKas=[], aPPOB=[], ppobFilter='semua', ppobLapMode='bulan';
-
 /* ACL - ACCESS CONTROL */
 const MENU_DEF = [
   {id:'warung_pos',     label:'🛒 Kasir POS',     modul:'🏪 Warung',      page:'pos'},
@@ -2415,9 +2388,6 @@ const MENU_DEF = [
   {id:'warung_daftar_produk', label:'Daftar Produk', modul:'🏪 Warung', page:'daftar-produk'},
   {id:'warung_paket',   label:'Paket & Bundling', modul:'🏪 Warung',      page:'paket'},
   {id:'warung_opname',  label:'Stock Opname',     modul:'🏪 Warung',      page:'opname'},
-  {id:'ppob_transaksi', label:'Transaksi PPOB',   modul:'⚡ PPOB',        page:'ppob'},
-  {id:'ppob_riwayat',   label:'Riwayat PPOB',     modul:'⚡ PPOB',        page:'ppob-riwayat'},
-  {id:'ppob_laporan',   label:'Laporan PPOB',     modul:'⚡ PPOB',        page:'ppob-laporan'},
   {id:'laundry_tracking', label:'Tracking Laundry', modul:'🧺 Laundry',    page:'tracking-laundry'},
   {id:'service_tracking', label:'Tracking Service', modul:'🔧 Service',    page:'tracking-service'},
   {id:'toko_pesanan',   label:'Pesanan Online',   modul:'🛒 Toko Online', page:'pesanan'},
@@ -2458,224 +2428,13 @@ async function recalcSaldo(kasId){
 }
 
 
-let ppobPelId = null; let ppobAnggotaId = null;
 // Close dropdown on outside click
 document.addEventListener('click',e=>{
-  if(!e.target.closest('#ppob-pel-search')&&!e.target.closest('#ppob-pel-dd')){
-    const dd=document.getElementById('ppob-pel-dd');if(dd)dd.style.display='none';
-  }
 });
 
 
-/* ===== PPOB KATEGORI & PRODUK SEARCHABLE ===== */
-const PPOB_KAT_PRODUK = {
-  pulsa:['Pulsa Telkomsel 5rb','Pulsa Telkomsel 10rb','Pulsa Telkomsel 15rb','Pulsa Telkomsel 20rb','Pulsa Telkomsel 25rb','Pulsa Telkomsel 50rb','Pulsa Telkomsel 100rb','Pulsa Indosat 5rb','Pulsa Indosat 10rb','Pulsa Indosat 25rb','Pulsa Indosat 50rb','Pulsa Indosat 100rb','Pulsa XL 5rb','Pulsa XL 10rb','Pulsa XL 25rb','Pulsa XL 50rb','Pulsa Axis 5rb','Pulsa Axis 10rb','Pulsa Axis 25rb','Pulsa Axis 50rb','Pulsa Tri 5rb','Pulsa Tri 10rb','Pulsa Tri 25rb','Pulsa Tri 50rb','Pulsa Smartfren 5rb','Pulsa Smartfren 10rb','Pulsa Smartfren 25rb','Pulsa Smartfren 50rb'],
-  data:['Paket Data Telkomsel 1GB 7hr','Paket Data Telkomsel 3GB 30hr','Paket Data Telkomsel 5GB 30hr','Paket Data Telkomsel 8GB 30hr','Paket Data Telkomsel 15GB 30hr','Paket Data Telkomsel 30GB 30hr','Paket Data Indosat 5GB 30hr','Paket Data Indosat 10GB 30hr','Paket Data Indosat 15GB 30hr','Paket Data Indosat 20GB 30hr','Paket Data XL 5GB 30hr','Paket Data XL 10GB 30hr','Paket Data XL 15GB 30hr','Paket Data Axis 5GB 30hr','Paket Data Axis 10GB 30hr','Paket Data Tri 5GB 30hr','Paket Data Tri 10GB 30hr','Paket Data Smartfren 5GB 30hr','Paket Data Smartfren 10GB 30hr'],
-  token:['Token PLN 20rb','Token PLN 50rb','Token PLN 100rb','Token PLN 200rb','Token PLN 500rb','Token PLN 1jt'],
-  tagpln:['Tagihan PLN Pascabayar'],
-  pdam:['Tagihan PDAM'],
-  bpjs:['BPJS Kesehatan per Orang','Tagihan BPJS Ketenagakerjaan'],
-  inet:['Internet IndiHome','Tagihan Telkom / IndiHome','Internet MyRepublic','Internet FirstMedia','Internet Biznet','Internet MNC Play','Tagihan Internet (by provider)'],
-  tv:['TV Transvision','TV K-Vision','TV MNC Vision','TV UseeTV'],
-  ewallet:['Top Up GoPay','Top Up OVO','Top Up Dana','Top Up ShopeePay','Top Up LinkAja'],
-  game:['Voucher Mobile Legends 86 Diamond','Voucher Mobile Legends 172 Diamond','Voucher Mobile Legends 257 Diamond','Voucher Mobile Legends 706 Diamond','Voucher Free Fire 70 Diamond','Voucher Free Fire 140 Diamond','Voucher Free Fire 355 Diamond','Voucher PUBG Mobile 60 UC','Voucher PUBG Mobile 325 UC','Voucher Roblox 400 Robux','Voucher Steam Wallet 50rb','Voucher Steam Wallet 100rb'],
-  angsuran:['Angsuran FIF','Angsuran WOM Finance','Angsuran Adira Finance','Angsuran BAF','Angsuran Mega Finance'],
-  transfer:['Transfer Bank'],
-  tiket:['Tiket KAI','Tiket Pesawat'],
-  lain:['Tagihan PBB','Asuransi','Lainnya']
-};
-const PPOB_KAT_LABEL = {
-  pulsa:'📶 Produk Pulsa', data:'📡 Paket Data', token:'⚡ Token PLN',
-  tagpln:'🔌 Tagihan PLN', pdam:'💧 PDAM / Air', bpjs:'🏥 BPJS',
-  inet:'🌐 Internet / WiFi', tv:'📺 TV Berbayar', ewallet:'💳 E-Wallet Top Up',
-  game:'🎮 Voucher Game', angsuran:'🏦 Angsuran', transfer:'🏧 Transfer Bank',
-  tiket:'🎫 Tiket', lain:'➕ Lainnya'
-};
-let _ppobKatAktif='', _ppobProdukTerpilih='', _ppobStatusVal='belum';
-
-
-
-
-
-
-
-
-
-
-
-async function simpanPPOB(){
-  const kasId=document.getElementById('ppob-kas').value;
-  const tgl=document.getElementById('ppob-tgl').value;
-  const produk=(_ppobProdukTerpilih||'').trim();
-  const hb=parseFloat(document.getElementById('ppob-hbeli').value)||0;
-  const hj=parseFloat(document.getElementById('ppob-hjual').value)||0;
-  const status=document.getElementById('ppob-status').value||_ppobStatusVal||'belum';
-  const catatan=document.getElementById('ppob-catatan').value.trim();
-  
-  // Nama pelanggan - dari search
-  const namaDariSearch=document.getElementById('ppob-pel-search').value.trim();
-  const nama=namaDariSearch;
-  const pelId=ppobPelId||null; const anggotaIdPpob=ppobAnggotaId||null;
-  
-  if(!produk){toast('Pilih kategori & produk dulu',true);return;}
-  if(!tgl){toast('Pilih tanggal',true);return;}
-  if(!nama){toast('Isi nama pelanggan',true);return;}
-  if(!kasId){toast('Pilih kas PPOB',true);return;}
-  if(!hb||!hj){toast('Isi harga beli dan harga jual',true);return;}
-
-  // Loading state — disable tombol + ubah text
-  const btnSimpan=document.getElementById('ppob-btn-simpan');
-  if(btnSimpan){btnSimpan.disabled=true;btnSimpan.style.opacity='0.6';btnSimpan.style.cursor='wait';btnSimpan.innerHTML='⏳ Menyimpan...';}
-
-  try{
-    const tid='ppob-'+Date.now().toString(36);
-    const{data:newPpob,error}=await sb.from('ppob').insert([{
-    tid,tanggal:tgl,nama,pelanggan_id:pelId,anggota_id:anggotaIdPpob,produk,
-    harga_beli:hb,harga_jual:hj,status_bayar:status,
-    kas_id:parseInt(kasId),catatan,operator:CU.username
-  }]).select('id').single();
-  if(error){
-    if(btnSimpan){btnSimpan.disabled=false;btnSimpan.style.opacity='1';btnSimpan.style.cursor='pointer';btnSimpan.innerHTML='💾 Simpan Transaksi PPOB';}
-    toast('Gagal simpan: '+error.message,true);return;
-  }
-  const ppobId=newPpob?.id||null;
-  
-  // Harga beli SELALU keluar dari kas PPOB (modal)
-  const kasPPOBid=parseInt(kasId);
-  // Insert mutasi keluar dari kas PPOB (modal)
-  await sb.from('kas_mutasi').insert([{
-    kas_id:kasPPOBid,tipe:'keluar',kategori:'keluar',
-    jumlah:hb,tanggal:tgl,
-    keterangan:'Modal PPOB: '+produk+(nama?' - '+nama:''),
-    operator:CU.username,
-    ref_type:'ppob',ref_id:ppobId
-  }]);
-  await recalcSaldo(kasPPOBid);
-
-  // Harga jual masuk ke Kas Utama jika sudah lunas
-  if(status==='lunas'){
-    const kasUtama=aKas.find(k=>{
-      const m=k.modul||'warung,ppob';
-      return m.includes('warung')&&!m.includes('ppob');
-    })||aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
-    if(kasUtama){
-      await sb.from('kas_mutasi').insert([{
-        kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
-        jumlah:hj,tanggal:tgl,
-        keterangan:'Bayar PPOB: '+produk+(nama?' - '+nama:''),
-        operator:CU.username,
-        ref_type:'ppob',ref_id:ppobId
-      }]);
-      await recalcSaldo(kasUtama.id);
-    }
-  }
-
-  // Jika belum bayar, catat ke hutang/piutang
-  if(status==='belum'){
-    await sb.from('hutang').insert([{nama,jml:hj,ket:'PPOB: '+produk+(catatan?' - '+catatan:''),tipe:'piutang',tgl,lunas:false,ref_type:'ppob'}]);
-  }
-  
-  await lKas();await lH();
-  renderHutang();;initPPOBForm();
-  // Reset form
-  ['ppob-catatan','ppob-hbeli','ppob-hjual'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  ppobPelId=null; ppobAnggotaId=null;
-  document.getElementById('ppob-pel-search').value='';
-  const pelChip=document.getElementById('ppob-pel-chip');if(pelChip)pelChip.style.display='none';
-  document.getElementById('ppob-keuntungan-info').style.display='none';
-  document.getElementById('ppob-kas-saldo').style.display='none';
-  // Reset state grid kategori
-  document.getElementById('ppob-produk-panel').style.display='none';
-  document.getElementById('ppob-produk-chip-wrap').style.display='none';
-  document.getElementById('ppob-detail-wrap').style.display='none';
-  document.querySelectorAll('.ppob-kat-item').forEach(k=>k.classList.remove('ppob-kat-active'));
-  _ppobProdukTerpilih=''; _ppobKatAktif='';
-  setStatusPPOB('belum');
-    // Restore tombol simpan
-    if(btnSimpan){btnSimpan.disabled=false;btnSimpan.style.opacity='1';btnSimpan.style.cursor='pointer';btnSimpan.innerHTML='💾 Simpan Transaksi PPOB';}
-    // Scroll ke atas (ke grid kategori) supaya user lihat form sudah reset
-    document.getElementById('page-ppob')?.scrollIntoView({behavior:'smooth',block:'start'});
-    toast('✅ Transaksi PPOB berhasil disimpan!');
-  }catch(e){
-    console.error('simpanPPOB error:',e);
-    if(btnSimpan){btnSimpan.disabled=false;btnSimpan.style.opacity='1';btnSimpan.style.cursor='pointer';btnSimpan.innerHTML='💾 Simpan Transaksi PPOB';}
-    toast('❌ Gagal simpan: '+(e.message||e),true);
-  }
-}
-
-/* PPOB RIWAYAT */
-function resetFilterPPOB(){
-  document.getElementById('ppob-dari').value='';
-  document.getElementById('ppob-sampai').value='';
-  document.getElementById('ppob-filter-nama').value='';
-  document.getElementById('ppob-filter-status').value='';
-  document.querySelectorAll('#page-ppob-riwayat .tab').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('#page-ppob-riwayat .tab')[0]?.classList.add('active');
-  ppobFilter='semua';
-}
-
-function setPPOBFilter(f,btn){
-  ppobFilter=f;
-  document.querySelectorAll('#page-ppob-riwayat .tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
-
-function bukaPPOBDetail(id){
-  const p=aPPOB.find(x=>x.id===id);if(!p)return;
-  const kas=aKas.find(k=>k.id===p.kas_id);
-  const untung=p.harga_jual-p.harga_beli;
-  document.getElementById('ppob-detail-content').innerHTML=`
-    <div style="background:var(--blue-light);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px">
-      <div style="font-weight:800;font-size:16px;color:var(--blue);margin-bottom:4px">⚡ ${p.produk}</div>
-      <div style="font-size:12px;color:var(--text-muted)">${p.tanggal} · ${p.tid||''}</div>
-    </div>
-    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:13px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text-muted)">Pelanggan</span><strong>${p.nama||'-'}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text-muted)">Harga Modal</span><strong>${fmt(p.harga_beli)}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text-muted)">Harga Jual</span><strong style="color:var(--green)">${fmt(p.harga_jual)}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px;border-top:1px solid var(--border);padding-top:6px"><span style="color:var(--text-muted)">Keuntungan</span><strong style="color:${untung>=0?'var(--purple)':'var(--red)'}">${fmt(untung)}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text-muted)">Kas</span><strong>${kas?.nama||'-'}</strong></div>
-      ${p.catatan?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text-muted)">Catatan</span><strong>${p.catatan}</strong></div>`:''}
-      <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Status</span><span class="badge ${p.status_bayar==='lunas'?'lunas':'belum'}">${p.status_bayar==='lunas'?'✓ Lunas':'⏳ Belum Bayar'}</span></div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn primary" style="width:100%" onclick="tampilStrukPPOB(${p.id});setTimeout(()=>closeModal('modal-ppob-detail',true),50)">🧾 Cetak Struk</button>
-      ${p.status_bayar==='belum'?`<button class="btn primary" style="width:100%" onclick="lunasiPPOB(${p.id});closeModal('modal-ppob-detail')">✓ Tandai Lunas</button>`:''}
-      <button class="btn danger" style="width:100%" onclick="" style="display:none">🗑️ Hapus</button>
-    </div>`;
-  openModal('modal-ppob-detail');
-}
-
-async function lunasiPPOB(id){
-  const p=aPPOB.find(x=>x.id===id);if(!p)return;
-  await sb.from('ppob').update({status_bayar:'lunas'}).eq('id',id);
-  // Harga jual masuk ke Kas Utama (pelanggan bayar)
-  const kasUtama=aKas.find(k=>{
-    const m=k.modul||'warung,ppob';
-    return m.includes('warung')&&!m.includes('ppob');
-  })||aKas.find(k=>k.nama.toLowerCase().includes('utama')||k.nama.toLowerCase().includes('bendahara'));
-  if(kasUtama){
-    await sb.from('kas_mutasi').insert([{
-      kas_id:kasUtama.id,tipe:'masuk',kategori:'masuk',
-      jumlah:p.harga_jual,tanggal:p.tanggal,
-      keterangan:'Bayar PPOB: '+p.produk+(p.nama?' - '+p.nama:''),
-      operator:CU.username,
-      ref_type:'ppob',ref_id:p.id
-    }]);
-    await recalcSaldo(kasUtama.id);
-  }
-  // Update hutang terkait PPOB
-  await sb.from('hutang').update({lunas:true}).eq('ref_type','ppob').eq('lunas',false).like('ket','PPOB: '+p.produk+'%');
-  await lKas();await lH();renderHutang();renderDashKas();
-  toast('PPOB dilunasi!');
-}
-
-/* PPOB LAPORAN */
-
 /* KAS */
 
-/* IMPORT PPOB DATA */
 
 /* EXPORT */
 
@@ -5102,359 +4861,13 @@ async function initPOSBeli(){
   posbRenderCart();
 }
 
-/* ============ KASIR PESAN WA - INPUT & PARSER ============ */
-let kasirWAItems=[];                  // parsed items
-let kasirWAPemesan=null;
-let kasirWAUsers=[];
-let kasirWAAliasCache=[];
-let kasirAllPesanan=[];
-let kasirInitedInputWA=false;
-
-const kasirStatusPesanan={
-  baru:{label:'🔴 Baru',color:'var(--red,#ef4444)'},
-  dikonfirmasi:{label:'🟡 Dikonfirmasi',color:'var(--amber,#f59e0b)'},
-  diproses:{label:'🔵 Diproses',color:'var(--blue,#3b82f6)'},
-  selesai:{label:'✅ Selesai',color:'var(--green,#16a34a)'},
-  dibatalkan:{label:'❌ Dibatalkan',color:'#999'}
-};
-
-async function kasirInitInputWA(){
-  if(!kasirInitedInputWA){
-    await kasirLoadUsers();
-    await kasirLoadAlias();
-    // Pastikan jamaah/anggota loaded
-    if(typeof aSahamAnggota==='undefined'||!aSahamAnggota.length){if(typeof lAnggota==='function')await lAnggota();}
-    if(typeof aJamaah==='undefined'||!aJamaah.length){if(typeof lJamaah==='function')await lJamaah();}
-    kasirInitedInputWA=true;
-  }
-  // Default tanggal
-  const tgl=document.getElementById('kwa-tgl-pesan');
-  if(tgl&&!tgl.value)tgl.value=new Date().toISOString().slice(0,10);
-}
-
-async function kasirLoadUsers(){
-  const{data}=await sb.from('users').select('id,username,nama').order('username');
-  kasirWAUsers=data||[];
-  // Default = user login
-  if(CU&&CU.username){
-    const me=kasirWAUsers.find(u=>u.username===CU.username);
-    const hid=document.getElementById('kwa-pengantar');
-    const txt=document.getElementById('kwa-pengantar-chip-text');
-    if(hid)hid.value=CU.username;
-    if(txt){txt.textContent=CU.username+(me&&me.nama?' ('+me.nama+')':'');txt.style.color='var(--text)';}
-  }
-}
-
-async function kasirLoadAlias(){
-  const{data}=await sb.from('warung_produk_alias').select('*');
-  kasirWAAliasCache=data||[];
-}
-
-function kasirResetFormWA(){
-  document.getElementById('kwa-text-input').value='';
-  document.getElementById('kwa-pemesan-search').value='';
-  document.getElementById('kwa-pemesan-selected').innerHTML='';
-  kasirWAPemesan=null;
-  kasirWAItems=[];
-  document.getElementById('kwa-preview-section').style.display='none';
-  document.getElementById('kwa-preview-list').innerHTML='';
-}
-
-function kasirCariPemesanWA(q){
-  const drop=document.getElementById('kwa-pemesan-dropdown');
-  if(!drop)return;
-  q=(q||'').trim().toLowerCase();
-  if(!q){drop.style.display='none';return;}
-  let html='';
-  const fa=(typeof aSahamAnggota!=='undefined'?aSahamAnggota:[]).filter(a=>(a.nama||'').toLowerCase().includes(q)).slice(0,5);
-  if(fa.length){
-    html+='<div style="padding:6px 10px;font-size:10px;font-weight:700;background:var(--bg);color:var(--text-muted);text-transform:uppercase">⭐ Anggota (Masuk SHU)</div>';
-    html+=fa.map(a=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border)" onclick='kasirSelPemesanWA(${JSON.stringify({label:a.nama,anggota_id:a.id,jamaah_did:null,sumber:"anggota",extra:a.no_anggota+" · "+(a.kelompok||"")}).replace(/'/g,"&apos;")})'><div style="font-weight:600">${a.nama}</div><div style="font-size:11px;color:var(--text-muted)">${a.no_anggota||""} · ${a.kelompok||""}</div></div>`).join('');
-  }
-  const fj=(typeof aJamaah!=='undefined'?aJamaah:[]).filter(j=>(j.nama||'').toLowerCase().includes(q)||(j.nama_kk||'').toLowerCase().includes(q)).slice(0,8);
-  if(fj.length){
-    html+='<div style="padding:6px 10px;font-size:10px;font-weight:700;background:var(--bg);color:var(--text-muted);text-transform:uppercase">👤 Jamaah Desa</div>';
-    html+=fj.map(j=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border)" onclick='kasirSelPemesanWA(${JSON.stringify({label:j.nama,anggota_id:null,jamaah_did:j.did,sumber:"jamaah",extra:(j.kelompok?"Kel."+j.kelompok+" · ":"")+(j.nama_kk?"KK: "+j.nama_kk:"")}).replace(/'/g,"&apos;")})'><div style="font-weight:600">${j.nama}</div><div style="font-size:11px;color:var(--text-muted)">${j.kelompok?"Kel."+j.kelompok+" · ":""}${j.nama_kk?"KK: "+j.nama_kk:""}</div></div>`).join('');
-  }
-  html+=`<div style="padding:8px 10px;cursor:pointer;border-top:2px solid var(--border)" onclick='kasirSelPemesanWA(${JSON.stringify({label:document.getElementById("kwa-pemesan-search").value,anggota_id:null,jamaah_did:null,sumber:"umum",extra:""}).replace(/'/g,"&apos;")})'><div style="font-weight:600">✏️ "${document.getElementById("kwa-pemesan-search").value}" (Umum / nama bebas)</div><div style="font-size:11px;color:var(--text-muted)">Tidak masuk SHU</div></div>`;
-  drop.innerHTML=html;
-  drop.style.display='block';
-}
-
-function kasirSelPemesanWA(obj){
-  kasirWAPemesan=obj;
-  document.getElementById('kwa-pemesan-search').value=obj.label;
-  document.getElementById('kwa-pemesan-dropdown').style.display='none';
-  const badge=obj.sumber==='anggota'?'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">⭐ Anggota</span>':obj.sumber==='jamaah'?'<span style="background:#e0e7ff;color:#4338ca;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">👤 Jamaah</span>':'<span style="background:#999;color:white;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">Umum</span>';
-  document.getElementById('kwa-pemesan-selected').innerHTML=badge+' '+obj.label+(obj.extra?' <span style="color:var(--text-muted);font-size:11px">('+obj.extra+')</span>':'');
-}
-
-/* PARSER (sama persis dengan warung.html) */
-
-function kasirFindAlias(parsedNama,parsedSatuan){
-  if(!kasirWAAliasCache.length||!parsedNama)return null;
-  const q=parsedNama.toLowerCase();
-  let match=kasirWAAliasCache.find(a=>(a.alias||'').toLowerCase()===q&&(parsedSatuan?(a.satuan_alias||'').toLowerCase()===parsedSatuan:!a.satuan_alias));
-  if(match)return match;
-  match=kasirWAAliasCache.find(a=>{const al=(a.alias||'').toLowerCase();return al&&(q.includes(al)||al.includes(q));});
-  return match||null;
-}
-
-function kasirRenderPreviewWA(){
-  const el=document.getElementById('kwa-preview-list');
-  if(!el)return;
-  if(!kasirWAItems.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-muted)">📋 Belum ada item</div>';return;}
-  el.innerHTML=kasirWAItems.map((it,idx)=>{
-    const matchOK=!!it.barang_id;
-    const bgColor=matchOK?'white':'#fff7ed';
-    const borderColor=matchOK?'var(--border)':'var(--amber,#f59e0b)';
-    const chipBg=matchOK?'#dcfce7':'#fef3c7';
-    const chipColor=matchOK?'#15803d':'#92400e';
-    const chipBorder=matchOK?'#16a34a':'#f59e0b';
-    const chipText=matchOK?(it.nama+(it.satuan?' ('+it.satuan+')':'')):'⚠️ Pilih produk...';
-    return `<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:8px;padding:10px;margin-bottom:8px">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">📱 WA: <i>${it.teks_asli}</i></div>
-      <button type="button" onclick="kasirBukaProdPicker(${idx})" style="width:100%;background:${chipBg};color:${chipColor};border:1.5px solid ${chipBorder};border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span>🔍</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${chipText}</span><span>▼</span>
-      </button>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <input type="number" step="0.01" value="${it.qty}" onchange="kasirSetWAItemQty(${idx},this.value)" style="width:60px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="qty"/>
-        <span style="font-size:11px;color:var(--text-muted);min-width:34px">${it.satuan||'-'}</span>
-        <input type="number" value="${it.harga}" onchange="kasirSetWAItemHarga(${idx},this.value)" style="width:80px;height:32px;border:1.5px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;text-align:right" placeholder="harga"/>
-      </div>
-      <div style="display:flex;gap:6px;justify-content:space-between;margin-top:6px;align-items:center">
-        <div style="font-size:11px;color:var(--text-muted)">${it.konversi>1?`<span style="color:var(--blue,#3b82f6)">📐 ${it.satuan_alias} → ${it.qtyReal} ${it.satuan}</span> · `:''}Subtotal: <b style="color:#15803d">${fmt((it.harga||0)*(it.qtyReal||it.qty))}</b></div>
-        <div style="display:flex;gap:4px">
-          ${matchOK?`<button class="btn xs" onclick="kasirBukaModalAlias(${idx})">🏷️ Alias</button>`:''}
-          <button class="btn xs" onclick="kasirBukaModalBarangBaru(${idx})">➕ Baru</button>
-          <button class="btn xs danger" onclick="kasirHapusWAItem(${idx})">🗑️</button>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-/* ============ PRODUK PICKER MODAL (kasir) ============ */
-let _kasirPickerCurrentIdx=-1;
-function kasirBukaProdPicker(idx){
-  _kasirPickerCurrentIdx=idx;
-  const inp=document.getElementById('kasir-prod-picker-search');
-  if(inp)inp.value='';
-  kasirFilterProdPicker('');
-  openModal('kasir-modal-prod-picker');
-  setTimeout(()=>{const i=document.getElementById('kasir-prod-picker-search');if(i)i.focus();},100);
-}
-function kasirFilterProdPicker(q){
-  const list=document.getElementById('kasir-prod-picker-list');
-  if(!list)return;
-  q=(q||'').trim().toLowerCase();
-  const arr=(typeof aB!=='undefined'?aB:[]);
-  let filtered=q?arr.filter(b=>(b.nama||'').toLowerCase().includes(q)||(b.barcode||'').toLowerCase().includes(q)):arr;
-  filtered=filtered.slice(0,80);
-  if(!filtered.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Tidak ada produk cocok<br><br><button class="btn sm primary" onclick="closeModal(\'kasir-modal-prod-picker\');kasirBukaModalBarangBaru('+_kasirPickerCurrentIdx+')">➕ Tambah Produk Baru</button></div>';return;}
-  list.innerHTML=filtered.map(b=>{
-    const stokBadge=b.stok>0?`<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700">stok ${b.stok}</span>`:`<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700">habis</span>`;
-    return `<div onclick="kasirPilihProdPicker(${b.id})" style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.nama}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${b.satuan||''} ${stokBadge}</div>
-      </div>
-      <div style="font-weight:700;color:#15803d;font-family:monospace;font-size:13px;flex-shrink:0">${fmt(b.harga||0)}</div>
-    </div>`;
-  }).join('');
-}
-
-/* ============ PENGANTAR PICKER MODAL (kasir) ============ */
-function kasirBukaPengantarPicker(){
-  const inp=document.getElementById('kasir-pengantar-picker-search');
-  if(inp)inp.value='';
-  kasirFilterPengantar('');
-  openModal('kasir-modal-pengantar');
-  setTimeout(()=>{const i=document.getElementById('kasir-pengantar-picker-search');if(i)i.focus();},100);
-}
-function kasirFilterPengantar(q){
-  const list=document.getElementById('kasir-pengantar-picker-list');
-  if(!list)return;
-  q=(q||'').trim().toLowerCase();
-  let arr=kasirWAUsers||[];
-  if(q)arr=arr.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.nama||'').toLowerCase().includes(q));
-  if(!arr.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Tidak ada user cocok</div>';return;}
-  list.innerHTML=arr.map(u=>{
-    const args=JSON.stringify(u.username)+','+JSON.stringify(u.nama||'');
-    return `<div onclick='kasirPilihPengantar(${args.replace(/'/g,"&apos;")})' style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer">
-    <div style="font-weight:600;font-size:13px">${u.username}</div>
-    ${u.nama?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${u.nama}</div>`:''}
-  </div>`;
-  }).join('');
-}
-
-function kasirSetWAItemBarang(idx,bid){
-  const it=kasirWAItems[idx];if(!it)return;
-  if(!bid){it.barang_id=null;kasirRenderPreviewWA();return;}
-  const b=(typeof aB!=='undefined')?aB.find(x=>x.id===parseInt(bid)):null;
-  if(!b)return;
-  it.barang_id=b.id;
-  it.nama=b.nama;
-  if(!it.harga||it.harga===0)it.harga=b.harga||0;
-  if(b.satuan)it.satuan=b.satuan;
-  it.qtyReal=it.qty*(it.konversi||1);
-  kasirRenderPreviewWA();
-}
-function kasirSetWAItemQty(idx,v){
-  const it=kasirWAItems[idx];if(!it)return;
-  it.qty=parseFloat(v)||0;
-  it.qtyReal=it.qty*(it.konversi||1);
-  kasirRenderPreviewWA();
-}
-function kasirSetWAItemHarga(idx,v){
-  const it=kasirWAItems[idx];if(!it)return;
-  it.harga=parseFloat(v)||0;
-  kasirRenderPreviewWA();
-}
-function kasirHapusWAItem(idx){
-  if(!confirm('Hapus item ini?'))return;
-  kasirWAItems.splice(idx,1);
-  kasirRenderPreviewWA();
-}
-function kasirTambahItemKosongWA(){
-  kasirWAItems.push({teks_asli:'(manual)',barang_id:null,nama:'',qty:1,satuan:'',harga:0,konversi:1,qtyReal:1,teks_alias:'',satuan_alias:''});
-  kasirRenderPreviewWA();
-}
-
-function kasirBukaModalAlias(idx){
-  const it=kasirWAItems[idx];if(!it||!it.barang_id)return;
-  const aliasGuess=(it.teks_alias||kasirExtractAlias(it.teks_asli)).toLowerCase();
-  const satuanGuess=it.satuan_alias||'';
-  const konvGuess=it.konversi||1;
-  const html=`
-  <div style="padding:14px 14px 18px">
-    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
-    <div style="font-weight:700;font-size:14px;margin-bottom:10px">🏷️ Simpan Alias Produk</div>
-    <div style="background:var(--bg,#f8fafc);padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px">
-      <div>Produk: <b>${it.nama}</b></div>
-      <div>Teks WA asli: <i>${it.teks_asli}</i></div>
-    </div>
-    <div class="irow"><label>Alias</label><input type="text" id="kalias-text" value="${aliasGuess}" placeholder="contoh: telor, ladaku" style="flex:1"/></div>
-    <div class="irow"><label>Satuan WA</label><input type="text" id="kalias-satuan" value="${satuanGuess}" placeholder="kosong / renceng / krat" style="flex:1"/></div>
-    <div class="irow"><label>Konversi Qty</label><input type="number" step="0.01" id="kalias-konversi" value="${konvGuess}" placeholder="1 satuan WA = ?" style="flex:1"/></div>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Contoh: 1 renceng = 10 pcs → konversi=10</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn primary" style="flex:1;height:42px" onclick="kasirSimpanAlias(${idx})">💾 Simpan</button>
-      <button class="btn" style="height:42px" onclick="closeModal('kasir-modal-alias-wa')">Batal</button>
-    </div>
-  </div>`;
-  document.getElementById('kasir-modal-alias-wa-content').innerHTML=html;
-  openModal('kasir-modal-alias-wa');
-}
-
-function kasirExtractAlias(teks){
-  const p=kasirParseWALine(teks);
-  return p?p.nama:'';
-}
-
-async function kasirSimpanAlias(idx){
-  const it=kasirWAItems[idx];if(!it||!it.barang_id)return;
-  const alias=(document.getElementById('kalias-text').value||'').trim().toLowerCase();
-  const satuan=(document.getElementById('kalias-satuan').value||'').trim().toLowerCase()||null;
-  const konv=parseFloat(document.getElementById('kalias-konversi').value)||1;
-  if(!alias){toast('Alias tidak boleh kosong',true);return;}
-  // Check existing
-  const{data:existing}=await sb.from('warung_produk_alias').select('id').ilike('alias',alias).eq('satuan_alias',satuan||'').maybeSingle();
-  if(existing){
-    await sb.from('warung_produk_alias').update({produk_id:it.barang_id,konversi_qty:konv}).eq('id',existing.id);
-  }else{
-    await sb.from('warung_produk_alias').insert([{produk_id:it.barang_id,alias,satuan_alias:satuan,konversi_qty:konv,created_by:CU?.username||'unknown'}]);
-  }
-  await kasirLoadAlias();
-  closeModal('kasir-modal-alias-wa');
-  toast('✅ Alias tersimpan: '+alias);
-}
-
-function kasirBukaModalBarangBaru(idx){
-  const it=kasirWAItems[idx];if(!it)return;
-  const namaGuess=it.nama||kasirExtractAlias(it.teks_asli);
-  const satuanGuess=it.satuan||'pcs';
-  const html=`
-  <div style="padding:14px 14px 18px">
-    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px"></div>
-    <div style="font-weight:700;font-size:14px;margin-bottom:10px">➕ Tambah Produk Baru ke Master</div>
-    <div style="background:#fef3c7;padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:10px;color:#92400e">
-      Produk akan disimpan ke master barang dan dipilih untuk item ini.
-    </div>
-    <div class="irow"><label>Nama Produk</label><input type="text" id="kbb-nama" value="${namaGuess}" style="flex:1"/></div>
-    <div class="irow"><label>Satuan</label><input type="text" id="kbb-satuan" value="${satuanGuess}" placeholder="pcs / kg / bks" style="flex:1"/></div>
-    <div class="irow"><label>Harga Jual</label><input type="number" id="kbb-harga" value="${it.harga||0}" style="flex:1"/></div>
-    <div class="irow"><label>Harga Beli</label><input type="number" id="kbb-hb" value="${it.harga||0}" style="flex:1"/></div>
-    <div class="irow"><label>Stok Awal</label><input type="number" id="kbb-stok" value="0" style="flex:1"/></div>
-    <div class="irow"><label>Kategori</label><input type="text" id="kbb-kat" value="warung" placeholder="warung / sembako" style="flex:1"/></div>
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn primary" style="flex:1;height:42px" onclick="kasirSimpanBarangBaru(${idx})">💾 Simpan & Pilih</button>
-      <button class="btn" style="height:42px" onclick="closeModal('kasir-modal-barang-baru-wa')">Batal</button>
-    </div>
-  </div>`;
-  document.getElementById('kasir-modal-barang-baru-wa-content').innerHTML=html;
-  openModal('kasir-modal-barang-baru-wa');
-}
-
-async function kasirSimpanBarangBaru(idx){
-  const it=kasirWAItems[idx];if(!it)return;
-  const payload={
-    nama:document.getElementById('kbb-nama').value.trim(),
-    satuan:document.getElementById('kbb-satuan').value.trim()||'pcs',
-    harga:parseInt(document.getElementById('kbb-harga').value)||0,
-    harga_beli:parseInt(document.getElementById('kbb-hb').value)||0,
-    stok:parseFloat(document.getElementById('kbb-stok').value)||0,
-    kategori:document.getElementById('kbb-kat').value.trim()||'warung'
-  };
-  if(!payload.nama){toast('Nama wajib diisi',true);return;}
-  const{data,error}=await sb.from('barang').insert([payload]).select().single();
-  if(error){toast('Gagal: '+error.message,true);return;}
-  if(typeof lB==='function')await lB();
-  it.barang_id=data.id;
-  it.nama=data.nama;
-  it.harga=data.harga;
-  it.satuan=data.satuan;
-  closeModal('kasir-modal-barang-baru-wa');
-  toast('✅ Produk baru: '+data.nama);
-  if(confirm('Simpan "'+(it.teks_alias||kasirExtractAlias(it.teks_asli))+'" sebagai alias produk ini?')){
-    kasirBukaModalAlias(idx);
-  }else{
-    kasirRenderPreviewWA();
-  }
-}
-
-
-/* DAFTAR PESANAN (Pending + Riwayat) */
-
-
-
-
-
-
-/* Auto-load pesanan saat masuk tab Pesan */
-(function(){
-  const orig=window.showMainTab;
-  if(typeof orig==='function'){
-    window.showMainTab=function(tab){
-      orig(tab);
-      if(tab==='pesan'){
-        // Default ke sub-tab Input WA
-        kasirInitInputWA();
-      }
-    };
-  }
-  // Auto poll badge tiap 60 detik (kalau user di tab lain)
-})();
-
 // ===== STUB FUNCTIONS (dipanggil dari HTML yang tersisa) =====
 function gantiPassword(){toast('Gunakan halaman portal untuk ganti password',false);}
 function tapProduk(id){posAddProduk(id);}
 function setBayar(n){posSetBayar(n);}
-function simpanGambar(){posDownloadStrukJPG();}
 function simpanGambarBeli(){toast('Simpan gambar beli tidak tersedia di kasir',false);}
 function hapusStrukBeli(){posbHapusStruk();}
 
-function hapusPPOB(id){toast('Hapus PPOB tidak tersedia di kasir',true);}
 
 // ===== STUBS untuk fungsi yang tidak ada di kasir =====
 function hitungDiskon(){/* warung lama - no-op */}
@@ -5492,28 +4905,8 @@ document.addEventListener('DOMContentLoaded',function(){
   const ms=document.getElementById('modal-struk');
   if(ms) document.body.appendChild(ms);
 });
-</script>
-</body>
-</html
-  /* === SIDEBAR KASIR === */
-  .sb-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:none;background:transparent;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);font-family:inherit;text-align:left;transition:background 0.15s;margin-bottom:2px}
-  .sb-item:hover{background:var(--green-light);color:var(--green-dark)}
-  .sb-item.active{background:var(--green-light);color:var(--green-dark);font-weight:700}
-  .sb-icon{font-size:18px;width:24px;text-align:center;flex-shrink:0}
-  /* === KPAGE (halaman utama) === */
-  .kpage{display:none;width:100%;height:100%}
-  .kpage.active{display:block}
-  /* Halaman Jual & Beli pakai tab-content existing */
-  .kpage#kpage-jual,.kpage#kpage-beli{overflow:hidden}
-  /* Hapus tab-content padding-top krn sudah ada topbar fixed */
-  .tab-content{height:100%;overflow:hidden}
-  /* Sub-tabs tetap di atas konten */
-  .sub-tabs{position:sticky;top:0;z-index:100;background:var(--surface);border-bottom:1px solid var(--border)}
-  /* Riwayat table responsive */
-  #kpage-riwayat-jual .rw-wrap,#kpage-riwayat-beli .rw-wrap{overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border)}
-  #kpage-riwayat-beli .tab.active{background:var(--amber);color:white;border-color:var(--amber)}
-  #kpage-riwayat-beli tr.rw-data.rw-selected td{background:#fef3c7!important}
-  </style/* === SIDEBAR NAVIGATION === */
+
+/* === SIDEBAR NAVIGATION === */
 function openSidebar(){
   document.getElementById('sidebar').style.left='0';
   document.getElementById('sidebar-overlay').style.display='block';
@@ -5554,5 +4947,6 @@ function showKasirPage(page){
   _activeKPage=page;
   localStorage.setItem('kasir_last_page',page);
 }
-
->
+</script>
+</body>
+</html>
