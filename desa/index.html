@@ -601,6 +601,28 @@ tr.grp-row td .car{margin-right:6px;font-size:11px}
   </div>
 </div>
 
+<!-- ══ MODAL: TERIMA KONFIRMASI PEMBAYARAN ══ -->
+<div id="modalTerimaKonfirm" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalTerimaKonfirm')">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title">✅ Konfirmasi Terima</div>
+      <button class="modal-close" onclick="closeModal('modalTerimaKonfirm')">&times;</button>
+    </div>
+    <div class="fg" style="background:var(--bg);border-radius:var(--r);padding:10px 12px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Jamaah</div>
+      <div id="tkNamaInfo" style="font-size:14px;font-weight:700">-</div>
+      <div style="font-size:11px;color:var(--muted);margin:8px 0 3px">Metode</div>
+      <div id="tkMetodeInfo" style="font-size:13px">-</div>
+    </div>
+    <div class="fg">
+      <label>Jumlah Diterima (Rp)</label>
+      <input type="number" id="tkNominal" step="1000" placeholder="0">
+      <div class="hint" id="tkHint"></div>
+    </div>
+    <button class="btn btn-pri btn-full" onclick="prosesTerimaKonfirm()">✅ Terima & Simpan</button>
+  </div>
+</div>
+
 <!-- ══ MODAL: OP MENU ══ -->
 <div id="modalOpMenu" class="modal-ov hide" onclick="if(event.target===this)closeModal('modalOpMenu')">
   <div class="modal-box" style="padding-bottom:18px">
@@ -1121,23 +1143,38 @@ async function loadKonfirmasi(){
     </div>`;
   }).join('');
 }
+let tkTarget=null;
 async function terimaKonfirm(id){
-  if(!confirm('Konfirmasi bahwa pembayaran ini sudah Anda terima?'))return;
   const {data:k}=await sb.from('aj_kesanggupan').select('*').eq('id',id).maybeSingle();
   if(!k){toast('Data tidak ditemukan');return;}
+  const j=allJamaah.find(x=>x.id===k.jamaah_id);
   const nilai=k.nominal_bebas&&Number(k.nominal_bebas)>0?Number(k.nominal_bebas):(k.jumlah_lembar||0)*HARGA;
   const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',k.jamaah_id);
   const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
   const sisa=nilai-tot;
-  if(sisa>0){
-    const {error:e1}=await sb.from('aj_pembayaran').insert({jamaah_id:k.jamaah_id,tanggal:today(),jumlah:sisa,
+  tkTarget=k;
+  $('tkNamaInfo').textContent=j?.nama||k.nama_luar||'-';
+  $('tkMetodeInfo').innerHTML=(k.metode_bayar==='tf'?'Transfer (TF)':'Cash')+(k.bukti_tf_url?` · <a href="${k.bukti_tf_url}" target="_blank" style="color:var(--ok);font-weight:700">📎 Bukti TF</a>`:'');
+  $('tkNominal').value=sisa>0?sisa:0;
+  $('tkHint').textContent='Otomatis: '+rp(sisa>0?sisa:0)+' (bisa diedit jika jumlah diterima berbeda)';
+  show('modalTerimaKonfirm');
+}
+async function prosesTerimaKonfirm(){
+  const k=tkTarget;
+  if(!k){toast('Data tidak ditemukan');return;}
+  const jumlah=parseInt($('tkNominal').value)||0;
+  if(jumlah<0){toast('Jumlah tidak boleh minus');return;}
+  if(!confirm('Konfirmasi terima sejumlah '+rp(jumlah)+'?'))return;
+  if(jumlah>0){
+    const {error:e1}=await sb.from('aj_pembayaran').insert({jamaah_id:k.jamaah_id,tanggal:today(),jumlah:jumlah,
       penerima:curUser.nama,penerima_jamaah_id:curUser.id,operator:curUser.nama,operator_jamaah_id:curUser.id});
     if(e1){toast('Gagal catat pembayaran: '+e1.message);return;}
   }
-  const {error:e2}=await sb.from('aj_kesanggupan').update({konfirmasi:'confirmed',status:'lunas',operator:curUser.nama}).eq('id',id);
+  const {error:e2}=await sb.from('aj_kesanggupan').update({konfirmasi:'confirmed',status:'lunas',operator:curUser.nama}).eq('id',k.id);
   if(e2){toast('Gagal update: '+e2.message);return;}
-  logIP('konfirmasi_terima:jamaah_'+k.jamaah_id+':'+rp(sisa>0?sisa:0));
+  logIP('konfirmasi_terima:jamaah_'+k.jamaah_id+':'+rp(jumlah));
   toast('✅ Pembayaran dikonfirmasi & tercatat');
+  closeModal('modalTerimaKonfirm');tkTarget=null;
   loadKonfirmasi();refreshData();
   if(curTab==='setor')loadSetoran();
 }
