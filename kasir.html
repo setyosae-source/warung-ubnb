@@ -492,6 +492,9 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
       <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:2px">
         <span>Subtotal</span><span id="pos-subtotal">Rp 0</span>
       </div>
+      <div id="pos-diskon-item-row" style="display:none;justify-content:space-between;font-size:12px;color:#dc2626;margin-bottom:2px">
+        <span id="pos-diskon-item-lbl">Diskon Item</span><span id="pos-diskon-item-val">- 0</span>
+      </div>
       <div id="pos-diskon-row" style="display:none;justify-content:space-between;font-size:12px;color:var(--red);margin-bottom:2px">
         <span id="pos-diskon-lbl">Diskon</span><span id="pos-diskon-val">- 0</span>
       </div>
@@ -2513,6 +2516,64 @@ let _pdCurrentId = null;
 
 /* === STATE POS === */
 let posCart = []; // {pid,nama,qty,harga,is_manual,barcode,_kategori,_qtyPerUnit,isPaket,paketItems,...}
+
+/* === DISKON QTY OTOMATIS PER PRODUK (mirror dari warung.html) === */
+function posGetDiskonQtyRule(barang){
+  if(!barang||!barang.diskon_tipe||!(parseFloat(barang.diskon_nilai)>0))return null;
+  return {
+    tipe:barang.diskon_tipe,
+    nilai:parseFloat(barang.diskon_nilai)||0,
+    minQty:Math.max(1,parseInt(barang.diskon_min_qty)||1),
+    mode:barang.diskon_mode||'per_qty'
+  };
+}
+function posGetCartDiskonRule(item){
+  if(!item||item.isPaket||item.is_manual)return null;
+  const barang=(typeof aB!=='undefined'?aB:[]).find(x=>x.id===(item.barang_id||item.pid));
+  return posGetDiskonQtyRule(barang);
+}
+function posHitungDiskonQtyItem(qty,harga,rule){
+  qty=parseFloat(qty)||0;
+  harga=parseFloat(harga)||0;
+  if(!rule||qty<rule.minQty||harga<=0)return 0;
+  const kelipatan=Math.floor(qty/rule.minQty);
+  let diskon=0;
+  if(rule.tipe==='persen'){
+    const basisNominal=rule.mode==='kelipatan'?harga*rule.minQty*kelipatan:harga*qty;
+    diskon=Math.round(basisNominal*rule.nilai/100);
+  } else if(rule.tipe==='nominal'){
+    if(rule.mode==='total')diskon=rule.nilai;
+    else if(rule.mode==='kelipatan')diskon=rule.nilai*kelipatan;
+    else diskon=rule.nilai*qty;
+  }
+  return Math.min(Math.round(diskon),Math.round(qty*harga));
+}
+function posApplyAutoDiskonQty(item){
+  if(!item||item.isPaket||item.is_manual||item._diskon_auto===false)return item;
+  const rule=posGetCartDiskonRule(item);
+  if(!rule){
+    if(item._diskon_auto){
+      item.diskon_tipe=null;item.diskon_nilai=0;item.diskon_total=0;
+      item.diskon_min_qty=1;item.diskon_mode='per_qty';item.diskon_label='';
+    }
+    return item;
+  }
+  const diskonTotal=posHitungDiskonQtyItem(item.qty,item.harga,rule);
+  item._diskon_auto=true;
+  item.diskon_tipe=rule.tipe;
+  item.diskon_nilai=rule.nilai;
+  item.diskon_total=diskonTotal;
+  item.diskon_min_qty=rule.minQty;
+  item.diskon_mode=rule.mode;
+  const nilaiTxt=rule.tipe==='persen'?`${rule.nilai}%`:`${fmt(rule.nilai)}`;
+  const modeTxt=rule.mode==='total'?'sekali per item':rule.mode==='kelipatan'?'per kelipatan qty':'per qty';
+  item.diskon_label=`Diskon qty min ${rule.minQty} · ${nilaiTxt} ${modeTxt}`;
+  return item;
+}
+function posRefreshAutoDiskonQty(){
+  if(!Array.isArray(posCart))return;
+  posCart.forEach(c=>posApplyAutoDiskonQty(c));
+}
 let posPel = {id:null,anggota_id:null,jamaah_did:null,label:'Umum',sumber:'umum'};
 let posMetode = 'hutang'; // default Bayar Nanti
 let posDiskon = {tipe:'none',nilai:0,nominal:0,voucher_kode:''};
@@ -2669,13 +2730,19 @@ function posAddProduk(pid,qty){
     return;
   }
   const ex=posCart.find(c=>c.pid===pid&&!c.isPaket);
-  if(ex){ex.qty+=qty;}
-  else posCart.push({
-    pid,nama:p.nama,qty,harga:p.harga||0,
-    barang_id:p.id,barcode:p.barcode||'',
-    is_manual:false,isPaket:false,
-    _kategori:p.kategori||'umum'
-  });
+  if(ex){
+    ex.qty+=qty;
+    posApplyAutoDiskonQty(ex);
+  } else {
+    const item={
+      pid,nama:p.nama,qty,harga:p.harga||0,
+      barang_id:p.id,barcode:p.barcode||'',
+      is_manual:false,isPaket:false,
+      _kategori:p.kategori||'umum'
+    };
+    posApplyAutoDiskonQty(item);
+    posCart.push(item);
+  }
   document.getElementById('pos-scan-input').value='';
   document.getElementById('pos-search-result').style.display='none';
   document.getElementById('pos-scan-input').focus();
@@ -2712,18 +2779,24 @@ function posRenderCart(){
     el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text-muted);font-size:13px"><div style="font-size:54px;opacity:0.3;margin-bottom:8px">🛒</div>Keranjang kosong<br><span style="font-size:12px">Scan / cari produk di atas</span></div>';
   } else {
     el.innerHTML=posCart.map((c,i)=>{
-      const subtotal=c.qty*c.harga;
+      const subtotalNormal=c.qty*c.harga;
+      const diskonItem=c.diskon_total||0;
+      const subtotal=Math.max(0,subtotalNormal-diskonItem);
       const ico=c.isPaket?'📦':(c.is_manual?'✏️':'🛒');
       // Cek apakah barang ini punya harga_levels (untuk tombol ganti satuan)
       const b=!c.isPaket&&!c.is_manual?(typeof aB!=='undefined'?aB:[]).find(x=>x.id===c.pid):null;
       const hasLevels=b&&b.harga_levels&&b.harga_levels.length>0;
       const lvBadge=c._levelLabel?` <span style="background:#dbeafe;color:#1e40af;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px">${c._levelLabel}</span>`:'';
+      const diskonBadge=diskonItem>0?` <span title="${c.diskon_label||'Diskon item'}" style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px">-${fmt(diskonItem)}</span>`:'';
       const gantiSatuan=hasLevels?`<span onclick="event.stopPropagation();posCartItemGantiSatuan(${i})" style="color:#2563eb;font-size:10px;font-weight:600;cursor:pointer;text-decoration:underline;margin-left:6px">↻ ganti satuan</span>`:'';
+      const hargaLine=diskonItem>0
+        ?`${fmt(c.harga)} × ${c.qty} <span style="text-decoration:line-through;opacity:0.5">${fmt(subtotalNormal)}</span>`
+        :`${fmt(c.harga)} × ${c.qty}`;
       return `<div class="pos-cart-item" data-idx="${i}" onclick="posOpenEdit(${i})" style="background:white;border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer">
         <div style="width:38px;height:38px;border-radius:8px;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${ico}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${c.nama}${lvBadge}</div>
-          <div style="font-size:11px;color:var(--text-muted)">${fmt(c.harga)} × ${c.qty}${c._qtyPerUnit&&c._qtyPerUnit>1&&b?(' <span style="color:var(--text-muted);font-size:10px">(= '+(c.qty*c._qtyPerUnit>=1000&&b.satuan_stok==='gr'?(c.qty*c._qtyPerUnit/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' Kg':c.qty*c._qtyPerUnit+' '+(b.satuan_stok||b.satuan||'pcs'))+')</span>'):''}${gantiSatuan}</div>
+          <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${c.nama}${lvBadge}${diskonBadge}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${hargaLine}${c._qtyPerUnit&&c._qtyPerUnit>1&&b?(' <span style="color:var(--text-muted);font-size:10px">(= '+(c.qty*c._qtyPerUnit>=1000&&b.satuan_stok==='gr'?(c.qty*c._qtyPerUnit/1000).toLocaleString('id-ID',{maximumFractionDigits:2})+' Kg':c.qty*c._qtyPerUnit+' '+(b.satuan_stok||b.satuan||'pcs'))+')</span>'):''}${gantiSatuan}</div>
         </div>
         <div style="font-weight:700;font-size:13px;color:var(--green-dark, #15803d);text-align:right;flex-shrink:0;font-family:'SF Mono',Monaco,monospace">${fmt(subtotal)}</div>
       </div>`;
@@ -2733,8 +2806,12 @@ function posRenderCart(){
 }
 
 function posUpdateTotal(){
-  const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
-  // Hitung diskon
+  posRefreshAutoDiskonQty();
+  // Subtotal setelah diskon per item (qty)
+  const subtotal=posCart.reduce((s,c)=>s+Math.max(0,c.qty*c.harga-(c.diskon_total||0)),0);
+  const subtotalKotor=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+  const totalDiskonItem=posCart.reduce((s,c)=>s+(c.diskon_total||0),0);
+  // Hitung diskon transaksi (atas subtotal bersih setelah diskon item)
   let diskonNominal=0;
   if(posDiskon.tipe==='persen')diskonNominal=Math.round(subtotal*(posDiskon.nilai||0)/100);
   else if(posDiskon.tipe==='nominal')diskonNominal=posDiskon.nominal||0;
@@ -2751,7 +2828,17 @@ function posUpdateTotal(){
   diskonNominal=Math.min(diskonNominal,subtotal);
   const total=Math.max(0,subtotal-diskonNominal+posOngkir);
 
-  document.getElementById('pos-subtotal').textContent=fmt(subtotal);
+  document.getElementById('pos-subtotal').textContent=fmt(subtotalKotor);
+  // Diskon item row (diskon qty otomatis per produk)
+  const diRow=document.getElementById('pos-diskon-item-row');
+  if(diRow){
+    if(totalDiskonItem>0){
+      diRow.style.display='flex';
+      const nItem=posCart.filter(c=>c.diskon_total>0).length;
+      document.getElementById('pos-diskon-item-lbl').textContent=`Diskon Item (${nItem} item)`;
+      document.getElementById('pos-diskon-item-val').textContent='- '+fmt(totalDiskonItem);
+    } else diRow.style.display='none';
+  }
   // Diskon row
   const drRow=document.getElementById('pos-diskon-row');
   if(diskonNominal>0){
@@ -2965,18 +3052,24 @@ function posPilihLevel(idx){
   const isLevelUtama = hasUtama && idx === 0;
   // Find existing entry dengan same level
   const ex=posCart.find(c=>c.pid===b.id&&!c.isPaket&&c._levelIdx===idx);
-  if(ex){ex.qty++;}
-  else posCart.push({
-    pid:b.id,
-    nama:b.nama+(isLevelUtama?'':` (${lv.label})`),
-    qty:1,harga:lv.harga,
-    barang_id:b.id,barcode:b.barcode||'',
-    is_manual:false,isPaket:false,
-    _kategori:b.kategori||'umum',
-    _levelIdx:idx,
-    _levelLabel:lv.label,
-    _qtyPerUnit:lv.qty
-  });
+  if(ex){
+    ex.qty++;
+    posApplyAutoDiskonQty(ex);
+  } else {
+    const item={
+      pid:b.id,
+      nama:b.nama+(isLevelUtama?'':` (${lv.label})`),
+      qty:1,harga:lv.harga,
+      barang_id:b.id,barcode:b.barcode||'',
+      is_manual:false,isPaket:false,
+      _kategori:b.kategori||'umum',
+      _levelIdx:idx,
+      _levelLabel:lv.label,
+      _qtyPerUnit:lv.qty
+    };
+    posApplyAutoDiskonQty(item);
+    posCart.push(item);
+  }
   closeModal('pos-modal-level', true);
   posRenderCart();
   toast('+ '+b.nama+' ('+lv.label+')');
@@ -3107,7 +3200,7 @@ function posOpenDiskon(){
   document.getElementById('pos-disk-nominal').value=posDiskon.tipe==='nominal'?(posDiskon.nominal||''):'';
   // Voucher dropdown
   const sel=document.getElementById('pos-disk-voucher');
-  const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+  const subtotal=posCart.reduce((s,c)=>s+Math.max(0,c.qty*c.harga-(c.diskon_total||0)),0);
   const today=new Date().toISOString().slice(0,10);
   const vList=(typeof aVoucher!=='undefined'?aVoucher:[]).filter(v=>v.aktif&&(!v.berlaku_sampai||v.berlaku_sampai>=today));
   sel.innerHTML='<option value="">-- Pilih voucher --</option>'+vList.map(v=>{
@@ -3213,7 +3306,7 @@ function posOpenBayar(){
 }
 
 function posComputeTotal(){
-  const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+  const subtotal=posCart.reduce((s,c)=>s+Math.max(0,c.qty*c.harga-(c.diskon_total||0)),0);
   let diskonNominal=0;
   if(posDiskon.tipe==='persen')diskonNominal=Math.round(subtotal*(posDiskon.nilai||0)/100);
   else if(posDiskon.tipe==='nominal')diskonNominal=posDiskon.nominal||0;
@@ -3324,7 +3417,8 @@ async function posKonfirmasiBayar(){
     }
 
     // Subtotal & diskon detail
-    const subtotal=posCart.reduce((s,c)=>s+c.qty*c.harga,0);
+    const subtotal=posCart.reduce((s,c)=>s+Math.max(0,c.qty*c.harga-(c.diskon_total||0)),0);
+    const totalDiskonItem=posCart.reduce((s,c)=>s+(c.diskon_total||0),0);
     let diskonNominal=0;
     if(posDiskon.tipe==='persen')diskonNominal=Math.round(subtotal*(posDiskon.nilai||0)/100);
     else if(posDiskon.tipe==='nominal')diskonNominal=posDiskon.nominal||0;
@@ -3505,10 +3599,14 @@ function posShowStruk(trx){
   <div>Pelanggan: <b>${trx.member.label}${trx.member.sumber==='anggota'?' ⭐':''}${trx.member.sumber==='jamaah'?' 👥':''}</b></div>
   ${trx.catatan?`<div style="font-size:10px;font-style:italic">Note: ${trx.catatan}</div>`:''}
   <hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>`;
+  let _totalDiskonItemStruk=0;
   trx.items.forEach(it=>{
-    const sub=it.qty*it.harga;
+    const subNormal=it.qty*it.harga;
+    const diskonIt=it.diskon_total||0;
+    _totalDiskonItemStruk+=diskonIt;
+    const sub=Math.max(0,subNormal-diskonIt);
     html+=`<div style="margin-bottom:3px">
-      <div style="font-size:10.5px">${it.nama}</div>
+      <div style="font-size:10.5px">${it.nama}${diskonIt>0?' <span style="color:#dc2626">(-'+diskonIt.toLocaleString('id-ID')+')</span>':''}</div>
       <div style="display:flex;justify-content:space-between;font-size:10.5px">
         <span>${it.qty} × ${(it.harga||0).toLocaleString('id-ID')}</span>
         <span style="font-weight:700">${sub.toLocaleString('id-ID')}</span>
@@ -3517,6 +3615,7 @@ function posShowStruk(trx){
   });
   html+=`<hr style="border:0;border-top:1px dashed #000;margin:5px 0"/>
   <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${trx.subtotal.toLocaleString('id-ID')}</span></div>`;
+  if(_totalDiskonItemStruk>0)html+=`<div style="display:flex;justify-content:space-between"><span>Diskon Item</span><span>-${_totalDiskonItemStruk.toLocaleString('id-ID')}</span></div>`;
   if(trx.diskonNominal>0)html+=`<div style="display:flex;justify-content:space-between"><span>Diskon</span><span>-${trx.diskonNominal.toLocaleString('id-ID')}</span></div>`;
   if(trx.ongkir>0)html+=`<div style="display:flex;justify-content:space-between"><span>Ongkir</span><span>+${trx.ongkir.toLocaleString('id-ID')}</span></div>`;
   html+=`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;border-top:1px dashed #000;padding-top:3px;margin-top:3px">
