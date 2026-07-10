@@ -5916,11 +5916,11 @@ function renderRiwayatBarang(id){
 function buildKartuStokHtml(id,b,txListFull,beliListFull){
   const masuk=beliListFull.map(p=>{
     const i=p.items.find(x=>x.barang_id===id);
-    return {tipe:'masuk',tgl:new Date(p.tgl_beli||p.waktu),qty:parseFloat(i&&i.qty)||0,ref:p.supplier_nama||p.operator||'-',refId:p.id};
+    return {tipe:'masuk',tgl:new Date(p.tgl_beli||p.waktu),qty:parseFloat(i&&i.qty)||0,operator:p.operator||'-',pihak:p.supplier_nama||'-',refId:p.id};
   });
   const keluar=txListFull.map(t=>{
     const i=t.items.find(x=>x.id===id||x.barang_id===id);
-    return {tipe:'keluar',tgl:new Date(t.tgl_transaksi||t.waktu),qty:parseFloat(i&&i.qty)||0,ref:t.kasir||'-',refId:t.id};
+    return {tipe:'keluar',tgl:new Date(t.tgl_transaksi||t.waktu),qty:parseFloat(i&&i.qty)||0,operator:t.kasir||'-',pihak:t.pelanggan||'Umum',refId:t.id};
   });
   const rows=[...masuk,...keluar].sort((a,c)=>c.tgl-a.tgl); // terbaru dulu
   if(!rows.length)return `<div style="font-size:12px;color:var(--text-muted);padding:8px">Belum ada mutasi stok</div>`;
@@ -5930,7 +5930,14 @@ function buildKartuStokHtml(id,b,txListFull,beliListFull){
     saldo = r.tipe==='masuk' ? saldo-r.qty : saldo+r.qty;
   });
   const satuan=b.satuan||'pcs';
-  let h=`<div style="font-size:10px;color:var(--text-muted);padding:0 2px 6px">Saldo dihitung mundur dari stok sistem sekarang (${b.stok} ${satuan}). Saldo negatif = indikasi tercatat terjual melebihi yg tercatat masuk.</div>`;
+  window._kartuStokRows=window._kartuStokRows||{};
+  window._kartuStokRows[id]=rows;
+  window._kartuStokBarang=window._kartuStokBarang||{};
+  window._kartuStokBarang[id]=b;
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 2px 6px">
+    <div style="font-size:10px;color:var(--text-muted)">Saldo dihitung mundur dari stok sistem sekarang (${b.stok} ${satuan}). Saldo negatif = indikasi tercatat terjual melebihi yg tercatat masuk.</div>
+    <button onclick="event.stopPropagation();exportKartuStokJPG(${id})" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">🖼️ Export JPG</button>
+  </div>`;
   h+=`<div style="max-height:340px;overflow-y:auto">`;
   h+=rows.map(r=>{
     const isMasuk=r.tipe==='masuk';
@@ -5938,17 +5945,80 @@ function buildKartuStokHtml(id,b,txListFull,beliListFull){
     const color=isMasuk?'var(--green)':'var(--red)';
     const icon=isMasuk?'📥':'📤';
     const saldoColor=r.saldoSetelah<0?'var(--red)':'var(--text)';
+    const label1=isMasuk?'Operator':'Kasir';
+    const label2=isMasuk?'Supplier':'Pelanggan';
     const clickFn=isMasuk?`const _p=aBeli.find(x=>x.id===${r.refId});if(_p)tampilDetailBeli(_p)`:`_showStruk(${r.refId})`;
     return `<div class="tx-row" style="cursor:pointer" onclick="event.stopPropagation();${clickFn}">
       <div>
         <div style="font-size:12px;font-weight:600;color:${color}">${icon} ${qtyS} ${satuan}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${fD(r.tgl)} · ${r.ref}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${fD(r.tgl)} · ${label1}: ${r.operator} · ${label2}: ${r.pihak}</div>
       </div>
       <span style="font-weight:700;font-size:12px;color:${saldoColor}">Saldo: ${r.saldoSetelah}</span>
     </div>`;
   }).join('');
   h+=`</div>`;
   return h;
+}
+
+// === Export Kartu Stok ke JPG (pola sama dgn posDownloadStrukJPG, font diperbesar utk gambar) ===
+async function exportKartuStokJPG(id){
+  if(typeof html2canvas!=='function'){toast('Library html2canvas belum dimuat',true);return;}
+  const b=(window._kartuStokBarang&&window._kartuStokBarang[id])||aB.find(x=>x.id===id);
+  const rows=(window._kartuStokRows&&window._kartuStokRows[id])||[];
+  if(!b||!rows.length){toast('Belum ada data kartu stok',true);return;}
+  const satuan=b.satuan||'pcs';
+  const tglCetak=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+  const rowsHtml=rows.map(r=>{
+    const isMasuk=r.tipe==='masuk';
+    const qtyS=(isMasuk?'+':'−')+r.qty;
+    const color=isMasuk?'#15803d':'#b91c1c';
+    const label1=isMasuk?'Operator':'Kasir';
+    const label2=isMasuk?'Supplier':'Pelanggan';
+    const saldoColor=r.saldoSetelah<0?'#b91c1c':'#111827';
+    return `<tr>
+      <td style="padding:12px 14px;font-size:16px;border-bottom:1px solid #e5e7eb;white-space:nowrap;color:#111827">${fD(r.tgl)}</td>
+      <td style="padding:12px 14px;font-size:16px;border-bottom:1px solid #e5e7eb;font-weight:700;color:${color};white-space:nowrap">${isMasuk?'MASUK':'KELUAR'} ${qtyS} ${satuan}</td>
+      <td style="padding:12px 14px;font-size:15px;border-bottom:1px solid #e5e7eb;color:#374151;line-height:1.5">${label1}: <b>${r.operator}</b><br>${label2}: <b>${r.pihak}</b></td>
+      <td style="padding:12px 14px;font-size:18px;font-weight:800;border-bottom:1px solid #e5e7eb;text-align:right;color:${saldoColor};white-space:nowrap">${r.saldoSetelah} ${satuan}</td>
+    </tr>`;
+  }).join('');
+  const capture=document.createElement('div');
+  capture.style.cssText='position:fixed;left:-9999px;top:0;width:960px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;padding:28px';
+  capture.innerHTML=`
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:26px;font-weight:800;color:#111827">📒 Kartu Stok</div>
+      <div style="font-size:20px;font-weight:700;color:#111827;margin-top:4px">${b.nama}</div>
+      <div style="font-size:14px;color:#6b7280;margin-top:4px">Dicetak ${tglCetak} · Stok saat ini: <b>${b.stok} ${satuan}</b></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#f3f4f6">
+          <th style="padding:12px 14px;font-size:14px;text-align:left;color:#374151">Tanggal</th>
+          <th style="padding:12px 14px;font-size:14px;text-align:left;color:#374151">Mutasi</th>
+          <th style="padding:12px 14px;font-size:14px;text-align:left;color:#374151">Keterangan</th>
+          <th style="padding:12px 14px;font-size:14px;text-align:right;color:#374151">Saldo</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div style="text-align:center;margin-top:16px;font-size:12px;color:#9ca3af">Warung UBNB — Kartu Stok Digital</div>
+  `;
+  document.body.appendChild(capture);
+  toast('Memproses gambar...');
+  try{
+    const canvas=await html2canvas(capture,{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
+    const link=document.createElement('a');
+    const slug=(b.nama||'produk').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+    link.download='kartu-stok-'+slug+'-'+Date.now()+'.jpg';
+    link.href=canvas.toDataURL('image/jpeg',0.95);
+    link.click();
+    toast('✅ Kartu stok tersimpan');
+  }catch(e){
+    console.error('exportKartuStokJPG:',e);
+    toast('Gagal export: '+(e.message||e),true);
+  }finally{
+    document.body.removeChild(capture);
+  }
 }
 
 function switchDetailTab(id,tab,btn){
