@@ -5891,10 +5891,12 @@ function renderStokRowDetail(id){
 function renderRiwayatBarang(id){
   const el=document.getElementById('riwayat-barang-'+id);if(!el)return;
   const b=aB.find(x=>x.id===id);if(!b)return;
-  const txList=aT.filter(t=>t.items.some(i=>i.id===id||i.barang_id===id)).slice(0,5);
-  const beliList=aBeli.filter(p=>p.items.some(i=>i.barang_id===id)).slice(0,5);
+  const txListFull=aT.filter(t=>t.items.some(i=>i.id===id||i.barang_id===id));
+  const beliListFull=aBeli.filter(p=>p.items.some(i=>i.barang_id===id));
+  const txList=txListFull.slice(0,5);
+  const beliList=beliListFull.slice(0,5);
   const bat=aBatch.filter(x=>x.barang_id===id&&x.qty_sisa>0);
-  let h=`<div class="detail-tabs"><button class="detail-tab active" onclick="event.stopPropagation();switchDetailTab(${id},'jual',this)">Riwayat Jual</button><button class="detail-tab" onclick="event.stopPropagation();switchDetailTab(${id},'beli',this)">Riwayat Beli</button><button class="detail-tab" onclick="event.stopPropagation();switchDetailTab(${id},'batch',this)">Batch FIFO</button></div>`;
+  let h=`<div class="detail-tabs"><button class="detail-tab active" onclick="event.stopPropagation();switchDetailTab(${id},'jual',this)">Riwayat Jual</button><button class="detail-tab" onclick="event.stopPropagation();switchDetailTab(${id},'beli',this)">Riwayat Beli</button><button class="detail-tab" onclick="event.stopPropagation();switchDetailTab(${id},'batch',this)">Batch FIFO</button><button class="detail-tab" onclick="event.stopPropagation();switchDetailTab(${id},'kartu',this)">📒 Kartu Stok</button></div>`;
   h+=`<div id="dt-jual-${id}">`;
   if(!txList.length)h+=`<div style="font-size:12px;color:var(--text-muted);padding:8px">Belum ada penjualan</div>`;
   else h+=txList.map(t=>{const i=t.items.find(x=>x.id===id||x.barang_id===id);return `<div class="tx-row"><div><div style="font-size:12px;font-weight:600">${i?i.qty+'× '+fmt(i.hE||i.hargaEfektif||i.harga):''}</div><div style="font-size:11px;color:var(--text-muted)">${fD(t.tgl_transaksi||t.waktu)} · ${t.kasir||''}</div></div><span style="color:var(--green);font-weight:600;font-size:12px">${fmt(i?(i.hE||i.hargaEfektif||i.harga)*i.qty:0)}</span></div>`;}).join('');
@@ -5904,11 +5906,53 @@ function renderRiwayatBarang(id){
   h+=`</div><div id="dt-batch-${id}" style="display:none">`;
   if(!bat.length)h+=`<div style="font-size:12px;color:var(--text-muted);padding:8px">Tidak ada batch aktif</div>`;
   else h+=bat.map((x,i)=>`<div class="tx-row"><div><div style="font-size:12px;font-weight:600">Batch ${i+1} — Sisa: ${x.qty_sisa}/${x.qty_awal}</div><div style="font-size:11px;color:var(--text-muted)">${fD(x.tgl_masuk)} · Beli: ${fmt(x.harga_beli)} → Jual: ${fmt(x.harga_jual)}</div></div><span class="badge blue">HPP ${fmt(x.qty_sisa*x.harga_beli)}</span></div>`).join('');
+  h+=`</div><div id="dt-kartu-${id}" style="display:none">`;
+  h+=buildKartuStokHtml(id,b,txListFull,beliListFull);
   h+=`</div>`;
   el.innerHTML=h;
 }
+
+// === KARTU STOK: ledger kronologis masuk(pembelian)+keluar(penjualan) dgn saldo dihitung mundur dari stok sistem sekarang ===
+function buildKartuStokHtml(id,b,txListFull,beliListFull){
+  const masuk=beliListFull.map(p=>{
+    const i=p.items.find(x=>x.barang_id===id);
+    return {tipe:'masuk',tgl:new Date(p.tgl_beli||p.waktu),qty:parseFloat(i&&i.qty)||0,ref:p.supplier_nama||p.operator||'-',refId:p.id};
+  });
+  const keluar=txListFull.map(t=>{
+    const i=t.items.find(x=>x.id===id||x.barang_id===id);
+    return {tipe:'keluar',tgl:new Date(t.tgl_transaksi||t.waktu),qty:parseFloat(i&&i.qty)||0,ref:t.kasir||'-',refId:t.id};
+  });
+  const rows=[...masuk,...keluar].sort((a,c)=>c.tgl-a.tgl); // terbaru dulu
+  if(!rows.length)return `<div style="font-size:12px;color:var(--text-muted);padding:8px">Belum ada mutasi stok</div>`;
+  let saldo=parseFloat(b.stok)||0;
+  rows.forEach(r=>{
+    r.saldoSetelah=saldo;
+    saldo = r.tipe==='masuk' ? saldo-r.qty : saldo+r.qty;
+  });
+  const satuan=b.satuan||'pcs';
+  let h=`<div style="font-size:10px;color:var(--text-muted);padding:0 2px 6px">Saldo dihitung mundur dari stok sistem sekarang (${b.stok} ${satuan}). Saldo negatif = indikasi tercatat terjual melebihi yg tercatat masuk.</div>`;
+  h+=`<div style="max-height:340px;overflow-y:auto">`;
+  h+=rows.map(r=>{
+    const isMasuk=r.tipe==='masuk';
+    const qtyS=(isMasuk?'+':'−')+r.qty;
+    const color=isMasuk?'var(--green)':'var(--red)';
+    const icon=isMasuk?'📥':'📤';
+    const saldoColor=r.saldoSetelah<0?'var(--red)':'var(--text)';
+    const clickFn=isMasuk?`const _p=aBeli.find(x=>x.id===${r.refId});if(_p)tampilDetailBeli(_p)`:`_showStruk(${r.refId})`;
+    return `<div class="tx-row" style="cursor:pointer" onclick="event.stopPropagation();${clickFn}">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:${color}">${icon} ${qtyS} ${satuan}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${fD(r.tgl)} · ${r.ref}</div>
+      </div>
+      <span style="font-weight:700;font-size:12px;color:${saldoColor}">Saldo: ${r.saldoSetelah}</span>
+    </div>`;
+  }).join('');
+  h+=`</div>`;
+  return h;
+}
+
 function switchDetailTab(id,tab,btn){
-  ['jual','beli','batch'].forEach(t=>{const el=document.getElementById('dt-'+t+'-'+id);if(el)el.style.display=t===tab?'block':'none';});
+  ['jual','beli','batch','kartu'].forEach(t=>{const el=document.getElementById('dt-'+t+'-'+id);if(el)el.style.display=t===tab?'block':'none';});
   btn.closest('.detail-tabs').querySelectorAll('.detail-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
