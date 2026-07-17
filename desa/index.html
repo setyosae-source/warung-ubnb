@@ -1,10 +1,28 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Shodaqoh Jariyah – Masjid Baiturrohim</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- Dukungan nama bebas + PW/gender + rekap dashboard -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js">
+async function refreshData(){
+  $('opTbody').innerHTML=`<tr><td colspan="8"><div class="loading"><div class="spin"></div> Memuat...</div></td></tr>`;
+  const jPool=curOp.scope==='Desa'?allJamaah:allJamaah.filter(j=>j.pw===curOp.scope);
+  const luarPool=(curOp.scope==='Desa'?allLuar:allLuar.filter(j=>j.pw===curOp.scope)).filter(j=>j.pw&&j.gender);
+  const jIds=jPool.map(j=>j.id),luarIds=luarPool.map(j=>j.id);
+  const [kJ,pJ,kL,pL]=await Promise.all([
+    jIds.length?sb.from('aj_kesanggupan').select('*').filter('jamaah_id','in',`(${jIds.join(',')})`):Promise.resolve({data:[]}),
+    jIds.length?sb.from('aj_pembayaran').select('*').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true}):Promise.resolve({data:[]}),
+    luarIds.length?sb.from('aj_kesanggupan').select('*').filter('luar_id','in',`(${luarIds.join(',')})`):Promise.resolve({data:[]}),
+    luarIds.length?sb.from('aj_pembayaran').select('*').filter('luar_id','in',`(${luarIds.join(',')})`).order('tanggal',{ascending:true}):Promise.resolve({data:[]})]);
+  const ksJ={},ksL={},payJ={},payL={};[...(kJ.data||[]),...(kL.data||[])].forEach(k=>{if(k.jamaah_id)ksJ[k.jamaah_id]=k;else if(k.luar_id)ksL[k.luar_id]=k;});[...(pJ.data||[]),...(pL.data||[])].forEach(p=>{const map=p.jamaah_id?payJ:payL,id=p.jamaah_id||p.luar_id;if(!id)return;if(!map[id])map[id]=[];map[id].push(p);});
+  const build=(j,ks,pays,isLuar=false)=>{const totalPay=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0),lembar=ks?.jumlah_lembar||0,isNB=ks&&ks.nominal_bebas&&Number(ks.nominal_bebas)>0,nilai=ks?(isNB?Number(ks.nominal_bebas):lembar*HARGA):0,hasSanggup=!!(ks&&(lembar>0||isNB));return{id:isLuar?'luar_'+j.id:j.id,dbId:j.id,isLuar,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut||99999,lembar,nilai,isNB,nominalBebas:Number(ks?.nominal_bebas||0),hasSanggup,status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays:pays||[],pending:ks?.konfirmasi==='pending',penerimaJid:ks?.penerima_jid||null,metode:ks?.metode_bayar||null,buktiUrl:ks?.bukti_tf_url||null};};
+  tableData=[...jPool.map(j=>build(j,ksJ[j.id],payJ[j.id]||[],false)),...luarPool.map(j=>build(j,ksL[j.id],payL[j.id]||[],true))];applyFilter();
+}
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -227,6 +245,9 @@ tr.grp-row td .car{margin-right:6px;font-size:11px}
 .spin{display:inline-block;width:18px;height:18px;border:3px solid var(--border);border-top-color:var(--pri);border-radius:50%;animation:sp .6s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .loading{display:flex;align-items:center;justify-content:center;padding:32px;gap:10px;color:var(--muted)}
+
+.free-name-toggle{width:100%;background:#fff8e1;color:#7d6000;border:1.5px dashed var(--warn);border-radius:var(--r);padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer;margin:7px 0 9px}
+.free-name-box{background:#fff8e1;border:1.5px solid var(--warn);border-radius:var(--r);padding:10px 12px;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -522,6 +543,15 @@ tr.grp-row td .car{margin-right:6px;font-size:11px}
       </div>
     </div>
     <div id="kesSearchRes" class="search-res hide"></div>
+    <button type="button" class="free-name-toggle" onclick="toggleNamaBebasForm('kes')">＋ Nama tidak ada di daftar? Input nama bebas</button>
+    <div id="kesNamaBebasForm" class="free-name-box hide">
+      <div class="fg"><label>Nama Lengkap</label><input id="kesNamaBebasInp" placeholder="Contoh: Bapak Ardi"></div>
+      <div class="row2">
+        <div class="fg"><label>PW Asal</label><select id="kesNamaBebasPW"><option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option></select></div>
+        <div class="fg"><label>Gender</label><select id="kesNamaBebasGender"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
+      </div>
+      <button type="button" class="btn btn-pri btn-full btn-sm" onclick="gunakanNamaBebas('kes')">Gunakan Nama Ini</button>
+    </div>
 
     <!-- Inline form (muncul setelah pilih nama) -->
     <div id="kesInlineForm" class="hide" style="background:var(--bg);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;border:1.5px solid var(--pri)">
@@ -622,6 +652,15 @@ tr.grp-row td .car{margin-right:6px;font-size:11px}
       </div>
     </div>
     <div id="paySearchRes" class="search-res hide"></div>
+    <button type="button" class="free-name-toggle" onclick="toggleNamaBebasForm('pay')">＋ Nama tidak ada di daftar? Input nama bebas</button>
+    <div id="payNamaBebasForm" class="free-name-box hide">
+      <div class="fg"><label>Nama Lengkap</label><input id="payNamaBebasInp" placeholder="Contoh: Ibu Diah Fauziah"></div>
+      <div class="row2">
+        <div class="fg"><label>PW Asal</label><select id="payNamaBebasPW"><option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option></select></div>
+        <div class="fg"><label>Gender</label><select id="payNamaBebasGender"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
+      </div>
+      <button type="button" class="btn btn-warn btn-full btn-sm" onclick="gunakanNamaBebas('pay')">Gunakan Nama Ini</button>
+    </div>
     <!-- Inline form -->
     <div id="payInlineForm" class="hide" style="background:var(--bg);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;border:1.5px solid var(--warn)">
       <div id="payTargetCard" style="font-size:12px;font-weight:600;color:var(--warn);margin-bottom:8px"></div>
@@ -918,7 +957,7 @@ async function logIP(aksi){
   }
 }
 
-let allJamaah=[],allOps=[];
+let allJamaah=[],allOps=[],allLuar=[];
 let curUser=null,curOp=null;
 let tableData=[],filteredData=[];
 let sortCol='nama',sortAsc=true;
@@ -991,11 +1030,12 @@ function lembarDisplay(row){
 // ── INIT ─────────────────────────────────────────────────────────────────────
 async function init(){
   fetchMyIP(); // mulai fetch IP di background
-  const [{data:jm},{data:ops}]=await Promise.all([
+  const [{data:jm},{data:ops},{data:luar}]=await Promise.all([
     sb.from('aj_jamaah').select('*').order('pw').order('gender').order('no_urut'),
-    sb.from('aj_operator').select('*').eq('aktif',true)
+    sb.from('aj_operator').select('*').eq('aktif',true),
+    sb.from('aj_luar').select('*').order('nama')
   ]);
-  allJamaah=jm||[]; allOps=ops||[];
+  allJamaah=jm||[]; allOps=ops||[]; allLuar=luar||[];
 
   const qid=new URLSearchParams(location.search).get('jid');
   if(qid){const j=allJamaah.find(x=>x.id==qid);if(j){curUser=j;saveSession();showJamaahView();return;}}
@@ -1679,6 +1719,55 @@ function handleQR(data){
   }
 }
 
+
+function toggleNamaBebasForm(type){
+  const box=$(type+'NamaBebasForm');
+  box.classList.toggle('hide');
+  if(!box.classList.contains('hide')){
+    const typed=$(type+'Search').value.trim();
+    if(typed)$(type+'NamaBebasInp').value=typed;
+    $(type+'NamaBebasPW').value=(curOp.scope==='Desa'?'PW1':curOp.scope);
+  }
+}
+async function pastikanNamaLuar(target){
+  if(target.luar_id)return target.luar_id;
+  const {data:ada,error:e1}=await sb.from('aj_luar').select('*').ilike('nama',target.nama).limit(1);
+  if(e1)throw e1;
+  if(ada&&ada.length){target.luar_id=ada[0].id;return target.luar_id;}
+  const {data:baru,error:e2}=await sb.from('aj_luar').insert({nama:target.nama,pw:target.pw,gender:target.gender}).select().single();
+  if(e2)throw e2;
+  allLuar.push(baru);target.luar_id=baru.id;return target.luar_id;
+}
+async function gunakanNamaBebas(type){
+  const nama=$(type+'NamaBebasInp').value.trim(),pw=$(type+'NamaBebasPW').value,gender=$(type+'NamaBebasGender').value;
+  if(nama.length<2){toast('Isi nama lengkap');return;}
+  if(curOp.scope!=='Desa'&&pw!==curOp.scope){toast('Operator hanya boleh input '+curOp.scope);return;}
+  const target={id:null,luar_id:null,isLuar:true,nama,pw,gender};
+  try{await pastikanNamaLuar(target);}catch(e){toast('Gagal menyiapkan nama bebas: '+e.message,4000);return;}
+  hide(type+'NamaBebasForm');
+  if(type==='kes')await kesPickTarget(target);else await payPickTarget(target);
+}
+function targetKey(t){return t?.isLuar?'L'+t.luar_id:'J'+t?.id;}
+async function kesPickTarget(j){
+  hide('kesSearchRes');$('kesSearch').value=j.nama;kesTarget=j;
+  let q=sb.from('aj_kesanggupan').select('*');q=j.isLuar?q.eq('luar_id',j.luar_id):q.eq('jamaah_id',j.id);
+  const {data:ks}=await q.maybeSingle();
+  let qp=sb.from('aj_pembayaran').select('jumlah');qp=j.isLuar?qp.eq('luar_id',j.luar_id):qp.eq('jamaah_id',j.id);
+  const {data:pays}=await qp;const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
+  const ksNB=ks?.nominal_bebas&&Number(ks.nominal_bebas)>0,ksNilai=ks?(ksNB?Number(ks.nominal_bebas):(ks.jumlah_lembar||0)*HARGA):0;
+  $('kesTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}${j.isLuar?' · Nama Bebas':''}<br><span style="color:var(--muted)">Saat ini: </span>${ks?`<span class="badge badge-${ks.status}">${ks.status}</span> ${ksNB?`Nominal Bebas ${rp(ks.nominal_bebas)}`:(ks.jumlah_lembar||0)+' lembar = '+rp(ksNilai)}`:'<span class="badge badge-belum">Belum ada</span>'}${tot?`<br><span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b>`:''}`;
+  if(ks){$('kesLembar').value=ks.jumlah_lembar||'';$('kesStatus').value=ks.status;calcNilai('kesLembar','kesHint');}else{$('kesLembar').value='';$('kesStatus').value='lunas';}
+  $('kesPenerima').innerHTML='<option value="">-- pilih operator --</option>'+opsiOperator(j.pw,curUser.id);$('kesMetode').value=ks?.metode_bayar||'';toggleLunasOpsi('kes');toggleMetode('kes');show('kesInlineForm');
+}
+async function payPickTarget(j){
+  hide('paySearchRes');$('paySearch').value=j.nama;payTarget=j;
+  let q=sb.from('aj_kesanggupan').select('*');q=j.isLuar?q.eq('luar_id',j.luar_id):q.eq('jamaah_id',j.id);const {data:ks}=await q.maybeSingle();
+  let qp=sb.from('aj_pembayaran').select('jumlah');qp=j.isLuar?qp.eq('luar_id',j.luar_id):qp.eq('jamaah_id',j.id);const {data:pays}=await qp;
+  const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0),nilai=ks?((ks.nominal_bebas&&Number(ks.nominal_bebas)>0)?Number(ks.nominal_bebas):(ks.jumlah_lembar||0)*HARGA):0,sisa=Math.max(0,nilai-tot);
+  $('payTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}${j.isLuar?' · Nama Bebas':''}<br><span style="color:var(--muted)">Nilai: </span><b>${rp(nilai)}</b> &nbsp;<span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b> &nbsp;<span style="font-weight:700;color:${sisa<=0?'var(--ok)':'var(--red)'}">${nilai>0?(sisa<=0?'✅ LUNAS':'Sisa: '+rp(sisa)):'Belum ada kesanggupan'}</span>`;
+  $('payJml').value=sisa>0?sisa:'';calcNilaiRaw('payJml','payHint');$('payTgl').value=today();$('payMetode').value='cash';payToggleMetode();show('payInlineForm');
+}
+
 // ── BATCH KES ─────────────────────────────────────────────────────────────────
 function kesTambahkeBatch(){
   if(!kesTarget){toast('Pilih jamaah dulu'); return;}
@@ -1692,11 +1781,8 @@ function kesTambahkeBatch(){
     metode=o.metode;penerimaJid=o.penerimaJid;buktiFile=o.file;
   }
   // Cek duplikat
-  if(kesBatch.find(b=>b.jid===kesTarget.id)){
-    kesBatch=kesBatch.filter(b=>b.jid!==kesTarget.id);
-  }
-  kesBatch.push({
-    jid:kesTarget.id, nama:kesTarget.nama, pw:kesTarget.pw,
+  const key=targetKey(kesTarget);if(kesBatch.find(b=>b.key===key))kesBatch=kesBatch.filter(b=>b.key!==key);
+  kesBatch.push({key,jid:kesTarget.isLuar?null:kesTarget.id,luar_id:kesTarget.isLuar?kesTarget.luar_id:null,isLuar:!!kesTarget.isLuar,nama:kesTarget.nama,pw:kesTarget.pw,gender:kesTarget.gender,
     lembar:isNominalBebas?0:lembar,
     nilai:isNominalBebas?nilai:lembar*HARGA,
     isNB:isNominalBebas, nominalBebas:isNominalBebas?nilai:0, status,
@@ -1722,7 +1808,7 @@ function renderKesBatch(){
     <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 8px;
       background:${i%2===0?'#fff':'#f9f9f9'};border-radius:6px;margin-bottom:3px;font-size:12px">
       <div>
-        <b>${b.nama}</b> <span style="color:var(--muted);font-size:10px">${b.pw}</span><br>
+        <b>${b.nama}</b> <span style="color:var(--muted);font-size:10px">${b.pw}${b.isLuar?" · Nama Bebas":""}</span><br>
         <span style="font-size:10px;color:var(--muted)">${b.isNB?'NB: '+rp(b.nominalBebas):b.lembar+' lembar'} · ${b.status}${b.metode?' · '+(b.metode==='tf'?'TF 📎':'Cash → '+((allJamaah.find(x=>x.id===b.penerimaJid)||{}).nama||'?')):''}</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
@@ -1745,26 +1831,23 @@ async function saveKesBatch(){
       extra.metode_bayar=b.metode;extra.penerima_jid=b.penerimaJid;
       extra.konfirmasi=(b.penerimaJid===curUser.id)?'confirmed':'pending';
       if(b.buktiFile){
-        try{extra.bukti_tf_url=await uploadBukti(b.buktiFile,b.jid);}
+        try{extra.bukti_tf_url=await uploadBukti(b.buktiFile,b.jid||('luar_'+b.luar_id));}
         catch(e){fail++;console.error(b.nama,'upload bukti:',e.message);continue;}
       }
     }
     const payload={jumlah_lembar:b.lembar,
       nominal_bebas:b.isNB?b.nominalBebas:null,
       status:b.status,operator:curUser.nama,operator_jamaah_id:curUser.id,...extra};
-    const {data:ex}=await sb.from('aj_kesanggupan').select('id').eq('jamaah_id',b.jid).maybeSingle();
-    let err;
-    if(ex){({error:err}=await sb.from('aj_kesanggupan').update(payload).eq('id',ex.id));}
-    else{({error:err}=await sb.from('aj_kesanggupan').insert({...payload,jamaah_id:b.jid}));}
+    let exQ=sb.from('aj_kesanggupan').select('id');exQ=b.isLuar?exQ.eq('luar_id',b.luar_id):exQ.eq('jamaah_id',b.jid);const {data:ex}=await exQ.maybeSingle();
+    let err;if(ex){({error:err}=await sb.from('aj_kesanggupan').update(payload).eq('id',ex.id));}else{const ident=b.isLuar?{jamaah_id:null,luar_id:b.luar_id,nama_luar:b.nama}:{jamaah_id:b.jid,luar_id:null,nama_luar:null};({error:err}=await sb.from('aj_kesanggupan').insert({...payload,...ident}));}
     if(err){fail++;console.error(b.nama,err.message);continue;}
     // Penerima = operator yang input → langsung tercatat sebagai pembayaran (konfirmasi otomatis)
     if(extra.konfirmasi==='confirmed'){
-      const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',b.jid);
+      let paysQ=sb.from('aj_pembayaran').select('jumlah');paysQ=b.isLuar?paysQ.eq('luar_id',b.luar_id):paysQ.eq('jamaah_id',b.jid);const {data:pays}=await paysQ;
       const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
       const sisa=b.nilai-tot;
       if(sisa>0){
-        const {error:e2}=await sb.from('aj_pembayaran').insert({jamaah_id:b.jid,tanggal:today(),jumlah:sisa,
-          penerima:curUser.nama,penerima_jamaah_id:curUser.id,operator:curUser.nama,operator_jamaah_id:curUser.id});
+        const ident=b.isLuar?{jamaah_id:null,luar_id:b.luar_id}:{jamaah_id:b.jid,luar_id:null};const {error:e2}=await sb.from('aj_pembayaran').insert({...ident,tanggal:today(),jumlah:sisa,penerima:curUser.nama,penerima_jamaah_id:curUser.id,operator:curUser.nama,operator_jamaah_id:curUser.id,metode_bayar:b.metode||'cash'});
         if(e2)console.error(b.nama,'pembayaran:',e2.message);
       }
     }
@@ -1798,10 +1881,8 @@ function payTambahkeBatch(){
     buktiFile=$('payBukti').files[0];
     if(!buktiFile){toast('Lampirkan bukti TF terlebih dahulu');return;}
   }
-  if(payBatch.find(b=>b.jid===payTarget.id)){
-    payBatch=payBatch.filter(b=>b.jid!==payTarget.id);
-  }
-  payBatch.push({jid:payTarget.id,nama:payTarget.nama,pw:payTarget.pw,jml,metode,buktiFile});
+  const key=targetKey(payTarget);if(payBatch.find(b=>b.key===key))payBatch=payBatch.filter(b=>b.key!==key);
+  payBatch.push({key,jid:payTarget.isLuar?null:payTarget.id,luar_id:payTarget.isLuar?payTarget.luar_id:null,isLuar:!!payTarget.isLuar,nama:payTarget.nama,pw:payTarget.pw,gender:payTarget.gender,jml,metode,buktiFile});
   renderPayBatch();
   // Reset untuk input berikutnya
   $('paySearch').value=''; hide('paySearchRes'); hide('payInlineForm');
@@ -1818,7 +1899,7 @@ function renderPayBatch(){
     <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 8px;
       background:${i%2===0?'#fff':'#f9f9f9'};border-radius:6px;margin-bottom:3px;font-size:12px">
       <div>
-        <b>${b.nama}</b> <span style="color:var(--muted);font-size:10px">${b.pw}</span><br>
+        <b>${b.nama}</b> <span style="color:var(--muted);font-size:10px">${b.pw}${b.isLuar?" · Nama Bebas":""}</span><br>
         <span style="font-size:10px;color:${b.metode==='tf'?'var(--blue)':'var(--muted)'}">${b.metode==='tf'?'TF 📎 → Triyono':'Cash'}</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
@@ -1847,11 +1928,11 @@ async function savePayBatch(){
     const isTF=b.metode==='tf';
     let buktiUrl=null;
     if(isTF&&b.buktiFile){
-      try{buktiUrl=await uploadBukti(b.buktiFile,b.jid);}
+      try{buktiUrl=await uploadBukti(b.buktiFile,b.jid||('luar_'+b.luar_id));}
       catch(e){fail++;console.error(b.nama,'upload bukti:',e.message);continue;}
     }
-    const {error:err}=await sb.from('aj_pembayaran').insert({
-      jamaah_id:b.jid,tanggal:tgl,jumlah:b.jml,
+    const ident=b.isLuar?{jamaah_id:null,luar_id:b.luar_id}:{jamaah_id:b.jid,luar_id:null};const {error:err}=await sb.from('aj_pembayaran').insert({
+      ...ident,tanggal:tgl,jumlah:b.jml,
       penerima:isTF?(triyono?.nama||'Triyono'):penerima,
       penerima_jamaah_id:isTF?TRIYONO_ID:penJid,
       operator:curUser.nama,operator_jamaah_id:curUser.id,
@@ -1861,7 +1942,7 @@ async function savePayBatch(){
     // Auto update status
     const {data:ks}=await sb.from('aj_kesanggupan').select('id,jumlah_lembar,nominal_bebas').eq('jamaah_id',b.jid).maybeSingle();
     if(ks){
-      const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',b.jid);
+      let paysQ=sb.from('aj_pembayaran').select('jumlah');paysQ=b.isLuar?paysQ.eq('luar_id',b.luar_id):paysQ.eq('jamaah_id',b.jid);const {data:pays}=await paysQ;
       const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
       const isNB=ks.nominal_bebas&&Number(ks.nominal_bebas)>0;
       const nilaiKes=isNB?Number(ks.nominal_bebas):(ks.jumlah_lembar||0)*HARGA;
@@ -1883,54 +1964,12 @@ function doModalSearch(type){
   if(q.length<2){hide(res);return;}
   const pool=curOp.scope==='Desa'?allJamaah:allJamaah.filter(j=>j.pw===curOp.scope);
   const found=pool.filter(j=>j.nama.toLowerCase().includes(q)).slice(0,10);
-  $(res).innerHTML=found.map(j=>`<div class="s-item" onclick="${type==='kes'?'kesPickJamaah':'payPickJamaah'}(${j.id})"><div class="si-name">${j.nama}</div><div class="si-sub">${j.pw} · ${j.gender==='L'?'Laki-laki':'Perempuan'}</div></div>`).join('');
-  show(res);
+  const rows=found.map(j=>`<div class="s-item" onclick="${type==='kes'?'kesPickJamaah':'payPickJamaah'}(${j.id})"><div class="si-name">${j.nama}</div><div class="si-sub">${j.pw} · ${j.gender==='L'?'Laki-laki':'Perempuan'}</div></div>`).join('');
+  const bebas=`<div class="s-item" style="background:#fff8e1;color:#7d6000" onclick="toggleNamaBebasForm('${type}');hide('${res}')"><div class="si-name">＋ Gunakan nama bebas: “${$(inp).value.trim()}”</div><div class="si-sub">Pilih PW dan gender manual</div></div>`;
+  $(res).innerHTML=rows+bebas;show(res);
 }
-async function kesPickJamaah(id){
-  const j=allJamaah.find(x=>x.id===id);hide('kesSearchRes');$('kesSearch').value=j.nama;kesTarget=j;
-  const {data:ks}=await sb.from('aj_kesanggupan').select('*').eq('jamaah_id',id).maybeSingle();
-  const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',id);
-  const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
-  const ksNB=ks?.nominal_bebas&&ks.nominal_bebas>0;
-  const ksNilai=ks?(ksNB?Number(ks.nominal_bebas):ks.jumlah_lembar*HARGA):0;
-  $('kesTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}<br>
-    <span style="color:var(--muted)">Saat ini: </span>
-    ${ks?`<span class="badge badge-${ks.status}">${ks.status}</span> ${ksNB?`Nominal Bebas ${rp(ks.nominal_bebas)}`:ks.jumlah_lembar+' lembar = '+rp(ksNilai)}`:'<span class="badge badge-belum">Belum ada</span>'}
-    ${tot?`<br><span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b>`:''}`;
-  if(ks){
-    if(ksNB){
-      // Aktifkan mode nominal bebas
-      $('kesNominalBebas').classList.remove('hide');
-      $('kesNominalVal').value=ks.nominal_bebas;
-      calcNilaiRaw('kesNominalVal','kesNominalHint');
-      $('kesToggleNB').textContent='Pakai Jumlah Lembar';
-      $('kesToggleNB').style.background='var(--muted)';
-      $('kesLembar').value='';
-    } else {
-      $('kesLembar').value=ks.jumlah_lembar;
-      calcNilai('kesLembar','kesHint');
-    }
-    $('kesStatus').value=ks.status;
-  } else {
-    $('kesLembar').value='';$('kesStatus').value='lunas';
-  }
-  $('kesPenerima').innerHTML='<option value="">-- pilih operator --</option>'+opsiOperator(j.pw,curUser.id);
-  $('kesMetode').value=ks&&ks.metode_bayar?ks.metode_bayar:'';
-  if($('kesBukti'))$('kesBukti').value='';
-  toggleLunasOpsi('kes');toggleMetode('kes');
-  show('kesInlineForm');
-}
-async function payPickJamaah(id){
-  const j=allJamaah.find(x=>x.id===id);hide('paySearchRes');$('paySearch').value=j.nama;payTarget=j;
-  const {data:ks}=await sb.from('aj_kesanggupan').select('*').eq('jamaah_id',id).maybeSingle();
-  const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',id);
-  const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
-  const nilai=ks?ks.jumlah_lembar*HARGA:0,sisa=Math.max(0,nilai-tot);
-  $('payTargetCard').innerHTML=`<b>${j.nama}</b> · ${j.pw}<br><span style="color:var(--muted)">Nilai: </span><b>${rp(nilai)}</b> &nbsp;<span style="color:var(--muted)">Terbayar: </span><b style="color:var(--ok)">${rp(tot)}</b> &nbsp;<span style="font-weight:700;color:${sisa<=0?'var(--ok)':'var(--red)'}">${sisa<=0?'✅ LUNAS':'Sisa: '+rp(sisa)}</span>`;
-  $('payJml').value=sisa>0?sisa:'';calcNilaiRaw('payJml','payHint');$('payTgl').value=today();
-  $('payMetode').value='cash';$('payBukti').value='';payToggleMetode();
-  show('payInlineForm');
-}
+async function kesPickJamaah(id){const j=allJamaah.find(x=>x.id===id);if(!j){toast('Jamaah tidak ditemukan');return;}return kesPickTarget({...j,isLuar:false});}
+async function payPickJamaah(id){const j=allJamaah.find(x=>x.id===id);if(!j){toast('Jamaah tidak ditemukan');return;}return payPickTarget({...j,isLuar:false});}
 function prefillKes(id){openModal('modalKes');setTimeout(()=>kesPickJamaah(id),150);}
 function prefillPay(id){openModal('modalPay');setTimeout(()=>payPickJamaah(id),80);}
 
