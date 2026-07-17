@@ -5,24 +5,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Shodaqoh Jariyah – Masjid Baiturrohim</title>
-<!-- Dukungan nama bebas + PW/gender + rekap dashboard -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js">
-async function refreshData(){
-  $('opTbody').innerHTML=`<tr><td colspan="8"><div class="loading"><div class="spin"></div> Memuat...</div></td></tr>`;
-  const jPool=curOp.scope==='Desa'?allJamaah:allJamaah.filter(j=>j.pw===curOp.scope);
-  const luarPool=(curOp.scope==='Desa'?allLuar:allLuar.filter(j=>j.pw===curOp.scope)).filter(j=>j.pw&&j.gender);
-  const jIds=jPool.map(j=>j.id),luarIds=luarPool.map(j=>j.id);
-  const [kJ,pJ,kL,pL]=await Promise.all([
-    jIds.length?sb.from('aj_kesanggupan').select('*').filter('jamaah_id','in',`(${jIds.join(',')})`):Promise.resolve({data:[]}),
-    jIds.length?sb.from('aj_pembayaran').select('*').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true}):Promise.resolve({data:[]}),
-    luarIds.length?sb.from('aj_kesanggupan').select('*').filter('luar_id','in',`(${luarIds.join(',')})`):Promise.resolve({data:[]}),
-    luarIds.length?sb.from('aj_pembayaran').select('*').filter('luar_id','in',`(${luarIds.join(',')})`).order('tanggal',{ascending:true}):Promise.resolve({data:[]})]);
-  const ksJ={},ksL={},payJ={},payL={};[...(kJ.data||[]),...(kL.data||[])].forEach(k=>{if(k.jamaah_id)ksJ[k.jamaah_id]=k;else if(k.luar_id)ksL[k.luar_id]=k;});[...(pJ.data||[]),...(pL.data||[])].forEach(p=>{const map=p.jamaah_id?payJ:payL,id=p.jamaah_id||p.luar_id;if(!id)return;if(!map[id])map[id]=[];map[id].push(p);});
-  const build=(j,ks,pays,isLuar=false)=>{const totalPay=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0),lembar=ks?.jumlah_lembar||0,isNB=ks&&ks.nominal_bebas&&Number(ks.nominal_bebas)>0,nilai=ks?(isNB?Number(ks.nominal_bebas):lembar*HARGA):0,hasSanggup=!!(ks&&(lembar>0||isNB));return{id:isLuar?'luar_'+j.id:j.id,dbId:j.id,isLuar,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut||99999,lembar,nilai,isNB,nominalBebas:Number(ks?.nominal_bebas||0),hasSanggup,status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays:pays||[],pending:ks?.konfirmasi==='pending',penerimaJid:ks?.penerima_jid||null,metode:ks?.metode_bayar||null,buktiUrl:ks?.bukti_tf_url||null};};
-  tableData=[...jPool.map(j=>build(j,ksJ[j.id],payJ[j.id]||[],false)),...luarPool.map(j=>build(j,ksL[j.id],payL[j.id]||[],true))];applyFilter();
-}
-
-</script>
+<!-- FIXED: dukungan nama bebas + PW/gender + rekap dashboard -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -1364,36 +1348,16 @@ function populateOpDropdowns(){
 async function refreshData(){
   $('opTbody').innerHTML=`<tr><td colspan="8"><div class="loading"><div class="spin"></div> Memuat...</div></td></tr>`;
   const jPool=curOp.scope==='Desa'?allJamaah:allJamaah.filter(j=>j.pw===curOp.scope);
-  const jIds=jPool.map(j=>j.id);
-  if(!jIds.length){$('opTbody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Tidak ada jamaah</td></tr>`;return;}
-
-  const [{data:ksAll,error:ke},{data:payAll}]=await Promise.all([
-    sb.from('aj_kesanggupan').select('id,jamaah_id,jumlah_lembar,nominal_bebas,status,konfirmasi,penerima_jid,metode_bayar,bukti_tf_url').filter('jamaah_id','in',`(${jIds.join(',')})`),
-    sb.from('aj_pembayaran').select('id,jamaah_id,tanggal,jumlah,penerima,operator,metode_bayar,bukti_tf_url').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true})
-  ]);
-  if(ke){toast('Error: '+ke.message);return;}
-
-  const ksMap={},payMap={};
-  (ksAll||[]).forEach(k=>{if(k.jamaah_id)ksMap[k.jamaah_id]=k;});
-  (payAll||[]).forEach(p=>{if(p.jamaah_id){if(!payMap[p.jamaah_id])payMap[p.jamaah_id]=[];payMap[p.jamaah_id].push(p);}});
-
-  tableData=jPool.map(j=>{
-    const ks=ksMap[j.id],pays=payMap[j.id]||[];
-    const totalPay=pays.reduce((s,p)=>s+Number(p.jumlah),0);
-    const lembar=ks?.jumlah_lembar||0;
-    const isNB=ks&&ks.nominal_bebas&&Number(ks.nominal_bebas)>0;
-    // Nilai efektif: nominal_bebas jika NB, atau lembar*50000
-    const nilai=ks?(isNB?Number(ks.nominal_bebas):lembar*HARGA):0;
-    // hasSanggup: true jika ada kesanggupan (baik lembar maupun NB)
-    const hasSanggup=ks&&(lembar>0||isNB);
-    return{id:j.id,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut,
-           lembar,nilai,isNB,nominalBebas:Number(ks?.nominal_bebas||0),
-           hasSanggup,
-           status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays,
-           pending:ks?.konfirmasi==='pending',penerimaJid:ks?.penerima_jid||null,
-           metode:ks?.metode_bayar||null,buktiUrl:ks?.bukti_tf_url||null};
-  });
-  applyFilter();
+  const luarPool=(curOp.scope==='Desa'?allLuar:allLuar.filter(j=>j.pw===curOp.scope)).filter(j=>j.pw&&j.gender);
+  const jIds=jPool.map(j=>j.id),luarIds=luarPool.map(j=>j.id);
+  const [kJ,pJ,kL,pL]=await Promise.all([
+    jIds.length?sb.from('aj_kesanggupan').select('*').filter('jamaah_id','in',`(${jIds.join(',')})`):Promise.resolve({data:[]}),
+    jIds.length?sb.from('aj_pembayaran').select('*').filter('jamaah_id','in',`(${jIds.join(',')})`).order('tanggal',{ascending:true}):Promise.resolve({data:[]}),
+    luarIds.length?sb.from('aj_kesanggupan').select('*').filter('luar_id','in',`(${luarIds.join(',')})`):Promise.resolve({data:[]}),
+    luarIds.length?sb.from('aj_pembayaran').select('*').filter('luar_id','in',`(${luarIds.join(',')})`).order('tanggal',{ascending:true}):Promise.resolve({data:[]})]);
+  const ksJ={},ksL={},payJ={},payL={};[...(kJ.data||[]),...(kL.data||[])].forEach(k=>{if(k.jamaah_id)ksJ[k.jamaah_id]=k;else if(k.luar_id)ksL[k.luar_id]=k;});[...(pJ.data||[]),...(pL.data||[])].forEach(p=>{const map=p.jamaah_id?payJ:payL,id=p.jamaah_id||p.luar_id;if(!id)return;if(!map[id])map[id]=[];map[id].push(p);});
+  const build=(j,ks,pays,isLuar=false)=>{const totalPay=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0),lembar=ks?.jumlah_lembar||0,isNB=ks&&ks.nominal_bebas&&Number(ks.nominal_bebas)>0,nilai=ks?(isNB?Number(ks.nominal_bebas):lembar*HARGA):0,hasSanggup=!!(ks&&(lembar>0||isNB));return{id:isLuar?'luar_'+j.id:j.id,dbId:j.id,isLuar,nama:j.nama,pw:j.pw,gender:j.gender,no_urut:j.no_urut||99999,lembar,nilai,isNB,nominalBebas:Number(ks?.nominal_bebas||0),hasSanggup,status:ks?.status||'belum',terbayar:totalPay,sisa:Math.max(0,nilai-totalPay),pays:pays||[],pending:ks?.konfirmasi==='pending',penerimaJid:ks?.penerima_jid||null,metode:ks?.metode_bayar||null,buktiUrl:ks?.bukti_tf_url||null};};
+  tableData=[...jPool.map(j=>build(j,ksJ[j.id],payJ[j.id]||[],false)),...luarPool.map(j=>build(j,ksL[j.id],payL[j.id]||[],true))];applyFilter();
 }
 
 const PW_LIST=['PW1','PW2','PW3','PW4'];
