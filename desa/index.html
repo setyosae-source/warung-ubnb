@@ -111,6 +111,9 @@ table.op-table td:first-child{border-left:1px solid var(--border)}
 
 /* Tabel RAB harus muat satu layar HP tanpa scroll horizontal */
 @media(max-width:600px){
+  #jvRabCard{padding:12px!important}
+  #jvRabCard>div:last-child{font-size:11px!important;gap:7px 8px!important}
+
   #t2-body{
     overflow-x:hidden!important;
     width:100%;
@@ -343,6 +346,32 @@ tr.grp-row td .car{margin-right:6px;font-size:11px}
         <span class="lunas-badge">✅ LUNAS – Jazaakumullaahu Khoiron</span>
       </div>
       <div id="jvPendingBox" class="hide" style="margin-top:10px;background:#fff8e1;border-radius:8px;padding:9px 12px;font-size:12px;color:#7d6000;border-left:3px solid var(--warn);line-height:1.5"></div>
+    </div>
+
+    <div class="jv-card" id="jvRabCard">
+      <div style="font-weight:700;color:var(--pri);margin-bottom:9px">🏗 Ringkasan Dana Pembangunan</div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:7px 10px;font-size:11px;align-items:start;margin-bottom:10px">
+        <div>RAB ruangan ibu-ibu berhalangan</div>
+        <div style="font-weight:700;text-align:right">Rp 30.309.000</div>
+
+        <div>RAB atap lantai 2 + waterproofing</div>
+        <div style="font-weight:700;text-align:right">Rp 135.005.000</div>
+
+        <div>Dinding utara + tangga + railing</div>
+        <div style="font-weight:700;text-align:right">Rp 62.045.000</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px 12px;font-size:12px;align-items:center;border-top:1px solid var(--border);padding-top:9px">
+        <div style="font-weight:700">Total RAB Dibutuhkan</div>
+        <div id="jvTotalRab" style="font-weight:700;text-align:right">-</div>
+
+        <div>Total Kesanggupan Masuk</div>
+        <div id="jvTotalKesGlobal" style="font-weight:700;color:var(--ok);text-align:right">-</div>
+
+        <div style="border-top:1px solid var(--border);padding-top:8px;font-weight:700">Kekurangan Dana</div>
+        <div id="jvKurangRab" style="border-top:1px solid var(--border);padding-top:8px;font-weight:700;color:var(--red);text-align:right">-</div>
+      </div>
     </div>
     <div id="jvKesForm" class="kes-form hide">
       <h4 id="jvKesFormTitle">📝 Input Kesanggupan</h4>
@@ -1130,10 +1159,21 @@ async function showJamaahView(){
   $('jvMeta').textContent=`${curUser.pw} · ${curUser.gender==='L'?'Laki-laki':'Perempuan'}`;
   hide('jvLunasBadge');hide('jvBayarInfo');hide('jvBelumKes');hide('jvKesForm');hide('jvPendingBox');
   $('jvRows').innerHTML='<div class="loading"><div class="spin"></div></div>';
-  const [{data:ks},{data:pays}]=await Promise.all([
+  const [{data:ks},{data:pays},{data:allKes,error:allKesErr}]=await Promise.all([
     sb.from('aj_kesanggupan').select('*').eq('jamaah_id',curUser.id).maybeSingle(),
-    sb.from('aj_pembayaran').select('*').eq('jamaah_id',curUser.id).order('tanggal')
+    sb.from('aj_pembayaran').select('*').eq('jamaah_id',curUser.id).order('tanggal'),
+    sb.from('aj_kesanggupan').select('nilai')
   ]);
+
+  const totalKesGlobal=allKesErr
+    ? 0
+    : (allKes||[]).reduce((s,k)=>s+Number(k.nilai||0),0);
+  const kurangRab=Math.max(0,TOTAL_RAB-totalKesGlobal);
+
+  $('jvTotalRab').textContent=rp(TOTAL_RAB);
+  $('jvTotalKesGlobal').textContent=rp(totalKesGlobal);
+  $('jvKurangRab').textContent=rp(kurangRab);
+
   jvKes=ks||null;jvPays=pays||[];
   if(!ks){
     $('jvRows').innerHTML='';setWALinks();show('jvBelumKes');
