@@ -1931,6 +1931,69 @@ function renderPayBatch(){
     </div>`).join('');
 }
 
+async function syncKesanggupanDariPembayaran(target,jumlah,metode,penerimaJid){
+  // target: {jid, luar_id, nama, isLuar}
+  let q=sb.from('aj_kesanggupan')
+    .select('id,jumlah_lembar,nominal_bebas,nilai')
+    .order('id',{ascending:true});
+  q=target.isLuar?q.eq('luar_id',target.luar_id):q.eq('jamaah_id',target.jid);
+
+  const {data:rows,error:readErr}=await q;
+  if(readErr)throw readErr;
+
+  const existing=(rows||[])[0]||null;
+  const nilaiExisting=existing
+    ? Number(existing.nilai || existing.nominal_bebas || ((existing.jumlah_lembar||0)*HARGA) || 0)
+    : 0;
+
+  // Jika belum ada kesanggupan atau nilainya masih 0, buat/isi sebesar pembayaran.
+  if(!existing || nilaiExisting<=0){
+    const kelipatan=jumlah%HARGA===0;
+    const payload={
+      jumlah_lembar:kelipatan?jumlah/HARGA:0,
+      nominal_bebas:kelipatan?0:jumlah,
+      status:'lunas',
+      operator:curUser.nama,
+      operator_jamaah_id:curUser.id,
+      metode_bayar:metode||'cash',
+      penerima_jid:penerimaJid||null,
+      konfirmasi:'confirmed'
+    };
+
+    if(existing){
+      const {error}=await sb.from('aj_kesanggupan').update(payload).eq('id',existing.id);
+      if(error)throw error;
+      return {aksi:'diperbaiki',id:existing.id};
+    }
+
+    const ident=target.isLuar
+      ? {jamaah_id:null,luar_id:target.luar_id,nama_luar:target.nama}
+      : {jamaah_id:target.jid,luar_id:null,nama_luar:null};
+
+    const {data:baru,error}=await sb.from('aj_kesanggupan')
+      .insert({...ident,...payload})
+      .select('id')
+      .single();
+    if(error)throw error;
+    return {aksi:'dibuat',id:baru.id};
+  }
+
+  // Jika kesanggupan sudah ada, hanya sinkronkan status berdasarkan total pembayaran.
+  let paysQ=sb.from('aj_pembayaran').select('jumlah');
+  paysQ=target.isLuar?paysQ.eq('luar_id',target.luar_id):paysQ.eq('jamaah_id',target.jid);
+  const {data:pays,error:payErr}=await paysQ;
+  if(payErr)throw payErr;
+
+  const total=(pays||[]).reduce((s,p)=>s+Number(p.jumlah||0),0);
+  const status=total>=nilaiExisting?'lunas':'angsur';
+  const {error:updateErr}=await sb.from('aj_kesanggupan')
+    .update({status,operator:curUser.nama,operator_jamaah_id:curUser.id})
+    .eq('id',existing.id);
+  if(updateErr)throw updateErr;
+
+  return {aksi:'status',id:existing.id};
+}
+
 let _savingPay=false;
 async function savePayBatch(){
   if(!payBatch.length){toast('Daftar kosong'); return;}
@@ -1940,8 +2003,8 @@ async function savePayBatch(){
   const penerima=$('payPenerima').value;
   const tgl=$('payTgl').value;
   const adaCash=payBatch.some(b=>b.metode!=='tf');
-  if(adaCash&&!penerima){toast('Pilih penerima'); return;}
-  if(!tgl){toast('Isi tanggal'); return;}
+  if(adaCash&&!penerima){_restorePay();toast('Pilih penerima'); return;}
+  if(!tgl){_restorePay();toast('Isi tanggal'); return;}
   const penOpt=$('payPenerima').options[$('payPenerima').selectedIndex];
   const penJid=penOpt?parseInt(penOpt.dataset.jid)||null:null;
   const triyono=allJamaah.find(x=>x.id===TRIYONO_ID);
@@ -1961,14 +2024,19 @@ async function savePayBatch(){
       metode_bayar:b.metode,bukti_tf_url:buktiUrl
     });
     if(err){fail++;console.error(b.nama,err.message);continue;}
-    // Auto update status
-    const {data:ks}=await sb.from('aj_kesanggupan').select('id,jumlah_lembar,nominal_bebas').eq('jamaah_id',b.jid).maybeSingle();
-    if(ks){
-      let paysQ=sb.from('aj_pembayaran').select('jumlah');paysQ=b.isLuar?paysQ.eq('luar_id',b.luar_id):paysQ.eq('jamaah_id',b.jid);const {data:pays}=await paysQ;
-      const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
-      const isNB=ks.nominal_bebas&&Number(ks.nominal_bebas)>0;
-      const nilaiKes=isNB?Number(ks.nominal_bebas):(ks.jumlah_lembar||0)*HARGA;
-      await sb.from('aj_kesanggupan').update({status:tot>=nilaiKes?'lunas':'angsur',operator:curUser.nama}).eq('id',ks.id);
+    // Jika belum ada kesanggupan, otomatis buat sebesar pembayaran.
+    try{
+      await syncKesanggupanDariPembayaran(
+        b,
+        b.jml,
+        b.metode,
+        isTF?TRIYONO_ID:penJid
+      );
+    }catch(e){
+      fail++;
+      console.error(b.nama,'sinkron kesanggupan:',e.message);
+      // Pembayaran sudah tersimpan; tandai gagal sinkron agar operator tahu.
+      continue;
     }
     ok++;
   }
@@ -2021,12 +2089,19 @@ async function savePay(){
   const penJid=penOpt?parseInt(penOpt.dataset.jid)||null:null;
   const {error:err}=await sb.from('aj_pembayaran').insert({jamaah_id:payTarget.id,tanggal:tgl,jumlah:jml,penerima,penerima_jamaah_id:penJid,operator:curUser.nama,operator_jamaah_id:curUser.id});
   if(err){toast('Gagal: '+err.message);return;}
-  // Auto update status
-  const {data:ks}=await sb.from('aj_kesanggupan').select('id,jumlah_lembar').eq('jamaah_id',payTarget.id).maybeSingle();
-  if(ks){
-    const {data:pays}=await sb.from('aj_pembayaran').select('jumlah').eq('jamaah_id',payTarget.id);
-    const tot=(pays||[]).reduce((s,p)=>s+Number(p.jumlah),0);
-    await sb.from('aj_kesanggupan').update({status:tot>=ks.jumlah_lembar*HARGA?'lunas':'angsur',operator:curUser.nama}).eq('id',ks.id);
+  // Jika belum ada kesanggupan, otomatis buat sebesar pembayaran.
+  try{
+    await syncKesanggupanDariPembayaran(
+      {jid:payTarget.id,luar_id:null,nama:payTarget.nama,isLuar:false},
+      jml,
+      'cash',
+      penJid
+    );
+  }catch(e){
+    console.error(payTarget.nama,'sinkron kesanggupan:',e.message);
+    toast('Pembayaran tersimpan, tetapi kesanggupan gagal dibuat: '+e.message);
+    refreshData();
+    return;
   }
   logIP('input_pembayaran:'+payTarget.nama+':'+rp(jml));
   toast(`✅ Bayar ${rp(jml)} tercatat`);closeModal('modalPay');refreshData();
