@@ -110,6 +110,11 @@ table.op-table td:first-child{border-left:1px solid var(--border)}
 .st-tab td.r{color:var(--red);font-weight:700}
 /* group row in main table */
 tr.grp-row td{background:var(--pri)!important;color:#fff;font-weight:700;font-size:12px;cursor:pointer;padding:8px 10px!important}
+tr.subgrp-row td{font-weight:700;font-size:11px;cursor:pointer;padding:7px 12px!important;border-bottom:1px solid var(--border)!important}
+tr.subgrp-row.sudah td{background:#e8f5e9!important;color:#1a6b3c!important}
+tr.subgrp-row.belum td{background:#fdecea!important;color:#a93226!important}
+tr.subgrp-row .car{display:inline-block;width:16px}
+tr.subgrp-row .count{float:right;background:rgba(255,255,255,.75);border-radius:12px;padding:1px 8px;font-size:10px}
 tr.grp-row td .car{margin-right:6px;font-size:11px}
 .td-r{text-align:right}.td-c{text-align:center}
 .detail-row td{background:#f0f7f3!important;border:1px solid #c8e6c9!important;padding:0!important}
@@ -1362,6 +1367,12 @@ async function refreshData(){
 
 const PW_LIST=['PW1','PW2','PW3','PW4'];
 let groupOpen={PW1:false,PW2:false,PW3:false,PW4:false};
+let subgroupOpen={
+  PW1:{sudah:true,belum:false},
+  PW2:{sudah:true,belum:false},
+  PW3:{sudah:true,belum:false},
+  PW4:{sudah:true,belum:false}
+};
 let panelOpen={t1:false,t2:false};
 function togglePanel(k){
   panelOpen[k]=!panelOpen[k];
@@ -1376,6 +1387,11 @@ function setPanelOpen(k,v){
 }
 function toggleGroup(pw){
   groupOpen[pw]=!groupOpen[pw];renderTable();
+}
+function toggleSubgroup(pw,jenis){
+  if(!subgroupOpen[pw])subgroupOpen[pw]={sudah:true,belum:false};
+  subgroupOpen[pw][jenis]=!subgroupOpen[pw][jenis];
+  renderTable();
 }
 function updateStats(data){
   // scope filter
@@ -1424,8 +1440,14 @@ function applyFilter(){
     return true;
   });
   if(q){
-    // grup yang mengandung hasil → expand
-    PW_LIST.forEach(pw=>{groupOpen[pw]=filteredData.some(r=>r.pw===pw);});
+    // Grup dan sub-grup yang mengandung hasil otomatis dibuka
+    PW_LIST.forEach(pw=>{
+      const d=filteredData.filter(r=>r.pw===pw);
+      groupOpen[pw]=d.length>0;
+      if(!subgroupOpen[pw])subgroupOpen[pw]={sudah:true,belum:false};
+      subgroupOpen[pw].sudah=d.some(r=>r.hasSanggup);
+      subgroupOpen[pw].belum=d.some(r=>!r.hasSanggup);
+    });
   }else if(curOp){
     // restore default
     const isDesa=curOp.scope==='Desa';
@@ -1503,17 +1525,53 @@ function renderTable(){
     if(typeof va==='string'){va=va.toLowerCase();vb=vb.toLowerCase();}
     return sortAsc?(va>vb?1:va<vb?-1:0):(va<vb?1:va>vb?-1:0);
   });
-  if(!sorted.length){$('opTbody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Tidak ada data</td></tr>`;return;}
+  if(!sorted.length){
+    $('opTbody').innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">Tidak ada data</td></tr>`;
+    return;
+  }
+
   const isDesa=curOp&&curOp.scope==='Desa';
   const pws=isDesa?PW_LIST:[curOp?curOp.scope:'-'];
   let html='';
+
   pws.forEach(pw=>{
     const rows=sorted.filter(r=>r.pw===pw);
     if(!rows.length)return;
+
+    const sudah=rows.filter(r=>r.hasSanggup);
+    const belum=rows.filter(r=>!r.hasSanggup);
     const open=!!groupOpen[pw];
-    html+=`<tr class="grp-row" onclick="toggleGroup('${pw}')"><td colspan="8"><span class="car">${open?'▾':'▸'}</span>${pw} · ${rows.length} jamaah</td></tr>`;
-    if(open)rows.forEach(r=>{html+=rowHTML(r);});
+
+    html+=`<tr class="grp-row" onclick="toggleGroup('${pw}')">
+      <td colspan="8">
+        <span class="car">${open?'▾':'▸'}</span>
+        ${pw} · ${rows.length} jamaah
+        <span style="float:right;font-size:10px;font-weight:600">
+          Sudah ${sudah.length} · Belum ${belum.length}
+        </span>
+      </td>
+    </tr>`;
+
+    if(!open)return;
+
+    const groups=[
+      {key:'sudah',label:'✅ Sudah Ada Kesanggupan',rows:sudah,cls:'sudah'},
+      {key:'belum',label:'❌ Belum Ada Kesanggupan',rows:belum,cls:'belum'}
+    ];
+
+    groups.forEach(g=>{
+      if(!g.rows.length)return;
+      const subOpen=!!subgroupOpen[pw]?.[g.key];
+      html+=`<tr class="subgrp-row ${g.cls}" onclick="toggleSubgroup('${pw}','${g.key}')">
+        <td colspan="8">
+          <span class="car">${subOpen?'▾':'▸'}</span>${g.label}
+          <span class="count">${g.rows.length} nama</span>
+        </td>
+      </tr>`;
+      if(subOpen)g.rows.forEach(r=>{html+=rowHTML(r);});
+    });
   });
+
   $('opTbody').innerHTML=html;
 }
 function toggleExpand(id){expandedId=expandedId===id?null:id;renderTable();}
@@ -2583,7 +2641,7 @@ async function doExport(type){
             </tr>
           </table>`;
 
-        // Data rows — 6 kolom: Nama | PW | L/P | Lembar | Status | Nilai | Terbayar | Sisa
+        // Data rows cetak: Nama | Lembar | Status | Nilai | Terbayar | Sisa
         // Detail bayar digabung dalam 1 cell di bawah nama
         const dataRows=sub.map((r,i)=>{
           const bg=i%2===0?'#ffffff':'#f5f9f5';
@@ -2599,8 +2657,6 @@ async function doExport(type){
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px">
               <b>${r.nama}</b>${payDetail}
             </td>
-            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.pw}</td>
-            <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.gender}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center">${r.isNB?'NB':r.lembar||'-'}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:center;color:${statusColor};font-weight:700">${r.status}</td>
             <td style="padding:5px 8px;border:1px solid #ddd;font-size:9px;text-align:right">${(r.lembar||r.isNB)?rp(r.nilai):'-'}</td>
@@ -2613,7 +2669,7 @@ async function doExport(type){
         const footRow=`
           <tr style="background:#1a6b3c;color:#fff;font-weight:700;font-size:9px">
             <td style="padding:5px 8px;border:1px solid #145530">TOTAL (${sub.length} orang)</td>
-            <td style="padding:5px 8px;border:1px solid #145530;text-align:center" colspan="3">${sub.filter(r=>!r.isNB).reduce((s,r)=>s+r.lembar,0)} lembar${sub.some(r=>r.isNB)?` + ${sub.filter(r=>r.isNB).length} NB`:''}</td>
+            <td style="padding:5px 8px;border:1px solid #145530;text-align:center">${sub.filter(r=>!r.isNB).reduce((s,r)=>s+r.lembar,0)} lembar${sub.some(r=>r.isNB)?` + ${sub.filter(r=>r.isNB).length} NB`:''}</td>
             <td style="padding:5px 8px;border:1px solid #145530"></td>
             <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tN)}</td>
             <td style="padding:5px 8px;border:1px solid #145530;text-align:right">${rp(tB)}</td>
@@ -2628,8 +2684,6 @@ async function doExport(type){
               <thead>
                 <tr style="background:#2e7d52;color:#fff;font-size:9px">
                   <th style="padding:5px 8px;text-align:left;border:1px solid #145530">Nama & Riwayat Bayar</th>
-                  <th style="padding:5px 8px;text-align:center;border:1px solid #145530">PW</th>
-                  <th style="padding:5px 8px;text-align:center;border:1px solid #145530">L/P</th>
                   <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Lembar</th>
                   <th style="padding:5px 8px;text-align:center;border:1px solid #145530">Status</th>
                   <th style="padding:5px 8px;text-align:right;border:1px solid #145530">Nilai</th>
@@ -2659,27 +2713,152 @@ async function doExport(type){
     const w=window.open('','_blank');
     w.document.write(`<!DOCTYPE html><html><head><title>Laporan Shodaqoh Jariyah</title>
     <style>
-      *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
-      body{font-family:Arial,sans-serif;font-size:10px;margin:14px;color:#222}
-      h3{margin:0 0 6px}
-      table{border-collapse:collapse;width:100%}
+      :root{
+        --print-font:9px;
+        --print-scale:1;
+        --cell-pad-y:5px;
+        --cell-pad-x:8px;
+        --page-margin:10mm;
+      }
+      *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important;box-sizing:border-box}
+      body{font-family:Arial,sans-serif;font-size:var(--print-font);margin:14px;color:#222;background:#f3f4f6}
+      .print-page{background:#fff;max-width:1200px;margin:0 auto;padding:14px;box-shadow:0 2px 12px rgba(0,0,0,.12);transform-origin:top center}
+      h3{margin:0 0 6px;font-size:calc(var(--print-font) + 2px)}
+      table{border-collapse:collapse;width:100%;table-layout:auto;font-size:var(--print-font)!important}
+      .print-page table th,
+      .print-page table td{
+        font-size:var(--print-font)!important;
+        padding:var(--cell-pad-y) var(--cell-pad-x)!important;
+        line-height:1.3
+      }
+      .print-page table td div{
+        font-size:calc(var(--print-font) - 1pt)!important;
+        line-height:1.3
+      }
+      .print-page h3{font-size:calc(var(--print-font) + 2pt)!important}
+      .print-page > div:first-child,
+      .print-page > div:first-child div{
+        font-size:var(--print-font)!important
+      }
+      td:first-child,th:first-child{width:42%;min-width:220px}
+      .print-toolbar{
+        position:sticky;top:0;z-index:999;background:#fff;border:1px solid #ddd;border-radius:10px;
+        padding:10px 12px;margin:0 auto 12px;max-width:1200px;display:flex;gap:10px;align-items:end;
+        flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.08)
+      }
+      .print-toolbar label{font-size:11px;font-weight:700;color:#555;display:block;margin-bottom:3px}
+      .print-toolbar select,.print-toolbar input{
+        padding:7px 9px;border:1px solid #bbb;border-radius:7px;font-size:12px;background:#fff
+      }
+      .print-toolbar .grp{min-width:120px}
+      .print-toolbar button{
+        padding:9px 16px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer
+      }
+      .btn-print{background:#1a6b3c;color:#fff}
+      .btn-fit{background:#555;color:#fff}
+      .toolbar-info{font-size:10px;color:#666;flex-basis:100%;line-height:1.4}
+      body.compact{--cell-pad-y:3px;--cell-pad-x:5px}
+      body.relaxed{--cell-pad-y:6px;--cell-pad-x:9px}
+      body.landscape .print-page{max-width:1500px}
+      @media screen and (max-width:800px){
+        body{margin:6px}
+        .print-page{padding:8px;overflow-x:auto}
+        .print-toolbar{border-radius:0;margin:-6px -6px 8px}
+      }
       @media print{
-        .no-print{display:none}
-        body{margin:8px}
-        @page{margin:10mm}
+        body{margin:0;background:#fff;font-size:var(--print-font)}
+        .no-print{display:none!important}
+        .print-page{box-shadow:none;max-width:none;padding:0;margin:0;transform:none!important}
+        table{width:100%;page-break-inside:auto}
+        tr{page-break-inside:avoid;page-break-after:auto}
+        thead{display:table-header-group}
+        tfoot{display:table-row-group}
+        @page{size:var(--page-size,A4 portrait);margin:var(--page-margin)}
       }
     </style></head><body>
-    ${headerHTML}
-    ${body}
-    <div class="no-print" style="margin-top:16px;text-align:center;padding:16px;border-top:1px solid #ddd">
-      <button onclick="window.print()"
-        style="padding:12px 32px;background:#1a6b3c;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">
-        🖨 Print / Simpan PDF
-      </button>
+    <div class="print-toolbar no-print">
+      <div class="grp" style="min-width:190px">
+        <label>Ukuran Font: <span id="fontActiveInfo" style="color:#1a6b3c">9.5 pt</span></label>
+        <input id="fontSize" type="range" min="7" max="14" value="9.5" step="0.5"
+          oninput="applyPrintSetting()" style="width:180px">
+      </div>
+      <div class="grp">
+        <label>Orientasi</label>
+        <select id="orientation" onchange="applyPrintSetting()">
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
+      </div>
+      <div class="grp">
+        <label>Kepadatan</label>
+        <select id="density" onchange="applyPrintSetting()">
+          <option value="compact">Rapat</option>
+          <option value="normal" selected>Normal</option>
+          <option value="relaxed">Longgar</option>
+        </select>
+      </div>
+      <div class="grp">
+        <label>Margin</label>
+        <select id="margin" onchange="applyPrintSetting()">
+          <option value="6">Tipis (6 mm)</option>
+          <option value="10" selected>Normal (10 mm)</option>
+          <option value="15">Lebar (15 mm)</option>
+        </select>
+      </div>
+      <div class="grp">
+        <label>Skala Tampilan</label>
+        <input id="scale" type="range" min="80" max="110" value="100" step="5" oninput="applyPrintSetting()">
+      </div>
+      <button class="btn-fit" onclick="autoFit()">↔ Sesuaikan Otomatis</button>
+      <button class="btn-print" onclick="window.print()">🖨 Print / Simpan PDF</button>
+      <div class="toolbar-info">
+        Gunakan <b>Landscape</b> jika tabel terasa sempit. Tombol <b>Sesuaikan Otomatis</b> akan memilih ukuran font dan orientasi berdasarkan lebar tabel.
+      </div>
     </div>
+    <div class="print-page" id="printPage">
+      ${headerHTML}
+      ${body}
+    </div>
+    <script>
+      function applyPrintSetting(){
+        const fs=document.getElementById('fontSize').value;
+        const ori=document.getElementById('orientation').value;
+        const den=document.getElementById('density').value;
+        const mar=document.getElementById('margin').value;
+        const scale=document.getElementById('scale').value;
+        document.documentElement.style.setProperty('--print-font',fs+'pt');
+        document.documentElement.style.setProperty('--page-margin',mar+'mm');
+        document.documentElement.style.setProperty('--page-size','A4 '+ori);
+        const info=document.getElementById('fontActiveInfo');
+        if(info)info.textContent=fs+' pt';
+        document.body.classList.remove('compact','relaxed','landscape');
+        if(den!=='normal')document.body.classList.add(den);
+        if(ori==='landscape')document.body.classList.add('landscape');
+        document.getElementById('printPage').style.transform='scale('+(scale/100)+')';
+      }
+      function autoFit(){
+        const page=document.getElementById('printPage');
+        const tables=[...page.querySelectorAll('table')];
+        const widest=Math.max(0,...tables.map(t=>t.scrollWidth));
+        const viewport=Math.max(700,window.innerWidth-40);
+        if(widest>viewport*1.05){
+          document.getElementById('orientation').value='landscape';
+          document.getElementById('fontSize').value='8.5';
+          document.getElementById('density').value='compact';
+          document.getElementById('scale').value='95';
+        }else{
+          document.getElementById('orientation').value='portrait';
+          document.getElementById('fontSize').value='9.5';
+          document.getElementById('density').value='normal';
+          document.getElementById('scale').value='100';
+        }
+        applyPrintSetting();
+      }
+      window.addEventListener('load',()=>setTimeout(autoFit,200));
+      applyPrintSetting();
+    <\/script>
     </body></html>`);
     w.document.close();
-    setTimeout(()=>w.print(),700);
   }
 }
 
