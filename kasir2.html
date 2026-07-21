@@ -699,6 +699,7 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
   <div class="tab-content" id="tc-ppob">
     <div class="sub-tabs">
       <button class="sub-tab blue active" id="stab-ppob-trx" onclick="showSubTab('ppob','trx')">&#9889; Transaksi</button>
+      <button class="sub-tab blue" id="stab-ppob-request" onclick="showSubTab('ppob','request');lPPOBRequest().then(renderPPOBRequest)">Request EZI</button>
       <button class="sub-tab blue" id="stab-ppob-riwayat" onclick="showSubTab('ppob','riwayat');lPPOB().then(renderPPOBRiwayat)">&#128203; Riwayat 7 Hari</button>
     </div>
     <div class="sub-content active" id="sc-ppob-trx">
@@ -817,6 +818,35 @@ body.pemilik .page.active.role-pemilik-only{display:block;}
         </div>
 
         <!-- (Input Teks Massal dihapus) -->
+    <div class="sub-content" id="sc-ppob-request">
+      <div class="riwayat-scroll">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:700">Request EZI Masuk</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Request dari ubnb.pw/ezi.html, diproses manual oleh admin POS.</div>
+          </div>
+          <button onclick="lPPOBRequest().then(renderPPOBRequest)" style="background:var(--blue-light);border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--blue);cursor:pointer">&#128260; Refresh</button>
+        </div>
+        <div class="rw-summary" id="ppob-request-summary"></div>
+        <div style="display:grid;grid-template-columns:1fr 160px;gap:8px;margin-bottom:10px">
+          <input type="text" id="ppob-request-search" placeholder="Cari nama / nomor / produk / kode..." oninput="renderPPOBRequest()" style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-size:13px;outline:none;background:white"/>
+          <select id="ppob-request-status" onchange="renderPPOBRequest()" style="width:100%;height:38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-size:13px;outline:none;background:white">
+            <option value="">Semua Status</option>
+            <option value="baru">Baru</option>
+            <option value="dibaca">Dibaca</option>
+            <option value="diproses">Diproses</option>
+            <option value="selesai">Selesai</option>
+            <option value="dibatalkan">Dibatalkan</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <table class="rw-table" style="width:100%;min-width:620px">
+            <thead><tr><th>Kode/Waktu</th><th>Pemesan</th><th>Produk/Tujuan</th><th style="text-align:right">Nominal</th><th>Status</th><th>Aksi</th></tr></thead>
+            <tbody id="ppob-request-list"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
     <div class="sub-content" id="sc-ppob-riwayat">
       <div class="riwayat-scroll">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -1671,7 +1701,7 @@ async function updateStokToko(barangId, delta){
 }
 async function loadAll(){
   try{await lKas();}catch(e){}
-  await Promise.all([lB(),lT(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lPPOB(),lAnggota(),lJamaah()]);
+  await Promise.all([lB(),lT(),lBeli(),lBatch(),lPaket(),lVoucher(),lPel(),lSup(),lPPOB(),lPPOBRequest(),lAnggota(),lJamaah()]);
   if(typeof initPOS==='function')initPOS();
   const lbl=document.getElementById('posb-kasir-label');
   if(lbl&&CU)lbl.textContent=CU.username;
@@ -2818,7 +2848,8 @@ const statusPesanan={
 
 /* PPOB */
 const PPOB_PRODUK = ['Pulsa','Token Listrik','Tagihan Listrik','PDAM','PAM','BPJS','Internet','IndiHome','Telkom/Indihome','First Media','Freedom Internet','GoPay','OVO','Dana','Shopee Pay','PULSA PASCABAYAR','Paket Data','Lainnya'];
-let aKas=[], aPPOB=[], ppobFilter='semua', ppobLapMode='bulan';
+let aKas=[], aPPOB=[], aPPOBRequest=[], ppobFilter='semua', ppobLapMode='bulan';
+let _eziRequestAktifId = null;
 
 /* ACL - ACCESS CONTROL */
 const MENU_DEF = [
@@ -2882,6 +2913,144 @@ async function lPPOB(){
   const tid=CU?.toko_id||1;
   const{data}=await sb.from('ppob').select('*').eq('toko_id',tid).order('tanggal',{ascending:false});
   aPPOB=data||[];
+}
+
+async function lPPOBRequest(){
+  const tid=CU?.toko_id||1;
+  try{
+    const{data,error}=await sb.from('ppob_request')
+      .select('*')
+      .eq('toko_id',tid)
+      .order('created_at',{ascending:false})
+      .limit(100);
+    if(error)throw error;
+    aPPOBRequest=data||[];
+  }catch(e){
+    console.warn('lPPOBRequest:',e.message||e);
+    aPPOBRequest=[];
+  }
+}
+
+function escPPOBReq(v){
+  return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function ppobReqStatusLabel(st){
+  return {
+    baru:'Baru',
+    dibaca:'Dibaca',
+    diproses:'Diproses',
+    selesai:'Selesai',
+    dibatalkan:'Dibatalkan'
+  }[st]||st||'-';
+}
+function ppobReqBadge(st){
+  const color={
+    baru:'var(--red)',
+    dibaca:'var(--amber)',
+    diproses:'var(--blue)',
+    selesai:'var(--green)',
+    dibatalkan:'#6b7280'
+  }[st]||'var(--text-muted)';
+  return `<span style="display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;background:rgba(0,0,0,.04);color:${color};font-size:10px;font-weight:700">${ppobReqStatusLabel(st)}</span>`;
+}
+function renderPPOBRequest(){
+  const el=document.getElementById('ppob-request-list');
+  if(!el)return;
+  const q=(document.getElementById('ppob-request-search')?.value||'').toLowerCase();
+  const st=document.getElementById('ppob-request-status')?.value||'';
+  let rows=[...(aPPOBRequest||[])];
+  if(st)rows=rows.filter(r=>r.status===st);
+  if(q){
+    rows=rows.filter(r=>[
+      r.request_code,r.nama,r.no_hp,r.produk,r.tujuan,r.catatan,r.status
+    ].join(' ').toLowerCase().includes(q));
+  }
+  const baru=(aPPOBRequest||[]).filter(r=>r.status==='baru').length;
+  const proses=(aPPOBRequest||[]).filter(r=>r.status==='diproses'||r.status==='dibaca').length;
+  const selesai=(aPPOBRequest||[]).filter(r=>r.status==='selesai').length;
+  const sum=document.getElementById('ppob-request-summary');
+  if(sum){
+    sum.innerHTML=`
+      <div class="rw-sum-card"><div class="rw-sum-label">Baru</div><div class="rw-sum-val" style="color:var(--red)">${baru}</div></div>
+      <div class="rw-sum-card"><div class="rw-sum-label">Dalam Proses</div><div class="rw-sum-val" style="color:var(--blue)">${proses}</div></div>
+      <div class="rw-sum-card"><div class="rw-sum-label">Selesai</div><div class="rw-sum-val" style="color:var(--green)">${selesai}</div></div>
+    `;
+  }
+  if(!rows.length){
+    el.innerHTML='<tr><td colspan="6" style="padding:28px;text-align:center;color:var(--text-muted)">Belum ada request sesuai filter</td></tr>';
+    return;
+  }
+  el.innerHTML=rows.map(r=>{
+    const nominal=parseFloat(r.perkiraan_harga||0);
+    const dt=r.created_at?new Date(r.created_at):null;
+    const waktu=dt&&!isNaN(dt)?dt.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'-';
+    const note=r.catatan?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px">${escPPOBReq(r.catatan)}</div>`:'';
+    const wa=r.no_hp?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">WA: ${escPPOBReq(r.no_hp)}</div>`:'';
+    return `<tr class="rw-data">
+      <td><div style="font-family:'SF Mono',Monaco,monospace;font-size:11px;font-weight:700">${escPPOBReq(r.request_code||'-')}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${waktu}</div></td>
+      <td><div style="font-weight:700">${escPPOBReq(r.nama||'-')}</div>${wa}</td>
+      <td><div style="font-weight:700">${escPPOBReq(r.produk||'-')}</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escPPOBReq(r.tujuan||'-')}</div>${note}</td>
+      <td style="text-align:right;font-weight:700">${nominal?fmt(nominal):'-'}</td>
+      <td>${ppobReqBadge(r.status)}</td>
+      <td>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn xs blue" onclick="ambilRequestPPOB(${r.id})">Ambil</button>
+          <button class="btn xs" onclick="copyPPOBRequestTujuan(${r.id})">Copy</button>
+          ${r.status!=='dibatalkan'&&r.status!=='selesai'?`<button class="btn xs danger" onclick="setStatusPPOBRequest(${r.id},'dibatalkan')">Batal</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function setStatusPPOBRequest(id, status){
+  try{
+    const payload={status,processed_by:CU?.username||null};
+    if(status==='selesai'||status==='dibatalkan')payload.processed_at=new Date().toISOString();
+    const{error}=await sb.from('ppob_request').update(payload).eq('id',id);
+    if(error)throw error;
+    await lPPOBRequest();
+    renderPPOBRequest();
+    toast('Status request: '+ppobReqStatusLabel(status));
+  }catch(e){toast('Gagal update request: '+(e.message||e),true);}
+}
+
+async function copyPPOBRequestTujuan(id){
+  const r=(aPPOBRequest||[]).find(x=>x.id===id);if(!r)return;
+  const txt=r.tujuan||'';
+  try{await navigator.clipboard.writeText(txt);toast('Nomor tujuan disalin');}
+  catch(e){toast('Nomor tujuan: '+txt);}
+}
+
+async function ambilRequestPPOB(id){
+  const r=(aPPOBRequest||[]).find(x=>x.id===id);if(!r){toast('Request tidak ditemukan',true);return;}
+  _eziRequestAktifId=id;
+  _ppobKatAktif=r.kategori||'lain';
+  _ppobProdukTerpilih=r.produk||'';
+  showSubTab('ppob','trx');
+  document.querySelectorAll('.ppob-kat-item').forEach(k=>k.classList.remove('ppob-kat-active'));
+  document.getElementById('ppob-produk-panel').style.display='none';
+  document.getElementById('ppob-produk-chip-wrap').style.display='block';
+  document.getElementById('ppob-detail-wrap').style.display='block';
+  document.getElementById('ppob-produk-chip-txt').textContent=_ppobProdukTerpilih||'-';
+  document.getElementById('ppob-pel-search').value=r.nama||'';
+  ppobPelId=null;ppobAnggotaId=null;
+  document.getElementById('ppob-catatan').value=[
+    'Request '+(r.request_code||'-'),
+    'Tujuan: '+(r.tujuan||'-'),
+    r.no_hp?'WA: '+r.no_hp:'',
+    r.catatan||''
+  ].filter(Boolean).join(' | ');
+  if(r.perkiraan_harga){
+    document.getElementById('ppob-hjual').value=Math.round(parseFloat(r.perkiraan_harga)||0);
+    hitungUntungPPOB();
+  }
+  try{
+    await sb.from('ppob_request').update({status:'diproses',processed_by:CU?.username||null}).eq('id',id);
+    await lPPOBRequest();
+  }catch(e){console.warn('update request diproses:',e.message||e);}
+  setTimeout(()=>document.getElementById('ppob-detail-wrap').scrollIntoView({behavior:'smooth',block:'start'}),80);
+  toast('Request EZI diambil ke form PPOB. Isi kas dan harga modal lalu simpan.');
 }
 
 let ppobPelId = null; let ppobAnggotaId = null;
@@ -3148,8 +3317,18 @@ async function simpanPPOB(){
   if(status==='belum'){
     await sb.from('hutang').insert([{nama,jml:hj,ket:'PPOB: '+produk+(catatan?' - '+catatan:''),tipe:'piutang',tgl,lunas:false,ref_type:'ppob',toko_id:_tid}]);
   }
+  if(_eziRequestAktifId&&ppobId){
+    await sb.from('ppob_request').update({
+      status:'selesai',
+      processed_ppob_id:ppobId,
+      processed_by:CU?.username||null,
+      processed_at:new Date().toISOString()
+    }).eq('id',_eziRequestAktifId).catch(e=>console.warn('update ppob_request selesai:',e.message||e));
+    _eziRequestAktifId=null;
+  }
   
   await lKas();await lPPOB();await lH();
+  await lPPOBRequest().catch(()=>{});
   renderHutang();;initPPOBForm();
   // Reset form
   ['ppob-catatan','ppob-hbeli','ppob-hjual'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
