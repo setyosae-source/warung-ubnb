@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="ubnb-auth.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -215,7 +216,7 @@ body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(-
 .modal-title h3{font-size:14px;font-weight:800;}
 .btn-close{background:var(--surface2);border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
 
-/* NOTA PRINT */
+/* KUITANSI PRINT */
 @media print{
   .sidebar,.topbar,.no-print{display:none!important;}
   .main-wrap{margin-left:0;padding-top:0;}
@@ -973,7 +974,11 @@ async function bukaDetail(id){
       ${next?`<button class="btn primary sm" onclick="updateStatus('${o.id}','${next}')">→ ${STATUS_LABEL[next]}</button>`:''}
       ${o.status_bayar==='belum'&&o.status!=='dibatalkan'?`<button class="btn hijau sm" onclick="tandaiLunas('${o.id}')">✅ Tandai Lunas</button>`:''}
       ${o.status!=='diambil'&&o.status!=='dibatalkan'?`<button class="btn danger sm" onclick="batalOrder('${o.id}')">❌ Batalkan</button>`:''}
-      <button class="btn secondary sm" onclick="cetakNota('${o.id}')">🖨️ Nota</button>
+      ${o.status_bayar!=='lunas'?`
+        <button class="btn secondary sm" onclick="downloadTagihanPdf('${o.id}')">📄 Download Tagihan PDF</button>
+        <button class="btn secondary sm" onclick="shareTagihan('${o.id}')">↗️ Share Tagihan</button>
+      `:''}
+      ${o.status_bayar==='lunas'?`<button class="btn secondary sm" onclick="downloadKuitansiPdf('${o.id}')">✅ Download Kuitansi PDF</button>`:''}
     </div>`;
 
   openModal('modal-order');
@@ -1020,38 +1025,6 @@ async function batalOrder(id){
   toast('Order dibatalkan');
   closeModal('modal-order');
   await loadAll(); renderDashboard(); filterTracking();
-}
-
-// ===== NOTA CETAK =====
-function cetakNota(id){
-  const o=aOrders.find(x=>x.id==id);if(!o)return;
-  const items=typeof o.item_tambahan==='string'?JSON.parse(o.item_tambahan||'[]'):o.item_tambahan||[];
-  const w=window.open('','_blank','width=400,height=600');
-  w.document.write(`<!DOCTYPE html><html><head><style>
-    body{font-family:monospace;font-size:12px;padding:10mm;max-width:80mm;}
-    .center{text-align:center;} .bold{font-weight:bold;} .line{border-top:1px dashed #000;margin:8px 0;}
-    .row{display:flex;justify-content:space-between;}
-  </style></head><body>
-    <div class="center bold" style="font-size:14px">LAUNDRY UBNB PERWIRA</div>
-    <div class="center">Desa Perwira, Bekasi Utara</div>
-    <div class="line"></div>
-    <div class="row"><span>No. Order:</span><span class="bold">${o.no_order}</span></div>
-    <div class="row"><span>Tgl Masuk:</span><span>${fmtTgl(o.tgl_masuk)}</span></div>
-    <div class="row"><span>Est. Selesai:</span><span>${fmtTgl(o.tgl_estimasi)||'—'}</span></div>
-    <div class="line"></div>
-    <div class="bold">${o.nama_display}</div>
-    <div>${o.no_hp||'—'}</div>
-    <div class="line"></div>
-    <div class="row"><span>${o.jenis_layanan} (${o.berat_kg} kg × ${rp(o.harga_per_kg)})</span><span>${rp((o.berat_kg||0)*(o.harga_per_kg||0))}</span></div>
-    ${items.map(it=>`<div class="row"><span>${it.nama}</span><span>${rp(it.harga)}</span></div>`).join('')}
-    <div class="line"></div>
-    <div class="row bold"><span>TOTAL</span><span>${rp(o.total_harga)}</span></div>
-    <div class="row"><span>Status Bayar:</span><span class="bold">${o.status_bayar==='lunas'?'LUNAS':'BELUM LUNAS'}</span></div>
-    <div class="line"></div>
-    <div class="center" style="font-size:11px">Terima kasih atas kepercayaan Anda!</div>
-  </body></html>`);
-  w.document.close();
-  w.print();
 }
 
 // ===== RIWAYAT =====
@@ -1269,7 +1242,7 @@ const parseJson=value=>{
 };
 const orderType=order=>order.tipe_order==='service'?'service':'laundry';
 const paidAmount=order=>{
-  if(order.jumlah_dibayar!==null&&order.jumlah_dibayar!==undefined)return num(order.jumlah_dibayar);
+  if(num(order.jumlah_dibayar)>0)return num(order.jumlah_dibayar);
   return order.status_bayar==='lunas'?num(order.total_harga):0;
 };
 const outstanding=order=>Math.max(0,num(order.total_harga)-paidAmount(order));
@@ -1838,7 +1811,11 @@ function bukaDetail(id){
     <div class="btn-row">
       ${next?`<button class="btn primary sm" onclick="updateStatus('${order.id}','${next}')">→ ${escapeHtml(next==='diambil'?(type==='service'?'Diserahkan':'Diambil'):STATUS_LABEL[next])}</button>`:''}
       ${paidAmount(order)===0&&!CLOSED_STATUS.includes(order.status)?`<button class="btn danger sm" onclick="batalOrder('${order.id}')">❌ Batalkan</button>`:''}
-      <button class="btn secondary sm" onclick="cetakNota('${order.id}')">🖨️ Cetak Nota</button>
+      ${remaining>0?`
+        <button class="btn secondary sm" onclick="downloadTagihanPdf('${order.id}')">📄 Download Tagihan PDF</button>
+        <button class="btn secondary sm" onclick="shareTagihan('${order.id}')">↗️ Share Tagihan</button>
+      `:''}
+      ${paidAmount(order)>0?`<button class="btn secondary sm" onclick="downloadKuitansiPdf('${order.id}')">✅ Download Kuitansi PDF</button>`:''}
     </div>
   `;
   openModal('modal-order');
@@ -1915,40 +1892,417 @@ async function batalOrder(id){
   showToast('Order dibatalkan.');
 }
 
-function cetakNota(id){
+const UBNB_DOCUMENT={
+  name:'UBNB Laundry & Servis',
+  address:'Desa Perwira, Bekasi Utara',
+  bank:'BCA',
+  accountName:'Sukamto',
+  accountNumber:'681 - 515 - 9113',
+  cashInstruction:'Tunai kepada petugas UBNB'
+};
+const UBNB_LOGO_DATA_URI='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCADUAKADASIAAhEBAxEB/8QAHQAAAgICAwEAAAAAAAAAAAAAAAgBBwUGAgMJBP/EAFEQAAECBAIEBgwJCQcFAQAAAAECAwAEBREGBwgSITETN0FRkbMUFRgyNlJhcXR1sdEiVnOBkpOUodI4U1RVcoKFssEWIyQzNELCFyYnQ2Kk/8QAGgEAAQUBAAAAAAAAAAAAAAAAAAECAwQGBf/EADURAAICAQEGAwUIAQUAAAAAAAABAgMRBAUSITEycTM0gRMVQVFhBhQiQlKRobHhYmPB0fD/2gAMAwEAAhEDEQA/AGpG6CAboIRAEY7ElUXRMP1SqNtpdXJSj0ylCjYKKEFQBPltGRjAZgeAuI/Vc11SocuYj5C0DTSxIQD/AGVpG0X/ANQ5G4ZSaTVazEx3IYanKBTpRmaS6ovMvLUpOogqGw7OSFER3ifMItbRf46aH8nM9SuLcqoqLeCCM23geuKFzp0jKvlhjIUCRochOtdiNzBdfdWlV1FQtYcnwYvoQlWlzxsfwyX/AJnIr1RUpYZLY2llGf7tHEfxVpH17kMvgDEruMMGUbED8uiWdqEoiYU0hRKUFQ3AnkjzfG+PQjI/ilwn6tZ9kSXQUUsDKpN8zXc+s56jlG1RlU+lSlQNRU8FdkOKSEBATu1efW+6Ki7tHEfxWpH17sbBpoSU1Ny+FDLyz7wSuaCi22pVrhu17DyQsHaipfq+d+zr90OrhFxyxJyknwL/AO7RxH8VaR9e5B3aOI/irSPr3IoDtRURvp879Qv3Rwdp82wjXelJhtA/3LaUkdJEP9lAbvyGWpOmo5wgTV8IDgydq5ObuR+6tP8AWLjwBnngnMNaJal1PgKgof6GcTwTx/ZBNlfukx5/xzadcZcQ60tTbiFBSVpJBSRuII3GElRF8gVrXM9PIIofRlzqm8cSj2GMQv8ADViRaDrMyrvppkEA63OtJIueUEHni+Iqyi4vDLCeVlBBBAYaKAggEEIgCMBmB4C4j9VzXVKjPxgMwPAXEfqua6pUOXMR8jzdR3ifMItbRf46aH8nM9SuKpR3ifMItbRf46aH8nM9SuL8+llWHUPWISrS542P4ZL/AMzkOqISrS542f4ZL/zORVo6ie3pKVG+PQjJDilwn6tZ9kee43x6EZIcUuE/VrPsiXUckR082bvaCwggioWA1RHW9LMzDamnmm3W1CxStIII8xjsggAUXSuytoWEnKbiWhSrcgmoPrl5mVZTqtleqVBaRuTexBA2bjC8w3Omef8As7D/AKyV1SoUeL1LzAq2rEuBZ+jPMOMZz4fDaiA5w7avKksrNvuEPgN0IXo2j/zPhv8Abf6lcPoN0V7+olp6Qg5IIIhJQEEAghEARgMwPAXEfqua6pUZ+MBmB4C4j9VzXVKhVzEfI83Ud4nzCLW0X+Omh/JzPUriqUd4nzCLW0X+Omh/JzPUri/PpZVh1D1iEq0ueNn+GS/wDM5DqiEp0uONn+GS/8zkVaOont6Slhvj0IyQ4pcJ+rWfZHnuN8ehGSHFLhP1az7Il1HJEdPNn3Y3yywtmIJQYlpxnRJlZY/vVo1Na2t3pF9w3xqvcx5WfFw/a3vxRacEVlJrkyfCKs7mPKz4uK+1vfijpm9FrK+ZZU23RZmWURscZnHNZPmuSPui2YIN+XzDdXyEPzwyUmMpqlLOMTap6jz5UJZ9YAcbUnaW1gbL22gjeL7rRV8NzpoeB2H/WSupVCjRcqk3HLKtiw+BfuiJjiapeM38JuuqVIVZpbrbZOxD7YvcftJBB8whwxCF6NvHPhv9t/qVw+g3RXvX4iep5iEEEEQkgDlggEEABGHxlJuz+Ea3KMJ1nX6fMNIHOpTagPvjMQHdAB5fgEJAIsQLEGN5ySxbT8EZmUWt1VRRItLW084Bfg0rQUa58gJBPkvG36ROS07gavzOIaXLLcw7Pul3WQLiTdUSShXMkm5Sd223JFMWtHQTU4lR5jI9LWcTUR6niot1enrkynXEwJhHB259a9oR3SHxpSscZlzdQoz3ZElLsNSiHx3rxRrayk/wDzdRAPLa8VprHVKbnVPJydEAF4ZXTuvORZWbywG655o9EMn5F6m5X4WlZhJS6imMayTyXQD/WFAyJyanszMQMzU0w43h2TdC5uYIsHiDfgUHlJ5SNw8toexttLTaW0JCUpAASBYADkiK+SfAkpjjiQ480yAXHEIB3axAjh2bLfpDP0x74WzTVecRLYTQlakpLk0SASLmzcK5wzv51z6ZhIU7yzkWVm68Hpt2dK/pDP0x746pir06UaU9MT8qy0kXUtx5KUgeUkx5nB90f+1z6ZiFOLWLLWpQ5lEmHfd/qN9t9C/dKbNuhY2dp2HcPzCJ5inPLffnG9ranCnVCEH/cACbndutC/xMdkvLPTb7cvLsuPPOqCG220lSlqO4ADaTE8YqKwRSe88lmaM8q5M5z0EtpKgyH3VnxUhlQv0kdMPeN0Ufo2ZJzOX0g9iGvthFcqDYbSxvMozcHVJ8dRAJ5rAc8XhFS2SlLgWa44QQQQREPAQRCd0TAAQQQQAdU1KS87LuS00y2+w6koW24kKStJ3gg7CIpHGOiPg2vTDk1RJqboDyySWmQHWL+RCtqfmNou+YmWZVlbz7qGmm0lS1rUEpSOck7hFU4m0kML0d5cvS2JmsuoNitkhtr5lHf8wifT03WPFSbILrqq1mx4KtVoV1LhbJxlKcHfeZJWtb6UbjhLQ/wlSH0TNeqM7XVIIPAEBhk+cJuoj54+Q6U03whthiX1PLNqv/LGzYc0lcNVN1LFXk5qkKUbcKoh1oecjaOiLlmg1kY5ceHoVq9dpZPCkWvTqbJUiSZkafKsykqwkIbZZQEIQOYAR9MdElPS1RlW5qUmGphh1Osh1pQUlQ5wRHfHM7l9fQqrPbJebzcao6ZSrsU005TpVwrJc1wsJ3WItbV++Kk7iysfHCQ+xr/FF25uZpTGWyKYpimNTxnS4DwjpRqatuYG97xXXdS1D4tSv2pX4Y6On0Wqsgp1rh6FG7WaeubjN8fU1fuLKx8cJD7Gv8UHcWVj44SH2Nf4o2fupqh8WpX7Ur8MHdTVD4syv2pX4Yn92639P8oi94aT5/wzG0jQslkOBVXxe84i+1EpKBBP7yibdEXJgHJnBmXVnaLSkmdtYz0yeFfPmUe9/dAivadpSyy1hNSw282m+1UvMBdvmUB7Ys3B+Z+F8bfApVRT2SBcyr44N0funf8ANeKl+k1NazZF4LFGq09jxCXE2zdBADeCKRcCIJsImIO6AATuiYhG6JgAICbQRi8UTLknhuqzLRIcZk3nEnmIQSIWKy0hJPCbFpzszTmsWViYotPfUiiybhb1UG3ZTiTYrVzpB3D54q7fEAkgEm5I2xt2VOGpPFmO6ZSagCqUWpbjqAba4Qkq1b8xtt8kb2EK9JRwXCKMXOc9TbxfFs1K2y/JzwboeprD1IZkRIt0uSTKhOrwIYTqW5rWhTs6MLyGE8dzUjTG+BlHWm5lDQ3NFV7pHkuDbzxU0O1Y6mx17uGWtXs2Wngp5yfRlFmjOYFrLUrMvLcoky4EzDJNwyTs4RPMRyjlENw24lxIUkhSSLgg7CIQW19nPsh1ss5t2ewDh+YeJU4uQa1ieWybf0jm7d00YuNseb5l7Y18pKVT+HIqvSnQpTOHSlKiAqY2gX5ERQHBL8Rf0TD7uMtuiziErA8YXjh2HLfmGvoCIdHtj7vUqtzOPr/gm1Wy/b2Ozexn6CF8EvxF/RMQUlIuoEDyi0Pp2HLfo7X0BHW/SpCaaU0/JSzrahYpW0kg/MRFpfaD/b/n/BW9x/6/4EOtHZLzDss8h5h1bTrZCkOIUUqSecEbjFvaQOW9Iwm5JVqisplGZ1xTL0sjvErA1gpI5AQDcRTkdzTaiGpqVkeTORfRKixwlzQ0mRmar+MpR2jVhwLq0mgLS9u7Ja3axHjDZfnuDzxbAhQ8h33GM0KOEKIDgebV5UltRt9whvBujI7W08ab2ocnxNPsy+VtOZc1wCIMTEHdHMOgCN0TEI3RMABGGxn4JVv1fMdWqMzGGxn4I1z1fMdWqH19a7jLOhiOJ70eYRYuQHGlS/k3+qMV0O9HmEWLo/8AGlTPk3+rVG713lp9mY7R+PDuht+SFW0j+MdXoLHtXDUiFW0j+MdXoLHtXGZ2H5n0ZoNr+X9UVbyw5+U/Fzh30Fv2QmHLDn5T8XOHfQW/ZHS+0HhQ7nP2J4kuxtkEa/ivHuH8FdjGuzxlBM6waPBqXratr96DziNf/wCvWX369/8AzO/hjNw01s1vRi2ux35X1xeJSSZYEEV8rPvL5Iv27UfNLOfhj55nSEwCw0paKlMvqA2IblV6x6QBD1o73+R/sMeqpX51+5rulH4NUb05XVqhbo33NfNOYzGnmEtyxlKbKFRYZUQVqUdhWojZe3IN0aFGw2ZROnTqFnMy20Lo23uUORvmRvGjQ/2neqVDgJ3QsujbhKYn8TvYicbUmUpzam21kbFvLFrDzJuT5xDNDdGe23ZGWpwvgjubHg40ZfxYRComIVujjnVBG6JiEbomAAjDYz8Ea56vmOrVGZjDYz8Ea56vmOrVD6+tdxlnQxHB3o8wixdH/jSpnyb/AFZiuh3o8wixdH/jSpnyb/Vqjd67y0+z/ox2j8eHdDbiFW0j+MdXoLHtXDUiFW0j+Mc+gse1cZnYfmfRmg2t5f1RVvLDn5T8XOHfQW/ZCYcsOflPxc4d9Bb9kdL7QeFDuc/YniS7FX6VH+Vhz9qY9iIoHbDq4xy+oOOhKiuSzrwlSotajqkW1rX3b9wjW+56wB+rpr7W574raDa1NFCrmnlf9k+s2bbdc5xawKbtguYbHuecAfq6a+1ue+OqY0dMCPNKQ3Kz8uojY4iaUSOm4i8tu6f5P/3qVPc9/wA0KnH00wSRn5ftkZgSXCJ4cy4Bc1L7dW+y8bhmllbN5cT7P+I7Mp02VdjvlOqoEb0KHPbbcbDGjCOpVbC+vfrfBnOsrlVPdmuKHcwM3h9GGJEYY4LtVwf9yW+XnKuXWvvvtvGfhaNGzF0xI4kfw264pUpPtqdaQTsQ8kXJHnTe/mEMuIxGu08qLnCTz8TXaK9XVKSWAiFRMQd0Uy2CN0TEI3RMABGGxn4I1z1fMdWqMzGGxn4I1z1fMdWqH19a7jLOhiODvR5hFi6P/GlTPk3+rMV0O9HmEWLo/wDGlTPk3+rMbvXeWn2f9GO0fjw7obcQq2kfxjn0Fj2rhqRCraR/GOr0Fj2rjM7D8z6M0G1vL+qKt5Yc/Kfi5w76C37ITDlhz8p+LnDvoLfsjpfaDwodzn7E8SXY2yCIKgk7YjXHjJ6YyppMnKCOOuOdPTHB6aZl0KcedbbQkXKlqAA+cwCZRTOlH4NUb05XVqhboujSGzBpOJVyNDpEwicTJOqefmGzdGuRqhCTy22kndFLxttkQlDTJSWOZktpzjPUNxeTfMjdmaNEt4zvVKhwBuhQ8iGVvZoUcoTcN8KtXkAbVt+8Q3g3Rw9u+YXb/lnX2N4D7hEGJiDHFOuCN0TEI3GJgAIw2M/BGt+gTHVqjMx8NdpyqtRZ+noWltU1LOMBahcJKkkX++HQaUk2NmsxaQiI70eYRYuj/wAaVM+Tf6pUbMNFuvBIH9oKZsH5pyNny2yIquCcXyldmqxIzLUuhxJbabWFHWSU7zs5Y12r2lpp0TjGfFp/MzOm0F8LYylHgmXUIVbSQ4x1egse1cNTFPZp5I1PHuKDWZSrSUq2Zdtng3W1FV0323HnjhbJvhTfv2PCwdnaVU7ad2Cy8iyjfDn5T8XOHfQW/ZFNDRcrvxgpn1TkXvgyhO4awvS6O88h5ySl0MqcQCEqI5QDF7bGspvrjGuWcMpbK0ttM5OxY4FRaUc0+wzh1LTzjYUuYJCFFN9ieaKC7YTf6XMfWq98NbnBlfPZjopYkqhLSZklOFXDIUrW1gN1vNFa9y5XfjBTPqnIn2ZrtNVp1CyWHx/sh1+kvsvcoLgU52fN/pUx9ar3xxXNTDqdVx95aeZSyR95i5u5crvxgpn1TkHcuV34wUz6pyOh7z0f6l+xT+4an9JSkcmmlvOJbbQpa1kJSlIJKieQDlMXxTdFl0uA1LEqAjlTLSxufnUf6RZ2DcpcLYJUl+nyXDTgH+smTwjo83In5gIr37b08F+D8TJadk3Tf4+CNUyIyrmMJSzterLXBVScRqNsK3y7W8g//SrC/MBbni3hsgAtBGVvvnfY7J82aSimNMFCHIIgxMQYhJQRuiYhG4xMABGHxjX1YXwrV64hgTCqfKOzIaKtULKEk2vyXtGYjUc3eK/FfqqZ6swq5iPkUE1pp1PWCnMGSpbBGtqzqr9OpFsSWfVKruVdZxxRZNTj9JaJmKdML1VNubLJKhfYQbhQ3wseV+OMN4ay7x5R61rLnaxLIakWgxr6ywhYvfcmxUk3PzRmsqJGZbyJzUnVtLEs6ww0hwjYtablQHPbWTfzxYlXH4EUZM2trTPrDigE4LlVC4B1ZtZ/4Rt+bGkvP5c4sFCl8OS86nsRmY4VyZUg3WCdWwSd1orvRrzVwbl/Q6xJ4mnFMPzU4h1kCWU7dIQBe4BttjG6SU4wxnpKTriv8O2xIPKVa/wAoqJt5oTcW9jAKT3c5LUy30r6biuvy9Dr9GNGfm3AyxMIf4RouE2SldwCm52X2i55IyWLdIWbw3m8xgJFAYmGHJmVlzNmYKVDhgkk6trbNbn5IobMbENKzKzwp07g9hx5mYfk2UWZ4NTziV/CVq793KeQRnM0/wAqyU9ZUz2NwKtZ9A3ngtzGGkLOYYzbYwI3QGJhhyYlWDNqmClQ4bVudW1tmtz8kGNtIacwnmuxgZFAYmWXH5VkzSpgpUOG1bnV1bbNbnio82vyp5T1hTPY3EZzflQSnptM/wCECguHYHJ8S3Z7SGm5TOZGXgoDCmFT7cl2Z2Qdf4SQdbVtbl3XjV8YaWtTw1i2sUFnCkrMpp825KpcM2oKcCDa9gnZujSqx+V4369l+rTGJlcSUrCWkxU61W3S1TpWrzpeWGy5a4WkfBG07SIVQj8vgDkxgMntIyk5n1A0WZp66TV9QuNtFzhG5hI77UVYG4G2xG6MNmdpVU3BlfmKDRKOqszUovgph5b3BtIcG9CbAlRHKdgvzxUeUDzOJ9JVNXocqtFOXOzc6lIRqcEwUrAJA2J2qGznMY7AGKaHg7PqpVrETnB09mcqCVLLRdspS1hPwQCd/LCezWWCm8DH5OaQNIzVmHqYuSXSqwy3wvY6nA4h5ANipCrDdcXBF9vLFrQl2j7Ny09pErm5G3Ykwuous2Tqjg1BRTs5NhGyHRER2RUXhD4PKCIVExCt0RjwRuMTEI3GJgAI1HN3ivxX6qmerMbdGHxhQDinC1XoSXxLmoSjssHinW4PXSRe3La8KuYjFT0Xcr8KZhsV93EtM7PVIuS4ZBeWgJCgskEJIvew3xe+clFp2H8jcS02kyTEjJsSBS2wygJSkaw5P6x1ZGZLv5Qy9YbfrLdTVUVtKBQwWg3qBQ5Sb31o3HMLCisbYMq+HETQlFVCXLIfKNcINwb2uL7ofOeZZ+A2McRFi0asr8FY8odZmsUSSZl+VnENskzK2rJKAbWSoX2xjNJKRZms9JSQWClh5iQYUAdySopP3GNpRoW1FKgRjWXAuDskVD/nG9ZhaOczjfH8lipGImpRuXRKoUwqVK1K4E3vraw3+bZEm+t7ORii93GCpNHYN4Iz3n8N1JhkvnsqntOuJBU26hRIKTyayUkbN94M2XEMaU8s66tLbaahTFKWs2AGq3tJ5ot7FOjvMVjNdnH9JxA1TFJmZeaVLmWKyVosFHW1h3wHNymMnnBo90bNOabqqJ5yk1htsNGYQ2HEPIF7BabjaL7CD0we0W9n6C7jxgonNmcllaUEvMJmGSyioU3WcCwUpsG73O4W5Y5ZvvtTWk9KKl3UPJ7OpibtqChcalxs5Y3JjQrlu1rqZjGDxnyQW1okwGkjlCklWsb89x88bPldos0nA1dYr9Wqy61OyqteWbDPBNNL5FkXJUocm2w3wu/FITdkVTWPyvG/Xsv1aY1XEGGVYvzyxRRW78NMTtRU1b84hDi0/ekD54Yme0eJibzlTmIMQNJaTPtzvYXYxKvgJCdXX1rbbb7QUPR5mKRnE7mErEDTrS52YmxJCWIUOESoauvrW2a2+3JCKxL9gcGzRdC6sygdxFRVsNJnSGptDuqOEU33ikk77A6pt5TGhZcYRo2N8/alRK7KmakXZuoLU0HFIuUrUQbpIO+L2wFo7zOAszn8XSGIWjIOrmP8AJYg8E4SQjX1rfBNttuSJwFo8zGDM0ZjGy8QNTTbrk0sSolilQ4Yk2KtY7r822E31ltfEVRfBFNZBSLFN0jXpCVRqS8s7UWWk3J1UJCkgXO/YBDniKWwLo8zGD805nHC8QNTTTrs04JQSxSocMTs1tY7r822LphljTeUOgsIIhW6JiDEY8xyai74rfQffE9sXfFR0H3wQQAAqLvio6D74O2Lvio6D74IIAJ7Yu+KjoPviO2Lvio6D74IIAAVF3xUdB98HbF3xUdB98EEAB2xd8VHQffB2xd8VHQffBBAAdsHfFR0H3wdsXfFR0H3wQQAHbF23eo6D74BUXfFR0H3wQQAHbF3xUdB98AqLvio6D74IIADti74qOg++AVF3xUdB98EEAB2xd8VHQffHE1J23et9B98EEAH/9k=';
+
+const UBNB_LOGO_PDF='data:image/jpeg;base64,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';
+
+function angkaTerbilang(value){
+  const words=['','satu','dua','tiga','empat','lima','enam','tujuh','delapan','sembilan','sepuluh','sebelas'];
+  const spell=number=>{
+    const n=Math.floor(number);
+    if(n<12)return words[n];
+    if(n<20)return spell(n-10)+' belas';
+    if(n<100)return spell(Math.floor(n/10))+' puluh '+spell(n%10);
+    if(n<200)return 'seratus '+spell(n-100);
+    if(n<1000)return spell(Math.floor(n/100))+' ratus '+spell(n%100);
+    if(n<2000)return 'seribu '+spell(n-1000);
+    if(n<1000000)return spell(Math.floor(n/1000))+' ribu '+spell(n%1000);
+    if(n<1000000000)return spell(Math.floor(n/1000000))+' juta '+spell(n%1000000);
+    if(n<1000000000000)return spell(Math.floor(n/1000000000))+' miliar '+spell(n%1000000000);
+    if(n<1000000000000000)return spell(Math.floor(n/1000000000000))+' triliun '+spell(n%1000000000000);
+    return String(n);
+  };
+  const number=Math.max(0,Math.floor(num(value)));
+  return number===0?'nol':spell(number).replace(/\s+/g,' ').trim();
+}
+
+function pdfOrderRows(order){
+  const type=orderType(order);
+  const rows=[];
+  if(type==='service'){
+    if(num(order.biaya_jasa)>0){
+      rows.push({
+        name:`Biaya jasa — ${orderDescription(order)||'Servis'}`,
+        qtyText:'1',
+        price:num(order.biaya_jasa),
+        total:num(order.biaya_jasa)
+      });
+    }
+  }else{
+    const weight=num(order.berat_kg);
+    const price=num(order.harga_per_kg);
+    if(weight>0&&price>0){
+      rows.push({
+        name:serviceOrLaundryLabel(order),
+        qtyText:`${weight.toLocaleString('id-ID')} kg`,
+        price,
+        total:weight*price
+      });
+    }
+  }
+  orderItems(order).forEach(item=>{
+    const qty=num(item.qty)||1;
+    rows.push({
+      name:item.nama||'Rincian tambahan',
+      qtyText:qty.toLocaleString('id-ID'),
+      price:num(item.harga),
+      total:qty*num(item.harga)
+    });
+  });
+  if(!rows.length){
+    rows.push({
+      name:orderDescription(order)||`${type==='service'?'Servis':'Laundry'} ${order.no_order}`,
+      qtyText:'1',
+      price:num(order.total_harga),
+      total:num(order.total_harga)
+    });
+  }
+  return rows;
+}
+
+function drawUbnbDocumentHeader(doc,{title,number,orderNo}){
+  const pageWidth=doc.internal.pageSize.getWidth();
+  const margin=10;
+  const right=pageWidth-margin;
+  doc.addImage(UBNB_LOGO_PDF,'JPEG',margin,7.5,13.6,18,'ubnb-logo','FAST');
+  doc.setTextColor(5,29,58);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(15);
+  doc.text('UBNB LAUNDRY & SERVIS',margin+18,14.5);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(76,95,120);
+  doc.text(UBNB_DOCUMENT.address,margin+18,19.3);
+  doc.text('Laundry, servis AC, motor, elektronik, dan layanan lainnya',margin+18,24);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(title.length>18?17:20);
+  doc.setTextColor(0,104,183);
+  doc.text(title,right,14.5,{align:'right'});
+  doc.setFontSize(9);
+  doc.setTextColor(76,95,120);
+  doc.text(`No. ${number}`,right,20.5,{align:'right'});
+  doc.text(`Order ${orderNo}`,right,25,{align:'right'});
+
+  doc.setDrawColor(0,104,183);
+  doc.setLineWidth(.65);
+  doc.line(margin,30,right,30);
+}
+
+function drawPdfOrderTable(doc,order,{tableY=60,maxRows=4}={}){
+  const pageWidth=doc.internal.pageSize.getWidth();
+  const margin=10;
+  const right=pageWidth-margin;
+  const contentWidth=right-margin;
+  const colDesc=margin+3;
+  const colQty=right-68;
+  const colPrice=right-43;
+  const colTotal=right-3;
+  const rows=pdfOrderRows(order);
+
+  doc.setFillColor(238,246,252);
+  doc.rect(margin,tableY,contentWidth,8,'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(38,68,96);
+  doc.text('RINCIAN',colDesc,tableY+5.3);
+  doc.text('QTY',colQty,tableY+5.3,{align:'right'});
+  doc.text('HARGA',colPrice,tableY+5.3,{align:'right'});
+  doc.text('JUMLAH',colTotal,tableY+5.3,{align:'right'});
+
+  let rowY=tableY+13.5;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  rows.slice(0,maxRows).forEach(row=>{
+    doc.setTextColor(5,29,58);
+    const name=doc.splitTextToSize(String(row.name),colQty-colDesc-5).slice(0,1);
+    doc.text(name,colDesc,rowY);
+    doc.text(row.qtyText||'1',colQty,rowY,{align:'right'});
+    doc.text(rupiah(row.price),colPrice,rowY,{align:'right'});
+    doc.setFont('helvetica','bold');
+    doc.text(rupiah(row.total),colTotal,rowY,{align:'right'});
+    doc.setFont('helvetica','normal');
+    doc.setDrawColor(218,229,238);
+    doc.line(margin,rowY+2.8,right,rowY+2.8);
+    rowY+=7.2;
+  });
+  if(rows.length>maxRows){
+    doc.setFont('helvetica','italic');
+    doc.setFontSize(8.5);
+    doc.setTextColor(76,95,120);
+    doc.text(`+ ${rows.length-maxRows} rincian lain tercakup dalam total`,colDesc,rowY);
+    doc.setFont('helvetica','normal');
+  }
+  return rows;
+}
+
+function drawPdfSummary(doc,order,{x=128,y=105,receivedLabel='Sudah dibayar'}={}){
+  const pageWidth=doc.internal.pageSize.getWidth();
+  const right=pageWidth-10;
+  const line=(label,value,lineY,bold=false)=>{
+    doc.setFont('helvetica',bold?'bold':'normal');
+    doc.setFontSize(bold?12:9.5);
+    doc.setTextColor(bold?0:38,bold?104:68,bold?183:96);
+    doc.text(label,x,lineY);
+    doc.text(rupiah(value),right,lineY,{align:'right'});
+  };
+  line('Total tagihan',order.total_harga,y);
+  line(receivedLabel,paidAmount(order),y+7);
+  doc.setDrawColor(0,104,183);
+  doc.line(x,y+10,right,y+10);
+  line('Sisa tagihan',outstanding(order),y+18,true);
+}
+
+function buildTagihanPdf(order){
+  const JsPdf=window.jspdf?.jsPDF;
+  if(!JsPdf)throw new Error('Pembuat PDF belum termuat. Periksa koneksi internet lalu coba lagi.');
+
+  const type=orderType(order);
+  const invoiceNumber=`INV-${String(order.no_order||order.id)}`;
+  const filename=`Tagihan_${String(order.no_order||order.id).replace(/[^a-zA-Z0-9_-]+/g,'_')}.pdf`;
+  const doc=new JsPdf({orientation:'landscape',unit:'mm',format:'a5',compress:true});
+  const pageWidth=doc.internal.pageSize.getWidth();
+  const margin=10;
+  const right=pageWidth-margin;
+  const contentWidth=right-margin;
+  const operatorName=currentUser?.nama||currentUser?.username||'Petugas UBNB';
+
+  doc.setProperties({
+    title:`Tagihan ${order.no_order}`,
+    subject:`Tagihan ${type==='service'?'servis':'laundry'}`,
+    author:UBNB_DOCUMENT.name,
+    creator:UBNB_DOCUMENT.name
+  });
+  drawUbnbDocumentHeader(doc,{title:'TAGIHAN',number:invoiceNumber,orderNo:order.no_order});
+
+  const leftWidth=contentWidth*.57;
+  const rightX=margin+leftWidth+8;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(76,95,120);
+  doc.text('DITAGIHKAN KEPADA',margin,37);
+  doc.setFontSize(12.5);
+  doc.setTextColor(5,29,58);
+  doc.text(String(order.nama_display||'—'),margin,43);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(38,68,96);
+  doc.text(`HP: ${order.no_hp||'—'}`,margin,48);
+  const addressLines=doc.splitTextToSize(String(order.alamat||'Alamat tidak dicantumkan'),leftWidth-3).slice(0,1);
+  doc.text(addressLines,margin,53);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(76,95,120);
+  doc.text('INFORMASI ORDER',rightX,37);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(5,29,58);
+  doc.text(`Tanggal masuk : ${fmtTanggal(order.tgl_masuk)}`,rightX,43);
+  doc.text(`Estimasi       : ${fmtTanggal(order.tgl_estimasi)}`,rightX,48);
+  doc.text(`Status / jenis : ${STATUS_LABEL[order.status]||order.status} / ${type==='service'?'Servis':'Laundry'}`,rightX,53);
+
+  drawPdfOrderTable(doc,order,{tableY:59,maxRows:4});
+
+  doc.setFillColor(238,246,252);
+  doc.setDrawColor(172,208,232);
+  doc.roundedRect(margin,105,110,31,2,2,'FD');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(0,104,183);
+  doc.text('CARA PEMBAYARAN',margin+4,111);
+  doc.setFontSize(9.5);
+  doc.setTextColor(5,29,58);
+  doc.text(`Transfer ${UBNB_DOCUMENT.bank} a.n. ${UBNB_DOCUMENT.accountName}`,margin+4,117);
+  doc.setFontSize(15);
+  doc.text(UBNB_DOCUMENT.accountNumber,margin+4,125);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text(`Atau ${UBNB_DOCUMENT.cashInstruction}.`,margin+4,132);
+
+  drawPdfSummary(doc,order,{x:right-72,y:110,receivedLabel:'Sudah dibayar'});
+  const statusText=paidAmount(order)>0?'DP / BELUM LUNAS':'BELUM LUNAS';
+  doc.setFillColor(253,246,227);
+  doc.setDrawColor(201,168,76);
+  doc.roundedRect(right-72,132,72,7,1.5,1.5,'FD');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(154,120,48);
+  doc.text(statusText,right-36,136.8,{align:'center'});
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  doc.setTextColor(76,95,120);
+  doc.text('Dokumen ini adalah tagihan dan bukan bukti pembayaran.',margin,143);
+  doc.text(`Dibuat oleh ${operatorName} · ${fmtTanggal(today())}`,right,143,{align:'right'});
+
+  return {doc,filename,invoiceNumber};
+}
+
+function downloadTagihanPdf(id){
   const order=allOrders.find(row=>String(row.id)===String(id));
   if(!order)return;
-  const items=orderItems(order);
+  if(outstanding(order)<=0){
+    showToast('Tagihan sudah lunas. Gunakan Kuitansi sebagai bukti pembayaran.',true);
+    return;
+  }
+  try{
+    const {doc,filename}=buildTagihanPdf(order);
+    doc.save(filename);
+    showToast('✅ Tagihan PDF berhasil diunduh.');
+  }catch(error){
+    console.error(error);
+    showToast('Gagal membuat tagihan PDF: '+error.message,true);
+  }
+}
+
+async function shareTagihan(id){
+  const order=allOrders.find(row=>String(row.id)===String(id));
+  if(!order)return;
+  if(outstanding(order)<=0){
+    showToast('Tagihan sudah lunas. Gunakan Kuitansi sebagai bukti pembayaran.',true);
+    return;
+  }
+  try{
+    const {doc,filename}=buildTagihanPdf(order);
+    const blob=doc.output('blob');
+    const file=new File([blob],filename,{type:'application/pdf'});
+    const shareData={
+      title:`Tagihan ${order.no_order}`,
+      text:`Tagihan ${orderType(order)==='service'?'servis':'laundry'} ${order.no_order} untuk ${order.nama_display}. Sisa pembayaran ${rupiah(outstanding(order))}.`,
+      files:[file]
+    };
+    if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+      await navigator.share(shareData);
+      showToast('✅ Tagihan siap dibagikan.');
+      return;
+    }
+    doc.save(filename);
+    showToast('Perangkat ini belum mendukung share PDF langsung. Tagihan sudah diunduh untuk dikirim manual.',true);
+  }catch(error){
+    if(error?.name==='AbortError')return;
+    console.error(error);
+    showToast('Gagal membagikan tagihan: '+error.message,true);
+  }
+}
+
+function buildKuitansiPdf(order){
+  const JsPdf=window.jspdf?.jsPDF;
+  if(!JsPdf)throw new Error('Pembuat PDF belum termuat. Periksa koneksi internet lalu coba lagi.');
+
+  const received=paidAmount(order);
   const type=orderType(order);
-  const baseRow=type==='service'
-    ?`<div class="row"><span>Biaya jasa</span><span>${rupiah(order.biaya_jasa)}</span></div>`
-    :`<div class="row"><span>${escapeHtml(serviceOrLaundryLabel(order))} ${num(order.berat_kg)?num(order.berat_kg)+' kg':''}</span><span>${rupiah(num(order.berat_kg)*num(order.harga_per_kg))}</span></div>`;
-  const popup=window.open('','_blank','width=430,height=720');
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(order.no_order)}</title><style>
-    body{font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:8mm;max-width:80mm;margin:auto;color:#111}
-    .center{text-align:center}.bold{font-weight:800}.line{border-top:1px dashed #111;margin:8px 0}.row{display:flex;justify-content:space-between;gap:10px;margin:3px 0}.small{font-size:10px}
-  </style></head><body>
-    <div class="center bold" style="font-size:15px">UBNB LAUNDRY & SERVIS</div>
-    <div class="center small">Desa Perwira, Bekasi Utara</div><div class="line"></div>
-    <div class="row"><span>No. Order</span><strong>${escapeHtml(order.no_order)}</strong></div>
-    <div class="row"><span>Jenis</span><span>${type==='service'?'SERVIS':'LAUNDRY'}</span></div>
-    <div class="row"><span>Tgl Masuk</span><span>${fmtTanggal(order.tgl_masuk)}</span></div>
-    <div class="row"><span>Estimasi</span><span>${fmtTanggal(order.tgl_estimasi)}</span></div><div class="line"></div>
-    <div class="bold">${escapeHtml(order.nama_display)}</div><div>${escapeHtml(order.no_hp||'—')}</div>
-    ${order.alamat?`<div class="small">${escapeHtml(order.alamat)}</div>`:''}
-    <div class="small">${escapeHtml(orderDescription(order))}</div>
-    ${order.keluhan?`<div class="small">Keluhan: ${escapeHtml(order.keluhan)}</div>`:''}<div class="line"></div>
-    ${baseRow}
-    ${items.map(item=>`<div class="row"><span>${escapeHtml(item.nama||'Rincian')} × ${num(item.qty)||1}</span><span>${rupiah((num(item.qty)||1)*num(item.harga))}</span></div>`).join('')}
-    <div class="line"></div><div class="row bold"><span>TOTAL</span><span>${rupiah(order.total_harga)}</span></div>
-    <div class="row"><span>Dibayar</span><span>${rupiah(paidAmount(order))}</span></div>
-    <div class="row bold"><span>Sisa</span><span>${rupiah(outstanding(order))}</span></div>
-    <div class="row"><span>Status</span><span>${paymentLabel(paymentStatus(order)).toUpperCase()}</span></div>
-    <div class="line"></div><div class="center small">Terima kasih atas kepercayaan Anda.</div>
-  </body></html>`);
-  popup.document.close();
-  popup.focus();
-  setTimeout(()=>popup.print(),250);
+  const paymentMethod={
+    tunai:'Tunai kepada petugas UBNB',
+    transfer:`Transfer ${UBNB_DOCUMENT.bank}`,
+    qris:'QRIS'
+  }[order.metode_bayar]||'—';
+  const receiptDate=fmtTanggal(order.tgl_bayar||today());
+  const operatorName=currentUser?.nama||currentUser?.username||'Petugas UBNB';
+  const status=paymentStatus(order);
+  const statusText=status==='lunas'?'LUNAS':'DP / SEBAGIAN';
+  const receiptNumber=`KWT-${String(order.no_order||order.id)}`;
+  const filename=`Kuitansi_${String(order.no_order||order.id).replace(/[^a-zA-Z0-9_-]+/g,'_')}.pdf`;
+  const doc=new JsPdf({orientation:'landscape',unit:'mm',format:'a5',compress:true});
+  const pageWidth=doc.internal.pageSize.getWidth();
+  const margin=10;
+  const right=pageWidth-margin;
+  const contentWidth=right-margin;
+
+  doc.setProperties({
+    title:`Kuitansi ${order.no_order}`,
+    subject:`Kuitansi pembayaran ${type==='service'?'servis':'laundry'}`,
+    author:UBNB_DOCUMENT.name,
+    creator:UBNB_DOCUMENT.name
+  });
+  drawUbnbDocumentHeader(doc,{title:'KUITANSI',number:receiptNumber,orderNo:order.no_order});
+
+  const leftWidth=contentWidth*.57;
+  const rightX=margin+leftWidth+8;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(76,95,120);
+  doc.text('TELAH DITERIMA DARI',margin,37);
+  doc.setFontSize(12.5);
+  doc.setTextColor(5,29,58);
+  doc.text(String(order.nama_display||'—'),margin,43);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(38,68,96);
+  doc.text(`HP: ${order.no_hp||'—'}`,margin,48);
+  const purpose=doc.splitTextToSize(orderDescription(order)||`${type==='service'?'Servis':'Laundry'} ${order.no_order}`,leftWidth-3).slice(0,1);
+  doc.text(purpose,margin,53);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(76,95,120);
+  doc.text('INFORMASI PEMBAYARAN',rightX,37);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.setTextColor(5,29,58);
+  doc.text(`Tanggal : ${receiptDate}`,rightX,43);
+  doc.text(`Metode  : ${paymentMethod}`,rightX,48);
+  doc.text(`Status  : ${statusText}`,rightX,53);
+
+  drawPdfOrderTable(doc,order,{tableY:59,maxRows:4});
+
+  doc.setFillColor(238,246,252);
+  doc.setDrawColor(172,208,232);
+  doc.roundedRect(margin,105,110,31,2,2,'FD');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(0,104,183);
+  doc.text('UANG SEJUMLAH',margin+4,111);
+  doc.setFontSize(15);
+  doc.setTextColor(5,29,58);
+  doc.text(rupiah(received),margin+4,120);
+  doc.setFont('helvetica','italic');
+  doc.setFontSize(9);
+  doc.setTextColor(38,68,96);
+  const terbilang=doc.splitTextToSize(`# ${angkaTerbilang(received)} rupiah #`,102).slice(0,2);
+  doc.text(terbilang,margin+4,126);
+
+  drawPdfSummary(doc,order,{x:right-72,y:110,receivedLabel:'Jumlah diterima'});
+  doc.setFillColor(status==='lunas'?232:253,status==='lunas'?245:246,status==='lunas'?237:227);
+  doc.setDrawColor(status==='lunas'?26:201,status==='lunas'?102:168,status==='lunas'?64:76);
+  doc.roundedRect(right-72,132,72,7,1.5,1.5,'FD');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(status==='lunas'?26:154,status==='lunas'?102:120,status==='lunas'?64:48);
+  doc.text(statusText,right-36,136.8,{align:'center'});
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  doc.setTextColor(76,95,120);
+  doc.text('Kuitansi elektronik ini sah sebagai bukti pembayaran yang telah diterima.',margin,143);
+  doc.text(`Penerima: ${operatorName}`,right,143,{align:'right'});
+
+  return {doc,filename,receiptNumber};
+}
+
+function downloadKuitansiPdf(id){
+  const order=allOrders.find(row=>String(row.id)===String(id));
+  if(!order)return;
+  if(paidAmount(order)<=0){
+    showToast('Kuitansi hanya dapat diunduh setelah pembayaran diterima.',true);
+    return;
+  }
+  try{
+    const {doc,filename}=buildKuitansiPdf(order);
+    doc.save(filename);
+    showToast('✅ Kuitansi PDF berhasil diunduh.');
+  }catch(error){
+    console.error(error);
+    showToast('Gagal membuat kuitansi PDF: '+error.message,true);
+  }
 }
 
 function filterRiwayat(){
