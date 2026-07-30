@@ -422,15 +422,13 @@ body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(-
           <div class="section-label">Pembayaran & Catatan</div>
           <div class="irow"><label>Bayar Awal</label><input type="number" id="order-dibayar" min="0" step="500" value="0" oninput="hitungHarga()"></div>
           <div class="irow"><label>Metode</label>
-            <select id="order-metode-bayar">
+            <select id="order-metode-bayar" onchange="updateOrderPaymentDestination()">
               <option value="tunai">Tunai</option>
               <option value="transfer">Transfer</option>
               <option value="qris">QRIS</option>
             </select>
           </div>
-          <div class="irow" id="row-kas"><label>Kas Penerima</label>
-            <select id="order-kas"><option value="">Pilih kas...</option></select>
-          </div>
+          <div class="info-box hijau" id="order-payment-destination"></div>
           <div class="irow"><label>Catatan</label><textarea id="order-catatan" rows="2" placeholder="Catatan penerimaan, kondisi fisik, permintaan pelanggan..."></textarea></div>
           <div class="btn-row" style="margin-top:12px">
             <button class="btn primary" style="flex:1" id="btn-simpan-order" onclick="simpanOrder()">💾 Simpan Order</button>
@@ -771,7 +769,7 @@ async function simpanOrder(){
   const tglEst=document.getElementById('order-tgl-est').value||null;
   const catatan=document.getElementById('order-catatan').value.trim()||null;
   const statusBayar=document.getElementById('order-bayar').value;
-  const kasId=parseInt(document.getElementById('order-kas').value)||null;
+  const kasId=null;
   const hp=document.getElementById('order-hp').value.trim()||null;
 
   if(!nama){toast('Isi nama pelanggan dulu',true);return;}
@@ -997,12 +995,8 @@ async function updateStatus(id,newStatus){
 
 async function tandaiLunas(id){
   const o=aOrders.find(x=>x.id==id);if(!o)return;
-  // Pilih kas
-  const kasOpts=aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
-  const kasHtml=aKas.length?`<select id="lunas-kas" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;margin-top:8px;font-family:inherit">${kasOpts}</select>`:'';
-  if(!confirm('Tandai order ini sebagai LUNAS?'+( aKas.length?' Pilih kas:':''))) return;
-
-  const kasId=document.getElementById('lunas-kas')?parseInt(document.getElementById('lunas-kas').value):null;
+  if(!confirm('Tandai order ini sebagai LUNAS?')) return;
+  const kasId=null;
   await sb.from('laundry_order').update({status_bayar:'lunas',tgl_bayar:today()}).eq('id',id);
 
   if(kasId){
@@ -1138,13 +1132,6 @@ function initForms(){
     hitungHarga();
   });
   document.getElementById('order-harga-kg').value=5000;
-  // Kas dropdown
-  const kasOpts='<option value="">Pilih kas...</option>'+aKas.map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
-  document.getElementById('order-kas').innerHTML=kasOpts;
-  // Show/hide kas
-  document.getElementById('order-bayar').addEventListener('change',function(){
-    document.getElementById('row-kas').style.display=this.value==='lunas'?'flex':'none';
-  });
 }
 
 // ===== UI HELPERS =====
@@ -1537,9 +1524,9 @@ function generateOrderNumber(type){
 }
 
 async function insertKasMutation(orderId,amount,kasId,description,dateValue){
-  if(amount<=0||!kasId)return;
+  if(amount<=0)return;
   const {error}=await appDb.from('kas_mutasi').insert([{
-    kas_id:Number(kasId),
+    kas_id:kasId?Number(kasId):null,
     tipe:'masuk',
     kategori:'masuk',
     jumlah:amount,
@@ -1550,6 +1537,55 @@ async function insertKasMutation(orderId,amount,kasId,description,dateValue){
     ref_id:orderId
   }]);
   if(error)throw error;
+}
+
+function paymentReceiverName(){
+  return currentUser?.nama||currentUser?.username||'Petugas UBNB';
+}
+
+function mainTreasurerKas(){
+  return allKas.find(kas=>{
+    const name=String(kas.nama||'').toLowerCase();
+    return name.includes('kas utama')&&name.includes('bendahara');
+  })||null;
+}
+
+function paymentDestination(method){
+  if(method==='tunai'){
+    return {
+      kasId:null,
+      label:`Tunai diterima oleh ${paymentReceiverName()} dan masih berada pada penerima.`,
+      mutationLabel:`Tunai diterima ${paymentReceiverName()}`
+    };
+  }
+  const kas=mainTreasurerKas();
+  if(!kas)throw new Error('Kas Utama (Bendahara) tidak ditemukan.');
+  return {
+    kasId:Number(kas.id),
+    label:`${method==='qris'?'QRIS':'Transfer'} otomatis masuk ${kas.nama}.`,
+    mutationLabel:`${method==='qris'?'QRIS':'Transfer'} masuk ${kas.nama}`
+  };
+}
+
+function setPaymentDestinationHint(targetId,method){
+  const target=el(targetId);
+  if(!target)return;
+  try{
+    const destination=paymentDestination(method);
+    target.className=`info-box ${method==='tunai'?'gold':'hijau'}`;
+    target.textContent=(method==='tunai'?'💵 ':'🏦 ')+destination.label;
+  }catch(error){
+    target.className='info-box';
+    target.textContent='⚠️ '+error.message;
+  }
+}
+
+function updateOrderPaymentDestination(){
+  setPaymentDestinationHint('order-payment-destination',el('order-metode-bayar')?.value||'tunai');
+}
+
+function updateDetailPaymentDestination(){
+  setPaymentDestinationHint('detail-payment-destination',el('detail-bayar-metode')?.value||'tunai');
 }
 
 async function insertShuLog(order,orderId){
@@ -1582,8 +1618,14 @@ async function simpanOrder(){
   if(type==='service'&&!el('order-unit').value.trim())return showToast('Nama unit yang diservis wajib diisi.',true);
   if(type==='service'&&!el('order-keluhan').value.trim())return showToast('Keluhan pelanggan wajib diisi.',true);
   if(totals.paid>totals.total)return showToast('Pembayaran awal tidak boleh melebihi total order.',true);
-  const kasId=el('order-kas').value;
-  if(totals.paid>0&&!kasId)return showToast('Pilih kas penerima pembayaran.',true);
+  const method=el('order-metode-bayar').value;
+  let destination;
+  try{
+    destination=paymentDestination(method);
+  }catch(error){
+    return showToast(error.message,true);
+  }
+  const kasId=destination.kasId;
 
   const category=type==='service'?el('order-service-kategori').value:el('order-laundry-layanan').value;
   const payment=totals.total>0&&totals.paid>=totals.total?'lunas':totals.paid>0?'dp':'belum';
@@ -1606,8 +1648,8 @@ async function simpanOrder(){
     jumlah_dibayar:totals.paid,
     status_bayar:payment,
     tgl_bayar:payment==='lunas'?today():null,
-    kas_id:kasId?Number(kasId):null,
-    metode_bayar:el('order-metode-bayar').value,
+    kas_id:kasId,
+    metode_bayar:method,
     status:'masuk',
     tgl_masuk:el('order-tgl-masuk').value||today(),
     tgl_estimasi:el('order-tgl-est').value||null,
@@ -1633,7 +1675,7 @@ async function simpanOrder(){
     const {data,error}=await appDb.from('laundry_order').insert([order]).select('id,no_order').single();
     if(error)throw error;
     if(totals.paid>0){
-      await insertKasMutation(data.id,totals.paid,kasId,`${type==='service'?'Servis':'Laundry'}: ${name} (${data.no_order})`,order.tgl_masuk);
+      await insertKasMutation(data.id,totals.paid,kasId,`${type==='service'?'Servis':'Laundry'}: ${name} (${data.no_order}) · ${destination.mutationLabel}`,order.tgl_masuk);
     }
     await insertShuLog(order,data.id);
     showToast('✅ Order '+data.no_order+' berhasil disimpan.');
@@ -1660,12 +1702,14 @@ function resetOrder(){
   el('order-berat').value='';
   el('order-biaya-jasa').value=0;
   el('order-dibayar').value=0;
+  el('order-metode-bayar').value='tunai';
   el('order-laundry-layanan').value='reguler';
   el('order-service-kategori').value='ac';
   el('order-lokasi').value='bengkel';
   el('order-pengantaran').value='ambil_sendiri';
   setLaundryDefault();
   setOrderType('laundry');
+  updateOrderPaymentDestination();
 }
 
 function loadOrderHariIni(){
@@ -1768,8 +1812,6 @@ function bukaDetail(id){
   const baseRow=type==='service'
     ?`<div class="summary-row"><span>Biaya jasa</span><span>${rupiah(order.biaya_jasa)}</span></div>`
     :`<div class="summary-row"><span>${escapeHtml(serviceOrLaundryLabel(order))} ${num(order.berat_kg)?'('+num(order.berat_kg).toLocaleString('id-ID')+' kg × '+rupiah(order.harga_per_kg)+')':''}</span><span>${rupiah(num(order.berat_kg)*num(order.harga_per_kg))}</span></div>`;
-  const kasOptions=allKas.map(kas=>`<option value="${kas.id}" ${String(kas.id)===String(order.kas_id)?'selected':''}>${escapeHtml(kas.nama)}</option>`).join('');
-
   el('modal-order-title').textContent=order.no_order;
   el('modal-order-content').innerHTML=`
     <div style="background:linear-gradient(135deg,${type==='service'?'var(--teal-dark),var(--teal)':'#2e1065,var(--purple)'});border-radius:10px;padding:14px;color:white;margin-bottom:14px">
@@ -1803,8 +1845,8 @@ function bukaDetail(id){
     ${remaining>0&&order.status!=='dibatalkan'?`
       <div class="section-label">Catat Pembayaran</div>
       <div class="irow"><label>Nominal</label><input id="detail-bayar-nominal" type="number" min="1" max="${remaining}" value="${remaining}" step="500"></div>
-      <div class="irow"><label>Metode</label><select id="detail-bayar-metode"><option value="tunai">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option></select></div>
-      <div class="irow"><label>Kas</label><select id="detail-bayar-kas"><option value="">Pilih kas...</option>${kasOptions}</select></div>
+      <div class="irow"><label>Metode</label><select id="detail-bayar-metode" onchange="updateDetailPaymentDestination()"><option value="tunai">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option></select></div>
+      <div class="info-box gold" id="detail-payment-destination"></div>
       <button class="btn hijau sm" onclick="catatPembayaran('${order.id}')">💰 Simpan Pembayaran</button>
     `:''}
     <div class="section-label">Tindakan</div>
@@ -1818,6 +1860,7 @@ function bukaDetail(id){
       ${paidAmount(order)>0?`<button class="btn secondary sm" onclick="downloadKuitansiPdf('${order.id}')">✅ Download Kuitansi PDF</button>`:''}
     </div>
   `;
+  updateDetailPaymentDestination();
   openModal('modal-order');
 }
 
@@ -1852,24 +1895,29 @@ async function catatPembayaran(id){
   const order=allOrders.find(row=>String(row.id)===String(id));
   if(!order)return;
   const amount=num(el('detail-bayar-nominal').value);
-  const kasId=el('detail-bayar-kas').value;
   const method=el('detail-bayar-metode').value;
   const remaining=outstanding(order);
   if(amount<=0||amount>remaining)return showToast('Nominal pembayaran harus antara Rp 1 dan '+rupiah(remaining)+'.',true);
-  if(!kasId)return showToast('Pilih kas penerima.',true);
+  let destination;
+  try{
+    destination=paymentDestination(method);
+  }catch(error){
+    return showToast(error.message,true);
+  }
+  const kasId=destination.kasId;
   const newPaid=paidAmount(order)+amount;
   const newStatus=newPaid>=num(order.total_harga)?'lunas':'dp';
   const {error}=await appDb.from('laundry_order').update({
     jumlah_dibayar:newPaid,
     status_bayar:newStatus,
     tgl_bayar:newStatus==='lunas'?today():null,
-    kas_id:Number(kasId),
+    kas_id:kasId,
     metode_bayar:method,
     updated_at:new Date().toISOString()
   }).eq('id',id);
   if(error)return showToast('Gagal memperbarui pembayaran: '+error.message,true);
   try{
-    await insertKasMutation(order.id,amount,kasId,`${orderType(order)==='service'?'Servis':'Laundry'}: ${order.nama_display} (${order.no_order})`,today());
+    await insertKasMutation(order.id,amount,kasId,`${orderType(order)==='service'?'Servis':'Laundry'}: ${order.nama_display} (${order.no_order}) · ${destination.mutationLabel}`,today());
   }catch(errorKas){
     return showToast('Pembayaran tersimpan, tetapi mutasi kas gagal: '+errorKas.message,true);
   }
@@ -2416,8 +2464,7 @@ function exportExcel(){
 }
 
 function fillKasOptions(){
-  const options='<option value="">Pilih kas...</option>'+allKas.map(kas=>`<option value="${kas.id}">${escapeHtml(kas.nama)}</option>`).join('');
-  el('order-kas').innerHTML=options;
+  updateOrderPaymentDestination();
 }
 
 function initializeForms(){
@@ -2427,6 +2474,7 @@ function initializeForms(){
   setOrderType('laundry',false);
   renderItems();
   hitungHarga();
+  updateOrderPaymentDestination();
 }
 
 function showPage(id,node){
