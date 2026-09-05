@@ -41,6 +41,11 @@ input:focus{border-color:var(--H3)}
 .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:99px;font-size:10px;font-weight:800}
 .badge.ok{background:#dcfce7;color:#166534}
 .badge.wait{background:#fef3c7;color:#92400e}
+.badge.partial{background:#dbeafe;color:#1e40af}
+.role-banner{margin-top:8px;padding:8px 10px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:11px;font-weight:750}
+.sign-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.sign-progress-item{border:1px solid var(--B);border-radius:7px;padding:7px 5px;text-align:center;font-size:9px;background:#fff}
+.sign-progress-item strong{display:block;color:var(--H);margin-bottom:2px}.sign-progress-item.ok{background:#f0fdf4;border-color:#86efac;color:#166534}.sign-progress-item.wait{background:#fffbeb;border-color:#fbbf24;color:#92400e}
 .paper-wrap{background:#ddd8d0;padding:9px;border-radius:10px;overflow:hidden}
 .paper{background:#fff;padding:14px;max-width:680px;margin:auto;border-top:5px solid #1a5c3a;box-shadow:0 2px 10px rgba(0,0,0,.12);font-family:Arial,sans-serif;font-size:9pt;line-height:1.5;overflow:hidden}
 /* Snapshot styles compatible with bmt.html */
@@ -111,6 +116,8 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
         </div>
         <span id="docBadge" class="badge wait">Menunggu TTD</span>
       </div>
+      <div id="roleBanner" class="role-banner hidden"></div>
+      <div id="signProgress" class="sign-progress"></div>
       <div id="hashStatus" class="alert info">Memverifikasi integritas dokumen...</div>
     </div>
 
@@ -129,9 +136,9 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
       </div>
     </div>
 
-    <div class="card">
-      <div class="title">2. Foto Verifikasi</div>
-      <div class="muted">Ambil foto diri langsung dari kamera HP. Foto disimpan sebagai bukti pendukung dan tidak ditampilkan pada halaman verifikasi publik.</div>
+    <div class="card" id="photoCard">
+      <div class="title">2. Foto Verifikasi Nasabah</div>
+      <div class="muted">Khusus Nasabah: ambil foto diri langsung dari kamera HP. Foto disimpan sebagai bukti pendukung dan tidak ditampilkan pada halaman verifikasi publik.</div>
       <div class="camera-box" style="margin-top:10px">
         <video id="video" class="hidden" autoplay playsinline></video>
         <img id="photoPreview" class="hidden" alt="Foto verifikasi">
@@ -147,26 +154,31 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
     </div>
 
     <div class="card">
-      <div class="title">3. Konfirmasi Persetujuan</div>
+      <div class="title" id="consentTitle">3. Konfirmasi Persetujuan</div>
       <label style="margin-top:0">Nama Penanda Tangan</label>
-      <input type="text" id="signerName">
+      <input type="text" id="signerName" readonly>
       <div class="consent">
         <input type="checkbox" id="consentCheck">
         <label for="consentCheck" id="consentText"></label>
       </div>
       <div class="alert info">
-        Dengan menekan tombol di bawah, waktu penandatanganan, tanda tangan, foto verifikasi, informasi perangkat, hash dokumen, dan catatan persetujuan akan disimpan sebagai audit trail.
+        Dengan menekan tombol di bawah, waktu penandatanganan, tanda tangan, informasi perangkat, hash dokumen, dan catatan persetujuan akan disimpan sebagai audit trail. Foto verifikasi wajib untuk Nasabah.
       </div>
       <button class="btn gold" id="btnSign" onclick="submitSignature()">✅ Setuju & Tandatangani Akad</button>
       <div id="signMsg"></div>
     </div>
   </div>
 
+  <div id="partialActions" class="card no-print hidden">
+    <div class="title">✍️ Tanda Tangan Tersimpan</div>
+    <div class="alert info" id="partialMessage">Akad belum Complete karena masih menunggu penanda tangan lainnya.</div>
+  </div>
+
   <div id="finalActions" class="card no-print hidden">
-    <div class="title">✅ Akad Telah Ditandatangani</div>
-    <div class="alert ok">Dokumen ini merupakan snapshot naskah yang telah disetujui nasabah. Integritas dokumen dapat diperiksa melalui hash dan kode verifikasi di bagian akhir.</div>
+    <div class="title">✅ Akad Complete · 3/3 Signed</div>
+    <div class="alert ok">Nasabah, Pengurus yang melakukan akad, dan Saksi telah menandatangani dokumen ini. Integritas snapshot dapat diperiksa melalui SHA-256 dan kode verifikasi.</div>
     <button class="btn primary" onclick="downloadPDF()">📥 Download PDF Final</button>
-    <button class="btn sec" onclick="window.print()">🖨️ Print / Simpan PDF</button>
+    <button class="btn sec" onclick="printFinal()">🖨️ Print / Simpan PDF</button>
   </div>
 </div>
 
@@ -188,7 +200,7 @@ let cameraStream=null;
 let canvas,ctx,dpr=1;
 
 function show(id,on=true){document.getElementById(id)?.classList.toggle('hidden',!on)}
-function fail(msg){show('loading',false);show('gate',false);show('docSection',false);show('sign-section',false);show('finalActions',false);show('errorBox',true);document.getElementById('errorText').textContent=msg}
+function fail(msg){show('loading',false);show('gate',false);show('docSection',false);show('sign-section',false);show('partialActions',false);show('finalActions',false);show('errorBox',true);document.getElementById('errorText').textContent=msg}
 async function sha256Hex(text){
   const b=new TextEncoder().encode(String(text));
   const h=await crypto.subtle.digest('SHA-256',b);
@@ -218,66 +230,168 @@ async function verifyDocumentHash(data){
   el.textContent=ok?'✅ Integritas naskah valid · SHA-256 sesuai':'❌ Integritas naskah tidak valid. Jangan tandatangani dokumen ini.';
   return ok;
 }
-function renderSnapshot(data, signed=false){
+function roleLabel(role){
+  return role==='nasabah'?'Nasabah':role==='pengurus'?'Pengurus BMT':'Saksi';
+}
+function signerMap(data){
+  const out=Object.assign({},data?.signers||{});
+  if(!out.nasabah && data?.signature_data){
+    out.nasabah={role:'nasabah',name:data.signer_name||data.nama,status:'signed',signed_at:data.signed_at,signature_data:data.signature_data,signature_sha256:data.signature_sha256,photo_sha256:data.photo_sha256};
+  }
+  return out;
+}
+function applySignerSlots(data){
+  const paper=document.getElementById('paper');
+  const signs=signerMap(data);
+  const roles=['nasabah','pengurus','saksi'];
+  const boxes=[...paper.querySelectorAll('.ppr-ttd-box,.ttd-box')];
+  roles.forEach((role,i)=>{
+    const sg=signs[role];
+    const box=boxes[i]||null;
+    const slot=paper.querySelector(`[data-signature-slot="${role}"]`)||box?.querySelector('.area');
+    const nameSlot=paper.querySelector(`[data-name-slot="${role}"]`)||box?.querySelector('.nama');
+    if(nameSlot&&sg?.name)nameSlot.textContent=sg.name;
+    if(slot&&sg?.status==='signed'&&sg?.signature_data){
+      const img=document.createElement('img');img.src=sg.signature_data;img.alt='Tanda tangan '+roleLabel(role);
+      slot.innerHTML='';slot.appendChild(img);
+    }
+  });
+}
+function renderSignProgress(data){
+  const el=document.getElementById('signProgress');if(!el)return;
+  const signs=signerMap(data);
+  el.innerHTML=['nasabah','pengurus','saksi'].map(role=>{
+    const x=signs[role];const ok=x?.status==='signed';
+    return `<div class="sign-progress-item ${ok?'ok':'wait'}"><strong>${roleLabel(role)}</strong>${ok?'✅ Signed':'⏳ Menunggu'}${x?.name?`<div>${escapeHTML(x.name)}</div>`:''}</div>`;
+  }).join('');
+}
+function renderSnapshot(data,canSign=false){
   reqData=data;
   show('loading',false);show('errorBox',false);show('gate',false);show('docSection',true);
+  show('sign-section',false);show('partialActions',false);show('finalActions',false);
   document.getElementById('docTitle').textContent=(data.no_akad||'Naskah Akad')+' · '+(data.nama||'');
   document.getElementById('docMeta').textContent=(data.objek||'—')+' · Versi '+(data.version||1);
   const badge=document.getElementById('docBadge');
-  badge.className='badge '+(signed?'ok':'wait');
-  badge.textContent=signed?'✅ Signed':'⏳ Menunggu TTD';
+  const count=parseInt(data.sign_count||0),complete=data.status==='complete'||count>=3;
+  badge.className='badge '+(complete?'ok':count>0?'partial':'wait');
+  badge.textContent=complete?'✅ Akad Complete':count>0?`✍️ ${count}/3 Signed`:'⏳ Menunggu TTD';
+
   const paper=document.getElementById('paper');
   paper.innerHTML=sanitizeSnapshot(data.document_html||'');
-  if(signed && data.signature_data){
-    const slot=paper.querySelector('[data-signature-slot="nasabah"]');
-    if(slot){const img=document.createElement('img');img.src=data.signature_data;img.alt='Tanda tangan nasabah';slot.innerHTML='';slot.appendChild(img);}
-    appendEvidence(data);
-  }
+  applySignerSlots(data);
+  renderSignProgress(data);
+  if(count>0)appendEvidence(data);
+
+  const roleBanner=document.getElementById('roleBanner');
+  if(canSign&&data.signer_role){
+    roleBanner.classList.remove('hidden');
+    roleBanner.textContent=`Anda diminta menandatangani sebagai ${roleLabel(data.signer_role)} · ${data.signer_name||''}`;
+  }else roleBanner.classList.add('hidden');
+
   verifyDocumentHash(data).then(ok=>{
     if(!ok){show('sign-section',false);document.getElementById('btnSign')?.setAttribute('disabled','disabled');}
   });
-  if(signed){show('sign-section',false);show('finalActions',true)}
-  else{show('sign-section',true);show('finalActions',false);document.getElementById('signerName').value=data.nama||'';document.getElementById('consentText').textContent=data.consent_text||'';setTimeout(initSignature,100)}
+
+  if(canSign&&data.signer_status==='pending'){
+    show('sign-section',true);
+    show('photoCard',!!data.photo_required);
+    document.getElementById('consentTitle').textContent=data.photo_required?'3. Konfirmasi Persetujuan':'2. Konfirmasi Persetujuan';
+    document.getElementById('signerName').value=data.signer_name||'';
+    document.getElementById('consentText').textContent=data.consent_text||'';
+    setTimeout(initSignature,100);
+  }else if(complete){
+    show('finalActions',true);
+  }else if(count>0){
+    show('partialActions',true);
+    const pending=['nasabah','pengurus','saksi'].filter(r=>signerMap(data)[r]?.status!=='signed').map(roleLabel);
+    document.getElementById('partialMessage').textContent=`Akad sudah ${count}/3 Signed. Masih menunggu ${pending.join(' dan ')}. PDF Final tersedia setelah status Akad Complete.`;
+  }
 }
 function appendEvidence(data){
   const paper=document.getElementById('paper');
   const old=paper.querySelector('.evidence');if(old)old.remove();
+  const signs=signerMap(data);
+  const count=parseInt(data.sign_count||0);
   const verifyUrl=new URL('akad-sign.html',location.href);verifyUrl.search='';verifyUrl.searchParams.set('v',data.verify_code);
+  const roleRows=['nasabah','pengurus','saksi'].map(role=>{
+    const x=signs[role]||{};
+    const ok=x.status==='signed';
+    return `<div class="ev-item">
+      <div class="ev-lbl">${escapeHTML(roleLabel(role))}</div>
+      <div class="ev-val">${ok?'✅ SIGNED':'⏳ MENUNGGU'} · ${escapeHTML(x.name||'—')}</div>
+      ${ok?`<div style="font-size:6.5pt;margin-top:3px;color:#555">Waktu: ${escapeHTML(fmtDate(x.signed_at))}</div>
+      <div style="font-size:6.2pt;margin-top:2px;color:#666;word-break:break-all">Hash TTD: ${escapeHTML(x.signature_sha256||'—')}</div>
+      ${x.photo_sha256?`<div style="font-size:6.2pt;margin-top:2px;color:#666;word-break:break-all">Hash Foto: ${escapeHTML(x.photo_sha256)}</div>`:''}`:''}
+    </div>`;
+  }).join('');
   const box=document.createElement('div');box.className='evidence';
-  box.innerHTML=`<h4>✅ PENGESAHAN DIGITAL NASABAH</h4>
-    <div class="ev-grid">
-      <div class="ev-item"><div class="ev-lbl">Penanda Tangan</div><div class="ev-val">${escapeHTML(data.signer_name||data.nama||'—')}</div></div>
-      <div class="ev-item"><div class="ev-lbl">Waktu Signed</div><div class="ev-val">${escapeHTML(fmtDate(data.signed_at))}</div></div>
-      <div class="ev-item"><div class="ev-lbl">Hash Dokumen SHA-256</div><div class="ev-val">${escapeHTML(data.document_hash||'—')}</div></div>
-      <div class="ev-item"><div class="ev-lbl">Hash Tanda Tangan</div><div class="ev-val">${escapeHTML(data.signature_sha256||'—')}</div></div>
-      <div class="ev-item"><div class="ev-lbl">Hash Foto Verifikasi</div><div class="ev-val">${escapeHTML(data.photo_sha256||'—')}</div></div>
-      <div class="ev-item"><div class="ev-lbl">Metode Verifikasi</div><div class="ev-val">Link + PIN + Signature + Foto + Consent</div></div>
-    </div>
+  box.innerHTML=`<h4>${count>=3?'✅ PENGESAHAN DIGITAL COMPLETE':'✍️ PROGRES PENGESAHAN DIGITAL · '+count+'/3 SIGNED'}</h4>
+    <div class="ev-grid">${roleRows}</div>
+    <div class="ev-item" style="margin-top:7px"><div class="ev-lbl">HASH DOKUMEN SHA-256</div><div class="ev-val">${escapeHTML(data.document_hash||'—')}</div></div>
     <div class="verify-row">
-      <div class="qr"><canvas id="verifyQr" width="90" height="90"></canvas></div>
+      <div class="qr"><div id="verifyQr" aria-label="QR verifikasi"></div></div>
       <div class="verify-text"><strong>Kode Verifikasi:</strong><br>${escapeHTML(data.verify_code||'—')}<br><br><strong>Verifikasi:</strong><br>${escapeHTML(verifyUrl.toString())}</div>
     </div>
-    <div style="font-size:6.8pt;color:#555;margin-top:8px"><strong>Pernyataan:</strong> ${escapeHTML(data.consent_text||'')}</div>`;
+    <div style="font-size:6.8pt;color:#555;margin-top:8px"><strong>Status:</strong> ${count>=3?'Akad Complete — seluruh pihak telah Signed.':'Akad belum Complete — masih menunggu pihak yang belum Signed.'}</div>`;
   paper.appendChild(box);
-  makeQR(verifyUrl.toString());
+  qrReadyPromise=makeQR(verifyUrl.toString()).catch(()=>null);
 }
 function escapeHTML(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+let qrReadyPromise=Promise.resolve();
+
+function loadScriptAny(urls,label){
+  return new Promise(async(resolve,reject)=>{
+    let lastErr=null;
+    for(const url of urls){
+      try{
+        await new Promise((res,rej)=>{
+          const x=document.createElement('script');
+          x.src=url;x.async=true;
+          const timer=setTimeout(()=>{x.remove();rej(new Error('Timeout memuat '+label))},12000);
+          x.onload=()=>{clearTimeout(timer);res()};
+          x.onerror=()=>{clearTimeout(timer);x.remove();rej(new Error('Gagal memuat '+label+' dari '+url))};
+          document.head.appendChild(x);
+        });
+        return resolve();
+      }catch(e){lastErr=e}
+    }
+    reject(lastErr||new Error('Gagal memuat '+label));
+  });
+}
+
 async function makeQR(text){
+  const c=document.getElementById('verifyQr');
+  if(!c)return;
+  c.innerHTML='<span style="font-size:9px;color:#777">Memuat QR...</span>';
   try{
     if(!window.QRCode){
-      await new Promise((res,rej)=>{const x=document.createElement('script');x.src='https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';x.onload=res;x.onerror=rej;document.head.appendChild(x)});
+      await loadScriptAny([
+        'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
+      ],'QR Code');
     }
-    const c=document.getElementById('verifyQr');
-    if(c&&window.QRCode?.toCanvas)await QRCode.toCanvas(c,text,{width:90,margin:1});
-  }catch(e){const c=document.getElementById('verifyQr');if(c){const g=c.getContext('2d');g.font='10px sans-serif';g.fillText('QR',35,48)}}
+    if(typeof window.QRCode!=='function')throw new Error('Library QR tidak tersedia');
+    c.innerHTML='';
+    new QRCode(c,{
+      text:text,width:88,height:88,colorDark:'#000000',colorLight:'#ffffff',
+      correctLevel:(QRCode.CorrectLevel&&QRCode.CorrectLevel.M)||0
+    });
+    await new Promise(r=>setTimeout(r,120));
+    const rendered=c.querySelector('canvas,img');
+    if(!rendered)throw new Error('QR tidak berhasil dirender');
+  }catch(e){
+    console.error('[Akad Digital] QR:',e);
+    c.innerHTML='<div style="font-size:8px;line-height:1.25;text-align:center;padding:4px;color:#991b1b">QR gagal dimuat<br>Gunakan kode verifikasi</div>';
+    throw e;
+  }
 }
 async function init(){
   try{
     if(VERIFY_CODE){
       const{data,error}=await sb.rpc('bmt_verify_signed_akad',{p_verify_code:VERIFY_CODE});
       if(error)throw error;
-      if(!data?.ok)return fail(data?.message||'Dokumen signed tidak ditemukan');
-      return renderSnapshot(data,true);
+      if(!data?.ok)return fail(data?.message||'Dokumen tanda tangan tidak ditemukan');
+      return renderSnapshot(data,false);
     }
     if(!RAW_TOKEN)return fail('Link akad tidak lengkap.');
     TOKEN_HASH=await sha256Hex(RAW_TOKEN);
@@ -290,15 +404,14 @@ async function verifyPin(){
   if(pin.length!==6){msg.innerHTML='<div class="alert err">PIN harus 6 digit.</div>';return}
   try{
     PIN_HASH=await sha256Hex(pin);
-    const{data,error}=await sb.rpc('bmt_get_akad_signing',{p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH});
+    const{data,error}=await sb.rpc('bmt_get_akad_signer',{p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH});
     if(error)throw error;
     if(!data?.ok){
       const rem=data?.remaining_attempts!==undefined?' Sisa percobaan: '+data.remaining_attempts+'.':'';
       msg.innerHTML='<div class="alert err">'+escapeHTML((data?.message||'Verifikasi gagal')+rem)+'</div>';return;
     }
     msg.innerHTML='';
-    if(data.status==='signed')renderSnapshot(data,true);
-    else renderSnapshot(data,false);
+    renderSnapshot(data,data.signer_status==='pending');
   }catch(e){msg.innerHTML='<div class="alert err">'+escapeHTML(e.message||'Verifikasi gagal')+'</div>'}
 }
 function initSignature(){
@@ -346,17 +459,18 @@ async function submitSignature(){
   const msg=document.getElementById('signMsg'),btn=document.getElementById('btnSign');
   if(!reqData||!TOKEN_HASH||!PIN_HASH){msg.innerHTML='<div class="alert err">Sesi verifikasi tidak valid.</div>';return}
   if(!signatureDrawn){msg.innerHTML='<div class="alert err">Tanda tangan belum diisi.</div>';return}
-  if(!photoData){msg.innerHTML='<div class="alert err">Foto verifikasi belum diambil.</div>';return}
+  if(reqData.photo_required&&!photoData){msg.innerHTML='<div class="alert err">Foto verifikasi nasabah belum diambil.</div>';return}
   if(!document.getElementById('consentCheck').checked){msg.innerHTML='<div class="alert err">Centang pernyataan persetujuan terlebih dahulu.</div>';return}
   const signer=document.getElementById('signerName').value.trim();
   if(!signer){msg.innerHTML='<div class="alert err">Nama penanda tangan wajib diisi.</div>';return}
   try{
     btn.disabled=true;btn.textContent='Menyimpan bukti tanda tangan...';
     signatureData=canvas.toDataURL('image/png');
-    const[sigHash,photoHash]=await Promise.all([sha256Hex(signatureData),sha256Hex(photoData)]);
-    const{data,error}=await sb.rpc('bmt_complete_akad_signing',{
+    const sigHash=await sha256Hex(signatureData);
+    const photoHash=photoData?await sha256Hex(photoData):null;
+    const{data,error}=await sb.rpc('bmt_complete_akad_signer',{
       p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH,p_signer_name:signer,p_consent_text:reqData.consent_text,
-      p_signature_data:signatureData,p_signature_sha256:sigHash,p_photo_data:photoData,p_photo_sha256:photoHash,
+      p_signature_data:signatureData,p_signature_sha256:sigHash,p_photo_data:photoData||null,p_photo_sha256:photoHash,
       p_user_agent:navigator.userAgent
     });
     if(error)throw error;
@@ -365,23 +479,53 @@ async function submitSignature(){
     const v=data.verify_code;
     const{data:finalData,error:verifyErr}=await sb.rpc('bmt_verify_signed_akad',{p_verify_code:v});
     if(verifyErr)throw verifyErr;
-    if(!finalData?.ok)throw new Error(finalData?.message||'Dokumen final belum tersedia');
+    if(!finalData?.ok)throw new Error(finalData?.message||'Status dokumen belum tersedia');
     history.replaceState({},'',location.pathname+'?v='+encodeURIComponent(v));
-    renderSnapshot(finalData,true);
+    renderSnapshot(finalData,false);
     window.scrollTo({top:0,behavior:'smooth'});
   }catch(e){msg.innerHTML='<div class="alert err">'+escapeHTML(e.message||'Gagal menandatangani')+'</div>'}
   finally{btn.disabled=false;btn.textContent='✅ Setuju & Tandatangani Akad'}
 }
-async function loadPdfLibs(){
-  if(!window.html2canvas)await new Promise((res,rej)=>{const x=document.createElement('script');x.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';x.onload=res;x.onerror=rej;document.head.appendChild(x)});
-  if(!window.jspdf)await new Promise((res,rej)=>{const x=document.createElement('script');x.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';x.onload=res;x.onerror=rej;document.head.appendChild(x)});
+async function waitPaperReady(){
+  await qrReadyPromise.catch(()=>null);
+  const imgs=[...document.querySelectorAll('#paper img')];
+  await Promise.all(imgs.map(img=>{
+    if(img.complete)return Promise.resolve();
+    return new Promise(res=>{img.addEventListener('load',res,{once:true});img.addEventListener('error',res,{once:true});setTimeout(res,4000)});
+  }));
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 }
+
+async function printFinal(){
+  try{await waitPaperReady()}catch(e){console.warn('[Akad Digital] Persiapan print:',e)}
+  window.print();
+}
+
+async function loadPdfLibs(){
+  if(!window.html2canvas){
+    await loadScriptAny([
+      'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+      'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+    ],'html2canvas');
+  }
+  if(!window.jspdf?.jsPDF){
+    await loadScriptAny([
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.0/jspdf.umd.min.js',
+      'https://cdn.jsdelivr.net/npm/jspdf@2.5.0/dist/jspdf.umd.min.js'
+    ],'jsPDF');
+  }
+  if(!window.html2canvas||!window.jspdf?.jsPDF)throw new Error('Library pembuat PDF tidak tersedia');
+}
+
 async function downloadPDF(){
   const btn=document.querySelector('#finalActions .btn.primary');
   try{
-    btn.disabled=true;btn.textContent='Menyiapkan PDF...';await loadPdfLibs();
+    btn.disabled=true;btn.textContent='Menyiapkan PDF...';
+    await waitPaperReady();
+    await loadPdfLibs();
     const el=document.getElementById('paper');
-    const canvas=await html2canvas(el,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false});
+    const canvas=await window.html2canvas(el,{backgroundColor:'#ffffff',scale:2,useCORS:true,allowTaint:false,logging:false});
+    if(!canvas||!canvas.width||!canvas.height)throw new Error('Dokumen tidak berhasil dirender');
     const{jsPDF}=window.jspdf;const pdf=new jsPDF('p','mm','a4');
     const margin=10,pageW=190,pageH=277,pxPerMm=canvas.width/pageW,slicePx=Math.floor(pageH*pxPerMm);
     let y=0,page=0;
@@ -395,8 +539,13 @@ async function downloadPDF(){
     }
     const nm=(reqData?.no_akad||'akad').replace(/[^\w-]+/g,'_');
     pdf.save('Akad-Digital-'+nm+'.pdf');
-  }catch(e){alert('Gagal membuat PDF: '+e.message)}
-  finally{btn.disabled=false;btn.textContent='📥 Download PDF Final'}
+  }catch(e){
+    console.error('[Akad Digital] PDF:',e);
+    alert('Generator PDF langsung tidak dapat dimuat ('+(e?.message||'error tidak diketahui')+'). Menu Print / Simpan PDF akan dibuka sebagai cadangan.');
+    await printFinal();
+  }finally{
+    btn.disabled=false;btn.textContent='📥 Download PDF Final';
+  }
 }
 window.addEventListener('beforeunload',stopCamera);
 window.addEventListener('resize',()=>{if(!document.getElementById('sign-section').classList.contains('hidden')&&!signatureDrawn)initSignature()});

@@ -460,10 +460,18 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 /* ── AKAD DIGITAL ─────────────────────────── */
 .digital-status{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:var(--rs);font-size:12px;margin-bottom:12px;border:1px solid var(--B);background:var(--K);}
 .digital-status.pending{background:var(--AML);border-color:#f59e0b;color:#92400e;}
-.digital-status.signed{background:var(--HL);border-color:#86efac;color:#166534;}
+.digital-status.partial{background:#eff6ff;border-color:#93c5fd;color:#1e40af;}
+.digital-status.complete,.digital-status.signed{background:var(--HL);border-color:#86efac;color:#166534;}
 .digital-status.expired,.digital-status.cancelled,.digital-status.superseded{background:var(--RL);border-color:#fca5a5;color:var(--R);}
+.digital-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:9px 0 12px}
+.digital-role{border:1px solid var(--B);background:#fff;border-radius:8px;padding:8px 6px;text-align:center;font-size:10px;line-height:1.35}
+.digital-role strong{display:block;color:var(--H);font-size:10px;margin-bottom:2px}
+.digital-role.signed{background:#f0fdf4;border-color:#86efac;color:#166534}
+.digital-role.pending{background:#fffbeb;border-color:#fbbf24;color:#92400e}
+.digital-role.none{background:#f8fafc;color:var(--M)}
 .digital-result{background:#f0fdf4;border:1px solid #86efac;border-radius:var(--rs);padding:12px;margin-top:12px;font-size:12px;word-break:break-word;}
-.digital-code{font-family:"DM Mono",monospace;font-size:20px;font-weight:800;letter-spacing:4px;color:var(--H);background:white;border:1px dashed var(--H3);padding:8px 12px;border-radius:7px;display:inline-block;margin:6px 0;}
+.digital-share-card{background:#fff;border:1px solid #d1fae5;border-radius:8px;padding:10px;margin-top:8px}
+.digital-code{font-family:"DM Mono",monospace;font-size:18px;font-weight:800;letter-spacing:3px;color:var(--H);background:white;border:1px dashed var(--H3);padding:7px 10px;border-radius:7px;display:inline-block;margin:5px 0;}
 
 </style>
 
@@ -1391,17 +1399,39 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 
     <div id="digital-akad-head" style="font-size:12px;color:var(--M);margin-bottom:10px"></div>
     <div id="digital-akad-status" class="digital-status">Memuat status...</div>
+    <div id="digital-akad-progress" class="digital-progress"></div>
 
     <div id="digital-akad-form">
       <div class="info-box blue" style="line-height:1.55">
-        Naskah akan dikunci sebagai snapshot dan diberi SHA-256. Nasabah membuka link di HP,
-        memasukkan PIN verifikasi, membaca naskah, tanda tangan di layar, mengambil foto langsung,
-        lalu memberikan persetujuan.
+        Akad dinyatakan <strong>Complete</strong> setelah ditandatangani oleh
+        <strong>Nasabah + Pengurus yang melakukan akad + Saksi</strong>.
+        Nasabah wajib foto verifikasi; Pengurus dan Saksi menandatangani naskah dan menyatakan persetujuannya.
       </div>
+
       <div class="fg">
         <label>No. WhatsApp Nasabah</label>
         <input type="tel" id="digital-phone" placeholder="08xxxxxxxxxx">
       </div>
+
+      <div class="fg" style="margin-top:10px">
+        <label>Pengurus yang Melakukan Akad</label>
+        <input type="text" id="digital-pengurus-name" placeholder="Nama pengurus">
+        <div style="font-size:9px;color:var(--M);margin-top:3px">Default mengikuti operator pembuat akad. Bisa disesuaikan jika pelaksana akad berbeda.</div>
+      </div>
+      <div class="fg">
+        <label>No. WhatsApp Pengurus <span style="font-weight:400;text-transform:none">(opsional)</span></label>
+        <input type="tel" id="digital-pengurus-phone" placeholder="08xxxxxxxxxx">
+      </div>
+
+      <div class="fg" style="margin-top:10px">
+        <label>Saksi</label>
+        <input type="text" id="digital-saksi-name" placeholder="Nama saksi">
+      </div>
+      <div class="fg">
+        <label>No. WhatsApp Saksi <span style="font-weight:400;text-transform:none">(opsional)</span></label>
+        <input type="tel" id="digital-saksi-phone" placeholder="08xxxxxxxxxx">
+      </div>
+
       <div class="fg">
         <label>Masa Berlaku Link</label>
         <select id="digital-expiry">
@@ -1411,25 +1441,16 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
           <option value="30">30 hari</option>
         </select>
       </div>
-      <button class="btn primary full" id="btn-create-digital" onclick="buatDanKirimAkadDigital()">📲 Buat Link & Kirim WhatsApp</button>
+
+      <button class="btn primary full" id="btn-create-digital" onclick="buatDanKirimAkadDigital()">🔐 Siapkan Link Penandatangan</button>
     </div>
 
     <div id="digital-akad-signed-actions" style="display:none">
-      <button class="btn primary full" onclick="lihatAkadSigned()">✅ Lihat Dokumen Signed</button>
-      <button class="btn secondary full" style="margin-top:8px" onclick="buatUlangAkadDigital()">🔄 Buat Link Tanda Tangan Baru</button>
+      <button class="btn primary full" onclick="lihatAkadSigned()">✅ Lihat Dokumen Complete</button>
+      <button class="btn secondary full" style="margin-top:8px" onclick="buatUlangAkadDigital()">🔄 Buat Versi Akad Digital Baru</button>
     </div>
 
-    <div id="digital-akad-result" class="digital-result" style="display:none">
-      <div style="font-weight:800;color:var(--H);margin-bottom:4px">Link berhasil dibuat</div>
-      <div>PIN verifikasi:</div>
-      <div class="digital-code" id="digital-pin">------</div>
-      <div style="font-size:10px;color:var(--M);margin-bottom:6px">PIN hanya berlaku untuk link ini.</div>
-      <div id="digital-link" style="font-family:'DM Mono',monospace;font-size:10px;background:white;border-radius:5px;padding:7px;border:1px solid var(--B)"></div>
-      <div class="btn-row">
-        <button class="btn primary" onclick="kirimUlangWADigital()">📲 Buka WhatsApp</button>
-        <button class="btn secondary" onclick="salinInfoAkadDigital()">📋 Salin Link + PIN</button>
-      </div>
-    </div>
+    <div id="digital-akad-result" class="digital-result" style="display:none"></div>
   </div>
 </div>
 
@@ -3211,9 +3232,10 @@ function cetakNaskah(){
   bukaPreviewCetak('Naskah Akad — '+a.nama_jamaah, buildNaskahPreview(a), ()=>buildNaskahPrint(a));
 }
 
-// ── AKAD DIGITAL ──────────────────────────────────────────────
+// ── AKAD DIGITAL · 3 PENANDA TANGAN ───────────────────────────
 let _digitalStatus=null;
-let _digitalShare=null;
+let _digitalShare={};
+let _forceNewDigitalVersion=false;
 
 async function sha256HexAkadDigital(text){
   const data=new TextEncoder().encode(String(text));
@@ -3228,6 +3250,12 @@ function randomTokenAkadDigital(){
 function randomPinAkadDigital(){
   const a=new Uint32Array(1);crypto.getRandomValues(a);
   return String(100000+(a[0]%900000));
+}
+function escDigital(v){
+  return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function roleLabelDigital(role){
+  return role==='nasabah'?'Nasabah':role==='pengurus'?'Pengurus BMT':'Saksi';
 }
 async function ensureAkadDigitalAdminHash(){
   if(_bmtAdminPasswordHash)return _bmtAdminPasswordHash;
@@ -3249,16 +3277,40 @@ function normWAAkadDigital(v){
   else if(n.startsWith('8'))n='62'+n;
   return n;
 }
-function snapshotNaskahDigital(a){
-  let html=buildNaskahPreview(a);
-  // Tandai kotak tanda tangan nasabah supaya tanda tangan digital bisa ditempel di versi final.
-  html=html.replace('<div class="area"></div>','<div class="area" data-signature-slot="nasabah"></div>');
-  return html;
+function snapshotNaskahDigital(a,pengurusName,saksiName){
+  const raw=buildNaskahPreview(a);
+  const doc=new DOMParser().parseFromString('<div id="digital-root">'+raw+'</div>','text/html');
+  const root=doc.getElementById('digital-root');
+  const boxes=[...root.querySelectorAll('.ppr-ttd-box,.ttd-box')];
+  const roles=['nasabah','pengurus','saksi'];
+  const names=[a.nama_jamaah,pengurusName,saksiName];
+  boxes.slice(0,3).forEach((box,i)=>{
+    const area=box.querySelector('.area');
+    const nm=box.querySelector('.nama');
+    if(area)area.setAttribute('data-signature-slot',roles[i]);
+    if(nm){nm.setAttribute('data-name-slot',roles[i]);nm.textContent=names[i]||nm.textContent;}
+  });
+  return root.innerHTML;
+}
+function signerStatusDigital(role){
+  return _digitalStatus?.signers?.[role]?.status||'none';
+}
+function renderAkadDigitalProgress(){
+  const el=document.getElementById('digital-akad-progress');if(!el)return;
+  const roles=['nasabah','pengurus','saksi'];
+  el.innerHTML=roles.map(role=>{
+    const x=_digitalStatus?.signers?.[role];
+    const st=x?.status||'none';
+    const cls=st==='signed'?'signed':st==='pending'?'pending':'none';
+    const icon=st==='signed'?'✅':st==='pending'?'⏳':'○';
+    const nm=x?.name?`<div style="font-size:9px;margin-top:2px">${escDigital(x.name)}</div>`:'';
+    return `<div class="digital-role ${cls}"><strong>${roleLabelDigital(role)}</strong>${icon} ${st==='signed'?'Signed':st==='pending'?'Menunggu':'Belum disiapkan'}${nm}</div>`;
+  }).join('');
 }
 async function refreshAkadDigitalStatus(akadId){
   const btn=document.getElementById('dp-btn-akad-digital');
   if(!_bmtAdminPasswordHash){
-    _digitalStatus={ok:true,status:'none'};
+    _digitalStatus={ok:true,status:'none',sign_count:0,total_signers:3,signers:{}};
     return;
   }
   try{
@@ -3267,14 +3319,18 @@ async function refreshAkadDigitalStatus(akadId){
     });
     if(error)throw error;
     if(data?.ok===false){_bmtAdminPasswordHash=null;throw new Error(data.message||'Verifikasi admin gagal');}
-    _digitalStatus=data||{ok:true,status:'none'};
+    _digitalStatus=data||{ok:true,status:'none',sign_count:0,total_signers:3,signers:{}};
     if(!btn)return;
     const st=_digitalStatus.status||'none';
-    if(st==='signed'){
-      btn.textContent='✅ Akad Ditandatangani';
+    const n=parseInt(_digitalStatus.sign_count||0);
+    if(st==='complete'){
+      btn.textContent='✅ Akad Complete';
       btn.style.borderColor='#86efac';btn.style.color='#166534';btn.style.background='#f0fdf4';
+    }else if(st==='partial'){
+      btn.textContent=`✍️ ${n}/3 Signed`;
+      btn.style.borderColor='#93c5fd';btn.style.color='#1e40af';btn.style.background='#eff6ff';
     }else if(st==='pending'){
-      btn.textContent='⏳ Menunggu TTD';
+      btn.textContent=`⏳ ${n}/3 Signed`;
       btn.style.borderColor='#f59e0b';btn.style.color='#92400e';btn.style.background='var(--AML)';
     }else{
       btn.textContent=st==='expired'?'📲 Kirim Ulang Akad':'📲 Akad Digital';
@@ -3285,116 +3341,200 @@ async function refreshAkadDigitalStatus(akadId){
     if(btn)btn.textContent='📲 Akad Digital';
   }
 }
+function renderStatusAkadDigital(){
+  const st=_digitalStatus?.status||'none';
+  const n=parseInt(_digitalStatus?.sign_count||0);
+  const box=document.getElementById('digital-akad-status');
+  box.className='digital-status '+st;
+  const labels={
+    none:'Belum pernah dibuat Akad Digital 3 pihak.',
+    pending:`Menunggu tanda tangan · ${n}/3 sudah Signed.`,
+    partial:`Proses penandatanganan berjalan · ${n}/3 sudah Signed. Akad belum Complete.`,
+    complete:`✅ Akad Complete · Nasabah, Pengurus, dan Saksi sudah Signed${_digitalStatus?.completed_at?' · '+fmtTgl(_digitalStatus.completed_at):''}.`,
+    expired:'Link sebelumnya sudah kedaluwarsa. Buat versi baru.',
+    superseded:'Versi sebelumnya sudah diganti.',
+    cancelled:'Permintaan sebelumnya dibatalkan.'
+  };
+  box.textContent=labels[st]||('Status: '+st);
+  renderAkadDigitalProgress();
+}
 async function bukaAkadDigital(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
   if(!a){toast('Buka detail akad dulu',true);return;}
   if(!CU||(CU.role!=='admin'&&CU.role!=='owner'&&CU.role!=='pemilik')){toast('Hanya admin/owner',true);return;}
   if(!await ensureAkadDigitalAdminHash())return;
-  document.getElementById('digital-akad-head').innerHTML=`<strong>${a.nama_jamaah}</strong> · ${a.no_akad}<br><span style="font-size:10px">${a.objek_pembiayaan||'—'}</span>`;
-  document.getElementById('digital-phone').value=phoneAkadDigital(a)||'';
+
+  document.getElementById('digital-akad-head').innerHTML=`<strong>${escDigital(a.nama_jamaah)}</strong> · ${escDigital(a.no_akad)}<br><span style="font-size:10px">${escDigital(a.objek_pembiayaan||'—')}</span>`;
   document.getElementById('digital-akad-result').style.display='none';
+  _digitalShare={};_forceNewDigitalVersion=false;
+
   await refreshAkadDigitalStatus(a.id);
+  const sg=_digitalStatus?.signers||{};
+  document.getElementById('digital-phone').value=sg.nasabah?.phone||phoneAkadDigital(a)||'';
+  document.getElementById('digital-pengurus-name').value=sg.pengurus?.name||_digitalStatus?.pengurus_name||a.operator||CU.nama||CU.username||'';
+  document.getElementById('digital-pengurus-phone').value=sg.pengurus?.phone||'';
+  document.getElementById('digital-saksi-name').value=sg.saksi?.name||_digitalStatus?.saksi_name||'';
+  document.getElementById('digital-saksi-phone').value=sg.saksi?.phone||'';
+
+  renderStatusAkadDigital();
   const st=_digitalStatus?.status||'none';
-  const box=document.getElementById('digital-akad-status');
-  box.className='digital-status '+st;
-  const labels={
-    none:'Belum pernah dikirim untuk tanda tangan.',
-    pending:`Menunggu tanda tangan nasabah${_digitalStatus?.expires_at?' · berlaku s.d. '+fmtTgl(_digitalStatus.expires_at):''}.`,
-    signed:`Sudah ditandatangani${_digitalStatus?.signed_at?' · '+fmtTgl(_digitalStatus.signed_at):''}${_digitalStatus?.signer_name?' oleh '+_digitalStatus.signer_name:''}.`,
-    expired:'Link sebelumnya sudah kedaluwarsa. Buat link baru.',
-    superseded:'Link sebelumnya sudah diganti. Buat link baru.',
-    cancelled:'Permintaan sebelumnya dibatalkan.'
-  };
-  box.textContent=labels[st]||('Status: '+st);
-  document.getElementById('digital-akad-form').style.display=st==='signed'?'none':'block';
-  document.getElementById('digital-akad-signed-actions').style.display=st==='signed'?'block':'none';
+  document.getElementById('digital-akad-form').style.display=st==='complete'?'none':'block';
+  document.getElementById('digital-akad-signed-actions').style.display=st==='complete'?'block':'none';
+  const btn=document.getElementById('btn-create-digital');
+  if(st==='partial'||st==='pending')btn.textContent='🔐 Siapkan / Perbarui Link yang Belum Signed';
+  else btn.textContent='🔐 Siapkan 3 Link Penandatangan';
   openModal('modal-akad-digital');
 }
 function buatUlangAkadDigital(){
+  _forceNewDigitalVersion=true;
   document.getElementById('digital-akad-form').style.display='block';
   document.getElementById('digital-akad-signed-actions').style.display='none';
-  document.getElementById('digital-akad-status').textContent='Membuat versi tanda tangan baru akan menjadikan versi ini sebagai versi terbaru.';
+  document.getElementById('digital-akad-status').className='digital-status pending';
+  document.getElementById('digital-akad-status').textContent='Akan dibuat versi akad digital baru. Semua pihak harus menandatangani versi baru.';
+  document.getElementById('btn-create-digital').textContent='🔄 Buat Versi Baru & Siapkan 3 Link';
 }
-async function buatDanKirimAkadDigital(){
-  const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
-  if(!a)return;
-  const phone=document.getElementById('digital-phone').value.trim();
-  const wa=normWAAkadDigital(phone);
-  if(wa.length<10){toast('Isi nomor WhatsApp nasabah yang valid',true);return;}
-  const btn=document.getElementById('btn-create-digital');
-  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Membuat...';
-  try{
-    const token=randomTokenAkadDigital();
-    const pin=randomPinAkadDigital();
-    const doc=snapshotNaskahDigital(a);
-    const[docHash,tokenHash,pinHash]=await Promise.all([
-      sha256HexAkadDigital(doc),sha256HexAkadDigital(token),sha256HexAkadDigital(pin)
-    ]);
-    const expiry=parseInt(document.getElementById('digital-expiry').value)||14;
-    if(!await ensureAkadDigitalAdminHash())throw new Error('Konfirmasi admin dibatalkan');
-    const{data,error}=await sb.rpc('bmt_create_akad_signing_secure',{
-      p_akad_id:a.id,
-      p_document_html:doc,
-      p_document_hash:docHash,
-      p_phone:phone,
-      p_operator:CU.username,
-      p_admin_user_id:CU.id,
-      p_admin_password_hash:_bmtAdminPasswordHash,
-      p_token_hash:tokenHash,
-      p_pin_hash:pinHash,
-      p_expiry_days:expiry
-    });
-    if(error)throw error;
-    if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal membuat link akad digital');}
-    const u=new URL('akad-sign.html',location.href);
-    u.searchParams.set('t',token);
-    const link=u.toString();
-    const pesan=`Assalamu'alaikum Bapak/Ibu *${a.nama_jamaah}*,
+function makeShareDigital(role,token,pin,phone,name,a,expiry){
+  const u=new URL('akad-sign.html',location.href);u.searchParams.set('t',token);
+  const link=u.toString();
+  const label=roleLabelDigital(role);
+  const pesan=`Assalamu'alaikum Bapak/Ibu *${name}*,
 
-Mohon membaca dan menandatangani naskah akad BMT UBNB berikut:
+Mohon membuka dan menandatangani Akad Digital BMT UBNB sebagai *${label}*:
 
 📋 *No Akad:* ${a.no_akad}
+👤 *Peran:* ${label}
 🏷️ *Objek:* ${a.objek_pembiayaan||'—'}
 🔗 *Link:* ${link}
 🔐 *PIN:* ${pin}
 
-Buka link di HP, masukkan PIN, baca naskah sampai selesai, tanda tangan pada layar, ambil foto verifikasi, lalu tekan *Setuju & Tandatangani Akad*.
+Buka link di HP, masukkan PIN, baca naskah, lalu tanda tangan pada layar dan konfirmasi persetujuan.${role==='nasabah'?'\n\nUntuk Nasabah juga diperlukan foto verifikasi langsung dari HP.':''}
 
 Link berlaku ${expiry} hari. Mohon tidak meneruskan link dan PIN ini kepada orang lain.
 
 Jazaakumullohu khoiro
 _BMT UBNB Perwira_`;
-    _digitalShare={link,pin,wa,pesan,verify_code:data.verify_code};
-    document.getElementById('digital-pin').textContent=pin;
-    document.getElementById('digital-link').textContent=link;
-    document.getElementById('digital-akad-result').style.display='block';
-    document.getElementById('digital-akad-status').className='digital-status pending';
-    document.getElementById('digital-akad-status').textContent='Link dibuat. Menunggu tanda tangan nasabah.';
+  return{role,link,pin,wa:normWAAkadDigital(phone),phone,name,pesan};
+}
+function renderDigitalShareResult(beforeStatus){
+  const box=document.getElementById('digital-akad-result');
+  const roles=['nasabah','pengurus','saksi'];
+  let out='<div style="font-weight:800;color:var(--H);margin-bottom:5px">Link penandatangan siap</div>';
+  out+=roles.map(role=>{
+    const old=beforeStatus?.signers?.[role]?.status||'none';
+    const sh=_digitalShare[role];
+    if(old==='signed'){
+      const nm=beforeStatus?.signers?.[role]?.name||roleLabelDigital(role);
+      return `<div class="digital-share-card"><strong>✅ ${roleLabelDigital(role)} — Sudah Signed</strong><div style="font-size:10px;color:var(--M);margin-top:3px">${escDigital(nm)}</div></div>`;
+    }
+    if(!sh)return `<div class="digital-share-card"><strong>${roleLabelDigital(role)}</strong><div style="font-size:10px;color:var(--M)">Link tidak dibuat.</div></div>`;
+    return `<div class="digital-share-card">
+      <strong>🔐 ${roleLabelDigital(role)} · ${escDigital(sh.name)}</strong><br>
+      <span style="font-size:10px">PIN:</span><br><div class="digital-code">${sh.pin}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;background:#f8fafc;border-radius:5px;padding:6px;border:1px solid var(--B);word-break:break-all">${escDigital(sh.link)}</div>
+      <div class="btn-row">
+        ${sh.wa?`<button class="btn primary" onclick="kirimWADigital('${role}')">📲 WhatsApp</button>`:''}
+        <button class="btn secondary" onclick="salinInfoAkadDigital('${role}')">📋 Salin Link + PIN</button>
+      </div>
+    </div>`;
+  }).join('');
+  box.innerHTML=out;box.style.display='block';
+}
+async function buatDanKirimAkadDigital(){
+  const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;
+  if(!a)return;
+  const phoneNasabah=document.getElementById('digital-phone').value.trim();
+  const pengurus=document.getElementById('digital-pengurus-name').value.trim();
+  const phonePengurus=document.getElementById('digital-pengurus-phone').value.trim();
+  const saksi=document.getElementById('digital-saksi-name').value.trim();
+  const phoneSaksi=document.getElementById('digital-saksi-phone').value.trim();
+  if(normWAAkadDigital(phoneNasabah).length<10 && signerStatusDigital('nasabah')!=='signed'){toast('Isi nomor WhatsApp nasabah yang valid',true);return;}
+  if(!pengurus){toast('Nama Pengurus yang melakukan akad wajib diisi',true);return;}
+  if(!saksi){toast('Nama Saksi wajib diisi',true);return;}
+  const btn=document.getElementById('btn-create-digital');
+  btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menyiapkan...';
+  const before=JSON.parse(JSON.stringify(_digitalStatus||{}));
+  try{
+    const expiry=parseInt(document.getElementById('digital-expiry').value)||14;
+    if(!await ensureAkadDigitalAdminHash())throw new Error('Konfirmasi admin dibatalkan');
+
+    const raw={
+      nasabah:{token:randomTokenAkadDigital(),pin:randomPinAkadDigital(),phone:phoneNasabah,name:a.nama_jamaah},
+      pengurus:{token:randomTokenAkadDigital(),pin:randomPinAkadDigital(),phone:phonePengurus,name:pengurus},
+      saksi:{token:randomTokenAkadDigital(),pin:randomPinAkadDigital(),phone:phoneSaksi,name:saksi}
+    };
+    const hashes={};
+    for(const role of ['nasabah','pengurus','saksi']){
+      hashes[role]={
+        token:await sha256HexAkadDigital(raw[role].token),
+        pin:await sha256HexAkadDigital(raw[role].pin)
+      };
+    }
+
+    const st=_digitalStatus?.status||'none';
+    const makeNew=_forceNewDigitalVersion || st==='none' || ['expired','superseded','cancelled'].includes(st);
+    let data,error;
+    if(makeNew){
+      const doc=snapshotNaskahDigital(a,pengurus,saksi);
+      const docHash=await sha256HexAkadDigital(doc);
+      ({data,error}=await sb.rpc('bmt_create_akad_signing_v2_secure',{
+        p_akad_id:a.id,p_document_html:doc,p_document_hash:docHash,
+        p_phone_nasabah:phoneNasabah,p_pengurus_name:pengurus,p_phone_pengurus:phonePengurus,
+        p_saksi_name:saksi,p_phone_saksi:phoneSaksi,p_operator:CU.username,p_admin_user_id:CU.id,
+        p_admin_password_hash:_bmtAdminPasswordHash,
+        p_token_hash_nasabah:hashes.nasabah.token,p_pin_hash_nasabah:hashes.nasabah.pin,
+        p_token_hash_pengurus:hashes.pengurus.token,p_pin_hash_pengurus:hashes.pengurus.pin,
+        p_token_hash_saksi:hashes.saksi.token,p_pin_hash_saksi:hashes.saksi.pin,p_expiry_days:expiry
+      }));
+    }else{
+      ({data,error}=await sb.rpc('bmt_refresh_signers_secure',{
+        p_akad_id:a.id,p_phone_nasabah:phoneNasabah,p_pengurus_name:pengurus,p_phone_pengurus:phonePengurus,
+        p_saksi_name:saksi,p_phone_saksi:phoneSaksi,p_operator:CU.username,p_admin_user_id:CU.id,
+        p_admin_password_hash:_bmtAdminPasswordHash,
+        p_token_hash_nasabah:hashes.nasabah.token,p_pin_hash_nasabah:hashes.nasabah.pin,
+        p_token_hash_pengurus:hashes.pengurus.token,p_pin_hash_pengurus:hashes.pengurus.pin,
+        p_token_hash_saksi:hashes.saksi.token,p_pin_hash_saksi:hashes.saksi.pin,p_expiry_days:expiry
+      }));
+    }
+    if(error)throw error;
+    if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal menyiapkan tanda tangan akad');}
+
+    _digitalShare={};
+    for(const role of ['nasabah','pengurus','saksi']){
+      const wasSigned=!makeNew && before?.signers?.[role]?.status==='signed';
+      if(!wasSigned)_digitalShare[role]=makeShareDigital(role,raw[role].token,raw[role].pin,raw[role].phone,raw[role].name,a,expiry);
+    }
+    renderDigitalShareResult(makeNew?{signers:{}}:before);
+    _forceNewDigitalVersion=false;
     await refreshAkadDigitalStatus(a.id);
-    window.open('https://wa.me/'+wa+'?text='+encodeURIComponent(pesan),'_blank');
+    renderStatusAkadDigital();
+
+    const first=_digitalShare.nasabah;
+    if(first?.wa)window.open('https://wa.me/'+first.wa+'?text='+encodeURIComponent(first.pesan),'_blank');
   }catch(e){
-    console.error('[akad-digital create]',e);
-    toast('Gagal membuat akad digital: '+e.message,true);
+    console.error('[akad-digital create/refresh]',e);
+    toast('Gagal menyiapkan Akad Digital: '+(e.message||e),true);
   }finally{
-    btn.disabled=false;btn.innerHTML='📲 Buat Link & Kirim WhatsApp';
+    btn.disabled=false;btn.textContent=(_digitalStatus?.status==='partial'||_digitalStatus?.status==='pending')?'🔐 Siapkan / Perbarui Link yang Belum Signed':'🔐 Siapkan Link Penandatangan';
   }
 }
-function kirimUlangWADigital(){
-  if(!_digitalShare)return;
-  window.open('https://wa.me/'+_digitalShare.wa+'?text='+encodeURIComponent(_digitalShare.pesan),'_blank');
+function kirimWADigital(role){
+  const sh=_digitalShare?.[role];if(!sh||!sh.wa)return;
+  window.open('https://wa.me/'+sh.wa+'?text='+encodeURIComponent(sh.pesan),'_blank');
 }
-async function salinInfoAkadDigital(){
-  if(!_digitalShare)return;
-  const text='Link Akad Digital: '+_digitalShare.link+'\nPIN: '+_digitalShare.pin;
-  try{await navigator.clipboard.writeText(text);toast('✅ Link + PIN disalin');}
+async function salinInfoAkadDigital(role){
+  const sh=_digitalShare?.[role];if(!sh)return;
+  const text=`Akad Digital BMT UBNB — ${roleLabelDigital(role)}
+Link: ${sh.link}
+PIN: ${sh.pin}`;
+  try{await navigator.clipboard.writeText(text);toast('✅ Link + PIN '+roleLabelDigital(role)+' disalin');}
   catch(e){prompt('Salin Link + PIN:',text);}
 }
 function lihatAkadSigned(){
   if(!_digitalStatus?.verify_code){toast('Kode verifikasi belum tersedia',true);return;}
-  const u=new URL('akad-sign.html',location.href);
-  u.searchParams.set('v',_digitalStatus.verify_code);
+  const u=new URL('akad-sign.html',location.href);u.searchParams.set('v',_digitalStatus.verify_code);
   window.open(u.toString(),'_blank');
 }
+
 // Preview Cetak
 let _printFn=null;
 function bukaPreviewCetak(judul, previewHTML, printFn){
