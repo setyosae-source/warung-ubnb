@@ -701,12 +701,13 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
         <option value="Lunas">Lunas</option>
       </select>
       <input type="text" id="flt-cari" placeholder="🔍 Cari nama..." oninput="renderDaftar()" style="flex:1;min-width:100px;">
+      <button id="btn-refresh-digital-list" class="btn sec" type="button" onclick="event.stopPropagation();muatStatusAkadDigitalDaftar(true)" style="padding:8px 10px;white-space:nowrap">🔄 Status Digital</button>
     </div>
     <div class="card" style="padding:0">
       <div class="tbl-wrap">
         <table class="bmt-tbl">
-          <thead><tr><th>No Akad</th><th>Nama</th><th>Akad</th><th>Sisa</th><th>Status</th></tr></thead>
-          <tbody id="pmb-daftar-body"><tr><td colspan="5" class="empty">Memuat...</td></tr></tbody>
+          <thead><tr><th>No Akad</th><th>Nama</th><th>Akad</th><th>Sisa</th><th>Status</th><th>Akad Digital</th></tr></thead>
+          <tbody id="pmb-daftar-body"><tr><td colspan="6" class="empty">Memuat...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1602,6 +1603,8 @@ let aPenyertaanInternal=[],aBHInternal=[];
 let aMitra=[],aPenyertaanEksternal=[],aBHEksternal=[];
 let _akadTerpilihPS=[],_editMitraId=null,_modalBHId=null;
 let aPengajuan=[];
+let aAkadDigitalStatus={};
+let _akadDigitalStatusLoading=false;
 let _bmtAdminPasswordHash=null; // hanya di memori tab; dipakai untuk aksi Akad Digital sensitif
 
 // UTILS
@@ -1690,6 +1693,9 @@ async function loginOK(){
   document.getElementById('bayar-tgl').value=today();
   document.getElementById('dash-tanggal').textContent=new Date().toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   await loadAll();
+  if(['admin','owner','pemilik'].includes(CU.role)&&_bmtAdminPasswordHash){
+    await muatStatusAkadDigitalDaftar(false);
+  }
   renderDashboard();
   renderProyeksiProfit();
 }
@@ -1814,7 +1820,10 @@ function gosub(main,sub,btn){
   document.querySelectorAll('#sub-'+main+' .snav').forEach(b=>b.classList.remove('active'));
   const el=document.getElementById(main+'-'+sub);if(el)el.classList.add('show');
   if(btn)btn.classList.add('active');
-  if(main==='pmb'&&sub==='daftar')renderDaftar();
+  if(main==='pmb'&&sub==='daftar'){
+    renderDaftar();
+    if(CU&&['admin','owner','pemilik'].includes(CU.role))muatStatusAkadDigitalDaftar(false);
+  }
   if(main==='pmb'&&sub==='pjy')loadPengajuan().then(renderPengajuan);
   if(main==='pmb'&&sub==='map')renderMapping();
   if(main==='wad'&&sub==='rek')filterRekening();
@@ -2131,6 +2140,77 @@ _BMT UBNB Perwira_`;
 }
 
 // PEMBIAYAAN — DAFTAR
+
+function htmlStatusAkadDigitalDaftar(akadId){
+  const isAdmin=CU&&['admin','owner','pemilik'].includes(CU.role);
+  if(!isAdmin)return '<span style="color:var(--M)">—</span>';
+
+  if(_akadDigitalStatusLoading){
+    return '<span style="font-size:10px;color:var(--M);white-space:nowrap">⏳ Memuat...</span>';
+  }
+
+  const x=aAkadDigitalStatus[String(akadId)];
+  if(!x){
+    if(!_bmtAdminPasswordHash){
+      return `<button type="button" onclick="event.stopPropagation();muatStatusAkadDigitalDaftar(true)" style="border:1px solid var(--B);background:var(--BG);border-radius:999px;padding:4px 8px;font-size:10px;cursor:pointer;white-space:nowrap">🔒 Muat Status</button>`;
+    }
+    return `<span onclick="event.stopPropagation();bukaAkadDigitalDariDaftar(${akadId})" style="display:inline-block;border:1px solid var(--B);background:var(--BG);border-radius:999px;padding:4px 8px;font-size:10px;cursor:pointer;white-space:nowrap;color:var(--M)">○ Belum dibuat</span>`;
+  }
+
+  const st=x.status||'none';
+  const n=parseInt(x.sign_count||0);
+  let label='○ Belum dibuat',bg='var(--BG)',border='var(--B)',color='var(--M)';
+  if(st==='pending'){label=`⏳ ${n}/3 Signed`;bg='var(--AML)';border='#f59e0b';color='#92400e';}
+  else if(st==='partial'){label=`✍️ ${n}/3 Signed`;bg='#eff6ff';border='#93c5fd';color='#1e40af';}
+  else if(st==='complete'){label='✅ Complete';bg='#f0fdf4';border='#86efac';color='#166534';}
+  else if(st==='expired'){label='⚠️ Expired';bg='#fff7ed';border='#fdba74';color='#9a3412';}
+  else if(st==='cancelled'){label='⛔ Batal';bg='#fef2f2';border='#fca5a5';color='#991b1b';}
+  else if(st==='superseded'){label='↪ Diganti';bg='var(--BG)';border='var(--B)';color='var(--M)';}
+
+  return `<span onclick="event.stopPropagation();bukaAkadDigitalDariDaftar(${akadId})" title="Klik untuk buka Akad Digital" style="display:inline-block;border:1px solid ${border};background:${bg};color:${color};border-radius:999px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${label}</span>`;
+}
+
+async function muatStatusAkadDigitalDaftar(forcePrompt=false){
+  if(!CU||!['admin','owner','pemilik'].includes(CU.role))return;
+  if(_akadDigitalStatusLoading)return;
+
+  if(!_bmtAdminPasswordHash){
+    if(!forcePrompt)return;
+    if(!await ensureAkadDigitalAdminHash())return;
+  }
+
+  _akadDigitalStatusLoading=true;
+  renderDaftar();
+  const btn=document.getElementById('btn-refresh-digital-list');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Memuat...';}
+
+  try{
+    const{data,error}=await sb.rpc('bmt_sign_status_list_secure',{
+      p_operator:CU.username,
+      p_admin_user_id:CU.id,
+      p_admin_password_hash:_bmtAdminPasswordHash
+    });
+    if(error)throw error;
+    if(data?.ok===false){
+      if(data.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;
+      throw new Error(data.message||'Gagal mengambil status Akad Digital');
+    }
+    aAkadDigitalStatus=data?.statuses||{};
+  }catch(e){
+    console.error('[akad-digital list]',e);
+    toast('Gagal memuat status Akad Digital: '+(e.message||e),true);
+  }finally{
+    _akadDigitalStatusLoading=false;
+    if(btn){btn.disabled=false;btn.textContent='🔄 Status Digital';}
+    renderDaftar();
+  }
+}
+
+async function bukaAkadDigitalDariDaftar(id){
+  lihatDetail(id);
+  await bukaAkadDigital();
+}
+
 function renderDaftar(){
   const kel=document.getElementById('flt-kel').value;
   const st=document.getElementById('flt-status').value;
@@ -2147,7 +2227,7 @@ function renderDaftar(){
     return db-da;
   });
   const tbody=document.getElementById('pmb-daftar-body');
-  if(!data.length){tbody.innerHTML='<tr><td colspan="5" class="empty">Tidak ada data</td></tr>';return;}
+  if(!data.length){tbody.innerHTML='<tr><td colspan="6" class="empty">Tidak ada data</td></tr>';return;}
   tbody.innerHTML=data.map(a=>{
     const angsAkad=aAngsuran.filter(x=>x.akad_id===a.id);
     const totalBayar=angsAkad.reduce((s,x)=>s+parseFloat(x.jumlah||0),0);
@@ -2161,6 +2241,7 @@ function renderDaftar(){
       <td style="font-size:11px">${a.jenis_akad||'Murabahah'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;color:${sisaColor};font-weight:700">${rp(sisaAktual)}</td>
       <td><span class="badge ${a.status==='Lunas'?'lunas':'belum'}">${a.status}</span></td>
+      <td>${htmlStatusAkadDigitalDaftar(a.id)}</td>
     </tr>`;
   }).join('');
 }
@@ -3374,6 +3455,16 @@ async function refreshAkadDigitalStatus(akadId){
     if(error)throw error;
     if(data?.ok===false){_bmtAdminPasswordHash=null;throw new Error(data.message||'Verifikasi admin gagal');}
     _digitalStatus=data||{ok:true,status:'none',sign_count:0,total_signers:3,signers:{}};
+    aAkadDigitalStatus[String(akadId)]={
+      akad_id:akadId,
+      status:_digitalStatus.status||'none',
+      sign_count:parseInt(_digitalStatus.sign_count||0),
+      total_signers:3,
+      completed_at:_digitalStatus.completed_at||null,
+      expires_at:_digitalStatus.expires_at||null,
+      verify_code:_digitalStatus.verify_code||null,
+      document_hash:_digitalStatus.document_hash||null
+    };
     if(!btn)return;
     const st=_digitalStatus.status||'none';
     const n=parseInt(_digitalStatus.sign_count||0);
