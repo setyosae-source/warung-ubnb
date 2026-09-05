@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BMT UBNB PERWIRA</title>
+<!-- FIX 2026-09-05: jatuh tempo mengikuti tgl_rutin -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="ubnb-auth.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -1447,7 +1448,35 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="fg"><label>Jaminan</label><input type="text" id="ea-akad-jaminan" placeholder="(opsional)"></div>
     <div class="fg"><label>Tanggal Kesanggupan Bayar</label>
       <select id="ea-akad-tgl-rutin">
-        ${Array.from({length:28},(_,i)=>`<option value="${i+1}">Tanggal ${i+1} setiap bulan</option>`).join('')}
+        <option value="">— Pilih tanggal —</option>
+        <option value="1">Tanggal 1 setiap bulan</option>
+        <option value="2">Tanggal 2 setiap bulan</option>
+        <option value="3">Tanggal 3 setiap bulan</option>
+        <option value="4">Tanggal 4 setiap bulan</option>
+        <option value="5">Tanggal 5 setiap bulan</option>
+        <option value="6">Tanggal 6 setiap bulan</option>
+        <option value="7">Tanggal 7 setiap bulan</option>
+        <option value="8">Tanggal 8 setiap bulan</option>
+        <option value="9">Tanggal 9 setiap bulan</option>
+        <option value="10">Tanggal 10 setiap bulan</option>
+        <option value="11">Tanggal 11 setiap bulan</option>
+        <option value="12">Tanggal 12 setiap bulan</option>
+        <option value="13">Tanggal 13 setiap bulan</option>
+        <option value="14">Tanggal 14 setiap bulan</option>
+        <option value="15">Tanggal 15 setiap bulan</option>
+        <option value="16">Tanggal 16 setiap bulan</option>
+        <option value="17">Tanggal 17 setiap bulan</option>
+        <option value="18">Tanggal 18 setiap bulan</option>
+        <option value="19">Tanggal 19 setiap bulan</option>
+        <option value="20">Tanggal 20 setiap bulan</option>
+        <option value="21">Tanggal 21 setiap bulan</option>
+        <option value="22">Tanggal 22 setiap bulan</option>
+        <option value="23">Tanggal 23 setiap bulan</option>
+        <option value="24">Tanggal 24 setiap bulan</option>
+        <option value="25">Tanggal 25 setiap bulan</option>
+        <option value="26">Tanggal 26 setiap bulan</option>
+        <option value="27">Tanggal 27 setiap bulan</option>
+        <option value="28">Tanggal 28 setiap bulan</option>
       </select>
       <div style="font-size:10px;color:var(--M);margin-top:3px">Penentu status tepat/terlambat (toleransi +15 hari)</div>
     </div>
@@ -1503,6 +1532,26 @@ const rp=n=>'Rp '+Math.round(Number(n)||0).toLocaleString('id-ID');
 const fmtRb=n=>rp(Math.round(Number(n)||0));
 const fmtTgl=v=>{if(!v)return'—';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});};
 const today=()=>new Date().toISOString().split('T')[0];
+// Jadwal jatuh tempo mengikuti tanggal kesanggupan bayar (tgl_rutin).
+// bulanKe=1 berarti bulan pertama SETELAH bulan akad.
+function getJatuhTempoAkad(a,bulanKe){
+  if(!a||!a.tanggal_akad)return null;
+  const p=String(a.tanggal_akad).slice(0,10).split('-').map(Number);
+  if(p.length<3||!p[0]||!p[1]||!p[2])return null;
+  const offset=Math.max(1,parseInt(bulanKe,10)||1);
+  const monthIndex=(p[1]-1)+offset;
+  const y=p[0]+Math.floor(monthIndex/12);
+  const m=((monthIndex%12)+12)%12;
+  let hari=parseInt(a.tgl_rutin,10);
+  if(!hari||hari<1)hari=p[2];
+  const maxHari=new Date(y,m+1,0).getDate();
+  return new Date(y,m,Math.min(hari,maxHari));
+}
+function tglInputLocal(d){
+  if(!d||isNaN(d))return'';
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 function toast(msg,isErr=false){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.className='show'+(isErr?' err':'');clearTimeout(el._t);el._t=setTimeout(()=>el.className='',3000);}
 function al(id,msg,type='err'){const e=document.getElementById(id);if(!e)return;e.className='alert show '+type;e.innerHTML=msg;}
 
@@ -1737,8 +1786,7 @@ async function renderProyeksiProfit(){
     const sisaBulan=Math.max(1,jangka-sudahBayarBulan);
     const marginPerBulanSisa=marginSisa/sisaBulan;
     for(let n=1;n<=sisaBulan;n++){
-      const jtBulan=new Date(tglAkad);
-      jtBulan.setMonth(jtBulan.getMonth()+sudahBayarBulan+n);
+      const jtBulan=getJatuhTempoAkad(a,sudahBayarBulan+n);
       const yr=jtBulan.getFullYear();
       profitPerTahun[yr]=(profitPerTahun[yr]||0)+marginPerBulanSisa;
     }
@@ -1844,7 +1892,7 @@ function renderPmbDash(){
     const sisaBulan=Math.max(1,(a.jangka||12)-angsAkad.length);
     const perBulan=marginSisaA/sisaBulan;
     for(let n=1;n<=sisaBulan;n++){
-      const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+angsAkad.length+n);
+      const jt=getJatuhTempoAkad(a,angsAkad.length+n);
       const yr=jt.getFullYear();
       profitTahun[yr]=(profitTahun[yr]||0)+perBulan;
     }
@@ -2028,7 +2076,7 @@ function lihatDetail(id){
   const dp=parseFloat(a.uang_muka||0);
   let sisaRunning=totalKewDB-dp;
   tbody.innerHTML=angs.length?angs.map((an,i)=>{
-    const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i+1);
+    const jt=getJatuhTempoAkad(a,i+1);
     const jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
     const st=an.status||'';
     const stBadge=st==='tepat_waktu'?'<span class="badge lunas">✅ Tepat</span>':st==='terlambat'?'<span class="badge red">⚠️ Telat</span>':'<span class="badge lunas">✓</span>';
@@ -2344,7 +2392,7 @@ function pilihPayAkad(id,nama,noAkad){
   // Pre-fill jumlah angsuran
   document.getElementById('pay-jumlah').value=Math.round(a.angsuran_perbulan||0)||'';
   // Jatuh tempo
-  if(a.tanggal_akad){const jt=new Date(a.tanggal_akad);jt.setMonth(jt.getMonth()+bulanKe);document.getElementById('pay-jatuh-tempo').value=jt.toISOString().slice(0,10);}
+  if(a.tanggal_akad){const jt=getJatuhTempoAkad(a,bulanKe);document.getElementById('pay-jatuh-tempo').value=tglInputLocal(jt);}
   // Enable simpan
   document.getElementById('btn-bayar').disabled=false;
   // Simpan state
@@ -2381,7 +2429,7 @@ function tampilRiwayat(akadId){
   wrap.innerHTML='<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--H)">📋 Riwayat ('+angs.length+' angsuran)</div><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>#</th><th>JT</th><th>Tgl Bayar</th><th>Jumlah</th><th>Status</th>'+(isAdmin?'<th style="width:70px">Aksi</th>':'')+'</tr></thead><tbody>'+
     angs.map((x,i)=>{
       let jtStr='—';
-      if(tA){const jt=new Date(tA);jt.setMonth(jt.getMonth()+i+1);jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});}
+      if(a2){const jt=getJatuhTempoAkad(a2,i+1);if(jt)jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});}
       const st=x.status||'';
       const stBadge=st==='tepat_waktu'?'<span class="badge lunas" style="font-size:9px">✅ Tepat</span>':st==='terlambat'?'<span class="badge red" style="font-size:9px">⚠️ Telat</span>':'<span class="badge lunas" style="font-size:9px">✓</span>';
       const aksiBtn=isAdmin?`<td style="text-align:center;white-space:nowrap">
@@ -2669,9 +2717,8 @@ function _buildKartuRows(a, styleMode){
     const mg=b?parseFloat(b.margin||0):marginRencana;
     sisa-=totalBayarBulan;
     const lunas=!!b;
-    // Hitung JT: tanggal_akad + i bulan
-    const tglAkad=new Date(a.tanggal_akad);
-    const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i);
+    // Hitung JT dari tanggal kesanggupan bayar (tgl_rutin)
+    const jt=getJatuhTempoAkad(a,i);
     const jtStr=jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
     // Status & warna baris
     let bg='',statusIcon='',statusStyle='';
@@ -2752,10 +2799,9 @@ function _buildKartuAktualRows(a, styleMode){
   const dp=parseFloat(a.uang_muka||0);
   const angsRencana=Math.round((totalKewajiban-dp)/jangka);
   // Generate jadwal rencana per bulan: {bulan, jt}
-  const tglAkad=new Date(a.tanggal_akad);
   const jadwal=[];
   for(let i=1;i<=jangka;i++){
-    const jt=new Date(tglAkad);jt.setMonth(jt.getMonth()+i);
+    const jt=getJatuhTempoAkad(a,i);
     jadwal.push({bulan:i,jt,jtMs:jt.getTime()});
   }
   // Algoritma Logic A:
