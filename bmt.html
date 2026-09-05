@@ -1406,7 +1406,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="info-box blue" style="line-height:1.55">
         Akad dinyatakan <strong>Complete</strong> setelah ditandatangani oleh
         <strong>Nasabah + Pengurus yang melakukan akad + Saksi</strong>.
-        Nasabah wajib foto verifikasi; Pengurus dan Saksi menandatangani naskah dan menyatakan persetujuannya.
+        Nasabah wajib foto verifikasi. Nama dan tanda tangan Saksi diisi bersamaan pada layar HP Nasabah, sedangkan Pengurus menandatangani melalui link Pengurus.
       </div>
 
       <div class="fg">
@@ -1424,13 +1424,10 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
         <input type="tel" id="digital-pengurus-phone" placeholder="08xxxxxxxxxx">
       </div>
 
-      <div class="fg" style="margin-top:10px">
-        <label>Saksi</label>
-        <input type="text" id="digital-saksi-name" placeholder="Nama saksi">
-      </div>
-      <div class="fg">
-        <label>No. WhatsApp Saksi <span style="font-weight:400;text-transform:none">(opsional)</span></label>
-        <input type="tel" id="digital-saksi-phone" placeholder="08xxxxxxxxxx">
+      <div class="info-box blue" style="margin-top:10px;line-height:1.55">
+        <strong>👥 Saksi diisi bersama Nasabah.</strong><br>
+        Nama dan tanda tangan Saksi akan diisi langsung pada halaman yang sama saat Nasabah menandatangani akad.
+        Jadi tidak perlu nomor WhatsApp atau link tanda tangan Saksi terpisah.
       </div>
 
       <div class="fg">
@@ -3518,8 +3515,6 @@ async function bukaAkadDigital(){
   document.getElementById('digital-phone').value=sg.nasabah?.phone||phoneAkadDigital(a)||'';
   document.getElementById('digital-pengurus-name').value=sg.pengurus?.name||_digitalStatus?.pengurus_name||a.operator||CU.nama||CU.username||'';
   document.getElementById('digital-pengurus-phone').value=sg.pengurus?.phone||'';
-  document.getElementById('digital-saksi-name').value=sg.saksi?.name||_digitalStatus?.saksi_name||'';
-  document.getElementById('digital-saksi-phone').value=sg.saksi?.phone||'';
 
   renderStatusAkadDigital();
   const st=_digitalStatus?.status||'none';
@@ -3527,7 +3522,7 @@ async function bukaAkadDigital(){
   document.getElementById('digital-akad-signed-actions').style.display=st==='complete'?'block':'none';
   const btn=document.getElementById('btn-create-digital');
   if(st==='partial'||st==='pending')btn.textContent='🔐 Siapkan / Perbarui Link yang Belum Signed';
-  else btn.textContent='🔐 Siapkan 3 Link Penandatangan';
+  else btn.textContent='🔐 Siapkan Link Nasabah & Pengurus';
   openModal('modal-akad-digital');
 }
 function buatUlangAkadDigital(){
@@ -3536,7 +3531,7 @@ function buatUlangAkadDigital(){
   document.getElementById('digital-akad-signed-actions').style.display='none';
   document.getElementById('digital-akad-status').className='digital-status pending';
   document.getElementById('digital-akad-status').textContent='Akan dibuat versi akad digital baru. Semua pihak harus menandatangani versi baru.';
-  document.getElementById('btn-create-digital').textContent='🔄 Buat Versi Baru & Siapkan 3 Link';
+  document.getElementById('btn-create-digital').textContent='🔄 Buat Versi Baru & Siapkan Link';
 }
 function makeShareDigital(role,token,pin,phone,name,a,expiry){
   const u=new URL('akad-sign.html',location.href);u.searchParams.set('t',token);
@@ -3562,8 +3557,9 @@ _BMT UBNB Perwira_`;
 }
 function renderDigitalShareResult(beforeStatus){
   const box=document.getElementById('digital-akad-result');
-  const roles=['nasabah','pengurus','saksi'];
+  const roles=['nasabah','pengurus'];
   let out='<div style="font-weight:800;color:var(--H);margin-bottom:5px">Link penandatangan siap</div>';
+  out+='<div class="digital-share-card"><strong>👥 Saksi</strong><div style="font-size:10px;color:var(--M);margin-top:3px">Nama dan tanda tangan Saksi diisi langsung bersama Nasabah pada halaman penandatanganan Nasabah.</div></div>';
   out+=roles.map(role=>{
     const old=beforeStatus?.signers?.[role]?.status||'none';
     const sh=_digitalShare[role];
@@ -3590,11 +3586,10 @@ async function buatDanKirimAkadDigital(){
   const phoneNasabah=document.getElementById('digital-phone').value.trim();
   const pengurus=document.getElementById('digital-pengurus-name').value.trim();
   const phonePengurus=document.getElementById('digital-pengurus-phone').value.trim();
-  const saksi=document.getElementById('digital-saksi-name').value.trim();
-  const phoneSaksi=document.getElementById('digital-saksi-phone').value.trim();
+  const saksi='Saksi';
+  const phoneSaksi='';
   if(normWAAkadDigital(phoneNasabah).length<10 && signerStatusDigital('nasabah')!=='signed'){toast('Isi nomor WhatsApp nasabah yang valid',true);return;}
   if(!pengurus){toast('Nama Pengurus yang melakukan akad wajib diisi',true);return;}
-  if(!saksi){toast('Nama Saksi wajib diisi',true);return;}
   const btn=document.getElementById('btn-create-digital');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menyiapkan...';
   const before=JSON.parse(JSON.stringify(_digitalStatus||{}));
@@ -3653,7 +3648,7 @@ async function buatDanKirimAkadDigital(){
     if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal menyiapkan tanda tangan akad');}
 
     _digitalShare={};
-    for(const role of ['nasabah','pengurus','saksi']){
+    for(const role of ['nasabah','pengurus']){
       const wasSigned=!makeNew && before?.signers?.[role]?.status==='signed';
       if(!wasSigned)_digitalShare[role]=makeShareDigital(role,raw[role].token,raw[role].pin,raw[role].phone,raw[role].name,a,expiry);
     }

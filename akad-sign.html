@@ -81,6 +81,7 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
   .paper-wrap{background:#fff;padding:0}.paper{box-shadow:none;max-width:none;border-top:0;padding:0}
 }
 </style>
+<!-- UBNB Akad Digital: Nasabah + Saksi sign pada sesi yang sama -->
 </head>
 <body>
 <div class="top">
@@ -136,8 +137,34 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
       </div>
     </div>
 
+    <div class="card hidden" id="witnessCard">
+      <div class="title">2. Saksi Akad</div>
+      <div class="muted">
+        Diisi saat Nasabah menandatangani. Saksi menyaksikan proses persetujuan akad ini,
+        lalu menuliskan nama dan membubuhkan tanda tangan pada layar HP yang sama.
+      </div>
+      <label style="margin-top:10px">Nama Saksi</label>
+      <input type="text" id="witnessName" placeholder="Nama lengkap saksi" autocomplete="name">
+
+      <div class="sign-box" style="margin-top:10px">
+        <canvas id="witnessSignature"></canvas>
+        <div class="sign-tools">
+          <span id="witnessSignHint">Tanda tangan Saksi di area putih</span>
+          <button type="button" onclick="clearWitnessSignature()" style="border:0;background:none;color:var(--R);font-weight:800">Hapus</button>
+        </div>
+      </div>
+
+      <div class="consent" style="margin-top:10px">
+        <input type="checkbox" id="witnessConsentCheck">
+        <label for="witnessConsentCheck">
+          Saya sebagai saksi menyatakan menyaksikan proses persetujuan dan penandatanganan akad ini,
+          serta membubuhkan tanda tangan elektronik sebagai saksi.
+        </label>
+      </div>
+    </div>
+
     <div class="card" id="photoCard">
-      <div class="title">2. Foto Verifikasi Nasabah</div>
+      <div class="title" id="photoTitle">3. Foto Verifikasi Nasabah</div>
       <div class="muted">Khusus Nasabah: ambil foto diri langsung dari kamera HP. Foto disimpan sebagai bukti pendukung dan tidak ditampilkan pada halaman verifikasi publik.</div>
       <div class="camera-box" style="margin-top:10px">
         <video id="video" class="hidden" autoplay playsinline></video>
@@ -198,6 +225,7 @@ let signatureData='';
 let photoData='';
 let cameraStream=null;
 let canvas,ctx,dpr=1;
+let witnessCanvas,witnessCtx,witnessDpr=1,witnessSignatureDrawn=false,witnessSignatureData='';
 
 function show(id,on=true){document.getElementById(id)?.classList.toggle('hidden',!on)}
 function fail(msg){show('loading',false);show('gate',false);show('docSection',false);show('sign-section',false);show('partialActions',false);show('finalActions',false);show('errorBox',true);document.getElementById('errorText').textContent=msg}
@@ -294,10 +322,20 @@ function renderSnapshot(data,canSign=false){
 
   if(canSign&&data.signer_status==='pending'){
     show('sign-section',true);
+    const isNasabah=data.signer_role==='nasabah';
+    const saksiAlreadySigned=signerMap(data).saksi?.status==='signed';
+    const needWitness=isNasabah&&!saksiAlreadySigned;
+    show('witnessCard',needWitness);
     show('photoCard',!!data.photo_required);
-    document.getElementById('consentTitle').textContent=data.photo_required?'3. Konfirmasi Persetujuan':'2. Konfirmasi Persetujuan';
+    document.getElementById('photoTitle').textContent=isNasabah?'3. Foto Verifikasi Nasabah':'2. Foto Verifikasi';
+    document.getElementById('consentTitle').textContent=isNasabah?'4. Konfirmasi Persetujuan':'2. Konfirmasi Persetujuan';
     document.getElementById('signerName').value=data.signer_name||'';
     document.getElementById('consentText').textContent=data.consent_text||'';
+    if(needWitness){
+      document.getElementById('witnessName').value='';
+      document.getElementById('witnessConsentCheck').checked=false;
+      setTimeout(initWitnessSignature,120);
+    }
     setTimeout(initSignature,100);
   }else if(complete){
     show('finalActions',true);
@@ -428,6 +466,29 @@ function initSignature(){
   canvas.onpointerup=canvas.onpointercancel=e=>{drawing=false;e.preventDefault()}
 }
 function clearSignature(){if(!canvas||!ctx)return;ctx.clearRect(0,0,canvas.width/dpr,canvas.height/dpr);signatureDrawn=false;signatureData='';document.getElementById('signHint').textContent='Tanda tangan di area putih'}
+function initWitnessSignature(){
+  witnessCanvas=document.getElementById('witnessSignature');if(!witnessCanvas)return;
+  witnessDpr=Math.max(1,window.devicePixelRatio||1);
+  const rect=witnessCanvas.getBoundingClientRect();
+  witnessCanvas.width=Math.round(rect.width*witnessDpr);
+  witnessCanvas.height=Math.round(210*witnessDpr);
+  witnessCtx=witnessCanvas.getContext('2d');
+  witnessCtx.scale(witnessDpr,witnessDpr);
+  witnessCtx.lineWidth=2.2;witnessCtx.lineCap='round';witnessCtx.lineJoin='round';witnessCtx.strokeStyle='#111';
+  witnessSignatureDrawn=false;
+  let drawing=false;
+  function pt(e){const r=witnessCanvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+  witnessCanvas.onpointerdown=e=>{drawing=true;witnessCanvas.setPointerCapture(e.pointerId);const p=pt(e);witnessCtx.beginPath();witnessCtx.moveTo(p.x,p.y);e.preventDefault()}
+  witnessCanvas.onpointermove=e=>{if(!drawing)return;const p=pt(e);witnessCtx.lineTo(p.x,p.y);witnessCtx.stroke();witnessSignatureDrawn=true;e.preventDefault()}
+  witnessCanvas.onpointerup=witnessCanvas.onpointercancel=e=>{drawing=false;e.preventDefault()}
+}
+function clearWitnessSignature(){
+  if(!witnessCanvas||!witnessCtx)return;
+  witnessCtx.clearRect(0,0,witnessCanvas.width/witnessDpr,witnessCanvas.height/witnessDpr);
+  witnessSignatureDrawn=false;witnessSignatureData='';
+  document.getElementById('witnessSignHint').textContent='Tanda tangan Saksi di area putih';
+}
+
 async function startCamera(){
   try{
     if(!navigator.mediaDevices?.getUserMedia)throw new Error('Kamera browser tidak tersedia');
@@ -463,16 +524,46 @@ async function submitSignature(){
   if(!document.getElementById('consentCheck').checked){msg.innerHTML='<div class="alert err">Centang pernyataan persetujuan terlebih dahulu.</div>';return}
   const signer=document.getElementById('signerName').value.trim();
   if(!signer){msg.innerHTML='<div class="alert err">Nama penanda tangan wajib diisi.</div>';return}
+
+  const isNasabah=reqData.signer_role==='nasabah';
+  const saksiAlreadySigned=signerMap(reqData).saksi?.status==='signed';
+  const needWitness=isNasabah&&!saksiAlreadySigned;
+  let witnessName='',witnessSigHash=null;
+  if(needWitness){
+    witnessName=document.getElementById('witnessName').value.trim();
+    if(!witnessName){msg.innerHTML='<div class="alert err">Nama Saksi wajib diisi.</div>';return}
+    if(!witnessSignatureDrawn){msg.innerHTML='<div class="alert err">Tanda tangan Saksi belum diisi.</div>';return}
+    if(!document.getElementById('witnessConsentCheck').checked){msg.innerHTML='<div class="alert err">Saksi harus mencentang pernyataan sebagai saksi.</div>';return}
+  }
+
   try{
-    btn.disabled=true;btn.textContent='Menyimpan bukti tanda tangan...';
+    btn.disabled=true;btn.textContent=isNasabah?'Menyimpan TTD Nasabah + Saksi...':'Menyimpan bukti tanda tangan...';
     signatureData=canvas.toDataURL('image/png');
     const sigHash=await sha256Hex(signatureData);
     const photoHash=photoData?await sha256Hex(photoData):null;
-    const{data,error}=await sb.rpc('bmt_complete_akad_signer',{
-      p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH,p_signer_name:signer,p_consent_text:reqData.consent_text,
-      p_signature_data:signatureData,p_signature_sha256:sigHash,p_photo_data:photoData||null,p_photo_sha256:photoHash,
-      p_user_agent:navigator.userAgent
-    });
+    let data,error;
+
+    if(isNasabah){
+      if(needWitness){
+        witnessSignatureData=witnessCanvas.toDataURL('image/png');
+        witnessSigHash=await sha256Hex(witnessSignatureData);
+      }
+      ({data,error}=await sb.rpc('bmt_complete_nasabah_with_saksi',{
+        p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH,p_signer_name:signer,p_consent_text:reqData.consent_text,
+        p_signature_data:signatureData,p_signature_sha256:sigHash,p_photo_data:photoData||null,p_photo_sha256:photoHash,
+        p_saksi_name:needWitness?witnessName:null,
+        p_saksi_signature_data:needWitness?witnessSignatureData:null,
+        p_saksi_signature_sha256:needWitness?witnessSigHash:null,
+        p_saksi_consent:needWitness?document.getElementById('witnessConsentCheck').checked:true,
+        p_user_agent:navigator.userAgent
+      }));
+    }else{
+      ({data,error}=await sb.rpc('bmt_complete_akad_signer',{
+        p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH,p_signer_name:signer,p_consent_text:reqData.consent_text,
+        p_signature_data:signatureData,p_signature_sha256:sigHash,p_photo_data:photoData||null,p_photo_sha256:photoHash,
+        p_user_agent:navigator.userAgent
+      }));
+    }
     if(error)throw error;
     if(!data?.ok)throw new Error(data?.message||'Gagal menyimpan tanda tangan');
     stopCamera();
