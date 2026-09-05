@@ -3149,12 +3149,45 @@ function buildKartuAktualPrint(a){
 <table class="pa"><thead><tr><th>#</th><th>Jatuh Tempo</th><th>Rencana</th><th>Tgl Bayar</th><th>Aktual</th><th>Sisa Aktual</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="pfooter">Progress: ${tercover}/${jangka} bulan tercover · ${jumlahPembayaran} transaksi · Dicetak: ${fmtTgl(today())} · BMT UBNB PERWIRA</div>`;
 }
+
+function buildJadwalAngsuranAkad(a){
+  const tenor=Math.max(1,parseInt(a?.jangka,10)||1);
+  const totalKewajiban=Math.max(0,parseFloat(a?.total_pembiayaan||0));
+  const dp=Math.max(0,parseFloat(a?.uang_muka||0));
+  const totalDiangsur=Math.max(0,totalKewajiban-dp);
+
+  let angsuranStandar=Math.round(parseFloat(a?.angsuran_perbulan||0));
+  if(!angsuranStandar||angsuranStandar<0)angsuranStandar=Math.round(totalDiangsur/tenor);
+
+  let sisa=totalDiangsur;
+  let rows='';
+  let totalRencana=0;
+
+  for(let i=1;i<=tenor;i++){
+    const jt=getJatuhTempoAkad(a,i);
+    // Angsuran terakhir disesuaikan agar total tepat lunas, termasuk selisih pembulatan.
+    const nominal=i===tenor?sisa:Math.min(angsuranStandar,sisa);
+    totalRencana+=nominal;
+    sisa=Math.max(0,sisa-nominal);
+
+    rows+=`<tr>
+      <td style="text-align:center;font-weight:700">${i}</td>
+      <td style="text-align:center"><strong>${jt?fmtTgl(ymd(jt)):'—'}</strong></td>
+      <td style="text-align:right"><strong>${rp(nominal)}</strong></td>
+      <td style="text-align:right">${rp(sisa)}</td>
+    </tr>`;
+  }
+
+  return{rows,tenor,totalDiangsur,totalRencana,angsuranStandar};
+}
+
 function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClass, footClass){
   // Rumus baru Sotoy: total_pembiayaan sudah = harga_beli + total_margin - diskon (final)
   const totalKewajiban=parseFloat(a.total_pembiayaan||0);
   const hargaBeli=parseFloat(a.harga_beli||0);
   const dp=parseFloat(a.uang_muka||0);
   const diskon=parseFloat(a.diskon||0);
+  const jadwalAkad=buildJadwalAngsuranAkad(a);
   // Narasi per jenis akad
   const narasi={
     Murabahah:`Bahwa PIHAK PERTAMA (BMT UBNB PERWIRA) telah menjual kepada PIHAK KEDUA (${a.nama_jamaah}) suatu barang/aset berupa <strong>${a.objek_pembiayaan||'—'}</strong> dengan harga pokok sebesar <strong>${rp(hargaBeli)}</strong> dan keuntungan (margin) sebesar <strong>${rp(a.total_margin)}</strong>${diskon>0?`, dengan diskon sebesar <strong>${rp(diskon)}</strong>`:''}, sehingga harga jual (total kewajiban) adalah <strong>${rp(totalKewajiban)}</strong>. ${dp>0?`PIHAK KEDUA telah membayar uang muka sebesar <strong>${rp(dp)}</strong> dan setuju untuk membayar sisa angsuran sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`:`PIHAK KEDUA setuju untuk membayar secara angsuran sebesar <strong>${rp(a.angsuran_perbulan)}</strong> per bulan selama <strong>${a.jangka} bulan</strong>.`}`,
@@ -3199,6 +3232,26 @@ function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClas
   <tr><td class="lbl">Tenor</td><td>${a.jangka} Bulan</td><td class="lbl">Status</td><td>${a.status}</td></tr>
   <tr><td class="lbl">Kesanggupan Bayar</td><td><strong>Tanggal ${a.tgl_rutin||new Date(a.tanggal_akad).getDate()} setiap bulan</strong></td><td class="lbl">Angsuran Pertama</td><td><strong>${fmtTgl(a.tgl_angsuran_pertama||ymd(getTglAngsuranPertama(a)))}</strong></td></tr>
 </table>
+<div class="${secClass}">JADWAL ANGSURAN YANG DISEPAKATI</div>
+<table class="${tblClass}">
+  <tr>
+    <td class="lbl" style="text-align:center;width:8%"><strong>Ke</strong></td>
+    <td class="lbl" style="text-align:center;width:32%"><strong>Tanggal Bayar</strong></td>
+    <td class="lbl" style="text-align:center;width:30%"><strong>Jumlah Angsuran</strong></td>
+    <td class="lbl" style="text-align:center;width:30%"><strong>Sisa Kewajiban</strong></td>
+  </tr>
+  ${jadwalAkad.rows}
+  <tr>
+    <td colspan="2" class="lbl" style="text-align:right"><strong>Total yang Diangsur</strong></td>
+    <td style="text-align:right"><strong>${rp(jadwalAkad.totalRencana)}</strong></td>
+    <td style="text-align:right"><strong>${rp(0)}</strong></td>
+  </tr>
+</table>
+<div style="font-size:8pt;line-height:1.55;color:#555;margin:6px 0 12px">
+  Jadwal angsuran di atas merupakan bagian yang tidak terpisahkan dari akad ini. PIHAK KEDUA menyatakan sanggup membayar
+  sesuai tanggal dan jumlah yang tercantum sampai kewajiban lunas, kecuali terdapat pelunasan lebih awal atau perubahan
+  yang kemudian disepakati oleh kedua belah pihak.
+</div>
 <div class="${secClass}">NARASI AKAD</div>
 <table class="${tblClass}">
   <tr><td colspan="4" style="font-size:9pt;line-height:1.8;padding:10px 8px">${teksNarasi}</td></tr>
@@ -3209,7 +3262,8 @@ function _buildNaskahBody(a, headClass, secClass, tblClass, ttdClass, ttdBoxClas
     1. Apabila PIHAK KEDUA terlambat membayar angsuran, wajib memberitahukan kepada PIHAK PERTAMA.<br>
     2. PIHAK KEDUA berhak melunasi lebih awal dengan penyesuaian sesuai kesepakatan.<br>
     3. Segala perselisihan diselesaikan secara musyawarah mufakat berdasarkan prinsip syariah Islam.<br>
-    4. Akad ini dibuat dalam 2 (dua) rangkap, masing-masing pihak memegang satu rangkap.
+    4. Jadwal angsuran, tanggal kesanggupan bayar, jumlah angsuran, dan tenor yang tercantum dalam akad ini telah dibaca dan disepakati oleh PIHAK KEDUA.<br>
+    5. Akad ini dibuat dalam 2 (dua) rangkap, masing-masing pihak memegang satu rangkap.
   </td></tr>
 </table>
 <div class="${ttdClass}">
@@ -3471,11 +3525,20 @@ async function buatDanKirimAkadDigital(){
     }
 
     const st=_digitalStatus?.status||'none';
-    const makeNew=_forceNewDigitalVersion || st==='none' || ['expired','superseded','cancelled'].includes(st);
+    const currentDoc=snapshotNaskahDigital(a,pengurus,saksi);
+    const currentDocHash=await sha256HexAkadDigital(currentDoc);
+    const docChanged=!!(_digitalStatus?.document_hash && currentDocHash!==_digitalStatus.document_hash);
+    const makeNew=_forceNewDigitalVersion || st==='none' || ['expired','superseded','cancelled'].includes(st) || docChanged;
+
+    if(docChanged && !_forceNewDigitalVersion && ['pending','partial'].includes(st) && parseInt(_digitalStatus?.sign_count||0)>0){
+      const ok=confirm('Isi naskah akad berubah (termasuk jadwal angsuran). Demi keabsahan dokumen, tanda tangan pada versi lama tidak dapat dipakai untuk naskah baru. Buat versi baru dan minta semua pihak tanda tangan ulang?');
+      if(!ok)return;
+    }
+
     let data,error;
     if(makeNew){
-      const doc=snapshotNaskahDigital(a,pengurus,saksi);
-      const docHash=await sha256HexAkadDigital(doc);
+      const doc=currentDoc;
+      const docHash=currentDocHash;
       ({data,error}=await sb.rpc('bmt_create_akad_signing_v2_secure',{
         p_akad_id:a.id,p_document_html:doc,p_document_hash:docHash,
         p_phone_nasabah:phoneNasabah,p_pengurus_name:pengurus,p_phone_pengurus:phonePengurus,
