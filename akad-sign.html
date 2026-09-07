@@ -82,6 +82,7 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
 }
 </style>
 <!-- UBNB Akad Digital: Nasabah + Saksi sign pada sesi yang sama -->
+<!-- UBNB Akad Digital: QR Portal Nasabah permanen -->
 </head>
 <body>
 <div class="top">
@@ -368,11 +369,26 @@ function appendEvidence(data){
     <div class="ev-item" style="margin-top:7px"><div class="ev-lbl">HASH DOKUMEN SHA-256</div><div class="ev-val">${escapeHTML(data.document_hash||'—')}</div></div>
     <div class="verify-row">
       <div class="qr"><div id="verifyQr" aria-label="QR verifikasi"></div></div>
-      <div class="verify-text"><strong>Kode Verifikasi:</strong><br>${escapeHTML(data.verify_code||'—')}<br><br><strong>Verifikasi:</strong><br>${escapeHTML(verifyUrl.toString())}</div>
+      <div class="verify-text"><strong>Kode Verifikasi:</strong><br>${escapeHTML(data.verify_code||'—')}<br><br><strong>Verifikasi Dokumen:</strong><br>${escapeHTML(verifyUrl.toString())}</div>
+    </div>
+    <div id="portalQrRow" class="verify-row" style="display:none">
+      <div class="qr"><div id="portalQr" aria-label="QR Portal Akad"></div></div>
+      <div class="verify-text"><strong>Portal Akad Nasabah:</strong><br>Scan QR untuk melihat naskah akad dan progres angsuran. Akses tetap memerlukan PIN Portal.</div>
     </div>
     <div style="font-size:6.8pt;color:#555;margin-top:8px"><strong>Status:</strong> ${count>=3?'Akad Complete — seluruh pihak telah Signed.':'Akad belum Complete — masih menunggu pihak yang belum Signed.'}</div>`;
   paper.appendChild(box);
-  qrReadyPromise=makeQR(verifyUrl.toString()).catch(()=>null);
+  const verifyPromise=makeQR(verifyUrl.toString(),'verifyQr').catch(()=>null);
+  const portalPromise=(async()=>{
+    try{
+      if(!data.verify_code)return;
+      const{data:pdata,error}=await sb.rpc('bmt_portal_code_by_verify',{p_verify_code:data.verify_code});
+      if(error||!pdata?.ok||!pdata?.access_code)return;
+      const purl=new URL('portal-akad.html',location.href);purl.search='';purl.searchParams.set('p',pdata.access_code);
+      const row=document.getElementById('portalQrRow');if(row)row.style.display='flex';
+      await makeQR(purl.toString(),'portalQr');
+    }catch(e){console.warn('[Portal QR]',e)}
+  })();
+  qrReadyPromise=Promise.all([verifyPromise,portalPromise]).then(()=>null);
 }
 function escapeHTML(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 let qrReadyPromise=Promise.resolve();
@@ -397,8 +413,8 @@ function loadScriptAny(urls,label){
   });
 }
 
-async function makeQR(text){
-  const c=document.getElementById('verifyQr');
+async function makeQR(text,targetId='verifyQr'){
+  const c=document.getElementById(targetId);
   if(!c)return;
   c.innerHTML='<span style="font-size:9px;color:#777">Memuat QR...</span>';
   try{
