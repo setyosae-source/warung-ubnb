@@ -84,6 +84,7 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
 <!-- UBNB Akad Digital: Nasabah + Saksi sign pada sesi yang sama -->
 <!-- UBNB Akad Digital: QR Portal Nasabah permanen -->
 <!-- UBNB Akad Digital: fix mobile witness signature pointer capture 2026-09-07 -->
+<!-- UBNB Akad Digital: witness-only re-sign after nasabah already signed -->
 </head>
 <body>
 <div class="top">
@@ -130,7 +131,7 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
   </div>
 
   <div id="sign-section" class="hidden">
-    <div class="card">
+    <div class="card" id="mainSignerCard">
       <div class="title">1. Tanda Tangan di Layar</div>
       <div class="muted">Gunakan jari pada layar HP. Tanda tangan ini akan ditempel pada naskah final.</div>
       <div class="sign-box" style="margin-top:10px">
@@ -163,6 +164,8 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
           serta membubuhkan tanda tangan elektronik sebagai saksi.
         </label>
       </div>
+      <button class="btn gold hidden" id="btnWitnessRetry" onclick="submitWitnessRetry()" style="margin-top:10px">✅ Simpan Ulang TTD Saksi</button>
+      <div id="witnessRetryMsg"></div>
     </div>
 
     <div class="card" id="photoCard">
@@ -182,7 +185,7 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
       <input type="file" id="photoFile" accept="image/*" capture="user" style="margin-top:6px;width:100%" onchange="photoFromFile(this)">
     </div>
 
-    <div class="card">
+    <div class="card" id="consentCard">
       <div class="title" id="consentTitle">3. Konfirmasi Persetujuan</div>
       <label style="margin-top:0">Nama Penanda Tangan</label>
       <input type="text" id="signerName" readonly>
@@ -322,7 +325,20 @@ function renderSnapshot(data,canSign=false){
     if(!ok){show('sign-section',false);document.getElementById('btnSign')?.setAttribute('disabled','disabled');}
   });
 
-  if(canSign&&data.signer_status==='pending'){
+  const signsNow=signerMap(data);
+  const witnessRetry=canSign&&data.signer_role==='nasabah'&&data.signer_status==='signed'&&signsNow.saksi?.status==='pending';
+  show('mainSignerCard',true);show('consentCard',true);show('btnWitnessRetry',false);
+  if(witnessRetry){
+    show('sign-section',true);
+    show('mainSignerCard',false);show('photoCard',false);show('consentCard',false);
+    show('witnessCard',true);show('btnWitnessRetry',true);
+    roleBanner.classList.remove('hidden');
+    roleBanner.textContent=`TTD Nasabah sudah Signed · Silakan ulang TTD Saksi ${signsNow.saksi?.name||''}`;
+    document.getElementById('witnessName').value=signsNow.saksi?.name||'';
+    document.getElementById('witnessConsentCheck').checked=false;
+    document.getElementById('witnessRetryMsg').innerHTML='<div class="alert info">TTD Nasabah tetap tersimpan. Pada sesi ini hanya Nama dan TTD Saksi yang akan diperbarui.</div>';
+    setTimeout(initWitnessSignature,120);
+  }else if(canSign&&data.signer_status==='pending'){
     show('sign-section',true);
     const isNasabah=data.signer_role==='nasabah';
     const saksiAlreadySigned=signerMap(data).saksi?.status==='signed';
@@ -334,8 +350,9 @@ function renderSnapshot(data,canSign=false){
     document.getElementById('signerName').value=data.signer_name||'';
     document.getElementById('consentText').textContent=data.consent_text||'';
     if(needWitness){
-      document.getElementById('witnessName').value='';
+      document.getElementById('witnessName').value=signerMap(data).saksi?.name==='Saksi'?'':(signerMap(data).saksi?.name||'');
       document.getElementById('witnessConsentCheck').checked=false;
+      show('btnWitnessRetry',false);
       setTimeout(initWitnessSignature,120);
     }
     setTimeout(initSignature,100);
@@ -560,6 +577,33 @@ async function photoFromFile(inp){
   const url=URL.createObjectURL(f),img=new Image();
   img.onload=()=>{photoData=canvasToJpegFromSource(img,img.naturalWidth,img.naturalHeight);document.getElementById('photoPreview').src=photoData;show('photoPreview',true);show('cameraPlaceholder',false);show('video',false);URL.revokeObjectURL(url)};
   img.src=url;
+}
+async function submitWitnessRetry(){
+  const msg=document.getElementById('witnessRetryMsg'),btn=document.getElementById('btnWitnessRetry');
+  if(!reqData||!TOKEN_HASH||!PIN_HASH){msg.innerHTML='<div class="alert err">Sesi verifikasi tidak valid.</div>';return}
+  const name=document.getElementById('witnessName').value.trim();
+  if(!name){msg.innerHTML='<div class="alert err">Nama Saksi wajib diisi.</div>';return}
+  if(!witnessSignatureDrawn){msg.innerHTML='<div class="alert err">Tanda tangan Saksi belum diisi.</div>';return}
+  if(!document.getElementById('witnessConsentCheck').checked){msg.innerHTML='<div class="alert err">Saksi harus mencentang pernyataan sebagai saksi.</div>';return}
+  try{
+    btn.disabled=true;btn.textContent='Menyimpan ulang TTD Saksi...';
+    witnessSignatureData=witnessCanvas.toDataURL('image/png');
+    const hash=await sha256Hex(witnessSignatureData);
+    const{data,error}=await sb.rpc('bmt_complete_saksi_via_nasabah',{
+      p_token_hash:TOKEN_HASH,p_pin_hash:PIN_HASH,p_saksi_name:name,
+      p_saksi_signature_data:witnessSignatureData,p_saksi_signature_sha256:hash,
+      p_saksi_consent:true,p_user_agent:navigator.userAgent
+    });
+    if(error)throw error;
+    if(!data?.ok)throw new Error(data?.message||'Gagal menyimpan ulang TTD Saksi');
+    const{data:finalData,error:verifyErr}=await sb.rpc('bmt_verify_signed_akad',{p_verify_code:data.verify_code});
+    if(verifyErr)throw verifyErr;
+    if(!finalData?.ok)throw new Error(finalData?.message||'Status dokumen belum tersedia');
+    history.replaceState({},'',location.pathname+'?v='+encodeURIComponent(data.verify_code));
+    renderSnapshot(finalData,false);
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){msg.innerHTML='<div class="alert err">'+escapeHTML(e.message||'Gagal menyimpan ulang TTD Saksi')+'</div>'}
+  finally{btn.disabled=false;btn.textContent='✅ Simpan Ulang TTD Saksi'}
 }
 async function submitSignature(){
   const msg=document.getElementById('signMsg'),btn=document.getElementById('btnSign');

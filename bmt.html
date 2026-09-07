@@ -1423,6 +1423,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div id="digital-akad-head" style="font-size:12px;color:var(--M);margin-bottom:10px"></div>
     <div id="digital-akad-status" class="digital-status">Memuat status...</div>
     <div id="digital-akad-progress" class="digital-progress"></div>
+    <div id="digital-saksi-reset-panel" class="digital-result" style="display:none;margin-bottom:10px"></div>
     <div id="digital-portal-panel" class="digital-result" style="display:none;margin-bottom:10px"></div>
 
     <div id="digital-akad-form">
@@ -3456,6 +3457,7 @@ function cetakNaskah(){
 let _digitalStatus=null;
 let _digitalShare={};
 let _digitalPortal=null;
+let _digitalWitnessRetry=null;
 let _forceNewDigitalVersion=false;
 
 async function sha256HexAkadDigital(text){
@@ -3572,6 +3574,59 @@ async function refreshAkadDigitalStatus(akadId){
     if(btn)btn.textContent='📲 Akad Digital';
   }
 }
+function renderSaksiResetPanel(){
+  const box=document.getElementById('digital-saksi-reset-panel');if(!box)return;
+  const n=_digitalStatus?.signers?.nasabah;
+  const s=_digitalStatus?.signers?.saksi;
+  if(n?.status==='signed'&&s?.status==='signed'){
+    box.style.display='block';
+    box.innerHTML=`<div style="display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <div><strong style="color:var(--H)">👥 Saksi: ${escDigital(s.name||'Saksi')} · Signed</strong><div style="font-size:9px;color:var(--M);margin-top:2px">Jika tanda tangan Saksi kurang jelas/bermasalah, hanya TTD Saksi yang dapat diulang. TTD Nasabah tetap dipertahankan.</div></div>
+      <button class="btn secondary" onclick="ulangTtdSaksi()">↻ Ulang TTD Saksi</button>
+    </div>`;
+  }else{
+    box.style.display='none';box.innerHTML='';
+  }
+}
+async function ulangTtdSaksi(){
+  const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;if(!a)return;
+  const n=_digitalStatus?.signers?.nasabah,s=_digitalStatus?.signers?.saksi;
+  if(n?.status!=='signed'){toast('Nasabah harus sudah Signed',true);return;}
+  if(s?.status!=='signed'){toast('Saksi belum Signed sehingga tidak perlu diulang',true);return;}
+  if(!confirm(`Ulang tanda tangan Saksi ${s.name||''}?\n\nTTD Nasabah tetap Signed dan tidak akan dihapus. TTD Saksi lama dicatat pada audit trail lalu status Saksi kembali Pending.`))return;
+  if(!await ensureAkadDigitalAdminHash())return;
+  const token=randomTokenAkadDigital(),pin=randomPinAkadDigital();
+  const tokenHash=await sha256HexAkadDigital(token),pinHash=await sha256HexAkadDigital(pin);
+  try{
+    const{data,error}=await sb.rpc('bmt_reset_saksi_secure',{
+      p_akad_id:a.id,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,
+      p_new_token_hash:tokenHash,p_new_pin_hash:pinHash,
+      p_reason:'TTD Saksi diminta diulang oleh Pengurus karena hasil tanda tangan kurang jelas/bermasalah',p_expiry_days:14
+    });
+    if(error)throw error;
+    if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal reset TTD Saksi');}
+    const u=new URL('akad-sign.html',location.href);u.search='';u.searchParams.set('t',token);
+    const phone=normWAAkadDigital(document.getElementById('digital-phone')?.value||n?.phone||'');
+    const msg=`Assalamu'alaikum Bapak/Ibu *${a.nama_jamaah}*,\n\nTTD Nasabah pada Akad Digital *${a.no_akad}* sudah tersimpan dan tidak perlu diulang. Mohon buka link berikut untuk *mengulang tanda tangan Saksi saja*:\n\n🔗 *Link:* ${u.toString()}\n🔐 *PIN:* ${pin}\n👥 *Saksi sebelumnya:* ${s.name||'Saksi'}\n\nPada halaman tersebut cukup isi/konfirmasi Nama Saksi lalu tanda tangan Saksi kembali.\n\nJazaakumullohu khoiro\n_BMT UBNB Perwira_`;
+    _digitalWitnessRetry={link:u.toString(),pin,wa:phone,pesan:msg,saksi:s.name||'Saksi'};
+    await refreshAkadDigitalStatus(a.id);renderStatusAkadDigital();
+    document.getElementById('digital-akad-form').style.display='block';
+    document.getElementById('digital-akad-signed-actions').style.display='none';
+    const result=document.getElementById('digital-akad-result');
+    result.style.display='block';
+    result.innerHTML=`<div class="digital-share-card"><strong>↻ Link Ulang TTD Saksi</strong><div style="font-size:10px;color:var(--M);margin-top:3px">TTD Nasabah tetap Signed. Link ini hanya membuka form pengulangan TTD Saksi.</div><div style="font-size:10px;margin-top:7px">PIN:</div><div class="digital-code">${pin}</div><div style="font-family:'DM Mono',monospace;font-size:9px;background:#f8fafc;border-radius:5px;padding:6px;border:1px solid var(--B);word-break:break-all">${escDigital(u.toString())}</div><div class="btn-row">${phone?'<button class="btn primary" onclick="kirimWAUlangTtdSaksi()">📲 WhatsApp</button>':''}<button class="btn secondary" onclick="salinUlangTtdSaksi()">📋 Salin Link + PIN</button></div></div>`;
+    toast('TTD Saksi di-reset. TTD Nasabah tetap aman.');
+  }catch(e){toast('Gagal reset TTD Saksi: '+(e.message||e),true)}
+}
+function kirimWAUlangTtdSaksi(){
+  if(!_digitalWitnessRetry?.wa)return;
+  window.open('https://wa.me/'+_digitalWitnessRetry.wa+'?text='+encodeURIComponent(_digitalWitnessRetry.pesan),'_blank');
+}
+async function salinUlangTtdSaksi(){
+  if(!_digitalWitnessRetry)return;
+  const text=`${_digitalWitnessRetry.link}\nPIN: ${_digitalWitnessRetry.pin}`;
+  try{await navigator.clipboard.writeText(text);toast('Link ulang TTD Saksi disalin')}catch(e){prompt('Salin link + PIN:',text)}
+}
 function renderStatusAkadDigital(){
   const st=_digitalStatus?.status||'none';
   const n=parseInt(_digitalStatus?.sign_count||0);
@@ -3588,6 +3643,7 @@ function renderStatusAkadDigital(){
   };
   box.textContent=labels[st]||('Status: '+st);
   renderAkadDigitalProgress();
+  renderSaksiResetPanel();
 }
 
 function portalUrlAkad(code){
@@ -3725,7 +3781,7 @@ async function bukaAkadDigital(){
 
   document.getElementById('digital-akad-head').innerHTML=`<strong>${escDigital(a.nama_jamaah)}</strong> · ${escDigital(a.no_akad)}<br><span style="font-size:10px">${escDigital(a.objek_pembiayaan||'—')}</span>`;
   document.getElementById('digital-akad-result').style.display='none';
-  _digitalShare={};_forceNewDigitalVersion=false;
+  _digitalShare={};_digitalWitnessRetry=null;_forceNewDigitalVersion=false;
 
   await refreshAkadDigitalStatus(a.id);
   await refreshPortalAkadAdmin(a.id);
