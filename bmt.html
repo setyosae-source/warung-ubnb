@@ -3584,6 +3584,12 @@ function renderSaksiResetPanel(){
       <div><strong style="color:var(--H)">👥 Saksi: ${escDigital(s.name||'Saksi')} · Signed</strong><div style="font-size:9px;color:var(--M);margin-top:2px">Jika tanda tangan Saksi kurang jelas/bermasalah, hanya TTD Saksi yang dapat diulang. TTD Nasabah tetap dipertahankan.</div></div>
       <button class="btn secondary" onclick="ulangTtdSaksi()">↻ Ulang TTD Saksi</button>
     </div>`;
+  }else if(n?.status==='signed'&&s?.status==='pending'){
+    box.style.display='block';
+    box.innerHTML=`<div style="display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <div><strong style="color:#92400e">↻ TTD Saksi belum selesai / sedang diulang</strong><div style="font-size:9px;color:var(--M);margin-top:2px">TTD Nasabah tetap Signed. Klik tombol di samping untuk membuat link baru khusus TTD Saksi.</div></div>
+      <button class="btn primary" onclick="ulangTtdSaksi()">🔗 Buat Link TTD Saksi</button>
+    </div>`;
   }else{
     box.style.display='none';box.innerHTML='';
   }
@@ -3592,8 +3598,9 @@ async function ulangTtdSaksi(){
   const a=_detailAkadId?aAkad.find(x=>x.id===_detailAkadId):null;if(!a)return;
   const n=_digitalStatus?.signers?.nasabah,s=_digitalStatus?.signers?.saksi;
   if(n?.status!=='signed'){toast('Nasabah harus sudah Signed',true);return;}
-  if(s?.status!=='signed'){toast('Saksi belum Signed sehingga tidak perlu diulang',true);return;}
-  if(!confirm(`Ulang tanda tangan Saksi ${s.name||''}?\n\nTTD Nasabah tetap Signed dan tidak akan dihapus. TTD Saksi lama dicatat pada audit trail lalu status Saksi kembali Pending.`))return;
+  if(!s||!['signed','pending'].includes(s.status)){toast('Status Saksi tidak dapat diproses',true);return;}
+  const resetting=s.status==='signed';
+  if(resetting&&!confirm(`Ulang tanda tangan Saksi ${s.name||''}?\n\nTTD Nasabah tetap Signed dan tidak akan dihapus. TTD Saksi lama dicatat pada audit trail lalu status Saksi kembali Pending.`))return;
   if(!await ensureAkadDigitalAdminHash())return;
   const token=randomTokenAkadDigital(),pin=randomPinAkadDigital();
   const tokenHash=await sha256HexAkadDigital(token),pinHash=await sha256HexAkadDigital(pin);
@@ -3601,13 +3608,13 @@ async function ulangTtdSaksi(){
     const{data,error}=await sb.rpc('bmt_reset_saksi_secure',{
       p_akad_id:a.id,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,
       p_new_token_hash:tokenHash,p_new_pin_hash:pinHash,
-      p_reason:'TTD Saksi diminta diulang oleh Pengurus karena hasil tanda tangan kurang jelas/bermasalah',p_expiry_days:14
+      p_reason:resetting?'TTD Saksi diminta diulang oleh Pengurus karena hasil tanda tangan kurang jelas/bermasalah':'Link ulang TTD Saksi dibuat/diperbarui oleh Pengurus',p_expiry_days:14
     });
     if(error)throw error;
     if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal reset TTD Saksi');}
     const u=new URL('akad-sign.html',location.href);u.search='';u.searchParams.set('t',token);
     const phone=normWAAkadDigital(document.getElementById('digital-phone')?.value||n?.phone||'');
-    const msg=`Assalamu'alaikum Bapak/Ibu *${a.nama_jamaah}*,\n\nTTD Nasabah pada Akad Digital *${a.no_akad}* sudah tersimpan dan tidak perlu diulang. Mohon buka link berikut untuk *mengulang tanda tangan Saksi saja*:\n\n🔗 *Link:* ${u.toString()}\n🔐 *PIN:* ${pin}\n👥 *Saksi sebelumnya:* ${s.name||'Saksi'}\n\nPada halaman tersebut cukup isi/konfirmasi Nama Saksi lalu tanda tangan Saksi kembali.\n\nJazaakumullohu khoiro\n_BMT UBNB Perwira_`;
+    const msg=`Assalamu'alaikum Bapak/Ibu *${a.nama_jamaah}*,\n\nTTD Nasabah pada Akad Digital *${a.no_akad}* sudah tersimpan dan tidak perlu diulang. Mohon buka link berikut untuk *melanjutkan / mengulang tanda tangan Saksi saja*:\n\n🔗 *Link:* ${u.toString()}\n🔐 *PIN:* ${pin}\n👥 *Saksi sebelumnya:* ${s.name||'Saksi'}\n\nPada halaman tersebut cukup isi/konfirmasi Nama Saksi lalu tanda tangan Saksi kembali.\n\nJazaakumullohu khoiro\n_BMT UBNB Perwira_`;
     _digitalWitnessRetry={link:u.toString(),pin,wa:phone,pesan:msg,saksi:s.name||'Saksi'};
     await refreshAkadDigitalStatus(a.id);renderStatusAkadDigital();
     document.getElementById('digital-akad-form').style.display='block';
@@ -3615,7 +3622,7 @@ async function ulangTtdSaksi(){
     const result=document.getElementById('digital-akad-result');
     result.style.display='block';
     result.innerHTML=`<div class="digital-share-card"><strong>↻ Link Ulang TTD Saksi</strong><div style="font-size:10px;color:var(--M);margin-top:3px">TTD Nasabah tetap Signed. Link ini hanya membuka form pengulangan TTD Saksi.</div><div style="font-size:10px;margin-top:7px">PIN:</div><div class="digital-code">${pin}</div><div style="font-family:'DM Mono',monospace;font-size:9px;background:#f8fafc;border-radius:5px;padding:6px;border:1px solid var(--B);word-break:break-all">${escDigital(u.toString())}</div><div class="btn-row">${phone?'<button class="btn primary" onclick="kirimWAUlangTtdSaksi()">📲 WhatsApp</button>':''}<button class="btn secondary" onclick="salinUlangTtdSaksi()">📋 Salin Link + PIN</button></div></div>`;
-    toast('TTD Saksi di-reset. TTD Nasabah tetap aman.');
+    toast(resetting?'TTD Saksi di-reset. TTD Nasabah tetap aman.':'Link TTD Saksi baru berhasil dibuat.');
   }catch(e){toast('Gagal reset TTD Saksi: '+(e.message||e),true)}
 }
 function kirimWAUlangTtdSaksi(){
