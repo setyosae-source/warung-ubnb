@@ -55,7 +55,7 @@ input:focus{border-color:var(--H3)}
 table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px 8px;border:1px solid #ddd;font-size:9pt}table.ppr-data td.lbl{background:#f5f5f0;color:#666;font-size:8pt;width:28%}table.ppr-data td.hl{background:#edf7f0;font-weight:bold;color:#1a5c3a}
 .ppr-ttd{display:flex;justify-content:space-between;margin-top:16px;border-top:1px solid #ccc;padding-top:12px;gap:8px}.ppr-ttd-box{width:31%;text-align:center}.ppr-ttd-box .area{height:60px;border-bottom:1px solid #333;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center}.ppr-ttd-box .area img{max-width:100%;max-height:58px;object-fit:contain}.ppr-ttd-box .nama{font-size:8pt;font-weight:bold}.ppr-footer{text-align:center;font-size:7pt;color:#aaa;margin-top:12px;font-style:italic}
 .sign-box{border:2px solid var(--H3);border-radius:10px;background:#fff;overflow:hidden}
-#signature{width:100%;height:210px;display:block;touch-action:none;background:#fff}
+#signature,#witnessSignature{width:100%;height:210px;display:block;touch-action:none;overscroll-behavior:contain;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;background:#fff}
 .sign-tools{display:flex;justify-content:space-between;align-items:center;background:var(--HL);padding:7px 10px;font-size:11px;color:var(--H)}
 .camera-box{border:1.5px solid var(--B);border-radius:10px;overflow:hidden;background:#111}
 #video,#photoPreview{width:100%;max-height:420px;object-fit:cover;display:block}
@@ -83,6 +83,7 @@ table.ppr-data{width:100%;border-collapse:collapse}table.ppr-data td{padding:5px
 </style>
 <!-- UBNB Akad Digital: Nasabah + Saksi sign pada sesi yang sama -->
 <!-- UBNB Akad Digital: QR Portal Nasabah permanen -->
+<!-- UBNB Akad Digital: fix mobile witness signature pointer capture 2026-09-07 -->
 </head>
 <body>
 <div class="top">
@@ -486,17 +487,45 @@ function initWitnessSignature(){
   witnessCanvas=document.getElementById('witnessSignature');if(!witnessCanvas)return;
   witnessDpr=Math.max(1,window.devicePixelRatio||1);
   const rect=witnessCanvas.getBoundingClientRect();
-  witnessCanvas.width=Math.round(rect.width*witnessDpr);
+  const cssW=Math.max(1,Math.round(rect.width));
+  witnessCanvas.width=Math.round(cssW*witnessDpr);
   witnessCanvas.height=Math.round(210*witnessDpr);
   witnessCtx=witnessCanvas.getContext('2d');
-  witnessCtx.scale(witnessDpr,witnessDpr);
-  witnessCtx.lineWidth=2.2;witnessCtx.lineCap='round';witnessCtx.lineJoin='round';witnessCtx.strokeStyle='#111';
+  witnessCtx.setTransform(witnessDpr,0,0,witnessDpr,0,0);
+  witnessCtx.lineWidth=2.4;witnessCtx.lineCap='round';witnessCtx.lineJoin='round';witnessCtx.strokeStyle='#111';
   witnessSignatureDrawn=false;
-  let drawing=false;
+  let drawing=false,activePointer=null;
   function pt(e){const r=witnessCanvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
-  witnessCanvas.onpointerdown=e=>{drawing=true;witnessCanvas.setPointerCapture(e.pointerId);const p=pt(e);witnessCtx.beginPath();witnessCtx.moveTo(p.x,p.y);e.preventDefault()}
-  witnessCanvas.onpointermove=e=>{if(!drawing)return;const p=pt(e);witnessCtx.lineTo(p.x,p.y);witnessCtx.stroke();witnessSignatureDrawn=true;e.preventDefault()}
-  witnessCanvas.onpointerup=witnessCanvas.onpointercancel=e=>{drawing=false;e.preventDefault()}
+  function drawPoint(e){const p=pt(e);witnessCtx.lineTo(p.x,p.y);witnessCtx.stroke();witnessSignatureDrawn=true}
+  witnessCanvas.onpointerdown=e=>{
+    if(activePointer!==null)return;
+    e.preventDefault();e.stopPropagation();
+    activePointer=e.pointerId;drawing=true;
+    try{witnessCanvas.setPointerCapture(e.pointerId)}catch(_){ }
+    const p=pt(e);witnessCtx.beginPath();witnessCtx.moveTo(p.x,p.y);
+    document.getElementById('witnessSignHint').textContent='Sedang menulis tanda tangan...';
+  };
+  witnessCanvas.onpointermove=e=>{
+    if(!drawing||e.pointerId!==activePointer)return;
+    e.preventDefault();e.stopPropagation();
+    const evs=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():[e];
+    if(evs.length){for(const ev of evs)drawPoint(ev)}else drawPoint(e);
+  };
+  const finish=e=>{
+    if(e.pointerId!==activePointer)return;
+    e.preventDefault();e.stopPropagation();
+    if(drawing){
+      const evs=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():[];
+      for(const ev of evs)drawPoint(ev);
+    }
+    drawing=false;
+    try{if(witnessCanvas.hasPointerCapture(e.pointerId))witnessCanvas.releasePointerCapture(e.pointerId)}catch(_){ }
+    activePointer=null;
+    document.getElementById('witnessSignHint').textContent=witnessSignatureDrawn?'Tanda tangan Saksi sudah terisi':'Tanda tangan Saksi di area putih';
+  };
+  witnessCanvas.onpointerup=finish;
+  witnessCanvas.onpointercancel=finish;
+  witnessCanvas.onlostpointercapture=()=>{drawing=false;activePointer=null};
 }
 function clearWitnessSignature(){
   if(!witnessCanvas||!witnessCtx)return;
@@ -655,7 +684,7 @@ async function downloadPDF(){
   }
 }
 window.addEventListener('beforeunload',stopCamera);
-window.addEventListener('resize',()=>{if(!document.getElementById('sign-section').classList.contains('hidden')&&!signatureDrawn)initSignature()});
+window.addEventListener('resize',()=>{if(document.getElementById('sign-section').classList.contains('hidden'))return;if(!signatureDrawn)initSignature();const wc=document.getElementById('witnessCard');if(wc&&!wc.classList.contains('hidden')&&!witnessSignatureDrawn)initWitnessSignature()});
 init();
 </script>
 </body>
