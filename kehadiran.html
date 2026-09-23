@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -134,7 +135,42 @@ async function refreshOngoingAttendance(){if(!SESSION||document.hidden)return;co
 function popularHistory(){const m=new Map();for(const e of EVENTS){const key=e.jenis_acara_id||('name:'+e.acara_nama);if(!m.has(key))m.set(key,{name:typeName(e),count:0,last:e});const x=m.get(key);x.count++;if(String(e.tanggal)>String(x.last.tanggal))x.last=e}return[...m.values()].sort((a,b)=>b.count-a.count||String(b.last.tanggal).localeCompare(String(a.last.tanggal)))}
 function renderPopularPresets(){const a=popularHistory().slice(0,8);$('popularPresets').innerHTML=a.length?a.map(x=>'<div class="preset" onclick="openCreateFromHistory('+x.last.id+')"><div class="name">'+esc(x.name)+'</div><div class="meta">'+x.count+'× dilaksanakan · terakhir: '+esc(x.last.acara_nama)+'</div></div>').join(''):'<div class="empty">Belum ada riwayat acara.</div>'}
 function eventGroupLabel(e){return e.kelompok||'Desa'}
-function renderEvents(){const q=$('eventSearch').value.trim().toLowerCase(),st=$('eventStatus').value;const data=EVENTS.filter(e=>(!q||e.acara_nama.toLowerCase().includes(q)||typeName(e).toLowerCase().includes(q))&&(!st||e.status===st));const labels=['Desa','PW1','PW2','PW3','PW4',...new Set(data.map(eventGroupLabel).filter(x=>!['Desa','PW1','PW2','PW3','PW4'].includes(x)))];$('eventsHistory').innerHTML=labels.map(g=>{const rows=data.filter(e=>eventGroupLabel(e)===g);if(!rows.length)return '';return '<div class="event-group"><div class="event-group-head"><span>'+esc(g)+'</span><span>'+rows.length+' acara</span></div>'+rows.map(e=>{const c=eventCounts(e.id),linkok=e.status==='aktif'&&e.absen_public&&e.public_token;return '<div class="event-card"><div><div class="ename">'+esc(e.acara_nama)+'</div><div class="emeta">'+esc(typeName(e))+' · '+esc(e.lokasi||'')+'</div></div><div><b>'+fmtDate(e.tanggal)+'</b><div class="emeta">'+fmtTime(e.waktu)+(e.waktu_selesai?'–'+fmtTime(e.waktu_selesai):'')+'</div></div><div><span class="pill '+(e.status==='aktif'?'active':'done')+'">'+esc(e.status)+'</span><div class="emeta">'+c.hadir+'/'+c.total+' hadir</div></div><div class="event-actions"><button class="btn xs soft" onclick="goAttendance('+e.id+')">Absensi</button>'+(linkok?'<button class="btn xs blue" onclick="copyText(publicLink(eventById('+e.id+')))" title="Salin link">Salin Link</button><button class="btn xs secondary" onclick="window.open(publicLink(eventById('+e.id+')),\'_blank\')">Buka Link</button>':'')+'</div></div>'}).join('')+'</div>'}).join('')||'<div class="card empty">Tidak ada acara.</div>'}
+
+async function setEventStatus(id,status){
+  const ev=eventById(id);
+  if(!ev)return;
+  const label={aktif:'mengaktifkan kembali',selesai:'menyelesaikan',dibatalkan:'membatalkan'}[status]||('mengubah status menjadi '+status);
+  const warning=status==='selesai'
+    ? '\n\nSetelah diselesaikan, link absensi publik akan ditutup. Data tetap bisa dilihat dan dikoreksi dari aplikasi admin.'
+    : status==='dibatalkan'
+      ? '\n\nLink absensi publik juga akan ditutup.'
+      : '\n\nLink absensi publik akan aktif kembali.';
+  if(!confirm('Yakin ingin '+label+' acara "'+ev.acara_nama+'"?'+warning))return;
+
+  const patch={
+    status,
+    absen_public:status==='aktif',
+    updated_at:new Date().toISOString()
+  };
+  const r=await sb.from('ubnb_kegiatan')
+    .update(patch)
+    .eq('id',id)
+    .select('id,status,absen_public')
+    .single();
+  if(r.error){alert('Gagal mengubah status: '+r.error.message);return;}
+
+  const local=EVENTS.find(x=>x.id===id);
+  if(local)Object.assign(local,r.data);
+  renderDashboard();
+  renderEvents();
+  renderAttendanceEventOptions();
+
+  if(status==='selesai') alert('Acara sudah ditandai SELESAI. Link absensi publik sekarang tertutup.');
+  if(status==='dibatalkan') alert('Acara sudah DIBATALKAN. Link absensi publik sekarang tertutup.');
+  if(status==='aktif') alert('Acara AKTIF kembali. Link absensi publik dapat digunakan lagi.');
+}
+
+function renderEvents(){const q=$('eventSearch').value.trim().toLowerCase(),st=$('eventStatus').value;const data=EVENTS.filter(e=>(!q||e.acara_nama.toLowerCase().includes(q)||typeName(e).toLowerCase().includes(q))&&(!st||e.status===st));const labels=['Desa','PW1','PW2','PW3','PW4',...new Set(data.map(eventGroupLabel).filter(x=>!['Desa','PW1','PW2','PW3','PW4'].includes(x)))];$('eventsHistory').innerHTML=labels.map(g=>{const rows=data.filter(e=>eventGroupLabel(e)===g);if(!rows.length)return '';return '<div class="event-group"><div class="event-group-head"><span>'+esc(g)+'</span><span>'+rows.length+' acara</span></div>'+rows.map(e=>{const c=eventCounts(e.id),linkok=e.status==='aktif'&&e.absen_public&&e.public_token;return '<div class="event-card"><div><div class="ename">'+esc(e.acara_nama)+'</div><div class="emeta">'+esc(typeName(e))+' · '+esc(e.lokasi||'')+'</div></div><div><b>'+fmtDate(e.tanggal)+'</b><div class="emeta">'+fmtTime(e.waktu)+(e.waktu_selesai?'–'+fmtTime(e.waktu_selesai):'')+'</div></div><div><span class="pill '+(e.status==='aktif'?'active':'done')+'">'+esc(e.status)+'</span><div class="emeta">'+c.hadir+'/'+c.total+' hadir</div></div><div class="event-actions"><button class="btn xs soft" onclick="goAttendance('+e.id+')">Absensi</button>'+(linkok?'<button class="btn xs blue" onclick="copyText(publicLink(eventById('+e.id+')))" title="Salin link">Salin Link</button><button class="btn xs secondary" onclick="window.open(publicLink(eventById('+e.id+')),\'_blank\')">Buka Link</button>':'')+(e.status==='aktif'?'<button class="btn xs" style="background:#7a5a00" onclick="setEventStatus('+e.id+',\'selesai\')">Selesaikan</button><button class="btn xs danger" onclick="setEventStatus('+e.id+',\'dibatalkan\')">Batalkan</button>':'<button class="btn xs secondary" onclick="setEventStatus('+e.id+',\'aktif\')">Aktifkan Lagi</button>')+'</div></div>'}).join('')+'</div>'}).join('')||'<div class="card empty">Tidak ada acara.</div>'}
 function initScopeOptions(){if(ACCESS.role==='pengurus_kelompok')$('ceScope').innerHTML='<option value="'+esc(ACCESS.kelompok_scope)+'">'+esc(ACCESS.kelompok_scope)+'</option>';else $('ceScope').innerHTML='<option value="">Desa · semua kelompok</option><option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option>'}
 function fillJenisOptions(){const opts=JENIS.map(x=>'<option value="'+x.id+'">'+esc(x.nama)+'</option>').join('');$('ceJenis').innerHTML=opts;const counts=new Map();EVENTS.forEach(e=>counts.set(e.jenis_acara_id,(counts.get(e.jenis_acara_id)||0)+1));const useful=JENIS.filter(j=>counts.has(j.id)).sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0));$('reportJenis').innerHTML=useful.map(x=>'<option value="'+x.id+'">'+esc(x.nama)+' ('+(counts.get(x.id)||0)+' acara)</option>').join('')||'<option value="">Belum ada jenis kegiatan</option>'}
 function openCreateEvent(){if(!canCreate())return;$('createEventForm').reset();$('createdLinks').innerHTML='';showMsg('createMsg','');$('ceDate').value=jakartaParts().date;initScopeOptions();fillJenisOptions();SELECTED_DIDS=new Set();toggleRepeat();refreshParticipantPreview();$('modal').classList.remove('hidden');$('ceName').focus()}
