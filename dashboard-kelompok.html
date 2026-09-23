@@ -756,6 +756,86 @@ const KELOMPOK_LIST=[
 
 let CU=null;
 
+// ===== SECURE ABSEN AUTH (legacy dashboard -> RPC token) =====
+const DK_ATT_TOKEN_KEY='dk_attendance_token';
+let DK_ATT_TOKEN=sessionStorage.getItem(DK_ATT_TOKEN_KEY)||null;
+
+function isDesaAttendanceManager(){
+  return !!CU && !isViewer() && !CU.kelompok_scope;
+}
+
+async function dkAttendanceAuthenticate(password){
+  if(!CU||!CU.username) throw new Error('Session user tidak tersedia');
+  const hash=await UBNBAuth.sha256(password);
+  const {data,error}=await sb.rpc('dk_attendance_login',{
+    p_username:CU.username,
+    p_password_hash:hash
+  });
+  if(error) throw new Error(error.message||'Gagal autentikasi modul Absen');
+  if(!data||data.ok!==true) throw new Error((data&&data.error)||'Autentikasi modul Absen ditolak');
+  DK_ATT_TOKEN=data.token;
+  sessionStorage.setItem(DK_ATT_TOKEN_KEY,DK_ATT_TOKEN);
+  return data;
+}
+
+async function getAttendanceSnapshot(interactive=false){
+  if(DK_ATT_TOKEN){
+    const {data,error}=await sb.rpc('dk_attendance_snapshot',{p_token:DK_ATT_TOKEN});
+    if(!error&&data&&data.ok===true) return data;
+    DK_ATT_TOKEN=null;
+    sessionStorage.removeItem(DK_ATT_TOKEN_KEY);
+  }
+  if(!interactive) return null;
+  if(isViewer()){
+    toast('Akses Absen hanya untuk pengurus',true);
+    return null;
+  }
+  const pass=prompt('Untuk membuka modul Absen, masukkan kembali password akun '+(CU?.username||'pengurus')+':');
+  if(pass===null) return null;
+  if(!pass.trim()){
+    toast('Password wajib diisi untuk membuka modul Absen',true);
+    return null;
+  }
+  try{
+    await dkAttendanceAuthenticate(pass);
+    const {data,error}=await sb.rpc('dk_attendance_snapshot',{p_token:DK_ATT_TOKEN});
+    if(error) throw new Error(error.message);
+    if(!data||data.ok!==true) throw new Error((data&&data.error)||'Gagal memuat data Absen');
+    return data;
+  }catch(e){
+    DK_ATT_TOKEN=null;
+    sessionStorage.removeItem(DK_ATT_TOKEN_KEY);
+    toast('Akses Absen gagal: '+(e.message||e),true);
+    return null;
+  }
+}
+
+function applyAttendanceSnapshot(snap){
+  if(!snap||snap.ok!==true){
+    aAcaraMaster=[];aKegiatan=[];aHadir=[];
+    return;
+  }
+  aAcaraMaster=Array.isArray(snap.masters)?snap.masters:[];
+  aKegiatan=Array.isArray(snap.kegiatan)?snap.kegiatan:[];
+  aHadir=Array.isArray(snap.hadir)?snap.hadir:[];
+}
+
+async function reloadAttendanceSecure(interactive=false){
+  const snap=await getAttendanceSnapshot(interactive);
+  if(!snap){
+    if(interactive){
+      aAcaraMaster=[];aKegiatan=[];aHadir=[];
+      renderAbsenStats();
+      renderKegiatanList();
+    }
+    return false;
+  }
+  applyAttendanceSnapshot(snap);
+  renderAbsenStats();
+  renderKegiatanList();
+  return true;
+}
+
 // ===== ACTIVITY LOG =====
 async function dkLog(aksi, detail={}){
   if(!CU||!sb) return;
@@ -799,6 +879,9 @@ async function doLogin(){
     // Pastikan kelompok_scope ke-save juga
     CU.kelompok_scope=userData.kelompok_scope;
     UBNBAuth.saveSSO(CU);
+    // Buat token khusus modul Absen. Jika akun memang bukan pengurus Absen,
+    // login dashboard tetap berjalan dan modul Absen akan menolak saat dibuka.
+    try{ await dkAttendanceAuthenticate(p); }catch(_e){ console.warn('Absen auth:',_e.message||_e); }
     dkLog('login',{nama:CU.nama||CU.username});
     if(CU.username==='Setyo'){const b=document.getElementById('tab-btn-logbook');if(b)b.style.display='';}
     init();
@@ -806,7 +889,17 @@ async function doLogin(){
 }
 function setLE(m){const e=document.getElementById('login-err');e.textContent=m;e.style.display='block';}
 function setLEUmum(m){const e=document.getElementById('login-err-umum');e.textContent=m;e.style.display='block';}
-function keluar(){dkLog('logout');UBNBAuth.clearAllSessions();sessionStorage.removeItem('ubnb_umum_jamaah');location.reload();}
+async function keluar(){
+  dkLog('logout');
+  if(DK_ATT_TOKEN){
+    try{await sb.rpc('dk_attendance_logout',{p_token:DK_ATT_TOKEN});}catch(_e){}
+  }
+  DK_ATT_TOKEN=null;
+  sessionStorage.removeItem(DK_ATT_TOKEN_KEY);
+  UBNBAuth.clearAllSessions();
+  sessionStorage.removeItem('ubnb_umum_jamaah');
+  location.reload();
+}
 
 // ===== SWITCH LOGIN MODE =====
 function switchLoginMode(mode){
@@ -1086,7 +1179,7 @@ window.addEventListener('DOMContentLoaded',async()=>{
       CU=cu;
       UBNBAuth.saveSSO(cu);
       init();
-      UBNBAuth.startIdleTimer(sb,()=>{UBNBAuth.clearAllSessions();location.reload();});
+      UBNBAuth.startIdleTimer(sb,()=>{DK_ATT_TOKEN=null;sessionStorage.removeItem(DK_ATT_TOKEN_KEY);UBNBAuth.clearAllSessions();location.reload();});
     }
   }
   document.getElementById('inp-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
@@ -1122,7 +1215,7 @@ async function init(){
   await loadAll();
   // Idle timer hanya untuk pengurus (yang login via UBNBAuth)
   if(!isUmumJamaah){
-    UBNBAuth.startIdleTimer(sb,()=>{UBNBAuth.clearAllSessions();sessionStorage.removeItem('ubnb_umum_jamaah');location.reload();});
+    UBNBAuth.startIdleTimer(sb,()=>{DK_ATT_TOKEN=null;sessionStorage.removeItem(DK_ATT_TOKEN_KEY);UBNBAuth.clearAllSessions();sessionStorage.removeItem('ubnb_umum_jamaah');location.reload();});
   }
 }
 
@@ -1165,10 +1258,10 @@ async function loadAll(){
   // Build queries
   const qJamaah = sb.from('jamaah_desa').select('*').order('nama');
   const qSensus = sb.from('ubnb_sensus_bulanan').select('id,periode,periode_label,kelompok_filter,tanggal_generate,generated_by,total_jiwa,total_kk,created_at').order('periode',{ascending:false});
-  // Absen
-  let qAcara = sb.from('ubnb_acara_master').select('*').eq('aktif',true);
-  let qKegiatan = sb.from('ubnb_kegiatan').select('*').order('tanggal',{ascending:false});
-  let qHadir = sb.from('ubnb_kegiatan_hadir').select('*').limit(9999);
+  // Absen sekarang dibaca melalui RPC bertoken, bukan query tabel langsung.
+  const qAttendance = DK_ATT_TOKEN
+    ? sb.rpc('dk_attendance_snapshot',{p_token:DK_ATT_TOKEN})
+    : Promise.resolve({data:null,error:null});
   // ISRUN
   let qIsrunKat = sb.from('ubnb_isrun_kategori').select('*').order('urutan');
   let qIsrunPbyr = sb.from('ubnb_isrun_pembayar').select('*').eq('aktif',true).order('nama');
@@ -1176,22 +1269,29 @@ async function loadAll(){
   let qPengurus = sb.from('ubnb_pengurus').select('*, jamaah_desa(nama,nama_kk,kelompok_nama)').order('urutan');
 
   if(scope){
-    qAcara = qAcara.eq('kelompok',scope);
-    qKegiatan = qKegiatan.eq('kelompok',scope);
     qIsrunKat = qIsrunKat.eq('kelompok',scope);
     qIsrunPbyr = qIsrunPbyr.eq('kelompok',scope);
   }
 
-  const [j,s,am,kg,hd,ikt,ipb,ipy,pg]=await Promise.all([qJamaah,qSensus,qAcara,qKegiatan,qHadir,qIsrunKat,qIsrunPbyr,qIsrunPbyrn,qPengurus]);
+  const [j,s,att,ikt,ipb,ipy,pg]=await Promise.all([qJamaah,qSensus,qAttendance,qIsrunKat,qIsrunPbyr,qIsrunPbyrn,qPengurus]);
 
   let allJamaah=j.data||[];
   if(scope){aJamaah=allJamaah.filter(x=>x.kelompok_nama===scope);}
   else{aJamaah=allJamaah;}
   aSensus=s.data||[];
+
   if(scope){aSensus=aSensus.filter(x=>x.kelompok_filter===scope);}
-  aAcaraMaster=am.data||[];
-  aKegiatan=kg.data||[];
-  aHadir=hd.data||[];
+
+  if(att && !att.error && att.data && att.data.ok===true){
+    applyAttendanceSnapshot(att.data);
+  }else{
+    aAcaraMaster=[];aKegiatan=[];aHadir=[];
+    if(DK_ATT_TOKEN && (att?.error || (att?.data && att.data.ok===false))){
+      DK_ATT_TOKEN=null;
+      sessionStorage.removeItem(DK_ATT_TOKEN_KEY);
+    }
+  }
+
   aIsrunKategori=ikt.data||[];
   aIsrunPembayar=ipb.data||[];
   // Filter ISRUN pembayaran by pembayar yang ke-load
@@ -1246,6 +1346,9 @@ function showTab(tab,btn){
   document.querySelectorAll('.page-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
   btn.classList.add('active');
+  if(tab==='absen'){
+    reloadAttendanceSecure(true);
+  }
   if(tab==='isrun'){
     checkIsrunUnlock();
   }
@@ -2763,7 +2866,7 @@ function editKegiatan(id){
       </div>
     </div>
     ${(()=>{
-      if(!CU||CU.role!=='pengurus_desa') return '';
+      if(!isDesaAttendanceManager()) return '';
       const sD=k&&!k.kelompok?'selected':'',s1=k&&k.kelompok==='PW1'?'selected':'',s2=k&&k.kelompok==='PW2'?'selected':'',s3=k&&k.kelompok==='PW3'?'selected':'',s4=k&&k.kelompok==='PW4'?'selected':'';
       return '<div class="modal-row"><label>Scope Kegiatan</label><select id="kg-scope" style="flex:1;" onchange="onKgScopeChange()"><option value="" '+sD+'>🏛️ Kegiatan Desa</option><option value="PW1" '+s1+'>🟢 PW1</option><option value="PW2" '+s2+'>🔵 PW2</option><option value="PW3" '+s3+'>🟠 PW3</option><option value="PW4" '+s4+'>🟣 PW4</option></select></div>';
     })()}
@@ -3002,7 +3105,7 @@ function previewPeserta(){
 function currentKegKelScope(){
   let kelScope=CU.kelompok_scope||null;
   const scEl=document.getElementById('kg-scope');
-  if(CU.role==='pengurus_desa' && scEl){ kelScope=scEl.value||null; }
+  if(isDesaAttendanceManager() && scEl){ kelScope=scEl.value||null; }
   return kelScope;
 }
 function onSumberChange(){
@@ -3079,104 +3182,95 @@ function initKegiatanSumber(k){
 }
 
 async function simpanKegiatan(){
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap) return;
+
   const acaraNama=document.getElementById('kg-acara-input').value.trim();
   const acaraIdVal=document.getElementById('kg-acara-id').value;
   if(!acaraNama){toast('Nama acara wajib diisi',true);return;}
   let acara_id=acaraIdVal?parseInt(acaraIdVal):null;
-  // Verify: kalau acara_id ada, pastikan nama-nya cocok (mencegah user ketik manual tapi id stale)
+
+  // Verify: kalau acara_id ada, pastikan nama-nya cocok (mencegah id stale)
   if(acara_id){
     const a=aAcaraMaster.find(x=>x.id===acara_id);
-    if(!a||a.nama!==acaraNama){
-      acara_id=null; // jadi acara baru
-    }
-  } else {
-    // Cek lagi by nama (kalau ternyata ada di master tapi id belum di-set)
+    if(!a||a.nama!==acaraNama) acara_id=null;
+  }else{
     const exact=aAcaraMaster.find(a=>(a.nama||'').toLowerCase()===acaraNama.toLowerCase());
     if(exact) acara_id=exact.id;
   }
+
   const tgl=document.getElementById('kg-tgl').value;
   if(!tgl){toast('Tanggal wajib diisi',true);return;}
+
   const modes=[];
   if(document.getElementById('kg-mode-manual').checked) modes.push('manual');
   if(document.getElementById('kg-mode-online').checked) modes.push('online');
   if(!modes.length){toast('Pilih minimal 1 mode',true);return;}
+
+  const targetScope=currentKegKelScope();
   const sumberEl=document.getElementById('kg-sumber');
   const sumber=sumberEl?sumberEl.value:'jamaah';
-  let filter, peserta;
+  let filter,peserta;
+
   if(sumber==='pengurus'){
     peserta=getPesertaPengurus();
-    const kelScope=currentKegKelScope();
     const cakEl=document.getElementById('kg-pengurus-cakupan');
-    filter={sumber:'pengurus', cakupan: kelScope?'kelompok':(cakEl?cakEl.value:'desa'), dapukan:getCheckedDapukan()};
+    filter={
+      sumber:'pengurus',
+      cakupan:targetScope?'kelompok':(cakEl?cakEl.value:'desa'),
+      dapukan:getCheckedDapukan()
+    };
   }else{
     filter=buildFilterPeserta();
-    peserta=getPesertaWajib(filter,CU.kelompok_scope);
+    // Penting: pengurus desa yang membuat kegiatan PW1/PW2/PW3/PW4
+    // harus mengambil peserta dari scope yang dipilih, bukan semua kelompok.
+    peserta=getPesertaWajib(filter,targetScope);
   }
 
+  const wasEdit=!!curKegiatanId;
   const payload={
     acara_id,
     acara_nama:acaraNama,
-    kelompok:(CU&&CU.role==='pengurus_desa')?(document.getElementById('kg-scope')?document.getElementById('kg-scope').value||null:null):CU.kelompok_scope||null,
+    kelompok:targetScope,
     tanggal:tgl,
     waktu:document.getElementById('kg-waktu').value||null,
     lokasi:document.getElementById('kg-lokasi').value.trim()||null,
     mode:modes,
     filter_peserta:filter,
     peserta_wajib_count:peserta.length,
+    status:wasEdit?(document.getElementById('kg-status').value||'aktif'):'aktif',
     catatan:document.getElementById('kg-catatan').value.trim()||null,
     created_by:CU.username,
     updated_at:new Date().toISOString(),
   };
 
-  // Auto-add ke master kalau acara baru
-  if(!acara_id){
-    const ins=await sb.from('ubnb_acara_master').insert([{
-      kelompok:(CU&&CU.role==='pengurus_desa')?(document.getElementById('kg-scope')?document.getElementById('kg-scope').value||null:null):CU.kelompok_scope||null,nama:acaraNama,created_by:CU.username
-    }]).select().single();
-    if(!ins.error&&ins.data){
-      payload.acara_id=ins.data.id;
-      aAcaraMaster.push(ins.data);
-    }
+  const {data,error}=await sb.rpc('dk_attendance_save_kegiatan',{
+    p_token:DK_ATT_TOKEN,
+    p_id:curKegiatanId||null,
+    p_payload:payload,
+    p_peserta:peserta
+  });
+
+  if(error||!data||data.ok!==true){
+    toast((wasEdit?'Gagal update: ':'Gagal simpan: ')+(error?.message||data?.error||'Unknown error'),true);
+    return;
   }
 
-  let kegiatanId=curKegiatanId;
-  if(curKegiatanId){
-    payload.status=document.getElementById('kg-status').value||'aktif';
-    const{error}=await sb.from('ubnb_kegiatan').update(payload).eq('id',curKegiatanId);
-    if(error){toast('Gagal update: '+error.message,true);return;}
-    toast('✅ Kegiatan diperbarui');
-  } else {
-    payload.status='aktif';
-    const{data,error}=await sb.from('ubnb_kegiatan').insert([payload]).select().single();
-    if(error){toast('Gagal simpan: '+error.message,true);return;}
-    kegiatanId=data.id;
-    if(peserta.length){
-      const rows=peserta.map(p=>({
-        kegiatan_id:kegiatanId,
-        jamaah_did:p.did,
-        jamaah_nama:p.nama,
-        jamaah_kk:p.nama_kk||null,
-        status_hadir:'tidak_hadir',
-        input_by:CU.username,
-        input_via:'manual',
-      }));
-      const{error:e2}=await sb.from('ubnb_kegiatan_hadir').insert(rows);
-      if(e2){toast('Kegiatan tersimpan, tapi gagal generate daftar hadir: '+e2.message,true);}
-    }
-    dkLog(isEdit?'edit_kegiatan':'buat_kegiatan',{acara:payload.acara_nama,peserta:peserta.length});
-    toast('✅ Kegiatan dibuat dengan '+peserta.length+' peserta wajib');
-  }
+  dkLog(wasEdit?'edit_kegiatan':'buat_kegiatan',{acara:payload.acara_nama,peserta:peserta.length});
+  toast(wasEdit?'✅ Kegiatan diperbarui':'✅ Kegiatan dibuat dengan '+peserta.length+' peserta wajib');
   closeMod('modal-kegiatan');
-  await loadAll();
+  await reloadAttendanceSecure(false);
 }
 
 async function hapusKegiatan(id,nama){
   if(!confirm('Hapus kegiatan "'+nama+'"?\n\nSemua data hadir akan ikut terhapus.')) return;
-  const{error}=await sb.from('ubnb_kegiatan').delete().eq('id',id);
-  if(error){toast('Gagal: '+error.message,true);return;}
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap) return;
+  const {data,error}=await sb.rpc('dk_attendance_delete_kegiatan',{p_token:DK_ATT_TOKEN,p_id:id});
+  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
   dkLog('hapus_kegiatan',{acara:nama});
   toast('Kegiatan dihapus');
-  await loadAll();
+  await reloadAttendanceSecure(false);
 }
 
 // ===== MASTER ACARA =====
@@ -3200,21 +3294,28 @@ function renderListAcaraMaster(){
 async function tambahAcaraMaster(){
   const nm=document.getElementById('acara-baru-input').value.trim();
   if(!nm){toast('Isi nama acara',true);return;}
-  const{error}=await sb.from('ubnb_acara_master').insert([{
-    kelompok:(CU&&CU.role==='pengurus_desa')?(document.getElementById('kg-scope')?document.getElementById('kg-scope').value||null:null):CU.kelompok_scope||null,nama:nm,created_by:CU.username
-  }]);
-  if(error){toast('Gagal: '+error.message,true);return;}
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap) return;
+  const kelompok=currentKegKelScope();
+  const {data,error}=await sb.rpc('dk_attendance_add_master',{
+    p_token:DK_ATT_TOKEN,
+    p_nama:nm,
+    p_kelompok:kelompok
+  });
+  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
   document.getElementById('acara-baru-input').value='';
   toast('✅ Master acara ditambahkan');
-  await loadAll();
+  await reloadAttendanceSecure(false);
   renderListAcaraMaster();
 }
 async function hapusAcaraMaster(id,nm){
   if(!confirm('Hapus master acara "'+nm+'"?\n\nKegiatan yang sudah pakai acara ini tidak terhapus, hanya master-nya saja.')) return;
-  const{error}=await sb.from('ubnb_acara_master').delete().eq('id',id);
-  if(error){toast('Gagal: '+error.message,true);return;}
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap) return;
+  const {data,error}=await sb.rpc('dk_attendance_delete_master',{p_token:DK_ATT_TOKEN,p_id:id});
+  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
   toast('Dihapus');
-  await loadAll();
+  await reloadAttendanceSecure(false);
   renderListAcaraMaster();
 }
 
@@ -3285,17 +3386,21 @@ function renderDaftarHadir(){
 }
 
 async function setHadir(hadirId,status){
-  const payload={status_hadir:status,input_by:CU.username,updated_at:new Date().toISOString()};
-  if(status==='hadir'&&!aHadir.find(h=>h.id===hadirId)?.hadir_at){
-    payload.hadir_at=new Date().toISOString();
-  }
-  const{error}=await sb.from('ubnb_kegiatan_hadir').update(payload).eq('id',hadirId);
-  if(error){toast('Gagal: '+error.message,true);return;}
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap) return;
+  const {data,error}=await sb.rpc('dk_attendance_set_hadir',{
+    p_token:DK_ATT_TOKEN,
+    p_hadir_id:hadirId,
+    p_status:status
+  });
+  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
+
+  const row=data.data||{};
   const _h=aHadir.find(h=>h.id===hadirId),_k=aKegiatan.find(k=>k.id===curKegiatanId);
   dkLog('input_hadir',{jamaah:_h?.jamaah_nama,status:status,kegiatan:_k?.acara_nama});
-  // Update local
+
   const idx=aHadir.findIndex(h=>h.id===hadirId);
-  if(idx>=0) aHadir[idx]={...aHadir[idx],...payload};
+  if(idx>=0) aHadir[idx]={...aHadir[idx],...row};
   renderDaftarHadir();
   renderKegiatanList();
   renderAbsenStats();
@@ -3305,25 +3410,36 @@ async function bulkHadir(status){
   if(!confirm('Tandai SEMUA peserta sebagai "'+(status==='hadir'?'Hadir':'Tidak Hadir')+'"?')) return;
   const ids=aHadir.filter(h=>h.kegiatan_id===curKegiatanId).map(h=>h.id);
   if(!ids.length) return;
-  const payload={status_hadir:status,input_by:CU.username,updated_at:new Date().toISOString()};
-  if(status==='hadir') payload.hadir_at=new Date().toISOString();
-  const{error}=await sb.from('ubnb_kegiatan_hadir').update(payload).in('id',ids);
-  if(error){toast('Gagal: '+error.message,true);return;}
-  toast('✅ '+ids.length+' peserta ditandai '+status);
-  await loadAll();
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap) return;
+  const {data,error}=await sb.rpc('dk_attendance_bulk_hadir',{
+    p_token:DK_ATT_TOKEN,
+    p_kegiatan_id:curKegiatanId,
+    p_status:status
+  });
+  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
+  toast('✅ '+(data.updated??ids.length)+' peserta ditandai '+status);
+  await reloadAttendanceSecure(false);
   renderDaftarHadir();
 }
 
-function bagikanLinkAbsen(){
+async function bagikanLinkAbsen(){
   const k=aKegiatan.find(x=>x.id===curKegiatanId);
   if(!k) return;
   if(!Array.isArray(k.mode)||!k.mode.includes('online')){
     if(!confirm('Mode online belum aktif untuk kegiatan ini. Aktifkan sekarang & generate link?')) return;
-    sb.from('ubnb_kegiatan').update({mode:[...(k.mode||['manual']),'online']}).eq('id',k.id).then(({error})=>{
-      if(error){toast('Gagal: '+error.message,true);return;}
-      bagikanLinkAbsenDirect(k.public_token);
-      loadAll();
+    const snap=await getAttendanceSnapshot(true);
+    if(!snap) return;
+    const {data,error}=await sb.rpc('dk_attendance_enable_online',{
+      p_token:DK_ATT_TOKEN,
+      p_kegiatan_id:k.id
     });
+    if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
+    const updated=data.data||k;
+    const idx=aKegiatan.findIndex(x=>x.id===k.id);
+    if(idx>=0) aKegiatan[idx]={...aKegiatan[idx],...updated};
+    bagikanLinkAbsenDirect(updated.public_token||k.public_token);
+    renderKegiatanList();
     return;
   }
   bagikanLinkAbsenDirect(k.public_token);
