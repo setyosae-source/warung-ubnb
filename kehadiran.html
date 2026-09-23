@@ -273,19 +273,58 @@ async function bootstrap(){
   }
 }
 function showLogin(){$('loginView').classList.remove('hidden');$('appView').classList.add('hidden');}
+async function getOrClaimAttendanceAccess(){
+  let a=await sb.from('ubnb_attendance_access')
+    .select('*')
+    .eq('auth_user_id',SESSION.user.id)
+    .eq('aktif',true)
+    .maybeSingle();
+  if(a.error)throw a.error;
+  if(a.data)return a.data;
+
+  const w=await sb.from('ubnb_attendance_allowed_email')
+    .select('legacy_user_id,role,kelompok_scope,aktif')
+    .eq('email',SESSION.user.email)
+    .eq('aktif',true)
+    .maybeSingle();
+  if(w.error)throw w.error;
+  if(!w.data)return null;
+
+  const ins=await sb.from('ubnb_attendance_access').insert({
+    auth_user_id:SESSION.user.id,
+    legacy_user_id:w.data.legacy_user_id,
+    role:w.data.role,
+    kelompok_scope:w.data.kelompok_scope,
+    aktif:true
+  }).select('*').single();
+
+  if(!ins.error&&ins.data)return ins.data;
+
+  // Antisipasi race condition jika akses dibuat bersamaan oleh proses lain.
+  a=await sb.from('ubnb_attendance_access')
+    .select('*')
+    .eq('auth_user_id',SESSION.user.id)
+    .eq('aktif',true)
+    .maybeSingle();
+  if(a.error)throw a.error;
+  if(a.data)return a.data;
+  throw ins.error||new Error('Gagal membuat akses kehadiran.');
+}
+
 async function enterApp(){
   try{
-    const a=await sb.from('ubnb_attendance_access').select('*').eq('auth_user_id',SESSION.user.id).eq('aktif',true).maybeSingle();
-    if(a.error)throw a.error;
-    if(!a.data){
+    const access=await getOrClaimAttendanceAccess();
+    if(!access){
       await sb.auth.signOut();SESSION=null;showLogin();
-      showMsg('loginMsg','Akun berhasil diautentikasi tetapi belum diberi akses modul kehadiran. Hubungkan akun ini ke user UBNB terlebih dahulu.','err');return;
+      showMsg('loginMsg','Email Google ini belum didaftarkan sebagai pengurus aplikasi kehadiran.','err');return;
     }
-    ACCESS=a.data;
+    ACCESS=access;
     $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');
     $('userEmail').textContent=SESSION.user.email||'user';$('scopeBadge').textContent=scopeLabel();$('dashScope').textContent='Scope aktif: '+scopeLabel();
     document.querySelectorAll('.create-event-btn').forEach(b=>b.style.display=canCreate()?'':'none');
     initScopeOptions();await loadAll();
+    // Bersihkan parameter error OAuth lama dari address bar setelah login sukses.
+    if(window.history&&window.location.search)window.history.replaceState({},document.title,window.location.pathname);
   }catch(e){showLogin();showMsg('loginMsg','Gagal membuka aplikasi: '+esc(e.message),'err');}
 }
 $('googleLoginBtn').onclick=async()=>{
