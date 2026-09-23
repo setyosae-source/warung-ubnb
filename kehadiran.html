@@ -170,7 +170,68 @@ async function setEventStatus(id,status){
   if(status==='aktif') alert('Acara AKTIF kembali. Link absensi publik dapat digunakan lagi.');
 }
 
-function renderEvents(){const q=$('eventSearch').value.trim().toLowerCase(),st=$('eventStatus').value;const data=EVENTS.filter(e=>(!q||e.acara_nama.toLowerCase().includes(q)||typeName(e).toLowerCase().includes(q))&&(!st||e.status===st));const labels=['Desa','PW1','PW2','PW3','PW4',...new Set(data.map(eventGroupLabel).filter(x=>!['Desa','PW1','PW2','PW3','PW4'].includes(x)))];$('eventsHistory').innerHTML=labels.map(g=>{const rows=data.filter(e=>eventGroupLabel(e)===g);if(!rows.length)return '';return '<div class="event-group"><div class="event-group-head"><span>'+esc(g)+'</span><span>'+rows.length+' acara</span></div>'+rows.map(e=>{const c=eventCounts(e.id),linkok=e.status==='aktif'&&e.absen_public&&e.public_token;return '<div class="event-card"><div><div class="ename">'+esc(e.acara_nama)+'</div><div class="emeta">'+esc(typeName(e))+' · '+esc(e.lokasi||'')+'</div></div><div><b>'+fmtDate(e.tanggal)+'</b><div class="emeta">'+fmtTime(e.waktu)+(e.waktu_selesai?'–'+fmtTime(e.waktu_selesai):'')+'</div></div><div><span class="pill '+(e.status==='aktif'?'active':'done')+'">'+esc(e.status)+'</span><div class="emeta">'+c.hadir+'/'+c.total+' hadir</div></div><div class="event-actions"><button class="btn xs soft" onclick="goAttendance('+e.id+')">Absensi</button>'+(linkok?'<button class="btn xs blue" onclick="copyText(publicLink(eventById('+e.id+')))" title="Salin link">Salin Link</button><button class="btn xs secondary" onclick="window.open(publicLink(eventById('+e.id+')),\'_blank\')">Buka Link</button>':'')+(e.status==='aktif'?'<button class="btn xs" style="background:#7a5a00" onclick="setEventStatus('+e.id+',\'selesai\')">Selesaikan</button><button class="btn xs danger" onclick="setEventStatus('+e.id+',\'dibatalkan\')">Batalkan</button>':'<button class="btn xs secondary" onclick="setEventStatus('+e.id+',\'aktif\')">Aktifkan Lagi</button>')+'</div></div>'}).join('')+'</div>'}).join('')||'<div class="card empty">Tidak ada acara.</div>'}
+function renderEvents(){
+  const q=$('eventSearch').value.trim().toLowerCase(),st=$('eventStatus').value;
+  const filtered=EVENTS.filter(x=>
+    (!q||String(x.acara_nama||'').toLowerCase().includes(q)||String(x.lokasi||'').toLowerCase().includes(q))
+    &&(!st||x.status===st)
+  );
+
+  const groupOrder=['Desa','PW1','PW2','PW3','PW4'];
+  const groups={Desa:[],PW1:[],PW2:[],PW3:[],PW4:[]};
+
+  filtered.forEach(e=>{
+    const g=e.kelompok&&groups[e.kelompok]?e.kelompok:'Desa';
+    groups[g].push(e);
+  });
+
+  const blocks=groupOrder.map(g=>{
+    const rows=groups[g];
+    if(!rows.length)return '';
+
+    const body=rows.map(e=>{
+      const linkok=e.status==='aktif'&&e.absen_public!==false&&e.public_token;
+      const statusClass=e.status==='aktif'?'hadir':e.status==='selesai'?'belum':e.status==='dibatalkan'?'sakit':'izin';
+
+      let actions='<button class="btn xs soft" onclick="goAttendance('+e.id+')">Absensi</button> ';
+      if(linkok){
+        actions+='<button class="btn xs blue" onclick="copyText(publicLink(eventById('+e.id+')))" title="Salin link">Salin Link</button> ';
+        actions+='<button class="btn xs secondary" onclick="window.open(publicLink(eventById('+e.id+')),\'_blank\')">Buka Link</button> ';
+      }
+
+      if(e.status==='aktif'){
+        actions+='<button class="btn xs" style="background:#7a5a00" onclick="setEventStatus('+e.id+',\'selesai\')">Selesaikan</button> ';
+        actions+='<button class="btn xs danger" onclick="setEventStatus('+e.id+',\'dibatalkan\')">Batalkan</button>';
+      }else{
+        actions+='<button class="btn xs secondary" onclick="setEventStatus('+e.id+',\'aktif\')">Aktifkan Lagi</button>';
+      }
+
+      return '<tr>'+
+        '<td><b>'+esc(e.acara_nama)+'</b><div class="muted">'+esc(e.lokasi||'')+'</div></td>'+
+        '<td>'+fmtDate(e.tanggal)+'</td>'+
+        '<td>'+fmtTime(e.waktu)+(e.waktu_selesai?'–'+fmtTime(e.waktu_selesai):'')+'</td>'+
+        '<td>'+esc(e.peserta_wajib_count||0)+'</td>'+
+        '<td><span class="pill '+statusClass+'">'+esc(e.status)+'</span></td>'+
+        '<td style="white-space:nowrap">'+actions+'</td>'+
+      '</tr>';
+    }).join('');
+
+    return '<div class="card" style="padding:0;overflow:hidden">'+
+      '<div style="padding:11px 13px;background:var(--green3);border-bottom:1px solid var(--line);font-weight:900;color:var(--green2)">'+
+        esc(g)+' <span class="muted" style="font-weight:600">· '+rows.length+' acara</span>'+
+      '</div>'+
+      '<div class="tablewrap" style="border:0;border-radius:0">'+
+        '<table style="min-width:860px">'+
+          '<thead><tr><th>Acara</th><th>Tanggal</th><th>Waktu</th><th>Peserta</th><th>Status</th><th>Aksi</th></tr></thead>'+
+          '<tbody>'+body+'</tbody>'+
+        '</table>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  $('eventsTable').innerHTML=blocks||'<div class="empty card">Tidak ada acara.</div>';
+}
+
 function initScopeOptions(){if(ACCESS.role==='pengurus_kelompok')$('ceScope').innerHTML='<option value="'+esc(ACCESS.kelompok_scope)+'">'+esc(ACCESS.kelompok_scope)+'</option>';else $('ceScope').innerHTML='<option value="">Desa · semua kelompok</option><option>PW1</option><option>PW2</option><option>PW3</option><option>PW4</option>'}
 function fillJenisOptions(){const opts=JENIS.map(x=>'<option value="'+x.id+'">'+esc(x.nama)+'</option>').join('');$('ceJenis').innerHTML=opts;const counts=new Map();EVENTS.forEach(e=>counts.set(e.jenis_acara_id,(counts.get(e.jenis_acara_id)||0)+1));const useful=JENIS.filter(j=>counts.has(j.id)).sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0));$('reportJenis').innerHTML=useful.map(x=>'<option value="'+x.id+'">'+esc(x.nama)+' ('+(counts.get(x.id)||0)+' acara)</option>').join('')||'<option value="">Belum ada jenis kegiatan</option>'}
 function openCreateEvent(){if(!canCreate())return;$('createEventForm').reset();$('createdLinks').innerHTML='';showMsg('createMsg','');$('ceDate').value=jakartaParts().date;initScopeOptions();fillJenisOptions();SELECTED_DIDS=new Set();toggleRepeat();refreshParticipantPreview();$('modal').classList.remove('hidden');$('ceName').focus()}
