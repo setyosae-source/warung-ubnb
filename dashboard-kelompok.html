@@ -506,14 +506,11 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   <div class="page" id="page-absen">
     <div class="ab-toolbar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn-save" onclick="bukaModalKegiatan()" style="padding:8px 14px;border-radius:6px;font-size:12px;">＋ Buat Kegiatan</button>
-      <button class="btn-cancel" onclick="bukaModalAcaraMaster()" style="padding:8px 14px;border-radius:6px;font-size:12px;">📚 Master Acara</button>
+      <button class="btn-cancel" onclick="bukaModalAcaraMaster()" style="padding:8px 14px;border-radius:6px;font-size:12px;">📚 Template Acara</button>
     </div>
     <div class="stats-pill" id="absen-stats"></div>
-    <div class="filter-bar" id="kegiatan-filter">
-      <button class="filter-btn active" onclick="filterKegiatan('all',this)">Semua</button>
-      <button class="filter-btn" onclick="filterKegiatan('aktif',this)">📋 Aktif</button>
-      <button class="filter-btn" onclick="filterKegiatan('selesai',this)">✅ Selesai</button>
-      <button class="filter-btn" onclick="filterKegiatan('dibatalkan',this)">❌ Dibatalkan</button>
+    <div class="scope-notice" style="margin-bottom:10px;background:#eff6ff;border-left-color:#3b82f6;color:#1e40af;">
+      📅 Kegiatan otomatis dikelompokkan berdasarkan waktu: <b>Akan Datang</b>, <b>Sedang Berlangsung</b>, dan <b>Sudah Selesai</b>, lalu dipisah lagi per bulan.
     </div>
     <div id="kegiatan-list"><div class="loading">Memuat data kegiatan...</div></div>
   </div>
@@ -689,23 +686,80 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   </div>
 </div>
 
-<!-- MODAL MASTER ACARA -->
+<!-- MODAL TEMPLATE ACARA -->
 <div class="modal-overlay" id="modal-acara-master">
-  <div class="modal">
+  <div class="modal" style="max-width:760px;">
     <div class="modal-handle"></div>
     <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
-      <strong style="font-size:14px;">📚 Master Acara Kelompok</strong>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Daftar nama acara yang sering dipakai. Sekali input bisa pakai berkali-kali.</div>
+      <strong style="font-size:14px;">📚 Template Acara</strong>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Peserta otomatis mengikuti kriteria template. Daftar peserta template dapat disesuaikan dan dikembalikan ke kriteria kapan saja.</div>
     </div>
-    <div id="modal-acara-list" style="padding:10px 14px;max-height:50vh;overflow:auto;"></div>
-    <div style="padding:10px 14px;border-top:1px solid var(--border);">
-      <div style="display:flex;gap:6px;">
-        <input type="text" id="acara-baru-input" placeholder="Nama acara baru..." style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;"/>
-        <button class="btn-save" onclick="tambahAcaraMaster()" style="padding:8px 14px;border-radius:6px;font-size:12px;">＋ Tambah</button>
-      </div>
-    </div>
+    <div id="modal-acara-list" style="padding:10px 14px;max-height:68vh;overflow:auto;"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeMod('modal-acara-master')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDIT PESERTA TEMPLATE -->
+<div class="modal-overlay" id="modal-template-peserta">
+  <div class="modal" style="max-width:940px;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="template-peserta-title" style="font-size:14px;">👥 Edit Peserta Template</strong>
+      <div id="template-peserta-subtitle" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+    </div>
+    <div style="padding:10px 14px;max-height:72vh;overflow:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+        <strong style="font-size:12px;color:var(--green);">✅ Peserta Terpilih</strong>
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+          <span id="template-peserta-count" style="font-size:11px;color:var(--text-muted);"></span>
+          <button type="button" class="btn-cancel" onclick="templateClearSelected()" style="padding:4px 8px;font-size:10px;">Kosongkan Nama</button>
+        </div>
+      </div>
+      <div id="template-peserta-selected" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:7px;background:white;margin-bottom:10px;"></div>
+      <div id="template-peserta-slots" style="display:none;margin:-2px 0 12px;padding:7px 9px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:10px;color:#92400e;"></div>
+
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:#fafafa;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:800;margin-bottom:6px;">⚡ Tambah Cepat</div>
+        <div style="position:relative;">
+          <input type="text" id="template-peserta-quick" autocomplete="off" placeholder="Ketik nama atau nama KK, lalu pilih hasil..." oninput="templateQuickSearch()" onfocus="templateQuickSearch()" style="width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:white;"/>
+          <div id="template-peserta-quick-list" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:40;max-height:230px;overflow:auto;border:1px solid #cbd5e1;border-radius:7px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.16);"></div>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:8px;background:white;overflow:hidden;">
+        <div style="padding:8px 10px;background:#ecfdf5;border-bottom:1px solid #d1fae5;font-size:11px;font-weight:800;color:#166534;">🔎 Filter & Tambah Peserta</div>
+        <div style="padding:9px 10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;">
+          <select id="tp-filter-kelompok" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;"></select>
+          <select id="tp-filter-gender" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;">
+            <option value="">Semua Gender</option><option value="L">Laki-laki</option><option value="P">Perempuan</option>
+          </select>
+          <select id="tp-filter-nikah" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;">
+            <option value="">Semua Status Nikah</option><option value="Menikah">Menikah</option><option value="Belum Menikah">Belum Menikah</option><option value="Janda / Duda">Janda / Duda</option>
+          </select>
+          <select id="tp-filter-kelas" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;">
+            <option value="">Semua Kelas KBM</option><option>Balita</option><option>Kelas A</option><option>Kelas B</option><option>Kelas C</option><option>Pra Remaja</option><option>Remaja</option><option>Dewasa</option>
+          </select>
+          <select id="tp-filter-pengurus" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;">
+            <option value="">Semua Jamaah</option><option value="pengurus">Semua Pengurus</option><option value="desa">Pengurus Desa</option><option value="kelompok">Pengurus Kelompok</option><option value="non">Bukan Pengurus</option>
+          </select>
+          <select id="tp-filter-dapukan" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;"><option value="">Semua Dapukan</option></select>
+        </div>
+        <div style="padding:0 10px 9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="tp-filter-text" placeholder="Cari dalam hasil filter..." oninput="templateFilterChanged(false)" style="flex:1;min-width:200px;padding:7px 9px;border:1px solid var(--border);border-radius:5px;font-size:11px;"/>
+          <button type="button" class="btn-cancel" onclick="templateResetFilters()" style="padding:6px 9px;font-size:10px;">↻ Reset Filter</button>
+          <button type="button" class="btn-save" onclick="templateAddAllFiltered()" style="padding:6px 9px;font-size:10px;">＋ Tambahkan Semua Hasil</button>
+          <button type="button" class="btn-save" id="tp-add-checked" onclick="templateAddChecked()" style="padding:6px 9px;font-size:10px;">＋ Tambahkan Tercentang (0)</button>
+        </div>
+        <div id="template-peserta-filter-count" style="padding:0 10px 7px;font-size:10px;color:var(--text-muted);"></div>
+        <div id="template-peserta-list" style="max-height:280px;overflow:auto;border-top:1px solid var(--border);background:white;"></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;gap:8px;flex-wrap:wrap;">
+      <button class="btn-cancel" onclick="resetTemplatePesertaToCriteria()" style="margin-right:auto;">↩ Kembalikan ke Kriteria</button>
+      <button class="btn-cancel" onclick="closeMod('modal-template-peserta')">Batal</button>
+      <button class="btn-save" onclick="simpanTemplatePeserta()">💾 Simpan Peserta</button>
     </div>
   </div>
 </div>
@@ -940,10 +994,11 @@ async function getAttendanceSnapshot(interactive=false){
 
 function applyAttendanceSnapshot(snap){
   if(!snap||snap.ok!==true){
-    aAcaraMaster=[];aKegiatan=[];aHadir=[];
+    aAcaraMaster=[];aTemplatePeserta=[];aKegiatan=[];aHadir=[];
     return;
   }
   aAcaraMaster=Array.isArray(snap.masters)?snap.masters:[];
+  aTemplatePeserta=Array.isArray(snap.template_peserta)?snap.template_peserta:[];
   aKegiatan=Array.isArray(snap.kegiatan)?snap.kegiatan:[];
   aHadir=Array.isArray(snap.hadir)?snap.hadir:[];
 }
@@ -952,7 +1007,7 @@ async function reloadAttendanceSecure(interactive=false){
   const snap=await getAttendanceSnapshot(interactive);
   if(!snap){
     if(interactive){
-      aAcaraMaster=[];aKegiatan=[];aHadir=[];
+      aAcaraMaster=[];aTemplatePeserta=[];aKegiatan=[];aHadir=[];
       renderAbsenStats();
       renderKegiatanList();
     }
@@ -1478,7 +1533,7 @@ function applyRoleRestrictions(){
 }
 
 // ===== LOAD DATA =====
-let aAcaraMaster=[],aKegiatan=[],aHadir=[];
+let aAcaraMaster=[],aTemplatePeserta=[],aKegiatan=[],aHadir=[];
 let aIsrunKategori=[],aIsrunPembayar=[],aIsrunPembayaran=[];
 let curIsrunPeriode=null;
 
@@ -1519,7 +1574,7 @@ async function loadAll(){
   if(att && !att.error && att.data && att.data.ok===true){
     applyAttendanceSnapshot(att.data);
   }else{
-    aAcaraMaster=[];aKegiatan=[];aHadir=[];
+    aAcaraMaster=[];aTemplatePeserta=[];aKegiatan=[];aHadir=[];
     if(DK_ATT_TOKEN && (att?.error || (att?.data && att.data.ok===false))){
       DK_ATT_TOKEN=null;
       sessionStorage.removeItem(DK_ATT_TOKEN_KEY);
@@ -2860,7 +2915,7 @@ function renderJamaah(){
                       if(va===null) va=_sortDir===1?9999:-1;
                       if(vb===null) vb=_sortDir===1?9999:-1;
                       break;
-      case 'kelas':   va=a.kelas_usia||'~'; vb=b.kelas_usia||'~'; break;
+      case 'kelas':   va=kelasKbmAktual(a)||'~'; vb=kelasKbmAktual(b)||'~'; break;
       case 'nikah':   va=a.status_nikah||'~'; vb=b.status_nikah||'~'; break;
       case 'sambung': va=a.status_sambung||'~'; vb=b.status_sambung||'~'; break;
       default:        va=(a.nama||'').toLowerCase(); vb=(b.nama||'').toLowerCase();
@@ -2891,7 +2946,7 @@ function renderJamaah(){
       <th onclick="setSort('nama')" class="${_sortBy==='nama'?'sorted':''}">Nama${sortInd('nama')}</th>
       <th onclick="setSort('jk')" class="${_sortBy==='jk'?'sorted':''}" style="text-align:center;">L/P${sortInd('jk')}</th>
       <th onclick="setSort('umur')" class="${_sortBy==='umur'?'sorted':''}" style="text-align:center;">Umur${sortInd('umur')}</th>
-      <th onclick="setSort('kelas')" class="${_sortBy==='kelas'?'sorted':''}">Kelas Generus${sortInd('kelas')}</th>
+      <th onclick="setSort('kelas')" class="${_sortBy==='kelas'?'sorted':''}">Kelas KBM${sortInd('kelas')}</th>
       <th onclick="setSort('nikah')" class="${_sortBy==='nikah'?'sorted':''}">Status Nikah${sortInd('nikah')}</th>
       <th onclick="setSort('sambung')" class="${_sortBy==='sambung'?'sorted':''}">Sambung${sortInd('sambung')}</th>
     </tr></thead><tbody>`;
@@ -2915,7 +2970,7 @@ function renderJamaah(){
       <td class="tc-nama">${pengSet.has(j.did)?'🛡️ ':''}${j.nama||''}</td>
       <td class="tc-jk">${jkIcon}</td>
       <td class="tc-umur">${umurStr}</td>
-      <td>${j.kelas_usia?`<span class="kelas-generus">${escH(j.kelas_usia)}</span>`:'<span style="color:var(--text-muted);">—</span>'}</td>
+      <td>${kelasKbmAktual(j)?`<span class="kelas-generus">${escH(kelasKbmAktual(j))}</span>${j.kelas_kbm&&j.kelas_usia?`<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">usia: ${escH(j.kelas_usia)}</div>`:''}`:'<span style="color:var(--text-muted);">—</span>'}</td>
       <td>${j.status_nikah||'<span style="color:var(--text-muted);">—</span>'}</td>
       <td>${ssBadgeRow(j.status_sambung)}</td>
     </tr>`;
@@ -2995,6 +3050,15 @@ function bukaModalEdit(did){
       </select>
     </div>
     <div class="modal-row"><label>Tgl Lahir</label><input type="date" id="ej-tgl" value="${tgl}"></div>
+    <div class="modal-row" id="ej-kelas-kbm-row"><label>Kelas KBM Aktual</label>
+      <div style="flex:1;min-width:0;">
+        <select id="ej-kelas-kbm" ${j.status_nikah==='Belum Menikah'?'':'disabled'}>
+          <option value="" ${!j.kelas_kbm?'selected':''}>${j.status_nikah==='Belum Menikah'?`Otomatis dari umur · ${escH(kelasKbmAktual({...j,kelas_kbm:null})||j.kelas_usia||'-')}`:'Tidak berlaku'}</option>
+          ${['Balita','Kelas A','Kelas B','Kelas C','Pra Remaja','Remaja','Dewasa'].map(x=>`<option value="${x}" ${j.kelas_kbm===x?'selected':''}>${x}</option>`).join('')}
+        </select>
+        <div id="ej-kelas-kbm-hint" style="font-size:10px;color:var(--text-muted);margin-top:4px;">${j.status_nikah==='Belum Menikah'?'Kelas KBM hanya untuk jamaah Belum Menikah.':'Kelas KBM tidak berlaku untuk status nikah ini.'}</div>
+      </div>
+    </div>
     <div class="modal-row"><label>Status Nikah</label>
       <select id="ej-nikah" onchange="onDashboardNikahChange()">
         <option value="">— Pilih —</option>
@@ -3114,7 +3178,8 @@ function renderDashboardEditKK(){
   updateDashboardKKHint();
 }
 function updateDashboardKKHint(){const hint=document.getElementById('ej-kk-hint');if(!hint)return;if(document.getElementById('ej-kk-mode').value==='self'){hint.textContent='KK baru: Nama KK mengikuti nama jamaah dan family ID disinkronkan otomatis.';return;}const h=aJamaah.find(x=>x.did===document.getElementById('ej-kk-existing').value);hint.textContent=h?`KK dipilih: ${h.nama} · ${h.kelompok_nama}`:'Ketik nama KK lalu pilih dari hasil yang muncul.';}
-function onDashboardNikahChange(){if(document.getElementById('ej-nikah').value==='Menikah'&&_editOriginalStatus!=='Menikah'&&document.getElementById('ej-kk-mode').value==='existing'){const h=aJamaah.find(x=>x.did===document.getElementById('ej-kk-existing').value);if(h&&String(h.nama||'').trim().toLowerCase()===String(_editOriginalKK||'').trim().toLowerCase())kkComboClear('ej');document.getElementById('ej-kk-hint').innerHTML='<span style="color:#b91c1c;font-weight:700;">Status menjadi Menikah: pilih KK pasangan atau “Jadikan sebagai KK”.</span>';}}
+function onDashboardNikahChange(){const nikah=document.getElementById('ej-nikah').value;syncDashboardKelasKbmUI();if(nikah==='Menikah'&&_editOriginalStatus!=='Menikah'&&document.getElementById('ej-kk-mode').value==='existing'){const h=aJamaah.find(x=>x.did===document.getElementById('ej-kk-existing').value);if(h&&String(h.nama||'').trim().toLowerCase()===String(_editOriginalKK||'').trim().toLowerCase())kkComboClear('ej');document.getElementById('ej-kk-hint').innerHTML='<span style="color:#b91c1c;font-weight:700;">Status menjadi Menikah: pilih KK pasangan atau “Jadikan sebagai KK”.</span>';}}
+function syncDashboardKelasKbmUI(){const nikah=document.getElementById('ej-nikah')?.value||'';const sel=document.getElementById('ej-kelas-kbm');const hint=document.getElementById('ej-kelas-kbm-hint');if(!sel)return;const eligible=nikah==='Belum Menikah';sel.disabled=!eligible;if(!eligible)sel.value='';if(hint)hint.textContent=eligible?'Kelas KBM hanya untuk jamaah Belum Menikah.':'Kelas KBM tidak berlaku untuk status nikah ini.';}
 
 async function simpanJamaah(){
   if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
@@ -3146,6 +3211,7 @@ async function simpanJamaah(){
     alamat:document.getElementById('ej-alamat').value.trim()||null,
     jenis_kelamin:document.getElementById('ej-jk').value||null,
     tgl_lahir:document.getElementById('ej-tgl').value||null,
+    kelas_kbm:newNikah==='Belum Menikah'?(document.getElementById('ej-kelas-kbm').value||null):null,
     status_nikah:newNikah,
     status_sambung:document.getElementById('ej-sambung').value||null,
     nomor_wa:document.getElementById('ej-wa').value.trim()||null,
@@ -3925,72 +3991,125 @@ function doExport(format){
 
 let curKegiatanFilter='all';
 let curKegiatanId=null;
+let _kgTemplateId=null;
+let _templateEditId=null;
+let _templateSelectedDids=new Set();
+let _templateCandidateDids=new Set();
 
-function filterKegiatan(s,btn){
-  curKegiatanFilter=s;
-  document.querySelectorAll('#kegiatan-filter .filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderKegiatanList();
+function localDateISO(d=new Date()){
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
 }
+function timeToMinutes(v){
+  if(!v) return null;
+  const p=String(v).substring(0,5).split(':').map(Number);
+  return Number.isFinite(p[0])&&Number.isFinite(p[1])?p[0]*60+p[1]:null;
+}
+function kegiatanPhase(k,now=new Date()){
+  if(k.status==='selesai'||k.status==='dibatalkan') return 'selesai';
+  const today=localDateISO(now),tgl=String(k.tanggal||'');
+  if(tgl>today) return 'akan';
+  if(tgl<today) return 'selesai';
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const start=timeToMinutes(k.waktu),end=timeToMinutes(k.waktu_selesai);
+  if(start!=null&&nowMin<start) return 'akan';
+  if(end!=null&&nowMin>end) return 'selesai';
+  return 'berlangsung';
+}
+function kegiatanMonthKey(k){return String(k.tanggal||'').substring(0,7)||'0000-00';}
+function kegiatanMonthLabel(key){
+  const [y,m]=key.split('-').map(Number);
+  if(!y||!m) return 'Tanpa Bulan';
+  return new Date(y,m-1,1).toLocaleDateString('id-ID',{month:'long',year:'numeric'});
+}
+function filterKegiatan(){renderKegiatanList();}
 
 function renderAbsenStats(){
-  const aktif=aKegiatan.filter(k=>k.status==='aktif').length;
-  const selesai=aKegiatan.filter(k=>k.status==='selesai').length;
-  const totalHadir=aHadir.filter(h=>h.status_hadir==='hadir').length;
+  const akan=aKegiatan.filter(k=>kegiatanPhase(k)==='akan').length;
+  const berlangsung=aKegiatan.filter(k=>kegiatanPhase(k)==='berlangsung').length;
+  const selesai=aKegiatan.filter(k=>kegiatanPhase(k)==='selesai').length;
+  const templateCount=aAcaraMaster.filter(a=>a.template_rutin&&a.default_filter&&a.default_filter.template_code).length;
   document.getElementById('absen-stats').innerHTML=`
-    <span class="stat-pill"><span class="pl">📋</span><span class="pv">${aktif}</span><span class="pl">aktif</span></span>
+    <span class="stat-pill gold"><span class="pl">🗓️</span><span class="pv">${akan}</span><span class="pl">akan datang</span></span>
+    <span class="stat-pill"><span class="pl">🟢</span><span class="pv">${berlangsung}</span><span class="pl">berlangsung</span></span>
     <span class="stat-pill blue"><span class="pl">✅</span><span class="pv">${selesai}</span><span class="pl">selesai</span></span>
-    <span class="stat-pill gold"><span class="pl">📚</span><span class="pv">${aAcaraMaster.length}</span><span class="pl">master acara</span></span>
-    <span class="stat-pill purple"><span class="pl">👥</span><span class="pv">${totalHadir}</span><span class="pl">total hadir</span></span>
+    <span class="stat-pill purple"><span class="pl">📚</span><span class="pv">${templateCount}</span><span class="pl">template</span></span>
   `;
 }
-
+function kegiatanCard(k,phase){
+  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  const hadirCount=aHadir.filter(h=>h.kegiatan_id===k.id&&h.status_hadir==='hadir').length;
+  const total=k.peserta_wajib_count||0;
+  const pct=total>0?Math.round((hadirCount/total)*100):0;
+  let statusBadge='';
+  if(k.status==='dibatalkan') statusBadge='<span class="badge warning" style="background:#fee2e2;color:var(--red);">Batal</span>';
+  else if(phase==='akan') statusBadge='<span class="badge" style="background:#fef3c7;color:#92400e;">Akan Datang</span>';
+  else if(phase==='berlangsung') statusBadge='<span class="badge tetap">Sedang Berlangsung</span>';
+  else statusBadge='<span class="badge" style="background:var(--blue-light);color:var(--blue);">Selesai</span>';
+  const modeStr=Array.isArray(k.mode)?k.mode.join(', '):(k.mode||'manual');
+  const isTpl=k.filter_peserta&&k.filter_peserta.sumber==='template';
+  const waktu=k.waktu?k.waktu.substring(0,5):'';
+  const selesai=k.waktu_selesai?k.waktu_selesai.substring(0,5):'';
+  const timeText=waktu?(' · '+waktu+(selesai?'–'+selesai:'')):'';
+  return `<div class="sensus-card">
+    <div class="sensus-card-head">
+      <div style="flex:1;min-width:0;">
+        <div class="sensus-card-title">${escH(k.acara_nama||'')}${isTpl?' <span class="badge" style="background:#ede9fe;color:#6d28d9;">📚 Template</span>':''}</div>
+        <div class="sensus-card-meta">${tgl}${timeText}${k.lokasi?' · '+escH(k.lokasi):''}${k.kelompok?' · '+escH(k.kelompok):' · Desa'}</div>
+      </div>${statusBadge}
+    </div>
+    <div class="sensus-card-stat">
+      <span>👥 <strong>${hadirCount}/${total}</strong> hadir (${pct}%)</span>
+      <span>🎯 Mode: <strong>${escH(modeStr)}</strong></span>
+    </div>
+    <div class="sensus-card-actions">
+      <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
+      <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🖨️ Cetak</button>
+      <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
+      <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
+      <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
+    </div>
+  </div>`;
+}
+function renderKegiatanSection(title,icon,phase,list,emptyText){
+  const color=phase==='berlangsung'?'#047857':phase==='akan'?'#92400e':'#1e40af';
+  let html=`<div style="margin:16px 0 8px;display:flex;align-items:center;gap:8px;"><div style="font-weight:800;font-size:14px;color:${color};">${icon} ${title}</div><span class="badge" style="background:#f3f4f6;color:#4b5563;">${list.length}</span></div>`;
+  if(!list.length) return html+`<div class="empty" style="padding:16px;">${emptyText}</div>`;
+  const groups=new Map();
+  list.forEach(k=>{const key=kegiatanMonthKey(k);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(k);});
+  let keys=[...groups.keys()];
+  keys.sort((a,b)=>phase==='selesai'?b.localeCompare(a):a.localeCompare(b));
+  keys.forEach(key=>{
+    const rows=groups.get(key).slice().sort((a,b)=>{
+      const aa=`${a.tanggal} ${a.waktu||'00:00'}`,bb=`${b.tanggal} ${b.waktu||'00:00'}`;
+      return phase==='selesai'?bb.localeCompare(aa):aa.localeCompare(bb);
+    });
+    html+=`<div style="font-size:11px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px;padding-bottom:5px;border-bottom:1px solid var(--border);">${kegiatanMonthLabel(key)}</div>`;
+    html+=rows.map(k=>kegiatanCard(k,phase)).join('');
+  });
+  return html;
+}
 function renderKegiatanList(){
-  let list=aKegiatan.slice();
-  if(curKegiatanFilter!=='all') list=list.filter(k=>k.status===curKegiatanFilter);
   const el=document.getElementById('kegiatan-list');
-  if(!list.length){
-    el.innerHTML='<div class="empty"><div class="ei">📋</div>Belum ada kegiatan. Klik "+ Buat Kegiatan" untuk mulai.</div>';
-    return;
-  }
-  el.innerHTML=list.map(k=>{
-    const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-    const hadirCount=aHadir.filter(h=>h.kegiatan_id===k.id&&h.status_hadir==='hadir').length;
-    const total=k.peserta_wajib_count||0;
-    const pct=total>0?Math.round((hadirCount/total)*100):0;
-    const statusBadge=k.status==='aktif'?'<span class="badge tetap">Aktif</span>':
-                      k.status==='selesai'?'<span class="badge" style="background:var(--blue-light);color:var(--blue);">Selesai</span>':
-                      k.status==='dibatalkan'?'<span class="badge warning" style="background:#fee2e2;color:var(--red);">Batal</span>':
-                      '<span class="badge warning">Draft</span>';
-    const modeStr=Array.isArray(k.mode)?k.mode.join(', '):(k.mode||'manual');
-    return `<div class="sensus-card">
-      <div class="sensus-card-head">
-        <div style="flex:1;min-width:0;">
-          <div class="sensus-card-title">${k.acara_nama}${(k.filter_peserta&&k.filter_peserta.sumber==='pengurus')?' <span class="badge" style="background:var(--gold-light);color:var(--gold-dark);">🛡️ Pengurus</span>':''}</div>
-          <div class="sensus-card-meta">${tgl}${k.waktu?' · '+k.waktu.substring(0,5):''}${k.lokasi?' · '+k.lokasi:''}</div>
-        </div>
-        ${statusBadge}
-      </div>
-      <div class="sensus-card-stat">
-        <span>👥 <strong>${hadirCount}/${total}</strong> hadir (${pct}%)</span>
-        <span>🎯 Mode: <strong>${modeStr}</strong></span>
-      </div>
-      <div class="sensus-card-actions">
-        <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
-        <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🖨️ Cetak</button>
-        <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
-        <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
-        <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
+  if(!aKegiatan.length){el.innerHTML='<div class="empty"><div class="ei">📋</div>Belum ada kegiatan. Gunakan Template Acara atau buat kegiatan baru.</div>';return;}
+  const akan=[],berlangsung=[],selesai=[];
+  aKegiatan.forEach(k=>{const p=kegiatanPhase(k);(p==='akan'?akan:p==='berlangsung'?berlangsung:selesai).push(k);});
+  el.innerHTML=
+    renderKegiatanSection('Acara Akan Datang','🗓️','akan',akan,'Belum ada acara yang akan datang.')+
+    renderKegiatanSection('Acara Sedang Berlangsung','🟢','berlangsung',berlangsung,'Tidak ada acara yang sedang berlangsung.')+
+    renderKegiatanSection('Acara Sudah Selesai','✅','selesai',selesai,'Belum ada acara yang selesai.');
 }
 
 // ===== MODAL: Buat / Edit Kegiatan =====
-function bukaModalKegiatan(){editKegiatan(null);}
+function bukaModalKegiatan(){_kgTemplateId=null;editKegiatan(null);}
 
 function editKegiatan(id){
   const k = id ? aKegiatan.find(x=>x.id===id) : null;
+  if(k){
+    const fp=k.filter_peserta||{};
+    _kgTemplateId=(fp.sumber==='template'&&fp.template_id)?Number(fp.template_id):null;
+  }
+  const tpl=_kgTemplateId?aAcaraMaster.find(a=>Number(a.id)===Number(_kgTemplateId)):null;
   document.getElementById('modal-kegiatan-title').textContent=k?'✏️ Edit Kegiatan':'＋ Buat Kegiatan';
   curKegiatanId=id;
   const today=new Date().toISOString().split('T')[0];
@@ -4014,7 +4133,8 @@ function editKegiatan(id){
       return '<div class="modal-row"><label>Scope Kegiatan</label><select id="kg-scope" style="flex:1;" onchange="onKgScopeChange()"><option value="" '+sD+'>🏛️ Kegiatan Desa</option><option value="PW1" '+s1+'>🟢 PW1</option><option value="PW2" '+s2+'>🔵 PW2</option><option value="PW3" '+s3+'>🟠 PW3</option><option value="PW4" '+s4+'>🟣 PW4</option></select></div>';
     })()}
     <div class="modal-row"><label>Tanggal *</label><input type="date" id="kg-tgl" value="${k?k.tanggal:today}"/></div>
-    <div class="modal-row"><label>Waktu</label><input type="time" id="kg-waktu" value="${k&&k.waktu?k.waktu.substring(0,5):''}"/></div>
+    <div class="modal-row"><label>Waktu Mulai</label><input type="time" id="kg-waktu" value="${k&&k.waktu?k.waktu.substring(0,5):''}"/></div>
+    <div class="modal-row"><label>Waktu Selesai</label><input type="time" id="kg-waktu-selesai" value="${k&&k.waktu_selesai?k.waktu_selesai.substring(0,5):''}"/></div>
     <div class="modal-row" style="position:relative;"><label>Lokasi</label>
       <div style="flex:1;position:relative;">
         <input type="text" id="kg-lokasi" placeholder="Ketik lokasi..." oninput="onLokasiSearch()" onfocus="onLokasiSearch()" autocomplete="off" value="${k&&k.lokasi?k.lokasi.replace(/"/g,'&quot;'):''}"/>
@@ -4031,13 +4151,13 @@ function editKegiatan(id){
         </label>
       </div>
     </div>
-    <div class="modal-row"><label>Sumber Peserta</label>
+    <div class="modal-row" id="kg-sumber-row"><label>Sumber Peserta</label>
       <select id="kg-sumber" onchange="onSumberChange()">
         <option value="jamaah">👥 Jamaah Tetap</option>
         <option value="pengurus">🛡️ Pengurus (sesuai label)</option>
       </select>
     </div>
-    <div style="padding:10px 16px;background:var(--green-light);font-size:11px;color:var(--green);font-weight:600;">📌 FILTER PESERTA WAJIB</div>
+    <div id="kg-filter-title" style="padding:10px 16px;background:var(--green-light);font-size:11px;color:var(--green);font-weight:600;">📌 FILTER PESERTA WAJIB</div>
     <div id="kg-filter-jamaah">
     <div class="modal-row"><label>Gender</label>
       <select id="kg-flt-gender">
@@ -4072,6 +4192,7 @@ function editKegiatan(id){
       <div style="padding:6px 16px 2px;font-size:10px;color:var(--text-muted);">Centang jenis dapukan (kosong = semua dapukan masuk):</div>
       <div id="kg-dapukan-list" style="padding:4px 16px 10px;display:flex;flex-wrap:wrap;gap:8px 14px;"></div>
     </div>
+    <div id="kg-template-summary" style="display:none;margin:8px 14px;padding:10px 12px;border:1px solid #ddd6fe;background:#f5f3ff;border-radius:7px;font-size:11px;color:#5b21b6;"></div>
     <div class="modal-row"><label>Catatan</label><input type="text" id="kg-catatan" value="${k&&k.catatan?k.catatan.replace(/"/g,'&quot;'):''}"/></div>
     ${k?`<div class="modal-row"><label>Status</label>
       <select id="kg-status">
@@ -4090,9 +4211,369 @@ function editKegiatan(id){
       el.addEventListener('input',previewPeserta);
     }
   });
-  setTimeout(()=>{ initKegiatanSumber(k); },100);
+  setTimeout(()=>{
+    initKegiatanSumber(k);
+    if(tpl) applyTemplateToKegiatanForm(tpl,!!k);
+  },100);
   openMod('modal-kegiatan');
 }
+
+
+function findJamaahAny(did){return (aJamaahDesa||[]).find(j=>String(j.did)===String(did))||null;}
+function kelasKbmAktual(j){
+  if(!j) return null;
+  if(j.status_nikah!=='Belum Menikah') return null;
+  if(j.kelas_kbm) return j.kelas_kbm;
+  const u=umurFromTgl(j.tgl_lahir);
+  if(u===null) return null;
+  if(u<=4) return 'Balita';
+  if(u<=7) return 'Kelas A';
+  if(u<=10) return 'Kelas B';
+  if(u<=12) return 'Kelas C';
+  if(u<=15) return 'Pra Remaja';
+  if(u<=20) return 'Remaja';
+  return 'Dewasa';
+}
+function uniqPeserta(rows){
+  const seen=new Set(),out=[];
+  (rows||[]).forEach(r=>{
+    if(!r) return;
+    const key=r.did?('D:'+r.did):('N:'+r.nama);
+    if(seen.has(key)) return;
+    seen.add(key);out.push(r);
+  });
+  return out;
+}
+function jamaahToPeserta(j){return {did:j.did,nama:j.nama,nama_kk:j.nama_kk||null};}
+function templateFilter(t){return (t&&t.default_filter&&typeof t.default_filter==='object')?t.default_filter:{};}
+function templateParticipantMode(t){return templateFilter(t).participant_mode==='custom'?'custom':'criteria';}
+function templateEligibleJamaah(t){
+  let rows=(aJamaahDesa||[]).filter(j=>j.status_sambung==='Tetap'&&['PW1','PW2','PW3','PW4'].includes(j.kelompok_nama));
+  if(t&&t.kelompok) rows=rows.filter(j=>j.kelompok_nama===t.kelompok);
+  if(templateFilter(t).rule==='kelas_kbm') rows=rows.filter(j=>j.status_nikah==='Belum Menikah');
+  return rows.sort((a,b)=>String(a.kelompok_nama||'').localeCompare(String(b.kelompok_nama||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+}
+function templateSpecialActualParticipants(t){
+  const f=templateFilter(t); if(f.rule!=='pengurus_desa_ki_pendamping') return [];
+  const out=[];
+  (aPengurus||[]).filter(p=>p.aktif!==false&&p.level==='desa').forEach(p=>{
+    const j=findJamaahAny(p.did);
+    if(j&&pgNormGender(j.jenis_kelamin)==='L') out.push(jamaahToPeserta(j));
+  });
+  (aPengurus||[]).filter(p=>p.aktif!==false&&p.level==='kelompok'&&String(p.dapukan||'').trim().toLowerCase()==='ki kelompok').forEach(p=>{
+    const j=findJamaahAny(p.did); if(j) out.push(jamaahToPeserta(j));
+  });
+  return uniqPeserta(out);
+}
+function templateCompanionSlots(t){
+  const f=templateFilter(t); if(f.rule!=='pengurus_desa_ki_pendamping') return [];
+  const n=Math.max(0,parseInt(f.pendamping_per_group||0));
+  const out=[];
+  ['PW1','PW2','PW3','PW4'].forEach(k=>{
+    for(let i=1;i<=n;i++) out.push({did:null,nama:`Pendamping ${k} #${i}`,nama_kk:null,placeholder:true,kelompok_nama:k});
+  });
+  return out;
+}
+function templateCriteriaActualParticipants(t){
+  const f=templateFilter(t),rule=f.rule;
+  if(rule==='pengurus_desa_ki_pendamping') return templateSpecialActualParticipants(t);
+  if(rule==='istri_pengurus_desa'){
+    const rows=pgBuildWomenRows().rows.filter(r=>r.level==='desa'&&r.jamaah&&r.jamaah.status_sambung==='Tetap');
+    return uniqPeserta(rows.map(r=>jamaahToPeserta(r.jamaah)));
+  }
+  let pool=templateEligibleJamaah(t);
+  if(rule==='ibu'){
+    pool=pool.filter(j=>pgNormGender(j.jenis_kelamin)==='P'&&['Menikah','Janda / Duda'].includes(j.status_nikah));
+  }else if(rule==='sambung'){
+    const cls=Array.isArray(f.unmarried_classes)?f.unmarried_classes:[];
+    pool=pool.filter(j=>['Menikah','Janda / Duda'].includes(j.status_nikah)||(j.status_nikah==='Belum Menikah'&&cls.includes(kelasKbmAktual(j))));
+  }else if(rule==='remaja'){
+    const cls=Array.isArray(f.classes)?f.classes:[];
+    pool=pool.filter(j=>j.status_nikah==='Belum Menikah'&&cls.includes(kelasKbmAktual(j)));
+  }else if(rule==='kelas_kbm'){
+    pool=pool.filter(j=>j.status_nikah==='Belum Menikah'&&kelasKbmAktual(j)===f.kelas);
+  }
+  return pool.map(jamaahToPeserta);
+}
+function templateCustomActualParticipants(t){
+  const dids=new Set((aTemplatePeserta||[]).filter(x=>Number(x.acara_id)===Number(t.id)).map(x=>String(x.jamaah_did)));
+  return templateEligibleJamaah(t).filter(j=>dids.has(String(j.did))).map(jamaahToPeserta);
+}
+function templateParticipants(t){
+  const actual=templateParticipantMode(t)==='custom'?templateCustomActualParticipants(t):templateCriteriaActualParticipants(t);
+  return [...uniqPeserta(actual),...templateCompanionSlots(t)];
+}
+function templateCriteriaText(t){
+  const f=templateFilter(t);
+  const code=f.template_code||'';
+  if(code==='sambung_desa') return 'Menikah/Janda-Duda + Belum Menikah kelas Remaja–Dewasa · seluruh PW';
+  if(code==='remaja_desa') return 'Belum Menikah kelas Pra Remaja–Dewasa · seluruh PW';
+  if(code==='ibu_desa') return 'Perempuan Menikah dan Janda/Duda · seluruh PW';
+  if(code==='istri_pengurus_desa') return 'Pengurus perempuan Desa + Istri Pengurus Desa';
+  if(code==='laporan_desa_kelompok') return 'Pengurus Desa laki-laki + seluruh KI Kelompok + 1 pendamping/PW';
+  if(code==='hasda_desa_kelompok') return 'Pengurus Desa laki-laki + seluruh KI Kelompok + 5 pendamping/PW';
+  if(code==='sambung_kelompok') return 'Menikah/Janda-Duda + Belum Menikah kelas Remaja–Dewasa';
+  if(code==='remaja_kelompok') return 'Belum Menikah kelas Remaja dan Dewasa';
+  if(f.rule==='kelas_kbm') return 'Semua peserta kelas KBM aktual: '+(f.kelas||'-');
+  return t.deskripsi||'Daftar peserta template';
+}
+function renderTemplateKegiatanSummary(){
+  const box=document.getElementById('kg-template-summary'); if(!box||!_kgTemplateId) return;
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_kgTemplateId)); if(!t) return;
+  const rows=templateParticipants(t),slots=rows.filter(x=>x.placeholder).length;
+  box.style.display='block';
+  box.innerHTML=`<div style="font-weight:800;margin-bottom:4px;">📚 ${escH(t.nama)}</div>
+    <div>${escH(templateCriteriaText(t))}</div>
+    <div style="margin-top:5px;"><b>${rows.length} peserta/slot</b> · ${templateParticipantMode(t)==='custom'?'Daftar peserta custom':'Mengikuti kriteria'}${slots?` · ${slots} slot pendamping tanpa nama`:''}</div>
+    ${!curKegiatanId?`<button type="button" class="btn-cancel" onclick="editTemplatePeserta(${t.id})" style="margin-top:7px;padding:5px 9px;border-radius:5px;font-size:10px;">✏️ Edit Peserta Template</button>`:''}`;
+  const prev=document.getElementById('kg-preview');
+  if(prev) prev.innerHTML=`📊 <b>${rows.length} peserta/slot</b> akan masuk daftar wajib hadir dari Template Acara.`;
+}
+function applyTemplateToKegiatanForm(t,isEdit=false){
+  if(!t) return;
+  _kgTemplateId=Number(t.id);
+  const nm=document.getElementById('kg-acara-input'),hid=document.getElementById('kg-acara-id');
+  if(nm){nm.value=t.nama||'';nm.disabled=true;nm.style.background='#f9fafb';}
+  if(hid) hid.value=t.id;
+  const sc=document.getElementById('kg-scope');
+  if(sc){sc.value=t.kelompok||'';sc.disabled=true;sc.style.background='#f9fafb';}
+  if(!isEdit){
+    const w=document.getElementById('kg-waktu'); if(w&&t.waktu_default)w.value=String(t.waktu_default).substring(0,5);
+    const we=document.getElementById('kg-waktu-selesai'); if(we&&t.waktu_selesai_default)we.value=String(t.waktu_selesai_default).substring(0,5);
+    const l=document.getElementById('kg-lokasi'); if(l&&t.lokasi_default)l.value=t.lokasi_default;
+  }
+  ['kg-sumber-row','kg-filter-title','kg-filter-jamaah','kg-filter-pengurus'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
+  renderTemplateKegiatanSummary();
+}
+function gunakanTemplate(id){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(id)); if(!t)return;
+  closeMod('modal-acara-master');
+  _kgTemplateId=Number(id);
+  editKegiatan(null);
+}
+function templateJamaahByDid(did){
+  return (aJamaahDesa||[]).find(j=>String(j.did)===String(did))||findJamaahAny(did)||null;
+}
+function templatePengurusRoles(did){
+  return (aPengurus||[]).filter(p=>p.aktif!==false&&String(p.did)===String(did));
+}
+function templatePengurusNote(j){
+  if(!j) return '';
+  const roles=templatePengurusRoles(j.did);
+  if(!roles.length) return '';
+  const labels=[];
+  roles.forEach(p=>{
+    const label=(p.level==='desa'?'Desa':(p.kelompok_nama||'Kelompok'))+' · '+(p.dapukan||'Pengurus');
+    if(!labels.includes(label)) labels.push(label);
+  });
+  return labels.join(' | ');
+}
+function templateSelectedRows(){
+  return [..._templateSelectedDids].map(templateJamaahByDid).filter(Boolean).sort((a,b)=>
+    String(a.kelompok_nama||'').localeCompare(String(b.kelompok_nama||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id')
+  );
+}
+function editTemplatePeserta(id){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(id)); if(!t)return;
+  _templateEditId=Number(id);
+  const base=templateParticipantMode(t)==='custom'?templateCustomActualParticipants(t):templateCriteriaActualParticipants(t);
+  _templateSelectedDids=new Set(base.filter(x=>x.did).map(x=>String(x.did)));
+  _templateCandidateDids=new Set();
+  document.getElementById('template-peserta-title').textContent='👥 Edit Peserta: '+t.nama;
+  document.getElementById('template-peserta-subtitle').textContent=(t.kelompok?('Scope '+t.kelompok):'Scope Desa')+' · '+templateCriteriaText(t);
+  const quick=document.getElementById('template-peserta-quick'); if(quick)quick.value='';
+  const ft=document.getElementById('tp-filter-text'); if(ft)ft.value='';
+  const fg=document.getElementById('tp-filter-gender'); if(fg)fg.value='';
+  const fn=document.getElementById('tp-filter-nikah'); if(fn)fn.value='';
+  const fk=document.getElementById('tp-filter-kelas'); if(fk)fk.value='';
+  const fp=document.getElementById('tp-filter-pengurus'); if(fp)fp.value='';
+  buildTemplateFilterOptions(t);
+  renderTemplatePesertaEditor();
+  openMod('modal-template-peserta');
+}
+function buildTemplateFilterOptions(t){
+  const kel=document.getElementById('tp-filter-kelompok');
+  if(kel){
+    const vals=t?.kelompok?[t.kelompok]:['PW1','PW2','PW3','PW4'];
+    kel.innerHTML=`<option value="">${t?.kelompok?'Semua di '+escH(t.kelompok):'Semua Kelompok'}</option>`+vals.map(k=>`<option value="${escH(k)}">${escH(k)}</option>`).join('');
+    kel.value='';
+  }
+  const dap=document.getElementById('tp-filter-dapukan');
+  if(dap){
+    const allowed=new Set(templateEligibleJamaah(t).map(j=>String(j.did)));
+    const vals=[...new Set((aPengurus||[]).filter(p=>p.aktif!==false&&allowed.has(String(p.did))&&p.dapukan).map(p=>String(p.dapukan).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
+    dap.innerHTML='<option value="">Semua Dapukan</option>'+vals.map(x=>`<option value="${escH(x)}">${escH(x)}</option>`).join('');
+    dap.value='';
+  }
+}
+function templateQuickMatches(){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_templateEditId)); if(!t)return[];
+  const q=(document.getElementById('template-peserta-quick')?.value||'').trim().toLowerCase();
+  if(q.length<1) return [];
+  return templateEligibleJamaah(t).filter(j=>!_templateSelectedDids.has(String(j.did))).filter(j=>
+    [j.nama,j.nama_kk,j.kelompok_nama,kelasKbmAktual(j),j.status_nikah,templatePengurusNote(j)].some(v=>String(v||'').toLowerCase().includes(q))
+  ).slice(0,10);
+}
+function templateQuickSearch(){
+  const dd=document.getElementById('template-peserta-quick-list'); if(!dd)return;
+  const q=(document.getElementById('template-peserta-quick')?.value||'').trim();
+  const rows=templateQuickMatches();
+  if(!q){dd.style.display='none';dd.innerHTML='';return;}
+  dd.style.display='block';
+  if(!rows.length){dd.innerHTML='<div style="padding:9px 10px;font-size:11px;color:var(--text-muted);background:white;">Tidak ada kandidat yang cocok.</div>';return;}
+  dd.innerHTML=rows.map(j=>`<div onclick="templateQuickChoose('${String(j.did).replace(/'/g,"\\'")}')" style="padding:8px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;background:white;" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='white'">
+    <div style="font-size:11px;font-weight:800;">${escH(j.nama)}</div>
+    <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">${escH(j.kelompok_nama||'-')} · ${escH(j.status_nikah||'-')} · ${escH(kelasKbmAktual(j)||'-')}${j.nama_kk?' · KK '+escH(j.nama_kk):''}</div>
+  </div>`).join('');
+}
+function templateQuickChoose(did){
+  _templateSelectedDids.add(String(did));
+  _templateCandidateDids.delete(String(did));
+  const inp=document.getElementById('template-peserta-quick'); if(inp)inp.value='';
+  const dd=document.getElementById('template-peserta-quick-list'); if(dd){dd.style.display='none';dd.innerHTML='';}
+  renderTemplatePesertaEditor();
+}
+function templateRemoveSelected(did){
+  _templateSelectedDids.delete(String(did));
+  _templateCandidateDids.delete(String(did));
+  renderTemplatePesertaEditor();
+}
+function templateClearSelected(){
+  if(!_templateSelectedDids.size)return;
+  if(!confirm('Kosongkan semua nama peserta terpilih? Slot pendamping otomatis tidak berubah.'))return;
+  _templateSelectedDids.clear();
+  _templateCandidateDids.clear();
+  renderTemplatePesertaEditor();
+}
+function templateFilteredCandidates(){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_templateEditId)); if(!t)return[];
+  const kel=document.getElementById('tp-filter-kelompok')?.value||'';
+  const gender=document.getElementById('tp-filter-gender')?.value||'';
+  const nikah=document.getElementById('tp-filter-nikah')?.value||'';
+  const kelas=document.getElementById('tp-filter-kelas')?.value||'';
+  const pengurus=document.getElementById('tp-filter-pengurus')?.value||'';
+  const dapukan=document.getElementById('tp-filter-dapukan')?.value||'';
+  const text=(document.getElementById('tp-filter-text')?.value||'').trim().toLowerCase();
+  let rows=templateEligibleJamaah(t).filter(j=>!_templateSelectedDids.has(String(j.did)));
+  if(kel) rows=rows.filter(j=>j.kelompok_nama===kel);
+  if(gender) rows=rows.filter(j=>pgNormGender(j.jenis_kelamin)===gender);
+  if(nikah) rows=rows.filter(j=>j.status_nikah===nikah);
+  if(kelas) rows=rows.filter(j=>kelasKbmAktual(j)===kelas);
+  if(pengurus){
+    rows=rows.filter(j=>{
+      const roles=templatePengurusRoles(j.did);
+      if(pengurus==='pengurus')return roles.length>0;
+      if(pengurus==='desa')return roles.some(p=>p.level==='desa');
+      if(pengurus==='kelompok')return roles.some(p=>p.level==='kelompok');
+      if(pengurus==='non')return roles.length===0;
+      return true;
+    });
+  }
+  if(dapukan) rows=rows.filter(j=>templatePengurusRoles(j.did).some(p=>p.dapukan===dapukan));
+  if(text) rows=rows.filter(j=>[j.nama,j.nama_kk,j.kelompok_nama,j.status_nikah,kelasKbmAktual(j),templatePengurusNote(j)].some(v=>String(v||'').toLowerCase().includes(text)));
+  return rows;
+}
+function templateFilterChanged(clearChecks=true){
+  if(clearChecks)_templateCandidateDids.clear();
+  renderTemplateCandidateList();
+}
+function templateResetFilters(){
+  ['tp-filter-kelompok','tp-filter-gender','tp-filter-nikah','tp-filter-kelas','tp-filter-pengurus','tp-filter-dapukan'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  const q=document.getElementById('tp-filter-text');if(q)q.value='';
+  _templateCandidateDids.clear();
+  renderTemplateCandidateList();
+}
+function toggleTemplateCandidate(did,checked){
+  if(checked)_templateCandidateDids.add(String(did));else _templateCandidateDids.delete(String(did));
+  const b=document.getElementById('tp-add-checked');if(b)b.textContent=`＋ Tambahkan Tercentang (${_templateCandidateDids.size})`;
+}
+function templateAddChecked(){
+  if(!_templateCandidateDids.size){toast('Centang peserta yang ingin ditambahkan',true);return;}
+  _templateCandidateDids.forEach(d=>_templateSelectedDids.add(String(d)));
+  _templateCandidateDids.clear();
+  renderTemplatePesertaEditor();
+}
+function templateAddAllFiltered(){
+  const rows=templateFilteredCandidates();
+  if(!rows.length){toast('Tidak ada hasil filter yang bisa ditambahkan',true);return;}
+  rows.forEach(j=>_templateSelectedDids.add(String(j.did)));
+  _templateCandidateDids.clear();
+  renderTemplatePesertaEditor();
+}
+function renderTemplateSelectedTable(){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_templateEditId)); if(!t)return;
+  const rows=templateSelectedRows();
+  const slots=templateCompanionSlots(t);
+  const cnt=document.getElementById('template-peserta-count');
+  if(cnt)cnt.innerHTML=`<b>${rows.length}</b> nama${slots.length?` + <b>${slots.length}</b> slot`:''}`;
+  const slotBox=document.getElementById('template-peserta-slots');
+  if(slotBox){
+    if(slots.length){
+      slotBox.style.display='block';
+      const by={};slots.forEach(x=>by[x.kelompok_nama]=(by[x.kelompok_nama]||0)+1);
+      slotBox.innerHTML='👥 <b>Slot pendamping otomatis:</b> '+Object.entries(by).map(([k,n])=>`${escH(k)} ${n} orang`).join(' · ')+' — nama pendamping tidak perlu ditentukan di template.';
+    }else slotBox.style.display='none';
+  }
+  const el=document.getElementById('template-peserta-selected');if(!el)return;
+  if(!rows.length){el.innerHTML='<div class="empty" style="padding:13px;">Belum ada nama peserta terpilih.</div>';return;}
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:10px;"><thead><tr style="background:#f8fafc;"><th style="text-align:left;padding:6px 8px;">Nama</th><th style="text-align:left;padding:6px 8px;width:70px;">Kel.</th><th style="text-align:left;padding:6px 8px;">Status / Kelas</th><th style="width:52px;padding:6px 8px;">Aksi</th></tr></thead><tbody>${rows.map(j=>{
+    const pn=templatePengurusNote(j);
+    return `<tr style="border-top:1px solid #f1f5f9;"><td style="padding:6px 8px;"><b>${escH(j.nama)}</b>${j.nama_kk?`<div style="font-size:9px;color:var(--text-muted);">KK: ${escH(j.nama_kk)}</div>`:''}${pn?`<div style="font-size:9px;color:#047857;">${escH(pn)}</div>`:''}</td><td style="padding:6px 8px;">${escH(j.kelompok_nama||'-')}</td><td style="padding:6px 8px;">${escH(j.status_nikah||'-')}<div style="font-size:9px;color:var(--text-muted);">${escH(kelasKbmAktual(j)||'-')}</div></td><td style="padding:6px 8px;text-align:center;"><button type="button" onclick="templateRemoveSelected('${String(j.did).replace(/'/g,"\\'")}')" style="border:0;background:#fee2e2;color:#b91c1c;border-radius:5px;padding:4px 7px;cursor:pointer;font-size:10px;">✕</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+function renderTemplateCandidateList(){
+  const rows=templateFilteredCandidates();
+  const count=document.getElementById('template-peserta-filter-count');
+  if(count)count.innerHTML=`Ditemukan <b>${rows.length}</b> kandidat yang belum terpilih. Bisa tambahkan semua hasil filter atau centang sebagian.`;
+  const b=document.getElementById('tp-add-checked');if(b)b.textContent=`＋ Tambahkan Tercentang (${_templateCandidateDids.size})`;
+  const el=document.getElementById('template-peserta-list');if(!el)return;
+  if(!rows.length){el.innerHTML='<div class="empty" style="padding:13px;">Tidak ada kandidat sesuai filter.</div>';return;}
+  el.innerHTML=rows.map(j=>{
+    const pn=templatePengurusNote(j);
+    return `<label style="display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border-bottom:1px solid #f3f4f6;cursor:pointer;background:white;">
+      <input type="checkbox" ${_templateCandidateDids.has(String(j.did))?'checked':''} onchange="toggleTemplateCandidate('${String(j.did).replace(/'/g,"\\'")}',this.checked)" style="margin-top:3px;">
+      <span style="flex:1;min-width:0;"><b>${escH(j.nama)}</b><span style="display:block;font-size:9px;color:var(--text-muted);margin-top:2px;">${escH(j.kelompok_nama||'-')} · ${escH(j.status_nikah||'-')} · ${escH(kelasKbmAktual(j)||'-')}${j.nama_kk?' · KK '+escH(j.nama_kk):''}</span>${pn?`<span style="display:block;font-size:9px;color:#047857;margin-top:2px;">${escH(pn)}</span>`:''}</span>
+    </label>`;
+  }).join('');
+}
+function renderTemplatePesertaEditor(){
+  renderTemplateSelectedTable();
+  renderTemplateCandidateList();
+  templateQuickSearch();
+}
+async function simpanTemplatePeserta(){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_templateEditId)); if(!t)return;
+  const snap=await getAttendanceSnapshot(true); if(!snap)return;
+  const {data,error}=await sb.rpc('dk_attendance_save_template_peserta',{
+    p_token:DK_ATT_TOKEN,p_acara_id:t.id,p_dids:[..._templateSelectedDids],p_use_custom:true
+  });
+  if(error||!data||data.ok!==true){toast('Gagal simpan peserta template: '+(error?.message||data?.error||'Unknown error'),true);return;}
+  toast('✅ Peserta template disimpan: '+_templateSelectedDids.size+' nama');
+  closeMod('modal-template-peserta');
+  await reloadAttendanceSecure(false);
+  renderListAcaraMaster();
+  if(_kgTemplateId)renderTemplateKegiatanSummary();
+}
+async function resetTemplatePesertaToCriteria(){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_templateEditId)); if(!t)return;
+  if(!confirm('Kembalikan peserta "'+t.nama+'" ke kriteria otomatis?'))return;
+  const snap=await getAttendanceSnapshot(true); if(!snap)return;
+  const {data,error}=await sb.rpc('dk_attendance_save_template_peserta',{
+    p_token:DK_ATT_TOKEN,p_acara_id:t.id,p_dids:[],p_use_custom:false
+  });
+  if(error||!data||data.ok!==true){toast('Gagal reset template: '+(error?.message||data?.error||'Unknown error'),true);return;}
+  toast('✅ Template kembali mengikuti kriteria');
+  closeMod('modal-template-peserta');
+  await reloadAttendanceSecure(false);
+  renderListAcaraMaster();
+  if(_kgTemplateId)renderTemplateKegiatanSummary();
+}
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#template-peserta-quick')&&!e.target.closest('#template-peserta-quick-list')){
+    const dd=document.getElementById('template-peserta-quick-list');if(dd)dd.style.display='none';
+  }
+});
 
 function onAcaraSearch(){
   const q=(document.getElementById('kg-acara-input').value||'').toLowerCase().trim();
@@ -4106,7 +4587,7 @@ function onAcaraSearch(){
   if(matches.length){
     html=matches.slice(0,10).map(a=>
       `<div class="kg-ac-item" onclick="pilihAcara(${a.id})" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;">
-        ${a.nama} <span style="color:var(--text-muted);font-size:10px;">📚 master</span>
+        ${a.nama} <span style="color:var(--text-muted);font-size:10px;">${a.default_filter&&a.default_filter.template_code?'📚 template':'📝 acara'}</span>
       </div>`
     ).join('');
   }
@@ -4134,6 +4615,9 @@ function pilihAcara(id){
   document.getElementById('kg-acara-input').value=a.nama;
   document.getElementById('kg-acara-id').value=a.id;
   document.getElementById('kg-acara-list').style.display='none';
+  if(a.template_rutin&&a.default_filter&&a.default_filter.template_code){
+    applyTemplateToKegiatanForm(a,false);
+  }
 }
 
 function pilihAcaraBaru(){
@@ -4350,12 +4834,22 @@ async function simpanKegiatan(){
   if(document.getElementById('kg-mode-online').checked) modes.push('online');
   if(!modes.length){toast('Pilih minimal 1 mode',true);return;}
 
-  const targetScope=currentKegKelScope();
+  const tpl=_kgTemplateId?aAcaraMaster.find(a=>Number(a.id)===Number(_kgTemplateId)):null;
+  const targetScope=tpl?(tpl.kelompok||null):currentKegKelScope();
   const sumberEl=document.getElementById('kg-sumber');
   const sumber=sumberEl?sumberEl.value:'jamaah';
   let filter,peserta;
 
-  if(sumber==='pengurus'){
+  if(tpl){
+    acara_id=tpl.id;
+    peserta=templateParticipants(tpl);
+    filter={
+      sumber:'template',
+      template_id:tpl.id,
+      template_code:templateFilter(tpl).template_code||null,
+      participant_mode:templateParticipantMode(tpl)
+    };
+  }else if(sumber==='pengurus'){
     peserta=getPesertaPengurus();
     const cakEl=document.getElementById('kg-pengurus-cakupan');
     filter={
@@ -4377,6 +4871,7 @@ async function simpanKegiatan(){
     kelompok:targetScope,
     tanggal:tgl,
     waktu:document.getElementById('kg-waktu').value||null,
+    waktu_selesai:document.getElementById('kg-waktu-selesai').value||null,
     lokasi:document.getElementById('kg-lokasi').value.trim()||null,
     mode:modes,
     filter_peserta:filter,
@@ -4416,50 +4911,52 @@ async function hapusKegiatan(id,nama){
   await reloadAttendanceSecure(false);
 }
 
-// ===== MASTER ACARA =====
+// ===== TEMPLATE ACARA =====
 function bukaModalAcaraMaster(){
   renderListAcaraMaster();
   openMod('modal-acara-master');
 }
+function templateScopeOrder(t){
+  if(!t.kelompok)return 0;
+  return ({PW1:1,PW2:2,PW3:3,PW4:4})[t.kelompok]||9;
+}
+function templateCardHtml(a){
+  const peserta=templateParticipants(a);
+  const slots=peserta.filter(x=>x.placeholder).length;
+  const mode=templateParticipantMode(a);
+  const scope=a.kelompok||'Desa';
+  return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 11px;margin-bottom:8px;background:white;">
+    <div style="display:flex;gap:8px;align-items:flex-start;justify-content:space-between;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-size:13px;font-weight:800;color:var(--text);">${escH(a.nama)}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${escH(scope)} · ${escH(templateCriteriaText(a))}</div>
+        <div style="font-size:10px;margin-top:5px;color:${mode==='custom'?'#7c3aed':'#047857'};font-weight:700;">👥 ${peserta.length} peserta/slot · ${mode==='custom'?'Peserta custom':'Sesuai kriteria'}${slots?` · ${slots} slot pendamping`:''}</div>
+      </div>
+      <span class="badge" style="background:${a.kelompok?'#eff6ff':'#ecfdf5'};color:${a.kelompok?'#1e40af':'#047857'};">${escH(scope)}</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+      <button class="btn-save" onclick="gunakanTemplate(${a.id})" style="padding:6px 10px;border-radius:5px;font-size:10px;">▶ Gunakan</button>
+      <button class="btn-cancel" onclick="editTemplatePeserta(${a.id})" style="padding:6px 10px;border-radius:5px;font-size:10px;">✏️ Edit Peserta</button>
+    </div>
+  </div>`;
+}
 function renderListAcaraMaster(){
   const el=document.getElementById('modal-acara-list');
-  if(!aAcaraMaster.length){
-    el.innerHTML='<div class="empty"><div class="ei">📚</div>Belum ada master acara</div>';
-    return;
-  }
-  el.innerHTML=aAcaraMaster.map(a=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border-light);">
-      <div style="font-size:13px;font-weight:600;">${a.nama}</div>
-      <button onclick="hapusAcaraMaster(${a.id},'${(a.nama||'').replace(/'/g,'')}')" style="background:var(--red-light);color:var(--red);border:none;padding:3px 9px;border-radius:5px;font-size:11px;cursor:pointer;">🗑️</button>
-    </div>
-  `).join('');
-}
-async function tambahAcaraMaster(){
-  const nm=document.getElementById('acara-baru-input').value.trim();
-  if(!nm){toast('Isi nama acara',true);return;}
-  const snap=await getAttendanceSnapshot(true);
-  if(!snap) return;
-  const kelompok=currentKegKelScope();
-  const {data,error}=await sb.rpc('dk_attendance_add_master',{
-    p_token:DK_ATT_TOKEN,
-    p_nama:nm,
-    p_kelompok:kelompok
+  const std=aAcaraMaster.filter(a=>a.aktif!==false&&a.template_rutin&&a.default_filter&&a.default_filter.template_code)
+    .sort((a,b)=>templateScopeOrder(a)-templateScopeOrder(b)||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+  if(!std.length){el.innerHTML='<div class="empty"><div class="ei">📚</div>Template acara belum tersedia.</div>';return;}
+  const groups=[];
+  if(isDesaAttendanceManager()) groups.push({key:null,label:'🏛️ Template Acara Desa'});
+  const scope=CU.kelompok_scope;
+  (scope?[scope]:['PW1','PW2','PW3','PW4']).forEach(k=>groups.push({key:k,label:'👥 Template Acara '+k}));
+  let html='';
+  groups.forEach(g=>{
+    const rows=std.filter(a=>(a.kelompok||null)===g.key);
+    if(!rows.length)return;
+    html+=`<div style="font-size:11px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--border);">${g.label}</div>`;
+    html+=rows.map(templateCardHtml).join('');
   });
-  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
-  document.getElementById('acara-baru-input').value='';
-  toast('✅ Master acara ditambahkan');
-  await reloadAttendanceSecure(false);
-  renderListAcaraMaster();
-}
-async function hapusAcaraMaster(id,nm){
-  if(!confirm('Hapus master acara "'+nm+'"?\n\nKegiatan yang sudah pakai acara ini tidak terhapus, hanya master-nya saja.')) return;
-  const snap=await getAttendanceSnapshot(true);
-  if(!snap) return;
-  const {data,error}=await sb.rpc('dk_attendance_delete_master',{p_token:DK_ATT_TOKEN,p_id:id});
-  if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
-  toast('Dihapus');
-  await reloadAttendanceSecure(false);
-  renderListAcaraMaster();
+  el.innerHTML=html||'<div class="empty">Tidak ada template dalam scope ini.</div>';
 }
 
 // ===== DAFTAR HADIR =====
