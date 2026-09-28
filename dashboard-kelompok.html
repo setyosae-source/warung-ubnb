@@ -742,8 +742,9 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
             <option value="">Semua Kelas KBM</option><option>Balita</option><option>Kelas A</option><option>Kelas B</option><option>Kelas C</option><option>Pra Remaja</option><option>Remaja</option><option>Dewasa</option>
           </select>
           <select id="tp-filter-pengurus" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;">
-            <option value="">Semua Jamaah</option><option value="pengurus">Semua Pengurus</option><option value="desa">Pengurus Desa</option><option value="kelompok">Pengurus Kelompok</option><option value="non">Bukan Pengurus</option>
+            <option value="">Semua Jamaah</option><option value="pengurus">Semua Pengurus</option><option value="desa">Pengurus Desa</option><option value="kelompok">Pengurus Kelompok</option><option value="khusus">Pengurus Unit Khusus</option><option value="non">Bukan Pengurus</option>
           </select>
+          <select id="tp-filter-unit" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;"><option value="">Semua Unit Khusus</option></select>
           <select id="tp-filter-dapukan" onchange="templateFilterChanged()" style="padding:7px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:white;"><option value="">Semua Dapukan</option></select>
         </div>
         <div style="padding:0 10px 9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
@@ -897,7 +898,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div class="form-row"><label>KATEGORI</label><select id="pg-export-kategori" onchange="updatePgExportInfo()">
         <option value="all">Semua Pengurus + Istri Pengurus</option>
         <option value="appointed">Pengurus yang Didapuk</option>
-        <option value="spouse">Hanya Istri Pengurus</option>
+        <option value="spouse">Hanya Istri/Pendamping Pengurus</option>
       </select></div>
       <div class="form-row"><label>JENIS KELAMIN</label><select id="pg-export-gender" onchange="updatePgExportInfo()">
         <option value="all">Semua</option>
@@ -910,7 +911,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         <option value="nonaktif">Nonaktif</option>
       </select></div>
       <div style="background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px;margin-top:10px;font-size:11px;color:var(--text-muted);">
-        PDF dan Excel mengikuti filter di atas. Jika memilih <b>Semua Wilayah</b>, laporan dipisahkan per tabel/sheet Desa, PW1, PW2, PW3, dan PW4.
+        PDF dan Excel mengikuti filter di atas. Hasil export dipisahkan per <b>wilayah/group</b> dan per <b>jenis kelamin</b>. Excel memakai sheet terpisah; PDF memakai lembar/halaman terpisah dengan layout Portrait.
       </div>
       <div style="display:flex;gap:8px;margin-top:14px;">
         <button onclick="exportPengurusExcel()" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
@@ -1055,7 +1056,7 @@ function _loginEsc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','
 
 async function loadPengurusLoginList(){
   const {data,error}=await sb.from('ubnb_pengurus')
-    .select('id,did,dapukan,level,kelompok_nama,urutan,aktif,jamaah_desa(nama,nama_kk,kelompok_nama)')
+    .select('id,did,dapukan,level,kelompok_nama,urutan,aktif,jamaah_desa!ubnb_pengurus_did_fkey(nama,nama_kk,kelompok_nama)')
     .eq('aktif',true)
     .order('level')
     .order('kelompok_nama')
@@ -1551,7 +1552,7 @@ async function loadAll(){
   let qIsrunKat = sb.from('ubnb_isrun_kategori').select('*').order('urutan');
   let qIsrunPbyr = sb.from('ubnb_isrun_pembayar').select('*').eq('aktif',true).order('nama');
   let qIsrunPbyrn = sb.from('ubnb_isrun_pembayaran').select('*');
-  let qPengurus = sb.from('ubnb_pengurus').select('*, jamaah_desa(nama,nama_kk,kelompok_nama)').order('urutan');
+  let qPengurus = sb.from('ubnb_pengurus').select('*, jamaah_desa!ubnb_pengurus_did_fkey(nama,nama_kk,kelompok_nama)').order('urutan');
   const qSpouse = (CU&&CU.did)
     ? sb.rpc('dashboard_spouse_overrides',{p_editor_did:CU.did})
     : Promise.resolve({data:{ok:true,data:[]},error:null});
@@ -1850,7 +1851,7 @@ function pgRenderRowsTable(title, rows, level, kelompokNama=null){
   html+=`<div class="tbl-wrap" style="border-radius:0 0 8px 8px;"><table class="tbl-jamaah tbl-pengurus" style="min-width:650px;">
     <thead><tr>
       <th style="cursor:default;">Dapukan</th>
-      <th style="cursor:default;">Nama Pengurus / Nama Istri</th>
+      <th style="cursor:default;">Nama</th>
       <th style="cursor:default;text-align:center;width:105px;">Status</th>
       <th style="cursor:default;text-align:center;width:125px;">Aksi</th>
     </tr></thead><tbody data-pg-level="${escH(level)}" data-pg-kelompok="${escH(kelompokNama||'')}">`;
@@ -2058,7 +2059,7 @@ function pgExportAoAForGroup(group){
     [sub],
     [`Filter: ${filter}`],
     [],
-    ['No','Dapukan','Nama Pengurus / Nama Istri','Jenis Kelamin','Nama KK','Keterangan','Status']
+    ['No','Dapukan','Nama','Kelompok','Nama KK','Keterangan','Status']
   ];
   rows.forEach((r,i)=>{
     const j=r.jamaah||pgJamaahRow(r.did)||{};
@@ -2067,12 +2068,12 @@ function pgExportAoAForGroup(group){
       : (!pgIsKK(j)&&j.nama_kk?`KK: ${j.nama_kk}`:'');
     aoa.push([
       i+1,
-      r.source==='spouse'?'Istri Pengurus':(r.dapukan||''),
+      r.source==='spouse'?(r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus'):(r.dapukan||''),
       j.nama||pgJamaahNama(r.did)||'',
       pgNormGender(j.jenis_kelamin)==='L'?'Laki-laki':(pgNormGender(j.jenis_kelamin)==='P'?'Perempuan':''),
       pgIsKK(j)?'':(j.nama_kk||''),
       ket,
-      r.source==='spouse'?'Istri · Otomatis':(r.aktif===false?'Nonaktif':'Aktif')
+      r.source==='spouse'?(r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis'):(r.aktif===false?'Nonaktif':'Aktif')
     ]);
   });
   return aoa;
@@ -2105,15 +2106,15 @@ function pgExportPdfTable(group){
   const rows=pgSortRows(group.rows);
   return `<section class="report-section">
     <h2>${escH(pgExportRegionLabel(group.region))}</h2>
-    <table><thead><tr><th>No</th><th>Dapukan</th><th>Nama Pengurus / Nama Istri</th><th>JK</th><th>Nama KK</th><th>Keterangan</th><th>Status</th></tr></thead><tbody>
+    <table><thead><tr><th>No</th><th>Dapukan</th><th>Nama</th><th>Kelompok</th><th>Nama KK</th><th>Keterangan</th><th>Status</th></tr></thead><tbody>
     ${rows.map((r,i)=>{
       const j=r.jamaah||pgJamaahRow(r.did)||{};
       const ket=r.source==='spouse'
         ? `Suami: ${r.husband?.nama||''}${r.husband_dapukan?.length?' · '+r.husband_dapukan.join(', '):''}`
         : (!pgIsKK(j)&&j.nama_kk?`KK: ${j.nama_kk}`:'');
-      const jk=pgNormGender(j.jenis_kelamin)==='L'?'L':(pgNormGender(j.jenis_kelamin)==='P'?'P':'');
-      const stat=r.source==='spouse'?'Istri · Otomatis':(r.aktif===false?'Nonaktif':'Aktif');
-      return `<tr><td class="center">${i+1}</td><td>${escH(r.source==='spouse'?'Istri Pengurus':(r.dapukan||''))}</td><td><b>${escH(j.nama||pgJamaahNama(r.did)||'')}</b></td><td class="center">${jk}</td><td>${escH(pgIsKK(j)?'':(j.nama_kk||''))}</td><td>${escH(ket)}</td><td class="center">${escH(stat)}</td></tr>`;
+      const kelompok=j.kelompok_nama||'';
+      const stat=r.source==='spouse'?(r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis'):(r.aktif===false?'Nonaktif':'Aktif');
+      return `<tr><td class="center">${i+1}</td><td>${escH(r.source==='spouse'?(r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus'):(r.dapukan||''))}</td><td><b>${escH(j.nama||pgJamaahNama(r.did)||'')}</b></td><td class="center">${jk}</td><td>${escH(pgIsKK(j)?'':(j.nama_kk||''))}</td><td>${escH(ket)}</td><td class="center">${escH(stat)}</td></tr>`;
     }).join('')}
     </tbody></table></section>`;
 }
@@ -2159,22 +2160,22 @@ function exportPengurusPDF(){
           : (!pgIsKK(j)&&j.nama_kk?`KK: ${j.nama_kk}`:'');
         return [
           i+1,
-          r.source==='spouse'?'Istri Pengurus':(r.dapukan||''),
+          r.source==='spouse'?(r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus'):(r.dapukan||''),
           j.nama||pgJamaahNama(r.did)||'',
           pgNormGender(j.jenis_kelamin)==='L'?'L':(pgNormGender(j.jenis_kelamin)==='P'?'P':''),
           pgIsKK(j)?'':(j.nama_kk||''),
           ket,
-          r.source==='spouse'?'Istri · Otomatis':(r.aktif===false?'Nonaktif':'Aktif')
+          r.source==='spouse'?(r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis'):(r.aktif===false?'Nonaktif':'Aktif')
         ];
       });
       if(typeof doc.autoTable!=='function') throw new Error('Plugin autoTable belum siap');
       doc.autoTable({
         startY:32,
-        head:[['No','Dapukan','Nama Pengurus / Nama Istri','JK','Nama KK','Keterangan','Status']],
+        head:[['No','Dapukan','Nama','Kelompok','Nama KK','Keterangan','Status']],
         body,
         theme:'grid',
         styles:{font:'helvetica',fontSize:7,cellPadding:1.8,valign:'top',lineWidth:0.15},
-        headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold'},
+        headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:8.6,cellPadding:2.1},
         columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:43},2:{cellWidth:51},3:{cellWidth:10,halign:'center'},4:{cellWidth:46},5:{cellWidth:72},6:{cellWidth:26,halign:'center'}},
         margin:{left:8,right:8,bottom:10},
         didDrawPage:()=>{
@@ -2392,7 +2393,7 @@ async function hapusPengurus(id){
 }
 
 async function reloadPengurus(){
-  const {data,error}=await sb.from('ubnb_pengurus').select('*, jamaah_desa(nama,nama_kk,kelompok_nama)').order('urutan');
+  const {data,error}=await sb.from('ubnb_pengurus').select('*, jamaah_desa!ubnb_pengurus_did_fkey(nama,nama_kk,kelompok_nama)').order('urutan');
   if(!error) aPengurus=data||[];
   renderPengurus();
   renderJamaah();
@@ -4184,11 +4185,14 @@ function editKegiatan(id){
     </div><!-- /kg-filter-jamaah -->
     <div id="kg-filter-pengurus" style="display:none;">
       <div class="modal-row" id="kg-cakupan-row"><label>Cakupan</label>
-        <select id="kg-pengurus-cakupan" onchange="rebuildDapukanList();previewPeserta();">
+        <select id="kg-pengurus-cakupan" onchange="toggleCakupanRow();rebuildDapukanList();previewPeserta();">
           <option value="desa">🏛️ Pengurus Desa saja</option>
           <option value="desa_kelompok">🏛️+👥 Desa + Semua Kelompok</option>
+          <option value="khusus">🧩 Unit Khusus saja</option>
+          <option value="semua">🏛️+👥+🧩 Semua Pengurus</option>
         </select>
       </div>
+      <div class="modal-row" id="kg-unit-khusus-row" style="display:none;"><label>Unit Khusus</label><select id="kg-unit-khusus" onchange="rebuildDapukanList();previewPeserta();"><option value="">— Semua Unit Khusus —</option></select></div>
       <div style="padding:6px 16px 2px;font-size:10px;color:var(--text-muted);">Centang jenis dapukan (kosong = semua dapukan masuk):</div>
       <div id="kg-dapukan-list" style="padding:4px 16px 10px;display:flex;flex-wrap:wrap;gap:8px 14px;"></div>
     </div>
@@ -6058,6 +6062,552 @@ async function renderLogbook() {
     el.innerHTML = '<div class="msg error">❌ Gagal memuat log: ' + e.message + '</div>';
   }
 }
+
+
+// ===== EXTENSION: UNIT KHUSUS / HAK AKSES TERPISAH =====
+var _pgFixedUnit=null;
+var _pgPendampingResults=[];
+var _pgPendampingChosen=null;
+
+function canManageKhusus(){ return canEdit() && !CU.kelompok_scope; }
+function pgLevelOrder(level){ return level==='desa'?0:(level==='kelompok'?1:2); }
+function pgUnitKey(v){ return String(v||'').trim(); }
+function pgKnownUnits(){
+  return [...new Set((aPengurus||[]).filter(p=>p.level==='khusus'&&pgUnitKey(p.unit_nama)).map(p=>pgUnitKey(p.unit_nama)))]
+    .sort((a,b)=>a.localeCompare(b,'id'));
+}
+function pgScopeIdentity(r){
+  if(r.level==='desa') return 'desa|';
+  if(r.level==='kelompok') return 'kelompok|'+String(r.kelompok_nama||'');
+  return 'khusus|'+pgUnitKey(r.unit_nama);
+}
+function pgManageForRow(r){
+  if(r.source==='spouse') return false;
+  if(r.level==='desa') return canManageDesa();
+  if(r.level==='kelompok') return canManageKelompok(r.kelompok_nama);
+  if(r.level==='khusus') return canManageKhusus();
+  return false;
+}
+function pgSortRows(rows){
+  const kelOrder=KELOMPOK_LIST.map(k=>k.singkat);
+  return rows.slice().sort((a,b)=>{
+    const la=pgLevelOrder(a.level),lb=pgLevelOrder(b.level);
+    if(la!==lb)return la-lb;
+    if(a.level==='kelompok'){
+      const ka=kelOrder.indexOf(a.kelompok_nama),kb=kelOrder.indexOf(b.kelompok_nama);
+      if(ka!==kb)return ka-kb;
+    }
+    if(a.level==='khusus'){
+      const u=pgUnitKey(a.unit_nama).localeCompare(pgUnitKey(b.unit_nama),'id');
+      if(u)return u;
+    }
+    const sa=a.source==='spouse'?1:0,sb=b.source==='spouse'?1:0;
+    if(sa!==sb)return sa-sb;
+    if(sa===0){
+      return ((a.urutan??999999)-(b.urutan??999999)) ||
+        String(a.dapukan||'').localeCompare(String(b.dapukan||''),'id') ||
+        String(a.jamaah?.nama||'').localeCompare(String(b.jamaah?.nama||''),'id');
+    }
+    return String(a.jamaah?.nama||'').localeCompare(String(b.jamaah?.nama||''),'id') ||
+      String(a.husband?.nama||'').localeCompare(String(b.husband?.nama||''),'id');
+  });
+}
+function pgBuildAppointedRows(){
+  const scope=CU.kelompok_scope;
+  return (aPengurus||[]).filter(p=>{
+    if(p.level==='desa') return true;
+    if(p.level==='kelompok') return !scope || p.kelompok_nama===scope;
+    if(p.level==='khusus'){
+      if(!scope)return true;
+      return p.akses_level==='kelompok' && p.akses_kelompok_nama===scope;
+    }
+    return false;
+  }).map(p=>({...p,source:'appointed',jamaah:pgJamaahRow(p.did),dapukan_note:''}));
+}
+function pgBuildWomenRows(){
+  const appointed=pgBuildAppointedRows();
+  const femaleDirect=appointed.filter(r=>pgNormGender(r.jamaah?.jenis_kelamin)==='P');
+  const directKeys=new Set(femaleDirect.map(r=>[String(r.did),pgScopeIdentity(r)].join('|')));
+  const husbandGroups=new Map();
+  appointed.filter(r=>r.aktif!==false&&pgNormGender(r.jamaah?.jenis_kelamin)==='L').forEach(r=>{
+    const key=[r.did,pgScopeIdentity(r)].join('|');
+    if(!husbandGroups.has(key)) husbandGroups.set(key,{husband:r.jamaah,level:r.level,kelompok_nama:r.kelompok_nama||null,unit_nama:r.unit_nama||null,dapukan:[],pendampingDids:[]});
+    const g=husbandGroups.get(key);
+    if(r.dapukan&&!g.dapukan.includes(r.dapukan))g.dapukan.push(r.dapukan);
+    if(r.level==='khusus'&&r.pendamping_did&&!g.pendampingDids.includes(String(r.pendamping_did)))g.pendampingDids.push(String(r.pendamping_did));
+  });
+  const spouses=[]; const seen=new Set(); const ambiguous=new Set();
+  husbandGroups.forEach(g=>{
+    let wife=null,explicit=false,amb=false;
+    if(g.level==='khusus'&&g.pendampingDids.length){
+      if(g.pendampingDids.length>1){amb=true;}
+      else{
+        wife=(aJamaahDesa||[]).find(j=>String(j.did)===g.pendampingDids[0])||null;
+        explicit=!!wife;
+      }
+    }
+    if(!wife&&!amb){
+      const f=pgFindWife(g.husband); wife=f.wife; amb=f.ambiguous;
+    }
+    if(amb){ambiguous.add(g.husband?.did||'');return;}
+    if(!wife||pgNormGender(wife.jenis_kelamin)!=='P')return;
+    const fake={level:g.level,kelompok_nama:g.kelompok_nama,unit_nama:g.unit_nama};
+    const directKey=[String(wife.did),pgScopeIdentity(fake)].join('|');
+    if(directKeys.has(directKey))return;
+    const spouseKey=[String(wife.did),pgScopeIdentity(fake)].join('|');
+    if(seen.has(spouseKey))return; seen.add(spouseKey);
+    spouses.push({
+      id:null,did:wife.did,level:g.level,kelompok_nama:g.kelompok_nama,unit_nama:g.unit_nama,
+      dapukan:g.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus',dapukan_note:'',
+      husband_dapukan:g.dapukan.slice(),urutan:null,aktif:true,source:'spouse',jamaah:wife,husband:g.husband,
+      pendamping_explicit:explicit
+    });
+  });
+  return {rows:pgSortRows([...femaleDirect,...spouses]),ambiguousCount:ambiguous.size};
+}
+function pgAddButtonHtml(level,kelompokNama,unitNama=null,cls=''){
+  const allowed=level==='desa'?canManageDesa():(level==='kelompok'?canManageKelompok(kelompokNama):canManageKhusus());
+  if(!allowed)return '';
+  const gender=_pengurusGenderTab==='perempuan'?'P':'L';
+  const kelArg=kelompokNama?`'${escH(kelompokNama)}'`:'null';
+  const unitArg=unitNama?`decodeURIComponent('${encodeURIComponent(String(unitNama))}')`:'null';
+  return `<button class="peng-add ${cls}" onclick="bukaModalPengurus('${level}',null,${kelArg},'${gender}',${unitArg})">＋ Tambah Pengurus</button>`;
+}
+function pgRenderRowsTable(title,rows,level,kelompokNama=null,unitNama=null){
+  const count=rows.length;
+  const topAdd=pgAddButtonHtml(level,kelompokNama,unitNama,'table-add');
+  const bottomAdd=pgAddButtonHtml(level,kelompokNama,unitNama,'');
+  let html=`<div class="peng-table-section"><div class="peng-table-title"><div class="peng-table-title-main"><span>${escH(title)}</span></div><div class="peng-table-title-actions"><span class="meta">${count} data</span>${topAdd}</div></div>`;
+  if(!count){
+    html+=`<div class="peng-empty" style="border:1px solid var(--border);border-radius:0;">Belum ada data.</div>`;
+    if(bottomAdd)html+=`<div style="border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:7px 10px;text-align:center;background:#f8fafc;">${bottomAdd}</div>`;
+    return html+`</div>`;
+  }
+  html+=`<div class="tbl-wrap" style="border-radius:0 0 8px 8px;"><table class="tbl-jamaah tbl-pengurus" style="min-width:650px;"><thead><tr><th style="cursor:default;">Dapukan</th><th style="cursor:default;">Nama</th><th style="cursor:default;text-align:center;width:105px;">Status</th><th style="cursor:default;text-align:center;width:125px;">Aksi</th></tr></thead><tbody data-pg-level="${escH(level)}" data-pg-kelompok="${escH(kelompokNama||'')}" data-pg-unit="${escH(unitNama||'')}">`;
+  rows.forEach(r=>{
+    const j=r.jamaah||pgJamaahRow(r.did); const nm=j?.nama||pgJamaahNama(r.did)||'';
+    const manage=pgManageForRow(r); const draggable=r.source!=='spouse'&&manage&&r.id!=null;
+    const spouseLabel=r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis';
+    const status=r.source==='spouse'?`<span class="badge pasangan">${spouseLabel}</span>`:(r.aktif===false?'<span class="badge warning">Nonaktif</span>':'<span class="badge tetap">Aktif</span>');
+    const actions=r.source==='spouse'?'<span style="font-size:10px;color:var(--text-muted);">—</span>':(manage?`<button class="peng-btn edit" onclick="bukaModalPengurus('${r.level}',${r.id})">Edit</button> <button class="peng-btn del" onclick="hapusPengurus(${r.id})">Hapus</button>`:'—');
+    const dragHandle=draggable?'<span class="peng-drag-handle" title="Drag untuk mengubah urutan">⋮⋮</span>':'';
+    const dlabel=r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus';
+    const dapukanCell=r.source==='spouse'?`<div style="font-weight:400;color:var(--text);font-size:11.5px;">${dlabel}</div>`:`<div class="peng-dapukan-main">${dragHandle}${escH(r.dapukan||'')}</div>`;
+    const namaNote=r.source==='spouse'
+      ? `<div class="peng-name-kk">${r.level==='khusus'&&r.pendamping_explicit?'Pengurus':'Suami'}: ${escH(r.husband?.nama||'')}${r.husband_dapukan?.length?` · ${escH(r.husband_dapukan.join(', '))}`:''}</div>`
+      : pgMemberNote(j);
+    const scopeKey=pgScopeIdentity(r);
+    const kelJs=String(r.kelompok_nama||'').replace(/'/g,"\\'");
+    const unitJs=String(r.unit_nama||'').replace(/'/g,"\\'");
+    html+=`<tr class="${r.aktif===false?'peng-nonaktif ':''}${draggable?'pg-draggable':''}" ${draggable?`draggable="true" data-pg-id="${r.id}" data-pg-scope="${escH(scopeKey)}" ondragstart="pgDragStart(event,${r.id},'${r.level}','${kelJs}','${unitJs}')" ondragover="pgDragOver(event)" ondrop="pgDrop(event)" ondragend="pgDragEnd(event)"`:''}><td>${dapukanCell}</td><td><div class="peng-name-main">${escH(nm)}</div>${namaNote}</td><td style="text-align:center;">${status}</td><td style="text-align:center;white-space:nowrap;">${actions}</td></tr>`;
+  });
+  if(bottomAdd)html+=`<tr class="peng-add-bottom"><td colspan="4">${bottomAdd}</td></tr>`;
+  html+=`</tbody></table></div></div>`; return html;
+}
+function pgRenderGroupedTables(rows){
+  const scope=CU.kelompok_scope; let html='';
+  const desa=pgSortRows(rows.filter(r=>r.level==='desa'));
+  html+=pgRenderRowsTable('🏛️ Pengurus Desa',desa,'desa',null,null);
+  if(scope){
+    const own=pgSortRows(rows.filter(r=>r.level==='kelompok'&&r.kelompok_nama===scope));
+    const k=KELOMPOK_LIST.find(x=>x.singkat===scope);
+    html+=pgRenderRowsTable(`👥 Pengurus Kelompok ${scope}${k?' · '+k.lengkap:''}`,own,'kelompok',scope,null);
+  }else{
+    KELOMPOK_LIST.forEach(k=>html+=pgRenderRowsTable(`👥 Pengurus Kelompok ${k.singkat} · ${k.lengkap}`,pgSortRows(rows.filter(r=>r.level==='kelompok'&&r.kelompok_nama===k.singkat)),'kelompok',k.singkat,null));
+  }
+  let units=pgKnownUnits();
+  if(scope)units=units.filter(u=>rows.some(r=>r.level==='khusus'&&pgUnitKey(r.unit_nama)===u));
+  units.forEach(u=>html+=pgRenderRowsTable(`🧩 Unit Khusus · ${u}`,pgSortRows(rows.filter(r=>r.level==='khusus'&&pgUnitKey(r.unit_nama)===u)),'khusus',null,u));
+  if(!scope&&canManageKhusus()){
+    const gender=_pengurusGenderTab==='perempuan'?'P':'L';
+    html+=`<div style="margin:10px 0 14px;text-align:center;"><button class="peng-add" onclick="bukaModalPengurus('khusus',null,null,'${gender}',null)">＋ Buat / Tambah Unit Khusus</button></div>`;
+  }
+  return html;
+}
+function pgDragStart(ev,id,level,kelompokNama,unitNama){
+  const tr=ev.currentTarget;if(!tr||!tr.classList.contains('pg-draggable'))return;
+  const fake={level,kelompok_nama:kelompokNama||null,unit_nama:unitNama||null};
+  _pgDrag={id:Number(id),level,kelompok_nama:kelompokNama||null,unit_nama:unitNama||null,scopeKey:pgScopeIdentity(fake),row:tr};
+  if(ev.dataTransfer){ev.dataTransfer.effectAllowed='move';try{ev.dataTransfer.setData('text/plain',String(id));}catch(_e){}}
+  requestAnimationFrame(()=>tr.classList.add('pg-dragging'));
+}
+async function pgDrop(ev){
+  if(!_pgDrag)return;ev.preventDefault();const drag={..._pgDrag};const tbody=drag.row?.parentNode;drag.row?.classList.remove('pg-dragging');_pgDrag=null;if(!tbody)return;
+  const ids=[...tbody.querySelectorAll('tr.pg-draggable[data-pg-id]')].map(tr=>Number(tr.dataset.pgId)).filter(Number.isFinite);if(!ids.length)return;
+  try{
+    const {data,error}=await sb.rpc('dashboard_pengurus_reorder',{p_editor_did:CU.did,p_level:drag.level,p_kelompok_nama:drag.kelompok_nama,p_unit_nama:drag.unit_nama,p_order_ids:ids});
+    if(error)throw error;if(data&&data.ok===false)throw new Error(data.error||'Gagal menyimpan urutan');
+    ids.forEach((id,idx)=>{const p=aPengurus.find(x=>Number(x.id)===id);if(p)p.urutan=idx+1;});toast('✅ Urutan pengurus disimpan');renderPengurus();
+  }catch(e){toast('Gagal menyimpan urutan: '+(e.message||e),true);await reloadPengurus();}
+}
+function renderPengurus(){
+  const wrap=document.getElementById('pengurus-wrap');if(!wrap)return;
+  const appointed=pgSortRows(pgBuildAppointedRows());
+  const maleRows=appointed.filter(r=>pgNormGender(r.jamaah?.jenis_kelamin)==='L');
+  const women=pgBuildWomenRows();
+  const femaleDirectCount=appointed.filter(r=>pgNormGender(r.jamaah?.jenis_kelamin)==='P').length;
+  const spouseCount=women.rows.filter(r=>r.source==='spouse').length;
+  let html=`<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:10px;"><button class="peng-add" onclick="bukaModalExportPengurus()" style="background:#0f766e;">⬇️ Export Pengurus</button></div><div class="subtab-bar peng-inner-tabs"><button class="subtab ${_pengurusGenderTab==='utama'?'active':''}" onclick="showPengurusGenderTab('utama')">👨 Pengurus Utama <span style="opacity:.8;">(${maleRows.length})</span></button><button class="subtab ${_pengurusGenderTab==='perempuan'?'active':''}" onclick="showPengurusGenderTab('perempuan')">👩 Ibu2 / Perempuan <span style="opacity:.8;">(${women.rows.length})</span></button></div>`;
+  if(_pengurusGenderTab==='perempuan'){
+    html+=`<div class="scope-notice" style="background:#fdf2f8;border-left-color:#ec4899;color:#831843;">👩 Menampilkan <b>${femaleDirectCount} dapukan pengurus perempuan</b> dan <b>${spouseCount} istri/pendamping pengurus laki-laki</b>. Deduplikasi dilakukan per Desa, Kelompok, atau Unit Khusus.</div>`;
+    if(women.ambiguousCount>0)html+=`<div class="scope-notice" style="background:#fff7ed;border-left-color:#f59e0b;color:#92400e;">⚠️ ${women.ambiguousCount} pengurus memiliki pasangan/pendamping yang belum bisa dipastikan otomatis.</div>`;
+    html+=pgRenderGroupedTables(women.rows);
+  }else html+=pgRenderGroupedTables(maleRows);
+  wrap.innerHTML=html;
+}
+
+function pgExportRegionLabel(code){
+  if(code==='desa')return 'Pengurus Desa';
+  if(String(code||'').startsWith('unit:'))return 'Unit Khusus - '+String(code).slice(5);
+  const k=KELOMPOK_LIST.find(x=>x.singkat===code);return k?`Pengurus Kelompok ${k.singkat} - ${k.lengkap}`:code;
+}
+function pgExportAccessibleRegions(){
+  const scope=CU.kelompok_scope;
+  const base=scope?['desa',scope]:['desa',...KELOMPOK_LIST.map(k=>k.singkat)];
+  const units=[...new Set(pgBuildAppointedRows().filter(r=>r.level==='khusus'&&pgUnitKey(r.unit_nama)).map(r=>'unit:'+pgUnitKey(r.unit_nama)))].sort((a,b)=>a.localeCompare(b,'id'));
+  return [...base,...units];
+}
+function pgExportRowRegion(r){return r.level==='desa'?'desa':(r.level==='kelompok'?r.kelompok_nama:'unit:'+pgUnitKey(r.unit_nama));}
+function pgExportGroupRows(rows){const order=pgExportAccessibleRegions();return order.map(region=>({region,rows:rows.filter(r=>pgExportRowRegion(r)===region)})).filter(g=>g.rows.length);}
+
+async function loadPengurusLoginList(){
+  const {data,error}=await sb.from('ubnb_pengurus').select('id,did,dapukan,level,kelompok_nama,unit_nama,akses_level,akses_kelompok_nama,urutan,aktif,jamaah_desa!ubnb_pengurus_did_fkey(nama,nama_kk,kelompok_nama)').eq('aktif',true).order('level').order('kelompok_nama').order('unit_nama').order('urutan');
+  if(error){setLE('Gagal memuat daftar pengurus: '+(error.message||'Unknown error'));return false;}
+  const map=new Map();
+  (data||[]).forEach(r=>{
+    const did=String(r.did||'').trim(),j=r.jamaah_desa||{},nama=String(j.nama||'').trim();if(!did||!nama)return;
+    let x=map.get(did);if(!x){x={did,nama,pw:j.kelompok_nama||'',scope:null,roles:[]};map.set(did,x);}
+    x.roles.push({id:r.id,level:r.level,kelompok_nama:r.kelompok_nama||null,unit_nama:r.unit_nama||null,dapukan:r.dapukan||'',akses_level:r.akses_level||null,akses_kelompok_nama:r.akses_kelompok_nama||null});
+    if(r.level==='desa'||(r.level==='khusus'&&r.akses_level==='desa'))x.scope='Desa';
+    else if(x.scope!=='Desa'){
+      if(r.level==='kelompok'&&r.kelompok_nama)x.scope=x.scope||r.kelompok_nama;
+      else if(r.level==='khusus'&&r.akses_level==='kelompok'&&r.akses_kelompok_nama)x.scope=x.scope||r.akses_kelompok_nama;
+    }
+  });
+  loginPengurusList=[...map.values()].filter(x=>!!x.scope).sort((a,b)=>a.nama.localeCompare(b.nama,'id'));return true;
+}
+function _pengurusRoleText(x){
+  if(!x)return '';
+  const labels=[];(x.roles||[]).forEach(r=>{
+    let s=r.level==='desa'?'Desa':(r.level==='kelompok'?(r.kelompok_nama||'Kelompok'):`Unit ${r.unit_nama||'-'}`);
+    s+=' · '+(r.dapukan||'Pengurus');if(!labels.includes(s))labels.push(s);
+  });
+  const scope=x.scope==='Desa'?'Akses Desa':('Akses '+(x.scope||'-'));return scope+(labels.length?' · '+labels.join(', '):'');
+}
+
+function getMasterDapukanKhusus(unitNama){
+  const unit=pgUnitKey(unitNama);return [...new Set((aPengurus||[]).filter(p=>p.level==='khusus'&&(!unit||pgUnitKey(p.unit_nama)===unit)&&String(p.dapukan||'').trim()).map(p=>String(p.dapukan).trim()))].sort((a,b)=>a.localeCompare(b,'id'));
+}
+function getPgDapukanValue(){
+  const level=document.getElementById('pg-level')?.value;
+  if(level==='kelompok'){
+    const sel=document.getElementById('pg-dapukan-select');if(sel?.value==='__new__')return(document.getElementById('pg-dapukan-baru')?.value||'').trim();return(sel?.value||'').trim();
+  }
+  if(level==='khusus')return(document.getElementById('pg-dapukan-khusus')?.value||'').trim();
+  return(document.getElementById('pg-dapukan')?.value||'').trim();
+}
+function pgNextUrutan(level,kelompokNama,unitNama=null){
+  const vals=(aPengurus||[]).filter(p=>p.level===level&&(level==='desa'||(level==='kelompok'&&p.kelompok_nama===kelompokNama)||(level==='khusus'&&pgUnitKey(p.unit_nama)===pgUnitKey(unitNama)))).map(p=>Number(p.urutan)||0);return(vals.length?Math.max(...vals):0)+1;
+}
+function pgPendampingSource(){return(aJamaahDesa||aJamaah||[]).filter(j=>j.status_sambung==='Tetap'&&pgNormGender(j.jenis_kelamin)==='P');}
+function renderPgPendampingResults(){
+  const box=document.getElementById('pg-pendamping-results'),inp=document.getElementById('pg-pendamping-search');if(!box||!inp)return;
+  const q=(inp.value||'').trim().toLowerCase();if(!q){box.style.display='none';box.innerHTML='';return;}
+  const rows=pgPendampingSource().filter(j=>(j.nama||'').toLowerCase().includes(q)||(j.nama_kk||'').toLowerCase().includes(q)).slice(0,15);_pgPendampingResults=rows;
+  box.innerHTML=rows.length?rows.map((j,i)=>`<div class="ac-item" onclick="pilihPgPendamping(${i})"><div class="ac-nm">${escH(j.nama)}</div><div class="ac-sub">${escH(j.kelompok_nama||'-')}${j.nama_kk?' · KK: '+escH(j.nama_kk):''}</div></div>`).join(''):'<div class="ac-item" style="color:var(--text-muted);cursor:default;">Tidak ditemukan</div>';box.style.display='';
+}
+function pilihPgPendamping(i){const j=_pgPendampingResults[i];if(!j)return;_pgPendampingChosen={did:j.did,nama:j.nama};const inp=document.getElementById('pg-pendamping-search');if(inp)inp.value=j.nama;const box=document.getElementById('pg-pendamping-results');if(box)box.style.display='none';}
+function clearPgPendamping(){_pgPendampingChosen=null;const inp=document.getElementById('pg-pendamping-search');if(inp)inp.value='';}
+function updatePgPendampingVisibility(){
+  const row=document.getElementById('pg-pendamping-row');if(!row)return;
+  const lvl=document.getElementById('pg-level')?.value;const j=_pgChosen?pgJamaahRow(_pgChosen.did):null;
+  row.style.display=(lvl==='khusus'&&pgNormGender(j?.jenis_kelamin)==='L')?'':'none';
+  if(row.style.display==='none')clearPgPendamping();
+}
+function onPgAccessChange(){const v=document.getElementById('pg-akses-level')?.value||'';const row=document.getElementById('pg-akses-kelompok-row');if(row)row.style.display=v==='kelompok'?'':'none';}
+function bukaModalPengurus(level,editId,fixedKelompok=null,fixedGender=null,fixedUnit=null){
+  if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
+  _pgEditId=editId||null;_pgChosen=null;_pgNameResults=[];_pgPendampingChosen=null;_pgPendampingResults=[];
+  const editing=!!editId;let row=null;if(editing){row=aPengurus.find(x=>x.id===editId);if(!row){toast('Data tidak ditemukan',true);return;}level=row.level;}
+  _pgFixedLevel=editing?null:(level||null);_pgFixedKelompok=editing?null:(fixedKelompok||null);_pgFixedGender=editing?null:(fixedGender||null);_pgFixedUnit=editing?null:(fixedUnit||null);
+  const scope=CU.kelompok_scope;const effLevel=editing?row.level:(scope?'kelompok':(_pgFixedLevel||level||'desa'));
+  if(effLevel==='desa'&&!canManageDesa()){toast('Hanya pengurus desa yang bisa kelola pengurus desa',true);return;}
+  if(effLevel==='khusus'&&!canManageKhusus()){toast('Unit Khusus hanya dapat dikelola dari akses Desa',true);return;}
+  const lockLevel=!!scope||(!editing&&!!_pgFixedLevel);
+  const targetKel=editing?row.kelompok_nama:(_pgFixedKelompok||scope||null);const targetUnit=editing?row.unit_nama:(_pgFixedUnit||null);
+  document.getElementById('modal-pengurus-title').textContent=editing?'✏️ Edit Pengurus / Dapukan':'＋ Tambah Pengurus';
+  const kelOptions=KELOMPOK_LIST.map(k=>`<option value="${k.singkat}" ${targetKel===k.singkat?'selected':''}>${k.singkat} - ${k.lengkap}</option>`).join('');
+  if(editing){const nm=(row.jamaah_desa&&row.jamaah_desa.nama)||pgJamaahNama(row.did);_pgChosen={did:row.did,nama:nm,kelompok_nama:(row.jamaah_desa&&row.jamaah_desa.kelompok_nama)||row.kelompok_nama};if(row.pendamping_did){const pj=pgJamaahRow(row.pendamping_did)||(aJamaahDesa||[]).find(x=>String(x.did)===String(row.pendamping_did));if(pj)_pgPendampingChosen={did:pj.did,nama:pj.nama};}}
+  const masterDapukan=getMasterDapukanKelompok(),currentDapukan=editing?(row.dapukan||''):'',currentInMaster=masterDapukan.includes(currentDapukan);
+  const dapukanOptions=masterDapukan.map(d=>`<option value="${escH(d)}" ${currentInMaster&&currentDapukan===d?'selected':''}>${escH(d)}</option>`).join('');
+  const units=pgKnownUnits();const unitList=units.map(u=>`<option value="${escH(u)}"></option>`).join('');
+  const specialDap=getMasterDapukanKhusus(targetUnit);const specialDapList=specialDap.map(d=>`<option value="${escH(d)}"></option>`).join('');
+  const accessLevel=editing?(row.akses_level||''):'';const accessKel=editing?(row.akses_kelompok_nama||''):(targetKel||'PW1');
+  document.getElementById('modal-pengurus-body').innerHTML=`
+    <div class="modal-row"><label>Level</label><select id="pg-level" ${lockLevel?'disabled':''} onchange="onPgLevelChange()"><option value="desa" ${effLevel==='desa'?'selected':''}>🏛️ Pengurus Desa</option><option value="kelompok" ${effLevel==='kelompok'?'selected':''}>👥 Pengurus Kelompok</option>${!scope?`<option value="khusus" ${effLevel==='khusus'?'selected':''}>🧩 Unit Khusus</option>`:''}</select></div>
+    <div class="modal-row" id="pg-kelompok-row" style="${effLevel==='kelompok'?'':'display:none;'}"><label>Kelompok</label><select id="pg-kelompok" ${(scope||(!editing&&_pgFixedKelompok))?'disabled':''} onchange="renderPgNameResults()">${kelOptions}</select></div>
+    <div class="modal-row" id="pg-unit-row" style="${effLevel==='khusus'?'':'display:none;'}"><label>Unit Khusus</label><div style="flex:1;"><input list="pg-unit-list" type="text" id="pg-unit" placeholder="Contoh: UB, PPG, Tim Haji..." value="${escH(targetUnit||'')}" ${(!editing&&_pgFixedUnit)?'readonly':''} style="width:100%;"><datalist id="pg-unit-list">${unitList}</datalist><div style="font-size:9.5px;color:var(--text-muted);margin-top:3px;">Pilih unit yang pernah ada atau ketik nama unit baru.</div></div></div>
+    <div class="modal-row" id="pg-dapukan-desa-row" style="${effLevel==='desa'?'':'display:none;'}"><label>Dapukan</label><input type="text" id="pg-dapukan" placeholder="Nama dapukan desa" value="${editing&&effLevel==='desa'?escH(row.dapukan):''}"></div>
+    <div id="pg-dapukan-kelompok-row" style="${effLevel==='kelompok'?'':'display:none;'}"><div class="modal-row"><label>Dapukan</label><select id="pg-dapukan-select" onchange="onPgDapukanChange()">${dapukanOptions}<option value="__new__" ${editing&&effLevel==='kelompok'&&!currentInMaster?'selected':''}>＋ Tambah dapukan baru</option></select></div><div class="modal-row" id="pg-dapukan-baru-row" style="${editing&&effLevel==='kelompok'&&!currentInMaster?'':'display:none;'}"><label>Dapukan Baru</label><input type="text" id="pg-dapukan-baru" placeholder="Ketik nama dapukan baru" value="${editing&&effLevel==='kelompok'&&!currentInMaster?escH(currentDapukan):''}"></div></div>
+    <div class="modal-row" id="pg-dapukan-khusus-row" style="${effLevel==='khusus'?'':'display:none;'}"><label>Dapukan</label><div style="flex:1;"><input list="pg-dapukan-khusus-list" type="text" id="pg-dapukan-khusus" placeholder="Nama dapukan pada unit" value="${editing&&effLevel==='khusus'?escH(row.dapukan):''}" style="width:100%;"><datalist id="pg-dapukan-khusus-list">${specialDapList}</datalist></div></div>
+    <div class="modal-row" style="align-items:flex-start;"><label>Nama Jamaah</label><div class="ac-wrap"><input type="text" id="pg-nama-search" placeholder="Ketik nama jamaah..." autocomplete="off" oninput="renderPgNameResults()" onfocus="renderPgNameResults()" value="${editing&&_pgChosen?escH(_pgChosen.nama):''}"><div id="pg-nama-results" class="ac-results" style="display:none;"></div></div></div>
+    <div class="modal-row" id="pg-pendamping-row" style="display:none;align-items:flex-start;"><label>Istri / Pendamping</label><div class="ac-wrap"><input type="text" id="pg-pendamping-search" placeholder="Opsional — ketik nama perempuan..." autocomplete="off" oninput="_pgPendampingChosen=null;renderPgPendampingResults()" onfocus="renderPgPendampingResults()" value="${_pgPendampingChosen?escH(_pgPendampingChosen.nama):''}"><div id="pg-pendamping-results" class="ac-results" style="display:none;"></div><div style="font-size:9.5px;color:var(--text-muted);margin-top:3px;">Kosongkan untuk memakai istri yang teridentifikasi otomatis dari data keluarga.</div></div></div>
+    <div id="pg-access-wrap" style="${effLevel==='khusus'?'':'display:none;'}"><div class="modal-row"><label>Hak Akses Dashboard</label><select id="pg-akses-level" onchange="onPgAccessChange()"><option value="" ${!accessLevel?'selected':''}>Tidak diberi akses login</option><option value="desa" ${accessLevel==='desa'?'selected':''}>Akses Desa</option><option value="kelompok" ${accessLevel==='kelompok'?'selected':''}>Akses Kelompok</option></select></div><div class="modal-row" id="pg-akses-kelompok-row" style="${accessLevel==='kelompok'?'':'display:none;'}"><label>Akses Kelompok</label><select id="pg-akses-kelompok">${KELOMPOK_LIST.map(k=>`<option value="${k.singkat}" ${accessKel===k.singkat?'selected':''}>${k.singkat} - ${k.lengkap}</option>`).join('')}</select></div><div style="padding:0 16px 8px;font-size:10px;color:var(--text-muted);">Posisi di Unit Khusus tidak otomatis memberi hak akses Dashboard. Akses bisa kosong, Desa, atau satu kelompok.</div></div>
+    <input type="hidden" id="pg-urutan" value="${editing?(row.urutan||0):pgNextUrutan(effLevel,targetKel,targetUnit)}">
+    <div style="padding:0 16px 8px;font-size:10px;color:var(--text-muted);">Urutan pengurus diatur langsung dengan drag naik/turun pada tabel.</div>
+    <div class="modal-row"><label>Status</label><select id="pg-aktif"><option value="true" ${(!editing||row.aktif!==false)?'selected':''}>✓ Aktif</option><option value="false" ${(editing&&row.aktif===false)?'selected':''}>✗ Nonaktif</option></select></div>`;
+  openMod('modal-pengurus');updatePgPendampingVisibility();
+}
+function onPgLevelChange(){
+  const lvl=document.getElementById('pg-level')?.value||'desa';
+  [['pg-kelompok-row',lvl==='kelompok'],['pg-unit-row',lvl==='khusus'],['pg-dapukan-desa-row',lvl==='desa'],['pg-dapukan-kelompok-row',lvl==='kelompok'],['pg-dapukan-khusus-row',lvl==='khusus'],['pg-access-wrap',lvl==='khusus']].forEach(([id,show])=>{const e=document.getElementById(id);if(e)e.style.display=show?'':'none';});
+  _pgChosen=null;_pgPendampingChosen=null;const inp=document.getElementById('pg-nama-search');if(inp)inp.value='';const pi=document.getElementById('pg-pendamping-search');if(pi)pi.value='';renderPgNameResults();updatePgPendampingVisibility();
+}
+function pgNameSource(){
+  let src=aJamaah.slice();const lvl=document.getElementById('pg-level')?.value||'desa';
+  if(lvl==='kelompok'){const kel=_pgFixedKelompok||CU.kelompok_scope||document.getElementById('pg-kelompok')?.value||'';if(kel)src=src.filter(x=>x.kelompok_nama===kel);}
+  if(_pgFixedGender)src=src.filter(x=>pgNormGender(x.jenis_kelamin)===_pgFixedGender);return src;
+}
+function pilihPgNama(i){const j=_pgNameResults[i];if(!j)return;_pgChosen={did:j.did,nama:j.nama,kelompok_nama:j.kelompok_nama};document.getElementById('pg-nama-search').value=j.nama;document.getElementById('pg-nama-results').style.display='none';updatePgPendampingVisibility();}
+async function simpanPengurus(){
+  if(!canEdit()){toast('Akses ditolak',true);return;}
+  const level=document.getElementById('pg-level').value,dapukan=getPgDapukanValue(),urutan=parseInt(document.getElementById('pg-urutan').value,10)||0,aktif=document.getElementById('pg-aktif').value==='true';
+  let kelompok_nama=null,unit_nama=null,akses_level=null,akses_kelompok_nama=null,pendamping_did=null;
+  if(level==='kelompok'){kelompok_nama=_pgFixedKelompok||CU.kelompok_scope||document.getElementById('pg-kelompok')?.value||null;if(!kelompok_nama){toast('Pilih kelompok',true);return;}}
+  if(level==='khusus'){
+    unit_nama=(_pgFixedUnit||document.getElementById('pg-unit')?.value||'').trim();if(!unit_nama){toast('Nama Unit Khusus wajib diisi',true);return;}
+    akses_level=document.getElementById('pg-akses-level')?.value||null;if(akses_level==='kelompok')akses_kelompok_nama=document.getElementById('pg-akses-kelompok')?.value||null;
+    const j=_pgChosen?pgJamaahRow(_pgChosen.did):null;if(pgNormGender(j?.jenis_kelamin)==='L'&&_pgPendampingChosen)pendamping_did=_pgPendampingChosen.did;
+  }
+  if(!dapukan){toast('Dapukan wajib diisi',true);return;}if(!_pgChosen||!_pgChosen.did){toast('Pilih nama jamaah dari daftar',true);return;}
+  if(level==='desa'&&!canManageDesa()){toast('Tidak boleh kelola pengurus desa',true);return;}if(level==='kelompok'&&!canManageKelompok(kelompok_nama)){toast('Tidak boleh kelola pengurus kelompok lain',true);return;}if(level==='khusus'&&!canManageKhusus()){toast('Tidak boleh kelola Unit Khusus',true);return;}
+  const payload={did:_pgChosen.did,dapukan,level,kelompok_nama,unit_nama,akses_level,akses_kelompok_nama,pendamping_did,urutan,aktif};
+  let res=_pgEditId?await sb.from('ubnb_pengurus').update(payload).eq('id',_pgEditId):await sb.from('ubnb_pengurus').insert([payload]);if(res.error){toast('Gagal simpan: '+res.error.message,true);return;}
+  toast('✅ Dapukan tersimpan');closeMod('modal-pengurus');await reloadPengurus();await loadPengurusLoginList();
+}
+async function hapusPengurus(id){
+  const p=aPengurus.find(x=>x.id===id);if(!p)return;
+  if(p.level==='desa'&&!canManageDesa()){toast('Tidak boleh hapus pengurus desa',true);return;}if(p.level==='kelompok'&&!canManageKelompok(p.kelompok_nama)){toast('Tidak boleh hapus pengurus kelompok lain',true);return;}if(p.level==='khusus'&&!canManageKhusus()){toast('Tidak boleh hapus Unit Khusus',true);return;}
+  const nm=(p.jamaah_desa&&p.jamaah_desa.nama)||pgJamaahNama(p.did);if(!confirm(`Hapus dapukan "${p.dapukan}" — ${nm}?`))return;const res=await sb.from('ubnb_pengurus').delete().eq('id',id);if(res.error){toast('Gagal hapus: '+res.error.message,true);return;}toast('🗑️ Dapukan dihapus');await reloadPengurus();await loadPengurusLoginList();
+}
+
+function templatePengurusNote(j){
+  if(!j)return '';const roles=templatePengurusRoles(j.did);if(!roles.length)return '';const labels=[];
+  roles.forEach(p=>{const label=(p.level==='desa'?'Desa':(p.level==='kelompok'?(p.kelompok_nama||'Kelompok'):`Unit ${p.unit_nama||'-'}`))+' · '+(p.dapukan||'Pengurus');if(!labels.includes(label))labels.push(label);});return labels.join(' | ');
+}
+function buildTemplateFilterOptions(t){
+  const kel=document.getElementById('tp-filter-kelompok');if(kel){const vals=t?.kelompok?[t.kelompok]:['PW1','PW2','PW3','PW4'];kel.innerHTML=`<option value="">${t?.kelompok?'Semua di '+escH(t.kelompok):'Semua Kelompok'}</option>`+vals.map(k=>`<option value="${escH(k)}">${escH(k)}</option>`).join('');kel.value='';}
+  const allowed=new Set(templateEligibleJamaah(t).map(j=>String(j.did)));
+  const unit=document.getElementById('tp-filter-unit');if(unit){const vals=[...new Set((aPengurus||[]).filter(p=>p.aktif!==false&&p.level==='khusus'&&allowed.has(String(p.did))&&pgUnitKey(p.unit_nama)).map(p=>pgUnitKey(p.unit_nama)))].sort((a,b)=>a.localeCompare(b,'id'));unit.innerHTML='<option value="">Semua Unit Khusus</option>'+vals.map(x=>`<option value="${escH(x)}">${escH(x)}</option>`).join('');unit.value='';}
+  const dap=document.getElementById('tp-filter-dapukan');if(dap){const vals=[...new Set((aPengurus||[]).filter(p=>p.aktif!==false&&allowed.has(String(p.did))&&p.dapukan).map(p=>String(p.dapukan).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));dap.innerHTML='<option value="">Semua Dapukan</option>'+vals.map(x=>`<option value="${escH(x)}">${escH(x)}</option>`).join('');dap.value='';}
+}
+function templateFilteredCandidates(){
+  const t=aAcaraMaster.find(a=>Number(a.id)===Number(_templateEditId));if(!t)return[];
+  const kel=document.getElementById('tp-filter-kelompok')?.value||'',gender=document.getElementById('tp-filter-gender')?.value||'',nikah=document.getElementById('tp-filter-nikah')?.value||'',kelas=document.getElementById('tp-filter-kelas')?.value||'',pengurus=document.getElementById('tp-filter-pengurus')?.value||'',unit=document.getElementById('tp-filter-unit')?.value||'',dapukan=document.getElementById('tp-filter-dapukan')?.value||'',text=(document.getElementById('tp-filter-text')?.value||'').trim().toLowerCase();
+  let rows=templateEligibleJamaah(t).filter(j=>!_templateSelectedDids.has(String(j.did)));if(kel)rows=rows.filter(j=>j.kelompok_nama===kel);if(gender)rows=rows.filter(j=>pgNormGender(j.jenis_kelamin)===gender);if(nikah)rows=rows.filter(j=>j.status_nikah===nikah);if(kelas)rows=rows.filter(j=>kelasKbmAktual(j)===kelas);
+  if(pengurus)rows=rows.filter(j=>{const roles=templatePengurusRoles(j.did);if(pengurus==='pengurus')return roles.length>0;if(pengurus==='desa')return roles.some(p=>p.level==='desa');if(pengurus==='kelompok')return roles.some(p=>p.level==='kelompok');if(pengurus==='khusus')return roles.some(p=>p.level==='khusus');if(pengurus==='non')return roles.length===0;return true;});
+  if(unit)rows=rows.filter(j=>templatePengurusRoles(j.did).some(p=>p.level==='khusus'&&pgUnitKey(p.unit_nama)===unit));if(dapukan)rows=rows.filter(j=>templatePengurusRoles(j.did).some(p=>p.dapukan===dapukan));if(text)rows=rows.filter(j=>[j.nama,j.nama_kk,j.kelompok_nama,j.status_nikah,kelasKbmAktual(j),templatePengurusNote(j)].some(v=>String(v||'').toLowerCase().includes(text)));return rows;
+}
+function templateResetFilters(){['tp-filter-kelompok','tp-filter-gender','tp-filter-nikah','tp-filter-kelas','tp-filter-pengurus','tp-filter-unit','tp-filter-dapukan'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});const q=document.getElementById('tp-filter-text');if(q)q.value='';_templateCandidateDids.clear();renderTemplateCandidateList();}
+
+function rebuildUnitKhususKegiatan(){
+  const sel=document.getElementById('kg-unit-khusus');if(!sel)return;const prev=sel.value;const vals=pgKnownUnits();sel.innerHTML='<option value="">— Semua Unit Khusus —</option>'+vals.map(u=>`<option value="${escH(u)}">${escH(u)}</option>`).join('');if(vals.includes(prev))sel.value=prev;
+}
+function toggleCakupanRow(){
+  const row=document.getElementById('kg-cakupan-row');if(!row)return;const groupScoped=!!currentKegKelScope();row.style.display=groupScoped?'none':'';
+  const ur=document.getElementById('kg-unit-khusus-row'),cak=document.getElementById('kg-pengurus-cakupan')?.value||'desa';if(ur)ur.style.display=(!groupScoped&&(cak==='khusus'||cak==='semua'))?'':'none';rebuildUnitKhususKegiatan();
+}
+function pengurusPoolForKegiatan(){
+  let pool=(aPengurus||[]).filter(p=>p.aktif!==false);const kelScope=currentKegKelScope();if(kelScope)return pool.filter(p=>p.level==='kelompok'&&p.kelompok_nama===kelScope);
+  const cak=document.getElementById('kg-pengurus-cakupan')?.value||'desa';
+  if(cak==='desa_kelompok')return pool.filter(p=>p.level==='desa'||p.level==='kelompok');
+  if(cak==='khusus'||cak==='semua'){
+    let r=cak==='khusus'?pool.filter(p=>p.level==='khusus'):pool;
+    const unit=document.getElementById('kg-unit-khusus')?.value||'';if(unit)r=r.filter(p=>p.level!=='khusus'||pgUnitKey(p.unit_nama)===unit);return r;
+  }
+  return pool.filter(p=>p.level==='desa');
+}
+
+// Close the Unit Khusus companion autocomplete when clicking elsewhere.
+document.addEventListener('click',e=>{const box=document.getElementById('pg-pendamping-results');if(box&&!e.target.closest('#pg-pendamping-row'))box.style.display='none';});
+
+
+/* ===== EXPORT PENGURUS v2: group + gender, portrait, Nama KK -> Keterangan ===== */
+function pgExportGenderLabel(gender){
+  return gender==='L'?'Laki-laki':(gender==='P'?'Perempuan':'');
+}
+function pgExportGroupRows(rows){
+  const order=pgExportAccessibleRegions();
+  const genderFilter=document.getElementById('pg-export-gender')?.value||'all';
+  const genders=genderFilter==='all'?['L','P']:[genderFilter];
+  const groups=[];
+  order.forEach(region=>{
+    genders.forEach(gender=>{
+      const gr=rows.filter(r=>{
+        if(pgExportRowRegion(r)!==region)return false;
+        const j=r.jamaah||pgJamaahRow(r.did)||{};
+        return pgNormGender(j.jenis_kelamin)===gender;
+      });
+      if(gr.length)groups.push({region,gender,rows:pgSortRows(gr)});
+    });
+  });
+  return groups;
+}
+function pgExportKeterangan(r,j){
+  const parts=[];
+  if(r.source==='spouse'){
+    const rel=r.level==='khusus'&&r.pendamping_explicit?'Pengurus':'Suami';
+    const nm=r.husband?.nama||'';
+    const dp=r.husband_dapukan?.length?r.husband_dapukan.join(', '):'';
+    if(nm)parts.push(`${rel}: ${nm}${dp?' · '+dp:''}`);
+  }
+  if(j?.nama_kk && !pgIsKK(j)) parts.push(`KK: ${j.nama_kk}`);
+  return parts.join(' · ');
+}
+function pgExportAoAForGroup(group){
+  const rows=pgSortRows(group.rows);
+  const title='DAFTAR PENGURUS DESA PERWIRA';
+  const sub=pgExportRegionLabel(group.region);
+  const gender=pgExportGenderLabel(group.gender);
+  const filter=pgExportFilterDescription();
+  const aoa=[
+    [title],
+    [sub],
+    [`${gender}`],
+    [`Filter: ${filter}`],
+    [],
+    ['No','Dapukan','Nama','Klp','Keterangan','Status']
+  ];
+  rows.forEach((r,i)=>{
+    const j=r.jamaah||pgJamaahRow(r.did)||{};
+    aoa.push([
+      i+1,
+      r.source==='spouse'?(r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus'):(r.dapukan||''),
+      j.nama||pgJamaahNama(r.did)||'',
+      j.kelompok_nama||'',
+      pgExportKeterangan(r,j),
+      r.source==='spouse'?(r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis'):(r.aktif===false?'Nonaktif':'Aktif')
+    ]);
+  });
+  return aoa;
+}
+function pgExportSheetName(group){
+  let base=group.region==='desa'?'Desa':(String(group.region).startsWith('unit:')?String(group.region).slice(5):group.region);
+  const sex=group.gender==='L'?'Laki':'Perempuan';
+  return pgSafeSheetName(`${base} - ${sex}`);
+}
+function exportPengurusExcel(){
+  if(typeof XLSX==='undefined'){toast('Library XLSX belum siap, refresh halaman',true);return;}
+  const rows=pgExportFilteredRows();
+  if(!rows.length){toast('Tidak ada data sesuai filter',true);return;}
+  const groups=pgExportGroupRows(rows);
+  const wb=XLSX.utils.book_new();
+  groups.forEach(g=>{
+    const aoa=pgExportAoAForGroup(g);
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges']=[
+      {s:{r:0,c:0},e:{r:0,c:5}},
+      {s:{r:1,c:0},e:{r:1,c:5}},
+      {s:{r:2,c:0},e:{r:2,c:5}},
+      {s:{r:3,c:0},e:{r:3,c:5}}
+    ];
+    ws['!cols']=[{wch:5},{wch:40},{wch:44},{wch:8},{wch:36},{wch:16}];
+    ws['!pageSetup']={orientation:'portrait',fitToWidth:1,fitToHeight:0};
+    ws['!margins']={left:0.35,right:0.35,top:0.5,bottom:0.5,header:0.2,footer:0.2};
+    XLSX.utils.book_append_sheet(wb,ws,pgExportSheetName(g));
+  });
+  const ts=new Date().toISOString().slice(0,10);
+  const scope=CU.kelompok_scope||'Desa';
+  XLSX.writeFile(wb,`Pengurus_Desa_Perwira_${scope}_${ts}.xlsx`);
+  closeMod('modal-export-pengurus');
+  toast(`✅ Excel Pengurus diunduh (${groups.length} sheet · ${rows.length} baris)`);
+}
+function pgExportPdfTable(group){
+  const rows=pgSortRows(group.rows);
+  return `<section class="report-section">
+    <h2>${escH(pgExportRegionLabel(group.region))}</h2>
+    <div class="gender-title">${escH(pgExportGenderLabel(group.gender))}</div>
+    <table><thead><tr><th>No</th><th>Dapukan</th><th>Nama</th><th>Klp</th><th>Keterangan</th><th>Status</th></tr></thead><tbody>
+    ${rows.map((r,i)=>{
+      const j=r.jamaah||pgJamaahRow(r.did)||{};
+      const kelompok=j.kelompok_nama||'';
+      const stat=r.source==='spouse'?(r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis'):(r.aktif===false?'Nonaktif':'Aktif');
+      return `<tr><td class="center">${i+1}</td><td>${escH(r.source==='spouse'?(r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus'):(r.dapukan||''))}</td><td>${escH(j.nama||pgJamaahNama(r.did)||'')}</td><td class="center">${escH(kelompok)}</td><td>${escH(pgExportKeterangan(r,j))}</td><td class="center">${escH(stat)}</td></tr>`;
+    }).join('')}
+    </tbody></table></section>`;
+}
+function exportPengurusPDFFallback(rows,groups){
+  const now=new Date();
+  const dateText=now.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Daftar Pengurus Desa Perwira</title><style>
+    @page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:11px;margin:0}h1{font-size:18px;margin:0;text-align:center}.sub{text-align:center;margin:4px 0 2px;font-size:12px}.meta{text-align:center;color:#555;margin-bottom:10px;font-size:10px}.report-section{margin:0}.report-section+.report-section{page-break-before:always}h2{font-size:14px;margin:0;padding:7px 8px;background:#e8f5ee;border:1px solid #9bb9a8;text-align:center}.gender-title{text-align:center;font-weight:700;font-size:12px;padding:6px;border-left:1px solid #9bb9a8;border-right:1px solid #9bb9a8}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}th,td{border:1px solid #aaa;padding:5px 6px;vertical-align:top;word-wrap:break-word;line-height:1.25}th{background:#176b42;color:white;font-size:10.5px}th:nth-child(1){width:5%}th:nth-child(2){width:25%}th:nth-child(3){width:29%}th:nth-child(4){width:7%}th:nth-child(5){width:21%}th:nth-child(6){width:13%}td.center,th.center{text-align:center}@media print{button{display:none!important}}
+  </style></head><body><h1>DAFTAR PENGURUS DESA PERWIRA</h1><div class="sub">${escH(pgExportFilterDescription())}</div><div class="meta">Dicetak ${escH(dateText)} · ${rows.length} data</div>${groups.map(pgExportPdfTable).join('')}<script>setTimeout(()=>window.print(),350)<\/script></body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Popup diblokir browser. Izinkan popup untuk cetak PDF.',true);return;}
+  w.document.open();w.document.write(html);w.document.close();
+}
+function exportPengurusPDF(){
+  const rows=pgExportFilteredRows();
+  if(!rows.length){toast('Tidak ada data sesuai filter',true);return;}
+  const groups=pgExportGroupRows(rows);
+  const jsPDFCtor=window.jspdf?.jsPDF;
+  if(!jsPDFCtor){exportPengurusPDFFallback(rows,groups);closeMod('modal-export-pengurus');return;}
+  try{
+    const doc=new jsPDFCtor({orientation:'portrait',unit:'mm',format:'a4'});
+    const pageW=doc.internal.pageSize.getWidth();
+    const now=new Date();
+    const dateText=now.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+    groups.forEach((group,gi)=>{
+      if(gi>0)doc.addPage('a4','portrait');
+      doc.setFont('helvetica','bold');doc.setFontSize(16);
+      doc.text('DAFTAR PENGURUS DESA PERWIRA',pageW/2,12,{align:'center'});
+      doc.setFontSize(11);doc.text(pgExportRegionLabel(group.region),pageW/2,18.5,{align:'center'});
+      doc.setFontSize(10);doc.text(pgExportGenderLabel(group.gender),pageW/2,23.5,{align:'center'});
+      doc.setFont('helvetica','normal');doc.setFontSize(8);
+      doc.text(`Filter: ${pgExportFilterDescription()}`,pageW/2,28,{align:'center',maxWidth:188});
+      doc.text(`Tanggal export: ${dateText} · ${group.rows.length} data`,pageW/2,33,{align:'center'});
+      const body=pgSortRows(group.rows).map((r,i)=>{
+        const j=r.jamaah||pgJamaahRow(r.did)||{};
+        return [
+          i+1,
+          r.source==='spouse'?(r.level==='khusus'?'Istri/Pendamping Pengurus':'Istri Pengurus'):(r.dapukan||''),
+          j.nama||pgJamaahNama(r.did)||'',
+          j.kelompok_nama||'',
+          pgExportKeterangan(r,j),
+          r.source==='spouse'?(r.level==='khusus'?(r.pendamping_explicit?'Pendamping · Manual':'Istri · Otomatis'):'Istri · Otomatis'):(r.aktif===false?'Nonaktif':'Aktif')
+        ];
+      });
+      if(typeof doc.autoTable!=='function')throw new Error('Plugin autoTable belum siap');
+      doc.autoTable({
+        startY:37,
+        head:[['No','Dapukan','Nama','Klp','Keterangan','Status']],
+        body,
+        theme:'grid',
+        styles:{font:'helvetica',fontSize:8.2,cellPadding:1.9,valign:'top',lineWidth:0.12,overflow:'linebreak',minCellHeight:5.8},
+        headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:8.6,cellPadding:2.1},
+        columnStyles:{0:{cellWidth:9,halign:'center'},1:{cellWidth:46},2:{cellWidth:54},3:{cellWidth:14,halign:'center'},4:{cellWidth:39},5:{cellWidth:26,halign:'center'}},
+        margin:{left:10,right:10,bottom:10},
+        didDrawPage:()=>{
+          const ph=doc.internal.pageSize.getHeight();
+          doc.setFontSize(7.5);doc.setTextColor(90);
+          doc.text(`${pgExportRegionLabel(group.region)} · ${pgExportGenderLabel(group.gender)}`,10,ph-4);
+          doc.text(`Halaman ${doc.internal.getNumberOfPages()}`,pageW-10,ph-4,{align:'right'});
+          doc.setTextColor(0);
+        }
+      });
+    });
+    const ts=new Date().toISOString().slice(0,10);
+    const scope=CU.kelompok_scope||'Desa';
+    doc.save(`Pengurus_Desa_Perwira_${scope}_${ts}.pdf`);
+    closeMod('modal-export-pengurus');
+    toast(`✅ PDF Pengurus diunduh (${groups.length} lembar/group · ${rows.length} baris)`);
+  }catch(e){
+    console.error('[exportPengurusPDF]',e);
+    exportPengurusPDFFallback(rows,groups);
+    closeMod('modal-export-pengurus');
+  }
+}
+/* ===== END EXPORT PENGURUS v2 ===== */
 </script>
 </body>
 </html>
