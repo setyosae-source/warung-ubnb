@@ -995,6 +995,8 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         <button onclick="cetakDaftarHadir()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Preview ID Absen</button>
         <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
         <button onclick="bukaKontrolAbsen()" style="background:#7c3aed;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Kontrol Absen</button>
+        <button id="btn-hadir-report" onclick="closeMod('modal-hadir');bukaRekapFinal(curKegiatanId,'nama')" style="background:#0f766e;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Report / Rekap</button>
+        <button id="btn-hadir-close" onclick="closeMod('modal-hadir');tutupKegiatanFinal(curKegiatanId)" style="display:none;background:#b45309;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🔒 Tutup Acara</button>
         <button onclick="closeMod('modal-hadir')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
       </div>
     </div>
@@ -9556,6 +9558,102 @@ kegiatanCard=function(k,phase){
 
 document.addEventListener('DOMContentLoaded',()=>{ensureFinalRecapModal();setTimeout(()=>{try{renderKegiatanList();}catch(_e){}},250);});
 /* ===== END TUTUP ACARA + REKAP FINAL v1 ===== */
+</script>
+
+<script>
+/* ===== INTEGRASI UI KALENDER + REPORT + TUTUP MANUAL v3 ===== */
+function ubnbEventNeedsManualClose(e){
+  if(!e||!e.actual||e.status!=='aktif')return false;
+  const today=calToday(),d=String(e.date||'');
+  if(d<today)return true;if(d>today)return false;if(!e.end_time)return false;
+  const p=String(e.end_time).slice(0,5).split(':').map(Number);
+  return Number.isFinite(p[0])&&Number.isFinite(p[1])&&calNowMinutes()>(p[0]*60+p[1]);
+}
+calendarEntryPhase=function(e){
+  if(!e)return 'selesai';
+  const today=calToday(),d=String(e.date||'');
+  if(e.cancelled||e.status==='dibatalkan'||e.status==='selesai')return 'selesai';
+  if(d>today)return 'akan';
+  if(e.actual&&e.status==='aktif'){
+    if(d<today)return 'berlangsung';
+    if(e.time){const p=String(e.time).slice(0,5).split(':').map(Number),s=(Number(p[0])||0)*60+(Number(p[1])||0);if(calNowMinutes()<s)return 'akan';}
+    return 'berlangsung';
+  }
+  if(d<today)return 'selesai';
+  if(e.time){
+    const p=String(e.time).slice(0,5).split(':').map(Number),s=(Number(p[0])||0)*60+(Number(p[1])||0);if(calNowMinutes()<s)return 'akan';
+    if(e.end_time){const q=String(e.end_time).slice(0,5).split(':').map(Number),z=(Number(q[0])||0)*60+(Number(q[1])||0);if(calNowMinutes()>z)return 'selesai';}
+  }
+  return 'berlangsung';
+};
+calendarEntryBadges=function(e){
+  const b=[];b.push(`<span class="cal-badge">${calScopeIcon(e.scope_level)} ${escH(calScopeLabel(e.scope_level,e.scope_kelompok))}</span>`);
+  if(e.routine)b.push('<span class="cal-badge rutin">↻ Rutin</span>');
+  if(e.moved)b.push('<span class="cal-badge moved">↔ Dipindah</span>');
+  if(e.generated)b.push(`<span class="cal-badge ready">👥 ${e.participant_count||0} peserta</span>`);
+  if(e.cancelled||e.status==='dibatalkan')b.push('<span class="cal-badge cancel">Mansuh</span>');
+  else if(e.actual&&e.status==='selesai'&&e.raw?.final_rekap)b.push('<span class="cal-badge" style="background:#dcfce7;color:#166534;">🔒 Selesai Final</span>');
+  else if(ubnbEventNeedsManualClose(e))b.push('<span class="cal-badge" style="background:#ffedd5;color:#9a3412;">⏳ Menunggu Ditutup</span>');
+  else if(calendarEntryPhase(e)==='berlangsung')b.push('<span class="cal-badge live">Sedang Berlangsung</span>');
+  else if(!e.generated&&calendarH7Ready(e))b.push('<span class="cal-badge ready">Siap Generate Peserta</span>');
+  else if(!e.generated)b.push(`<span class="cal-badge wait">Peserta H-7 · ${calendarH7Date(e)}</span>`);
+  return b.join('');
+};
+function ubnbActiveEventCard(e){
+  if(!ubnbEventNeedsManualClose(e))return calendarTodayActionCard(e);
+  const time=[e.time,e.end_time].filter(Boolean).join('–');
+  return `<div class="cal-event-card scope-${e.scope_level}" onclick="openCalendarEntry('${e.key}')"><div class="cal-event-top"><div style="min-width:0;flex:1;"><div class="cal-event-name">${escH(e.name)}</div><div class="cal-event-meta">📅 ${escH(calFmtDate(e.date))}${time?' · ⏰ '+escH(time):''}${e.location?' · 📍 '+escH(e.location):''}</div></div><div class="cal-event-badges">${calendarEntryBadges(e)}</div></div><div style="margin-top:8px;padding:8px 10px;border:1px solid #fed7aa;background:#fff7ed;border-radius:7px;font-size:10px;color:#9a3412;font-weight:800;">⏳ Jadwal sudah berakhir, tetapi acara belum ditutup. Buka detail lalu pilih <b>Tutup Acara</b>.</div></div>`;
+}
+renderAbsenStats=function(){
+  const today=calToday(),from=calAddDays(today,-45),to=calAddDays(today,180),all=calendarFilterEntries(calendarEntries(from,to));
+  const akan=all.filter(x=>calendarEntryPhase(x)==='akan').length;
+  const aktif=calendarFilterEntries((aKegiatan||[]).map(calendarEntryFromActual)).filter(e=>calendarEntryPhase(e)==='berlangsung').length;
+  const done=(aKegiatan||[]).filter(k=>k.status==='selesai').length;
+  const el=document.getElementById('absen-stats');if(!el)return;
+  el.innerHTML=`<span class="stat-pill"><span class="pl">🗓️</span><span class="pv">${akan}</span><span class="pl">akan datang</span></span><span class="stat-pill green"><span class="pl">🟢</span><span class="pv">${aktif}</span><span class="pl">aktif</span></span><span class="stat-pill blue"><span class="pl">🔒</span><span class="pv">${done}</span><span class="pl">selesai</span></span>`;
+};
+renderCalendarList=function(){
+  const el=document.getElementById('kegiatan-list'),controls=document.getElementById('calendar-list-controls');if(!el)return;const today=calToday();
+  const active=calendarFilterEntries((aKegiatan||[]).map(calendarEntryFromActual)).filter(e=>calendarEntryPhase(e)==='berlangsung').sort((a,b)=>(ubnbEventNeedsManualClose(a)?0:1)-(ubnbEventNeedsManualClose(b)?0:1)||String(a.date||'').localeCompare(String(b.date||''))||(a.time||'99:99').localeCompare(b.time||'99:99'));
+  const upEnd=calAddDays(today,calUpcomingDays);
+  const upcoming=calendarFilterEntries(calendarEntries(today,upEnd)).filter(e=>calendarEntryPhase(e)==='akan').sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  const history=calendarFilterEntries((aKegiatan||[]).map(calendarEntryFromActual)).filter(e=>e.status==='selesai'||e.status==='dibatalkan').sort((a,b)=>b.date.localeCompare(a.date)||(b.time||'').localeCompare(a.time||''));
+  const routines=(aJadwal||[]).filter(j=>j.aktif!==false&&(!j.tanggal_selesai||String(j.tanggal_selesai).slice(0,10)>=today)&&calendarScheduleMatchesFilter(j)).sort((a,b)=>{const ma=(aAcaraMaster||[]).find(x=>Number(x.id)===Number(a.acara_id)),mb=(aAcaraMaster||[]).find(x=>Number(x.id)===Number(b.acara_id));return String(ma?.nama||'').localeCompare(String(mb?.nama||''),'id',{sensitivity:'base'});});
+  const ab=document.getElementById('cal-list-tab-berlangsung');if(ab)ab.innerHTML=`🟢 Aktif <span class="count" id="cal-count-berlangsung">${active.length}</span>`;
+  const db=document.getElementById('cal-list-tab-selesai');if(db)db.innerHTML=`🔒 Selesai <span class="count" id="cal-count-selesai">${history.length}</span>`;
+  const counts={berlangsung:active.length,akan:upcoming.length,selesai:history.length,rutin:routines.length};
+  ['berlangsung','akan','selesai','rutin'].forEach(t=>{document.getElementById('cal-list-tab-'+t)?.classList.toggle('active',calListTab===t);const c=document.getElementById('cal-count-'+t);if(c)c.textContent=counts[t];});
+  if(controls){if(calListTab==='akan')controls.innerHTML=`<span>Rentang:</span><select onchange="setCalendarUpcomingDays(this.value)"><option value="30" ${calUpcomingDays===30?'selected':''}>30 Hari</option><option value="90" ${calUpcomingDays===90?'selected':''}>3 Bulan</option><option value="180" ${calUpcomingDays===180?'selected':''}>6 Bulan</option></select><span>Menampilkan ${Math.min(calUpcomingLimit,upcoming.length)} dari ${upcoming.length} acara.</span>${upcoming.length>calUpcomingLimit?'<button onclick="calendarLoadMoreUpcoming()">＋ Tampilkan berikutnya</button>':''}`;else if(calListTab==='selesai')controls.innerHTML=`<span>Hanya acara yang sudah <b>ditutup/final</b> atau dibatalkan.</span><span>Menampilkan ${Math.min(calHistoryLimit,history.length)} dari ${history.length}.</span>${history.length>calHistoryLimit?'<button onclick="calendarLoadMoreHistory()">＋ Muat berikutnya</button>':''}`;else if(calListTab==='rutin')controls.innerHTML='<span>🔁 Satu kartu = satu seri jadwal rutin.</span>';else controls.innerHTML='<span>🟢 Acara yang masih aktif.</span><span style="font-weight:800;color:#9a3412;">⏳ Acara lewat jadwal tetap di sini sampai ditutup manual.</span>';}
+  if(calListTab==='berlangsung'){el.innerHTML=active.length?active.map(ubnbActiveEventCard).join(''):'<div class="cal-empty">Tidak ada acara aktif.</div>';ensureCalendarCountdownTimer();}
+  else if(calListTab==='akan')el.innerHTML=upcoming.length?upcoming.slice(0,calUpcomingLimit).map(calendarEntryCard).join(''):'<div class="cal-empty">Belum ada acara yang akan datang pada rentang ini.</div>';
+  else if(calListTab==='selesai')el.innerHTML=history.length?history.slice(0,calHistoryLimit).map(calendarEntryCard).join(''):'<div class="cal-empty">Belum ada acara yang sudah ditutup.</div>';
+  else el.innerHTML=routines.length?routines.map(calendarScheduleCard).join(''):'<div class="cal-empty">Belum ada jadwal rutin aktif sesuai filter.</div>';
+};
+const _ubnbRenderCalendarDetailV3=renderCalendarDetail;
+renderCalendarDetail=function(){
+  _ubnbRenderCalendarDetailV3();const e=_calCurrentEntry,box=document.getElementById('calendar-detail-content');if(!e||!box||!e.actual)return;
+  const k=e.raw||{},locked=e.status==='selesai'&&!!k.final_rekap,manage=calendarCanManageEntry(e),actions=box.querySelector('.cal-detail-actions');
+  if(locked){
+    if(actions)actions.innerHTML=`<button class="primary ubnb-final-allowed" onclick="closeMod('modal-calendar-detail');bukaRekapFinal(${e.id},'nama')">📊 Report Final</button><button class="blue ubnb-final-allowed" onclick="closeMod('modal-calendar-detail');bukaRekapFinal(${e.id},'tanpa')">📈 Tanpa Nama</button><button class="ubnb-final-allowed" onclick="closeMod('modal-calendar-detail');bukaDaftarHadir(${e.id})">👥 Daftar Hadir</button>${manage?`<button class="warn ubnb-final-allowed" onclick="bukaKembaliKegiatanFinal(${e.id})">🔓 Buka Kembali</button>`:''}`;
+    box.querySelectorAll('button').forEach(b=>{if(!b.classList.contains('ubnb-final-allowed'))b.style.display='none';});
+    const info=document.createElement('div');info.style.cssText='margin-top:9px;padding:9px 11px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:7px;font-size:10px;color:#166534;font-weight:800;';info.innerHTML='🔒 Acara sudah ditutup. Data dan rekap final dikunci.';actions?.before(info);return;
+  }
+  if(actions)actions.insertAdjacentHTML('beforeend',`<button class="blue" onclick="closeMod('modal-calendar-detail');bukaRekapFinal(${e.id},'nama')">📊 Report / Rekap</button><button onclick="closeMod('modal-calendar-detail');bukaRekapFinal(${e.id},'tanpa')">📈 Tanpa Nama</button>${manage&&e.status==='aktif'?`<button class="warn" style="background:#b45309;color:white;" onclick="closeMod('modal-calendar-detail');tutupKegiatanFinal(${e.id})">🔒 Tutup Acara</button>`:manage&&e.status==='selesai'&&!k.final_rekap?`<button class="warn" style="background:#b45309;color:white;" onclick="closeMod('modal-calendar-detail');tutupKegiatanFinal(${e.id})">🔒 Finalisasi Rekap</button>`:''}`);
+  if(ubnbEventNeedsManualClose(e)){const info=document.createElement('div');info.style.cssText='margin-top:9px;padding:9px 11px;border:1px solid #fed7aa;background:#fff7ed;border-radius:7px;font-size:10px;color:#9a3412;font-weight:800;';info.innerHTML='⏳ Jadwal sudah selesai, tetapi status masih aktif. Absen tetap dapat dikoreksi sampai pengurus menekan <b>Tutup Acara</b>.';actions?.before(info);}
+};
+async function bukaKembaliKegiatanFinal(id){
+  if(!confirm('Buka kembali acara ini untuk koreksi?\n\nRekap final akan dilepas dan terminal dapat diaktifkan kembali.'))return;
+  const {data,error}=await sb.rpc('dk_attendance_reopen_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:Number(id)});if(error||!data||data.ok!==true){toast('Gagal membuka kembali: '+(error?.message||data?.error||'Unknown'),true);return;}
+  closeMod('modal-calendar-detail');toast('✅ Acara dibuka kembali untuk koreksi');await reloadAttendanceSecure(false);calListTab='berlangsung';renderKegiatanList();
+}
+const _ubnbRenderDaftarHadirV3=renderDaftarHadir;
+renderDaftarHadir=function(){
+  _ubnbRenderDaftarHadirV3();const k=(aKegiatan||[]).find(x=>Number(x.id)===Number(curKegiatanId));if(!k)return;const locked=k.status==='selesai'&&!!k.final_rekap;
+  const report=document.getElementById('btn-hadir-report'),closeBtn=document.getElementById('btn-hadir-close');if(report)report.textContent=locked?'📊 Report Final':'📊 Report / Rekap';if(closeBtn)closeBtn.style.display=(!locked&&k.status==='aktif'&&canManageCalendar())?'inline-block':'none';
+  const modal=document.getElementById('modal-hadir');if(modal){const terminal=modal.querySelector('button[onclick="bukaAbsenTerminal()"]');if(terminal)terminal.style.display=locked?'none':'inline-block';const kontrol=modal.querySelector('button[onclick="bukaKontrolAbsen()"]');if(kontrol)kontrol.style.display=locked?'none':'inline-block';}
+};
+document.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>{try{const pending=(aKegiatan||[]).map(calendarEntryFromActual).filter(ubnbEventNeedsManualClose);if(pending.length&&calListTab==='selesai')calListTab='berlangsung';renderKegiatanList();}catch(_e){}},700);});
+/* ===== END INTEGRASI UI KALENDER + REPORT + TUTUP MANUAL v3 ===== */
 </script>
 </body>
 </html>
