@@ -994,6 +994,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button onclick="cetakIdAbsenPeserta()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Cetak ID Absen Peserta</button>
         <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
+        <button onclick="generateLaporanKegiatan(curKegiatanId)" style="background:#7c3aed;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Laporan Absen</button>
         <button onclick="closeMod('modal-hadir')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
       </div>
     </div>
@@ -5074,7 +5075,7 @@ function kegiatanCard(k,phase){
       <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
       ${canManageCalendar()?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
       <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🪪 ID Absen</button>
-      <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
+      <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan Absen</button>
       <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
       <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
     </div>
@@ -6234,21 +6235,20 @@ async function cetakIdAbsenPeserta(kegiatanId=null){
     const sn=String(j.status_nikah||'').trim().toLowerCase();
     const orangTua=(sn==='menikah'||sn.includes('janda')||sn.includes('duda'));
     const rawId=idMap.get(did)??j.absen_id??'';
+    const kelompok=String(j.kelompok_nama||j.kelompok||h.kelompok||k.kelompok||'Tanpa Kelompok').trim()||'Tanpa Kelompok';
     return {
       did,
       nama:h.jamaah_nama||j.nama||'',
       jk:(jk==='L'||jk==='P')?jk:'',
       status_nikah:j.status_nikah||'',
       orangTua,
+      kelompok,
       absen_id:rawId!==''?String(rawId).padStart(4,'0'):'—'
     };
   }).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
 
-  const male=rows.filter(r=>r.jk==='L');
-  const female=rows.filter(r=>r.jk==='P');
-  const unknown=rows.filter(r=>!r.jk);
   const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  const meta=[tgl,k.waktu?String(k.waktu).substring(0,5)+' WIB':'',k.lokasi||'',k.kelompok||'Desa Perwira'].filter(Boolean).join(' · ');
+  const meta=[tgl,k.waktu?String(k.waktu).substring(0,5)+' WIB':'',k.lokasi||''].filter(Boolean).join(' · ');
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const ROWS_PER_PAGE=34;
 
@@ -6261,7 +6261,8 @@ async function cetakIdAbsenPeserta(kegiatanId=null){
     return h;
   }
 
-  function buildGenderPages(genderRows,genderTitle,youthTitle,icon){
+  function buildGenderPages(groupRows,kelompok,genderCode,genderTitle,youthTitle,icon){
+    const genderRows=groupRows.filter(r=>r.jk===genderCode);
     if(!genderRows.length)return [];
     const parent=genderRows.filter(r=>r.orangTua).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
     const youth=genderRows.filter(r=>!r.orangTua).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
@@ -6271,35 +6272,51 @@ async function cetakIdAbsenPeserta(kegiatanId=null){
       const pa=parent.slice(p*ROWS_PER_PAGE,(p+1)*ROWS_PER_PAGE);
       const ya=youth.slice(p*ROWS_PER_PAGE,(p+1)*ROWS_PER_PAGE);
       out.push(`<section class="id-sheet">
+        <div class="group-kicker">KELOMPOK · ${esc(kelompok)}</div>
         <h1>DAFTAR ID ABSEN PESERTA</h1>
         <div class="sub"><b>${esc(k.acara_nama||'Acara UBNB')}</b><br>${esc(meta)}<br>${icon} <b>${esc(genderTitle)}</b> · ${genderRows.length} peserta${pages>1?` · Halaman ${p+1}/${pages}`:''}</div>
         <div class="id-grid">
           <div class="id-col">${tableHtml('ORANG TUA · Menikah + Janda/Duda',pa,p*ROWS_PER_PAGE,'#166534')}</div>
           <div class="id-col">${tableHtml(youthTitle,ya,p*ROWS_PER_PAGE,'#1d4ed8')}</div>
         </div>
-        <div class="id-foot">ID Absen tetap 4 digit · digunakan pada Terminal Absen UBNB</div>
+        <div class="id-foot">Kelompok ${esc(kelompok)} · ID Absen tetap 4 digit · digunakan pada Terminal Absen UBNB</div>
       </section>`);
     }
     return out;
   }
 
-  const pages=[];
-  pages.push(...buildGenderPages(male,'LAKI-LAKI','REMAJA PUTRA','👨'));
-  pages.push(...buildGenderPages(female,'PEREMPUAN','REMAJA PUTRI','👩'));
-  if(unknown.length){
+  function buildUnknownPages(groupRows,kelompok){
+    const unknown=groupRows.filter(r=>!r.jk);
+    if(!unknown.length)return [];
     const chunks=[];for(let i=0;i<unknown.length;i+=ROWS_PER_PAGE*2)chunks.push(unknown.slice(i,i+ROWS_PER_PAGE*2));
-    chunks.forEach((chunk,p)=>pages.push(`<section class="id-sheet">
+    return chunks.map((chunk,p)=>`<section class="id-sheet">
+      <div class="group-kicker">KELOMPOK · ${esc(kelompok)}</div>
       <h1>DAFTAR ID ABSEN PESERTA</h1>
       <div class="sub"><b>${esc(k.acara_nama||'Acara UBNB')}</b><br>${esc(meta)}<br>❓ <b>JENIS KELAMIN BELUM DISET</b>${chunks.length>1?` · Halaman ${p+1}/${chunks.length}`:''}</div>
       ${tableHtml('Perlu perbaikan data jamaah',chunk,p*ROWS_PER_PAGE*2,'#b45309')}
-      <div class="id-foot">Peserta di halaman ini belum dapat dipisahkan ke halaman laki-laki/perempuan.</div>
-    </section>`));
+      <div class="id-foot">Kelompok ${esc(kelompok)} · peserta di halaman ini belum dapat dipisahkan ke halaman laki-laki/perempuan.</div>
+    </section>`);
   }
+
+  const groupOrder={PW1:1,PW2:2,PW3:3,PW4:4};
+  const kelompokList=[...new Set(rows.map(r=>r.kelompok))].sort((a,b)=>{
+    const aa=groupOrder[String(a).toUpperCase()]??99,bb=groupOrder[String(b).toUpperCase()]??99;
+    return aa-bb||String(a).localeCompare(String(b),'id');
+  });
+
+  const pages=[];
+  kelompokList.forEach(kelompok=>{
+    const groupRows=rows.filter(r=>r.kelompok===kelompok);
+    pages.push(...buildGenderPages(groupRows,kelompok,'L','LAKI-LAKI','REMAJA PUTRA','👨'));
+    pages.push(...buildGenderPages(groupRows,kelompok,'P','PEREMPUAN','REMAJA PUTRI','👩'));
+    pages.push(...buildUnknownPages(groupRows,kelompok));
+  });
   if(!pages.length){toast('Tidak ada peserta yang dapat dicetak',true);return;}
 
   const body=`<style>
     .id-sheet{page-break-after:always;min-height:255mm;display:flex;flex-direction:column;}
     .id-sheet:last-child{page-break-after:auto;}
+    .group-kicker{display:inline-block;align-self:flex-start;background:#0f5132;color:white;font-size:10px;font-weight:900;letter-spacing:.7px;padding:4px 9px;border-radius:999px;margin-bottom:5px;}
     .id-grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm;align-items:start;margin-top:7px;}
     .id-col{min-width:0;}
     .id-table{table-layout:fixed;font-size:9.6px;}
@@ -8241,7 +8258,11 @@ function renderCalendarDetail(){
   else if(ready)participantInfo='<b style="color:#047857;">Sudah masuk H-7 — peserta dapat digenerate sekarang</b>';
   else participantInfo=`Peserta belum digenerate · dapat digenerate mulai <b>${calFmtDate(calendarH7Date(e),false)}</b>`;
   let actions='';
-  if(e.generated&&e.actual)actions+=`<button class="primary" onclick="closeMod('modal-calendar-detail');bukaDaftarHadir(${e.id})">✅ Buka Absen</button>`;
+  if(e.generated&&e.actual){
+    actions+=`<button class="primary" onclick="closeMod('modal-calendar-detail');bukaDaftarHadir(${e.id})">✅ Buka Absen</button>`;
+    actions+=`<button class="blue" onclick="cetakIdAbsenPeserta(${e.id})">🪪 ID Absen</button>`;
+    actions+=`<button style="background:#7c3aed;border-color:#7c3aed;color:#fff;" onclick="generateLaporanKegiatan(${e.id})">📊 Laporan Absen</button>`;
+  }
   if(manage&&!e.cancelled){
     if(!e.generated&&ready)actions+=`<button class="primary" onclick="generateCalendarParticipants('${e.key}')">⚡ Generate dari Kriteria</button>`;
     if(e.kind==='virtual'&&ready)actions+=`<button class="blue" onclick="openVirtualPeserta('${e.key}')">👥 Pilih Peserta Manual</button>`;
