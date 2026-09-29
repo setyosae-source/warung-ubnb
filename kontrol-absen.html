@@ -75,6 +75,12 @@ button,input,select{font:inherit}
 .status.tidak{background:#f3f4f6;color:#4b5563}
 .status.izin{background:var(--blue-soft);color:var(--blue)}
 .status.sakit{background:var(--purple-soft);color:var(--purple)}
+.section-label{
+  position:sticky;top:0;z-index:2;padding:6px 10px;font-size:10px;font-weight:900;
+  letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid #dbe7df
+}
+.section-label.male{background:#eff6ff;color:#1d4ed8}
+.section-label.female{background:#fdf2f8;color:#be185d}
 .empty{padding:30px;text-align:center;color:#94a3b8;font-size:12px}
 .footerbar{margin-top:10px;color:#7c8a82;font-size:9.5px;text-align:center}
 #error{display:none;background:#fff1f2;color:#b91c1c;border:1px solid #fecdd3;border-radius:10px;padding:12px 14px;margin:14px;line-height:1.5}
@@ -168,7 +174,7 @@ try{
   }
 }catch(_e){}
 
-let snapshot=null,events=[],rows=[],selectedId=null,refreshing=false,lastHadirIds=new Set();
+let snapshot=null,events=[],rows=[],selectedId=null,refreshing=false,lastHadirIds=new Set(),genderMap=new Map();
 const params=new URLSearchParams(location.search);
 const requestedId=Number(params.get('kegiatan')||0)||null;
 
@@ -205,6 +211,46 @@ function eventScore(k){
   s+=Number(k.id)||0;
   return s;
 }
+
+async function ensureGenderMap(){
+  const dids=[...new Set((snapshot?.hadir||[]).map(h=>String(h.jamaah_did||'')).filter(Boolean))]
+    .filter(d=>!genderMap.has(d));
+  if(!dids.length)return;
+  const chunkSize=150;
+  for(let i=0;i<dids.length;i+=chunkSize){
+    const chunk=dids.slice(i,i+chunkSize);
+    const {data,error}=await sb.from('jamaah_desa').select('did,jenis_kelamin').in('did',chunk);
+    if(error)continue;
+    (data||[]).forEach(j=>genderMap.set(String(j.did),String(j.jenis_kelamin||'')));
+  }
+}
+function genderOf(h){
+  const g=(genderMap.get(String(h.jamaah_did||''))||'').trim().toLowerCase();
+  if(g.startsWith('l'))return 'L';
+  if(g.startsWith('p'))return 'P';
+  return '';
+}
+function renderHadirGrouped(hadir){
+  if(!hadir.length)return '<div class="empty">Belum ada yang absen.</div>';
+  const male=hadir.filter(h=>genderOf(h)==='L');
+  const female=hadir.filter(h=>genderOf(h)==='P');
+  const unknown=hadir.filter(h=>!genderOf(h));
+  let html='';
+  if(male.length){
+    html+='<div class="section-label male">👨 Laki-laki · '+male.length+' orang</div>';
+    html+=male.map((r,i)=>rowHtml(r,i,true)).join('');
+  }
+  if(female.length){
+    html+='<div class="section-label female">👩 Perempuan · '+female.length+' orang</div>';
+    html+=female.map((r,i)=>rowHtml(r,i,true)).join('');
+  }
+  if(unknown.length){
+    html+='<div class="section-label">Data gender belum lengkap · '+unknown.length+' orang</div>';
+    html+=unknown.map((r,i)=>rowHtml(r,i,true)).join('');
+  }
+  return html;
+}
+
 function buildEventOptions(){
   const sel=document.getElementById('eventSelect');
   events=(snapshot?.kegiatan||[]).slice().sort((a,b)=>eventScore(b)-eventScore(a));
@@ -251,7 +297,13 @@ function render(){
   const all=(snapshot.hadir||[]).filter(h=>Number(h.kegiatan_id)===Number(selectedId));
   const visible=q?all.filter(h=>(h.jamaah_nama||'').toLowerCase().includes(q)||(h.jamaah_kk||'').toLowerCase().includes(q)):all;
   const hadir=visible.filter(h=>h.status_hadir==='hadir').sort((a,b)=>new Date(b.hadir_at||0)-new Date(a.hadir_at||0));
-  const belum=visible.filter(h=>h.status_hadir!=='hadir').sort((a,b)=>(a.jamaah_nama||'').localeCompare(b.jamaah_nama||'','id'));
+  const statusOrder={izin:0,sakit:1,tidak_hadir:2};
+  const belum=visible.filter(h=>h.status_hadir!=='hadir').sort((a,b)=>{
+    const sa=statusOrder[a.status_hadir]??9;
+    const sb=statusOrder[b.status_hadir]??9;
+    if(sa!==sb)return sa-sb;
+    return (a.jamaah_nama||'').localeCompare(b.jamaah_nama||'','id');
+  });
   const total=all.length,hTotal=all.filter(h=>h.status_hadir==='hadir').length,bTotal=total-hTotal,pct=total?Math.round(hTotal/total*100):0;
 
   document.getElementById('eventTitle').textContent=k.acara_nama||'Acara';
@@ -263,7 +315,7 @@ function render(){
   document.getElementById('bar').style.width=pct+'%';
   document.getElementById('countHadir').textContent=hadir.length+(q?' hasil':' orang');
   document.getElementById('countBelum').textContent=belum.length+(q?' hasil':' orang');
-  document.getElementById('listHadir').innerHTML=hadir.length?hadir.map((r,i)=>rowHtml(r,i,true)).join(''):'<div class="empty">Belum ada yang absen.</div>';
+  document.getElementById('listHadir').innerHTML=renderHadirGrouped(hadir);
   document.getElementById('listBelum').innerHTML=belum.length?belum.map((r,i)=>rowHtml(r,i,false)).join(''):'<div class="empty">Semua peserta sudah absen.</div>';
   lastHadirIds=new Set(all.filter(h=>h.status_hadir==='hadir').map(h=>String(h.id)));
 }
@@ -276,6 +328,7 @@ async function refreshNow(){
     if(error)throw error;
     if(!data||data.ok!==true)throw new Error(data?.error||'Sesi pengurus tidak valid');
     snapshot=data;
+    await ensureGenderMap();
     buildEventOptions();
     document.getElementById('main').style.display='';
     document.getElementById('error').style.display='none';
