@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Kontrol Absen Pengurus - UBNB</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --green:#0f5132;--green2:#197044;--green-soft:#ecfdf5;
+  --red:#b42318;--red-soft:#fef2f2;--amber:#b45309;--amber-soft:#fffbeb;
+  --blue:#1d4ed8;--blue-soft:#eff6ff;--purple:#6d28d9;--purple-soft:#f5f3ff;
+  --ink:#17211b;--muted:#66756c;--line:#dfe7e2;--bg:#f4f7f5;--card:#fff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:Arial,sans-serif}
+button,input,select{font:inherit}
+.app{min-height:100vh}
+.top{
+  background:linear-gradient(135deg,#0b3d27,#17643e);
+  color:#fff;padding:14px 18px;position:sticky;top:0;z-index:50;
+  box-shadow:0 2px 12px rgba(0,0,0,.16)
+}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand .kicker{font-size:10px;font-weight:800;letter-spacing:1.4px;opacity:.8}
+.brand h1{font-size:20px;margin:3px 0 0}
+.live{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800}
+.dot{width:9px;height:9px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 5px rgba(74,222,128,.14)}
+.toolbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.toolbar select,.toolbar input{
+  border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);
+  color:#fff;border-radius:7px;padding:7px 9px;font-size:11px;outline:none
+}
+.toolbar select option{color:#111;background:#fff}
+.toolbar input::placeholder{color:rgba(255,255,255,.72)}
+.toolbar button{border:0;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer}
+.btn-light{background:#fff;color:#0f5132}
+.btn-blue{background:#dbeafe;color:#1d4ed8}
+.btn-dark{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.24)!important}
+.main{max-width:1500px;margin:auto;padding:14px}
+.event-head{
+  background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px
+}
+.event-title{font-size:18px;font-weight:900;color:var(--green)}
+.event-meta{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45}
+.clock{font-weight:900;font-size:18px;color:var(--green);text-align:right}
+.clock small{display:block;font-size:9px;color:var(--muted);font-weight:700;margin-top:2px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 12px}
+.stat .v{font-size:23px;font-weight:900;line-height:1}
+.stat .l{font-size:10px;color:var(--muted);margin-top:5px;font-weight:700}
+.stat.green .v{color:var(--green)} .stat.red .v{color:var(--red)} .stat.blue .v{color:var(--blue)} .stat.amber .v{color:var(--amber)}
+.progress{height:9px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:7px}
+.progress i{display:block;height:100%;background:#22c55e;width:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+.panel-head{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.panel-head b{font-size:13px}
+.panel-head .count{font-size:10px;font-weight:900;padding:3px 8px;border-radius:99px}
+.panel.hadir .panel-head{background:var(--green-soft);color:#166534}
+.panel.hadir .count{background:#dcfce7;color:#166534}
+.panel.belum .panel-head{background:var(--red-soft);color:#991b1b}
+.panel.belum .count{background:#fee2e2;color:#991b1b}
+.list{max-height:calc(100vh - 285px);overflow:auto}
+.row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 11px;border-bottom:1px solid #eef2ef}
+.row:last-child{border-bottom:0}
+.no{font-size:10px;text-align:center;color:#89958e;font-weight:800}
+.name{font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{font-size:9.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side{text-align:right;min-width:86px}
+.time{font-size:11px;font-weight:900;color:#166534}
+.via{font-size:9px;color:var(--muted);margin-top:2px}
+.status{font-size:9px;font-weight:900;border-radius:99px;padding:3px 7px;display:inline-block}
+.status.tidak{background:#f3f4f6;color:#4b5563}
+.status.izin{background:var(--blue-soft);color:var(--blue)}
+.status.sakit{background:var(--purple-soft);color:var(--purple)}
+.empty{padding:30px;text-align:center;color:#94a3b8;font-size:12px}
+.footerbar{margin-top:10px;color:#7c8a82;font-size:9.5px;text-align:center}
+#error{display:none;background:#fff1f2;color:#b91c1c;border:1px solid #fecdd3;border-radius:10px;padding:12px 14px;margin:14px;line-height:1.5}
+.flash{animation:flash .7s ease}
+@keyframes flash{0%{background:#dcfce7}100%{background:transparent}}
+@media(max-width:850px){
+  .stats{grid-template-columns:1fr 1fr}
+  .grid{grid-template-columns:1fr}
+  .list{max-height:none}
+  .event-head{align-items:center}
+}
+@media(max-width:520px){
+  .top{padding:12px}
+  .main{padding:9px}
+  .toolbar{align-items:stretch}
+  .toolbar select,.toolbar input{flex:1;min-width:140px}
+  .stats{gap:6px}
+  .stat{padding:9px}
+  .stat .v{font-size:20px}
+  .event-title{font-size:15px}
+  .clock{font-size:15px}
+  .row{grid-template-columns:26px minmax(0,1fr) auto;padding:8px}
+  .side{min-width:72px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="topline">
+      <div class="brand">
+        <div class="kicker">UBNB · DESA PERWIRA</div>
+        <h1>Kontrol Absen Pengurus</h1>
+      </div>
+      <div class="live"><span class="dot"></span><span id="liveText">Menghubungkan…</span></div>
+    </div>
+    <div class="toolbar">
+      <select id="eventSelect" onchange="changeEvent()"></select>
+      <input id="search" placeholder="Cari nama / KK..." oninput="render()">
+      <button class="btn-light" onclick="refreshNow()">↻ Refresh</button>
+      <button class="btn-blue" onclick="openTerminal()">🖥 Terminal</button>
+      <button class="btn-dark" onclick="openDashboard()">← Dashboard</button>
+    </div>
+  </header>
+
+  <div id="error"></div>
+
+  <main class="main" id="main" style="display:none">
+    <section class="event-head">
+      <div>
+        <div class="event-title" id="eventTitle">—</div>
+        <div class="event-meta" id="eventMeta">—</div>
+      </div>
+      <div class="clock"><span id="clock">--:--:--</span><small id="lastUpdate">Belum diperbarui</small></div>
+    </section>
+
+    <section class="stats">
+      <div class="stat blue"><div class="v" id="sTotal">0</div><div class="l">Total Peserta</div></div>
+      <div class="stat green"><div class="v" id="sHadir">0</div><div class="l">Sudah Absen</div></div>
+      <div class="stat red"><div class="v" id="sBelum">0</div><div class="l">Belum Absen</div></div>
+      <div class="stat amber"><div class="v" id="sPct">0%</div><div class="l">Kehadiran</div><div class="progress"><i id="bar"></i></div></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel hadir">
+        <div class="panel-head"><b>✅ SUDAH ABSEN</b><span class="count" id="countHadir">0 orang</span></div>
+        <div class="list" id="listHadir"></div>
+      </div>
+      <div class="panel belum">
+        <div class="panel-head"><b>⏳ BELUM ABSEN</b><span class="count" id="countBelum">0 orang</span></div>
+        <div class="list" id="listBelum"></div>
+      </div>
+    </section>
+
+    <div class="footerbar">Auto-refresh setiap 3 detik · halaman kontrol bersifat read-only</div>
+  </main>
+</div>
+
+<script>
+const SURL='https://skltbmcrqutevmtcxqxj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrbHRibWNycXV0ZXZtdGN4cXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NzM5ODIsImV4cCI6MjA5MTI0OTk4Mn0._nogUZg5UylVyP45QTGYw69u76pNxGryj9hZORIfE_A';
+const {createClient}=supabase;
+const sb=createClient(SURL,SKEY);
+const TOKEN_KEY='dk_attendance_token';
+let token=sessionStorage.getItem(TOKEN_KEY)||'';
+try{
+  if(!token&&window.opener&&window.opener!==window){
+    token=window.opener.sessionStorage.getItem(TOKEN_KEY)||'';
+    if(token)sessionStorage.setItem(TOKEN_KEY,token);
+  }
+}catch(_e){}
+
+let snapshot=null,events=[],rows=[],selectedId=null,refreshing=false,lastHadirIds=new Set();
+const params=new URLSearchParams(location.search);
+const requestedId=Number(params.get('kegiatan')||0)||null;
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function fmtDate(d){
+  if(!d)return '';
+  return new Date(d+'T00:00:00+07:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Jakarta'});
+}
+function fmtTime(ts){
+  if(!ts)return '';
+  try{return new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(ts)).replace(/\./g,':')}catch(_e){return ''}
+}
+function updateClock(){
+  document.getElementById('clock').textContent=new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date()).replace(/\./g,':');
+}
+setInterval(updateClock,1000);updateClock();
+
+function showError(msg){
+  const e=document.getElementById('error');
+  e.style.display='block';
+  e.innerHTML='<b>Kontrol absen tidak dapat dibuka.</b><br>'+esc(msg)+'<br><br><button onclick="openDashboard()" style="padding:7px 10px;border:0;border-radius:6px;background:#0f5132;color:white;font-weight:800">Buka Dashboard Kelompok</button>';
+  document.getElementById('main').style.display='none';
+}
+function setLive(msg,ok=true){
+  document.getElementById('liveText').textContent=msg;
+  const d=document.querySelector('.dot');
+  d.style.background=ok?'#4ade80':'#f59e0b';
+}
+function eventScore(k){
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  let s=0;
+  if(k.tanggal===today)s+=1000;
+  if(k.status==='aktif')s+=500;
+  s+=Number(k.id)||0;
+  return s;
+}
+function buildEventOptions(){
+  const sel=document.getElementById('eventSelect');
+  events=(snapshot?.kegiatan||[]).slice().sort((a,b)=>eventScore(b)-eventScore(a));
+  if(!events.length){sel.innerHTML='<option>Tidak ada acara</option>';return}
+  if(!selectedId){
+    if(requestedId&&events.some(x=>Number(x.id)===requestedId))selectedId=requestedId;
+    else selectedId=Number(events[0].id);
+  }
+  sel.innerHTML=events.map(k=>'<option value="'+k.id+'" '+(Number(k.id)===Number(selectedId)?'selected':'')+'>'+esc(k.acara_nama||'Acara')+' · '+esc(k.tanggal||'')+(k.scope_kelompok?' · '+esc(k.scope_kelompok):'')+'</option>').join('');
+}
+function changeEvent(){
+  selectedId=Number(document.getElementById('eventSelect').value)||null;
+  const u=new URL(location.href);u.searchParams.set('kegiatan',selectedId||'');history.replaceState(null,'',u);
+  render();
+}
+function statusBadge(r){
+  const s=r.status_hadir||'tidak_hadir';
+  if(s==='izin')return '<span class="status izin">IZIN</span>';
+  if(s==='sakit')return '<span class="status sakit">SAKIT</span>';
+  return '<span class="status tidak">BELUM</span>';
+}
+function viaText(r){
+  if(r.input_via==='terminal_id'||r.input_by==='terminal-id')return '🖥 Terminal';
+  if(r.input_via==='online')return '🌐 Online';
+  if(r.input_via==='manual')return '✍ Manual';
+  return r.input_via?esc(r.input_via):'';
+}
+function rowHtml(r,i,isHadir){
+  const justNew=isHadir&&!lastHadirIds.has(String(r.id));
+  const meta=[r.jamaah_kk&&('KK: '+r.jamaah_kk)].filter(Boolean).join(' · ');
+  return '<div class="row '+(justNew?'flash':'')+'">'
+    +'<div class="no">'+(i+1)+'</div>'
+    +'<div><div class="name">'+esc(r.jamaah_nama||'')+'</div><div class="meta">'+esc(meta||'')+'</div></div>'
+    +'<div class="side">'+(isHadir
+      ?'<div class="time">'+esc(fmtTime(r.hadir_at))+'</div><div class="via">'+viaText(r)+'</div>'
+      :statusBadge(r))
+    +'</div></div>';
+}
+function render(){
+  if(!snapshot||!selectedId)return;
+  const k=events.find(x=>Number(x.id)===Number(selectedId));
+  if(!k)return;
+  const q=(document.getElementById('search').value||'').trim().toLowerCase();
+  const all=(snapshot.hadir||[]).filter(h=>Number(h.kegiatan_id)===Number(selectedId));
+  const visible=q?all.filter(h=>(h.jamaah_nama||'').toLowerCase().includes(q)||(h.jamaah_kk||'').toLowerCase().includes(q)):all;
+  const hadir=visible.filter(h=>h.status_hadir==='hadir').sort((a,b)=>new Date(b.hadir_at||0)-new Date(a.hadir_at||0));
+  const belum=visible.filter(h=>h.status_hadir!=='hadir').sort((a,b)=>(a.jamaah_nama||'').localeCompare(b.jamaah_nama||'','id'));
+  const total=all.length,hTotal=all.filter(h=>h.status_hadir==='hadir').length,bTotal=total-hTotal,pct=total?Math.round(hTotal/total*100):0;
+
+  document.getElementById('eventTitle').textContent=k.acara_nama||'Acara';
+  document.getElementById('eventMeta').textContent=[fmtDate(k.tanggal),k.waktu&&('Pukul '+String(k.waktu).slice(0,5)),k.waktu_selesai&&('–'+String(k.waktu_selesai).slice(0,5)+' WIB'),k.lokasi,k.scope_kelompok||k.kelompok||((k.scope_level||'').toLowerCase()==='desa'?'Desa Perwira':'')].filter(Boolean).join(' · ');
+  document.getElementById('sTotal').textContent=total;
+  document.getElementById('sHadir').textContent=hTotal;
+  document.getElementById('sBelum').textContent=bTotal;
+  document.getElementById('sPct').textContent=pct+'%';
+  document.getElementById('bar').style.width=pct+'%';
+  document.getElementById('countHadir').textContent=hadir.length+(q?' hasil':' orang');
+  document.getElementById('countBelum').textContent=belum.length+(q?' hasil':' orang');
+  document.getElementById('listHadir').innerHTML=hadir.length?hadir.map((r,i)=>rowHtml(r,i,true)).join(''):'<div class="empty">Belum ada yang absen.</div>';
+  document.getElementById('listBelum').innerHTML=belum.length?belum.map((r,i)=>rowHtml(r,i,false)).join(''):'<div class="empty">Semua peserta sudah absen.</div>';
+  lastHadirIds=new Set(all.filter(h=>h.status_hadir==='hadir').map(h=>String(h.id)));
+}
+async function refreshNow(){
+  if(refreshing||!token)return;
+  refreshing=true;
+  setLive('Memperbarui…',true);
+  try{
+    const {data,error}=await sb.rpc('dk_attendance_snapshot',{p_token:token});
+    if(error)throw error;
+    if(!data||data.ok!==true)throw new Error(data?.error||'Sesi pengurus tidak valid');
+    snapshot=data;
+    buildEventOptions();
+    document.getElementById('main').style.display='';
+    document.getElementById('error').style.display='none';
+    render();
+    document.getElementById('lastUpdate').textContent='Update '+fmtTime(new Date().toISOString());
+    setLive('LIVE · auto-refresh 3 detik',true);
+  }catch(e){
+    setLive('Koneksi bermasalah',false);
+    if(/sesi|session|token/i.test(String(e?.message||e)))showError(e.message||String(e));
+  }finally{refreshing=false}
+}
+function openTerminal(){
+  const k=events.find(x=>Number(x.id)===Number(selectedId));
+  if(!k?.public_token){alert('Terminal belum diaktifkan untuk acara ini. Buka terminal dari Dashboard Kelompok terlebih dahulu.');return}
+  window.open(location.origin+'/absen-terminal.html?token='+encodeURIComponent(k.public_token),'_blank');
+}
+function openDashboard(){window.open(location.origin+'/dashboard-kelompok.html','_blank')}
+if(!token){
+  showError('Sesi pengurus tidak ditemukan. Buka halaman Kontrol Absen melalui tombol di Dashboard Kelompok setelah login.');
+  setLive('Belum login',false);
+}else{
+  refreshNow();
+  setInterval(refreshNow,3000);
+}
+</script>
+</body>
+</html>

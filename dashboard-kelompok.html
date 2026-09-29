@@ -992,9 +992,9 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         <div id="modal-hadir-meta" style="font-size:10px;color:var(--text-muted);"></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button onclick="cetakIdAbsenPeserta()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Cetak ID Absen Peserta</button>
+        <button onclick="cetakDaftarHadir()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Preview ID Absen</button>
         <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
-        <button onclick="generateLaporanKegiatan(curKegiatanId)" style="background:#7c3aed;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Laporan Absen</button>
+        <button onclick="bukaKontrolAbsen()" style="background:#7c3aed;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Kontrol Absen</button>
         <button onclick="closeMod('modal-hadir')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
       </div>
     </div>
@@ -5075,7 +5075,7 @@ function kegiatanCard(k,phase){
       <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
       ${canManageCalendar()?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
       <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🪪 ID Absen</button>
-      <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan Absen</button>
+      <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
       <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
       <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
     </div>
@@ -6100,6 +6100,15 @@ async function bulkHadir(status){
 }
 
 
+
+function bukaKontrolAbsen(kegiatanId){
+  const id=Number(kegiatanId||curKegiatanId||0);
+  if(!id){toast('Pilih acara terlebih dahulu',true);return;}
+  const url=window.location.origin+'/kontrol-absen.html?kegiatan='+encodeURIComponent(id);
+  const w=window.open(url,'_blank');
+  if(!w) prompt('Popup diblokir. Buka link kontrol absen ini:',url);
+}
+
 async function bukaAbsenTerminal(){
   if(!curKegiatanId){toast('Pilih acara terlebih dahulu',true);return;}
   return bukaAbsenTerminalFor(curKegiatanId);
@@ -6184,235 +6193,451 @@ function _bukaCetakKegiatan(html,title){
   w.document.close();
 }
 
-async function cetakKegiatan(id){
-  curKegiatanId=id;
-  await cetakIdAbsenPeserta(id);
-}
 
-function _mergeAbsenIds(rows){
-  const map=new Map((rows||[]).map(x=>[String(x.did),String(x.absen_id??'')]));
-  const apply=arr=>(arr||[]).forEach(j=>{
-    const v=map.get(String(j.did));
-    if(v!==undefined&&v!=='') j.absen_id=v.padStart(4,'0');
-  });
-  apply(aJamaahDesa);
-  apply(aJamaah);
-  return map;
-}
+function _bukaPreviewIdAbsen(html,title){
+  const w=window.open('','_blank','width=1180,height=900');
+  if(!w){toast('Browser memblokir popup preview',true);return;}
 
-async function _ensureIdAbsenPeserta(list){
-  const dids=[...new Set((list||[]).map(h=>String(h.jamaah_did??'')).filter(Boolean))];
-  const known=new Map();
-  (aJamaahDesa||[]).forEach(j=>{if(j.absen_id!==null&&j.absen_id!==undefined&&String(j.absen_id)!=='')known.set(String(j.did),String(j.absen_id).padStart(4,'0'));});
-  (aJamaah||[]).forEach(j=>{if(j.absen_id!==null&&j.absen_id!==undefined&&String(j.absen_id)!=='')known.set(String(j.did),String(j.absen_id).padStart(4,'0'));});
-  const missing=dids.filter(d=>!known.has(d));
-  if(!missing.length) return known;
-  if(!DK_ATT_TOKEN){toast('Sesi ID absen tidak tersedia. Silakan masuk ulang sebagai pengelola Acara.',true);return null;}
-  const {data,error}=await sb.rpc('dk_attendance_absen_ids',{p_token:DK_ATT_TOKEN});
-  if(error||!data||data.ok!==true){toast('Gagal memuat ID absen: '+(error?.message||data?.error||'Unknown error'),true);return null;}
-  const fresh=_mergeAbsenIds(Array.isArray(data.data)?data.data:[]);
-  fresh.forEach((v,k)=>known.set(k,String(v).padStart(4,'0')));
-  return known;
-}
+  const safeTitle=String(title||'Nomor ID Absen').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+  const pdfName=(String(title||'Nomor ID Absen')
+    .replace(/[\\/:*?"<>|]+/g,'-')
+    .replace(/\s+/g,' ')
+    .trim()||'Nomor ID Absen')+'.pdf';
 
-async function cetakIdAbsenPeserta(kegiatanId=null){
-  if(kegiatanId!==null&&kegiatanId!==undefined) curKegiatanId=kegiatanId;
-  const k=aKegiatan.find(x=>Number(x.id)===Number(curKegiatanId));
-  if(!k){toast('Kegiatan tidak ditemukan',true);return;}
-  const list=aHadir.filter(h=>Number(h.kegiatan_id)===Number(curKegiatanId));
-  if(!list.length){toast('Peserta acara belum tersedia',true);return;}
+  w.document.open();
+  w.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${safeTitle}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+    <style>
+      :root{
+        --id-font:11.5px;
+        --margin-left:8mm;
+        --margin-right:8mm;
+      }
+      *{box-sizing:border-box}
+      html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#111;background:#d7dbe0}
+      .preview-toolbar{
+        position:sticky;top:0;z-index:9999;background:#123f2c;color:#fff;
+        padding:10px 14px;box-shadow:0 2px 10px rgba(0,0,0,.18)
+      }
+      .preview-toolbar-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .preview-toolbar .ttl{font-size:13px;font-weight:800;margin-right:4px}
+      .ctrl{
+        display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.10);
+        padding:6px 8px;border-radius:7px;font-size:11px
+      }
+      .ctrl label{font-weight:700;white-space:nowrap}
+      .ctrl input[type=range]{width:120px}
+      .ctrl input[type=number]{
+        width:58px;padding:4px 5px;border-radius:5px;border:1px solid #cbd5e1;
+        font-size:11px;text-align:center
+      }
+      .preview-toolbar button{
+        border:none;border-radius:6px;padding:7px 11px;font-size:11px;
+        font-weight:800;cursor:pointer
+      }
+      .btn-pdf{background:#10b981;color:white}
+      .btn-print{background:#2563eb;color:white}
+      .btn-reset{background:#f3f4f6;color:#374151}
+      .btn-close{background:#6b7280;color:white}
+      #fitStatus{font-size:10px;font-weight:700;margin-left:auto}
+      #fitStatus.ok{color:#bbf7d0}
+      #fitStatus.warn{color:#fde68a}
+      #previewWrap{padding:12mm 0 20mm;overflow:auto}
+      #previewRoot{width:max-content;margin:0 auto}
+      #previewRoot .pw{max-width:none!important;margin:0!important;padding:0!important;box-shadow:none!important}
+      #previewRoot .id-page{
+        width:210mm!important;
+        height:297mm!important;
+        min-height:297mm!important;
+        max-height:297mm!important;
+        margin:0 auto 10mm!important;
+        padding:8mm var(--margin-right) 8mm var(--margin-left)!important;
+        background:#fff!important;
+        box-shadow:0 5px 22px rgba(0,0,0,.22)!important;
+        overflow:hidden!important;
+        break-after:page!important;
+        page-break-after:always!important;
+      }
+      #previewRoot .id-page:last-of-type{break-after:auto!important;page-break-after:auto!important}
+      #previewRoot .id-table{font-size:var(--id-font)!important}
+      #previewRoot .id-table th,#previewRoot .id-table td{
+        font-size:inherit!important;
+      }
+      #previewRoot .id-table .id-code{
+        font-size:calc(var(--id-font) + .5px)!important;
+      }
+      #previewRoot .id-col-title{
+        font-size:calc(var(--id-font) + 1.5px)!important;
+      }
+      #previewRoot .id-kel td{
+        font-size:calc(var(--id-font) - 1px)!important;
+      }
+      #previewRoot .id-meta{
+        font-size:calc(var(--id-font) - 2px)!important;
+      }
+      #previewRoot .id-gender{
+        font-size:calc(var(--id-font) - .5px)!important;
+      }
+      .pdf-working{
+        position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.72);
+        display:none;align-items:center;justify-content:center;color:#fff;
+        font-size:15px;font-weight:800
+      }
+      .pdf-working.show{display:flex}
+      @page{size:A4 portrait;margin:0}
+      @media print{
+        html,body{background:#fff!important}
+        .preview-toolbar,.pdf-working{display:none!important}
+        #previewWrap{padding:0!important;overflow:visible!important}
+        #previewRoot{width:auto!important;margin:0!important}
+        #previewRoot .id-page{
+          width:210mm!important;height:297mm!important;
+          margin:0!important;box-shadow:none!important;
+          break-after:page!important;page-break-after:always!important
+        }
+        #previewRoot .id-page:last-of-type{break-after:auto!important;page-break-after:auto!important}
+      }
+    </style></head><body>
+      <div class="preview-toolbar">
+        <div class="preview-toolbar-row">
+          <div class="ttl">Preview A4 · Nomor ID Absen</div>
 
-  const idMap=await _ensureIdAbsenPeserta(list);
-  if(!idMap) return;
+          <div class="ctrl">
+            <label>Font</label>
+            <input id="fontRange" type="range" min="8" max="16" step="0.5" value="11.5">
+            <input id="fontNum" type="number" min="8" max="16" step="0.5" value="11.5">
+            <span>px</span>
+          </div>
 
-  const jMap=new Map();
-  (aJamaahDesa||[]).forEach(j=>jMap.set(String(j.did),j));
-  (aJamaah||[]).forEach(j=>jMap.set(String(j.did),j));
-  const rows=list.map(h=>{
-    const did=String(h.jamaah_did??'');
-    const j=jMap.get(did)||{};
-    const jk=String(j.jenis_kelamin||'').trim().toUpperCase().charAt(0);
-    const sn=String(j.status_nikah||'').trim().toLowerCase();
-    const orangTua=(sn==='menikah'||sn.includes('janda')||sn.includes('duda'));
-    const rawId=idMap.get(did)??j.absen_id??'';
-    const kelompok=String(j.kelompok_nama||j.kelompok||h.kelompok||k.kelompok||'Tanpa Kelompok').trim()||'Tanpa Kelompok';
-    return {
-      did,
-      nama:h.jamaah_nama||j.nama||'',
-      jk:(jk==='L'||jk==='P')?jk:'',
-      status_nikah:j.status_nikah||'',
-      orangTua,
-      kelompok,
-      absen_id:rawId!==''?String(rawId).padStart(4,'0'):'—'
-    };
-  }).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
+          <div class="ctrl">
+            <label>Margin kiri</label>
+            <input id="leftRange" type="range" min="3" max="25" step="1" value="8">
+            <input id="leftNum" type="number" min="3" max="25" step="1" value="8">
+            <span>mm</span>
+          </div>
 
-  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  const meta=[tgl,k.waktu?String(k.waktu).substring(0,5)+' WIB':'',k.lokasi||''].filter(Boolean).join(' · ');
-  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const ROWS_PER_PAGE=34;
+          <div class="ctrl">
+            <label>Margin kanan</label>
+            <input id="rightRange" type="range" min="3" max="25" step="1" value="8">
+            <input id="rightNum" type="number" min="3" max="25" step="1" value="8">
+            <span>mm</span>
+          </div>
 
-  function tableHtml(title,arr,start,captionColor){
-    let h=`<div style="font-size:11px;font-weight:800;color:${captionColor};margin:0 0 5px;display:flex;justify-content:space-between;gap:6px;"><span>${esc(title)}</span><span>${arr.length} orang</span></div>`;
-    h+=`<table class="id-table"><thead><tr><th style="width:28px;">No.</th><th>Nama Jamaah</th><th style="width:66px;">ID Absen</th></tr></thead><tbody>`;
-    if(!arr.length){h+=`<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px 4px;">— Tidak ada peserta —</td></tr>`;}
-    arr.forEach((r,i)=>{h+=`<tr><td class="no">${start+i+1}</td><td>${esc(r.nama)}</td><td class="id-code">${esc(r.absen_id||'—')}</td></tr>`;});
-    h+='</tbody></table>';
-    return h;
-  }
-
-  function buildGenderPages(groupRows,kelompok,genderCode,genderTitle,youthTitle,icon){
-    const genderRows=groupRows.filter(r=>r.jk===genderCode);
-    if(!genderRows.length)return [];
-    const parent=genderRows.filter(r=>r.orangTua).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
-    const youth=genderRows.filter(r=>!r.orangTua).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
-    const pages=Math.max(1,Math.ceil(parent.length/ROWS_PER_PAGE),Math.ceil(youth.length/ROWS_PER_PAGE));
-    const out=[];
-    for(let p=0;p<pages;p++){
-      const pa=parent.slice(p*ROWS_PER_PAGE,(p+1)*ROWS_PER_PAGE);
-      const ya=youth.slice(p*ROWS_PER_PAGE,(p+1)*ROWS_PER_PAGE);
-      out.push(`<section class="id-sheet">
-        <div class="group-kicker">KELOMPOK · ${esc(kelompok)}</div>
-        <h1>DAFTAR ID ABSEN PESERTA</h1>
-        <div class="sub"><b>${esc(k.acara_nama||'Acara UBNB')}</b><br>${esc(meta)}<br>${icon} <b>${esc(genderTitle)}</b> · ${genderRows.length} peserta${pages>1?` · Halaman ${p+1}/${pages}`:''}</div>
-        <div class="id-grid">
-          <div class="id-col">${tableHtml('ORANG TUA · Menikah + Janda/Duda',pa,p*ROWS_PER_PAGE,'#166534')}</div>
-          <div class="id-col">${tableHtml(youthTitle,ya,p*ROWS_PER_PAGE,'#1d4ed8')}</div>
+          <button class="btn-reset" onclick="resetLayout()">↺ Reset</button>
+          <button class="btn-pdf" onclick="downloadPdf()">⬇ Download PDF</button>
+          <button class="btn-print" onclick="window.print()">🖨 Print</button>
+          <button class="btn-close" onclick="window.close()">✕ Tutup</button>
+          <span id="fitStatus" class="ok">A4 siap</span>
         </div>
-        <div class="id-foot">Kelompok ${esc(kelompok)} · ID Absen tetap 4 digit · digunakan pada Terminal Absen UBNB</div>
-      </section>`);
-    }
-    return out;
-  }
+      </div>
 
-  function buildUnknownPages(groupRows,kelompok){
-    const unknown=groupRows.filter(r=>!r.jk);
-    if(!unknown.length)return [];
-    const chunks=[];for(let i=0;i<unknown.length;i+=ROWS_PER_PAGE*2)chunks.push(unknown.slice(i,i+ROWS_PER_PAGE*2));
-    return chunks.map((chunk,p)=>`<section class="id-sheet">
-      <div class="group-kicker">KELOMPOK · ${esc(kelompok)}</div>
-      <h1>DAFTAR ID ABSEN PESERTA</h1>
-      <div class="sub"><b>${esc(k.acara_nama||'Acara UBNB')}</b><br>${esc(meta)}<br>❓ <b>JENIS KELAMIN BELUM DISET</b>${chunks.length>1?` · Halaman ${p+1}/${chunks.length}`:''}</div>
-      ${tableHtml('Perlu perbaikan data jamaah',chunk,p*ROWS_PER_PAGE*2,'#b45309')}
-      <div class="id-foot">Kelompok ${esc(kelompok)} · peserta di halaman ini belum dapat dipisahkan ke halaman laki-laki/perempuan.</div>
-    </section>`);
-  }
+      <div id="previewWrap"><div id="previewRoot">${html}</div></div>
+      <div id="pdfWorking" class="pdf-working">Membuat PDF A4…</div>
 
-  const groupOrder={PW1:1,PW2:2,PW3:3,PW4:4};
-  const kelompokList=[...new Set(rows.map(r=>r.kelompok))].sort((a,b)=>{
-    const aa=groupOrder[String(a).toUpperCase()]??99,bb=groupOrder[String(b).toUpperCase()]??99;
-    return aa-bb||String(a).localeCompare(String(b),'id');
-  });
+      <script>
+        const PDF_NAME=${JSON.stringify(pdfName)};
+        const root=document.documentElement;
+        const $=id=>document.getElementById(id);
 
-  const pages=[];
-  kelompokList.forEach(kelompok=>{
-    const groupRows=rows.filter(r=>r.kelompok===kelompok);
-    pages.push(...buildGenderPages(groupRows,kelompok,'L','LAKI-LAKI','REMAJA PUTRA','👨'));
-    pages.push(...buildGenderPages(groupRows,kelompok,'P','PEREMPUAN','REMAJA PUTRI','👩'));
-    pages.push(...buildUnknownPages(groupRows,kelompok));
-  });
-  if(!pages.length){toast('Tidak ada peserta yang dapat dicetak',true);return;}
+        function clamp(v,min,max,def){
+          v=parseFloat(v);
+          if(!Number.isFinite(v)) return def;
+          return Math.min(max,Math.max(min,v));
+        }
+        function syncPair(rangeId,numId,cssVar,unit,min,max,def){
+          const r=$(rangeId),n=$(numId);
+          const apply=v=>{
+            v=clamp(v,min,max,def);
+            r.value=v;n.value=v;
+            root.style.setProperty(cssVar,v+unit);
+            requestAnimationFrame(checkFit);
+          };
+          r.addEventListener('input',()=>apply(r.value));
+          n.addEventListener('input',()=>apply(n.value));
+          return apply;
+        }
+        const setFont=syncPair('fontRange','fontNum','--id-font','px',8,16,11.5);
+        const setLeft=syncPair('leftRange','leftNum','--margin-left','mm',3,25,8);
+        const setRight=syncPair('rightRange','rightNum','--margin-right','mm',3,25,8);
 
-  const body=`<style>
-    .id-sheet{page-break-after:always;min-height:255mm;display:flex;flex-direction:column;}
-    .id-sheet:last-child{page-break-after:auto;}
-    .group-kicker{display:inline-block;align-self:flex-start;background:#0f5132;color:white;font-size:10px;font-weight:900;letter-spacing:.7px;padding:4px 9px;border-radius:999px;margin-bottom:5px;}
-    .id-grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm;align-items:start;margin-top:7px;}
-    .id-col{min-width:0;}
-    .id-table{table-layout:fixed;font-size:9.6px;}
-    .id-table th,.id-table td{padding:3px 4px;line-height:1.14;}
-    .id-table td:nth-child(2){word-break:break-word;}
-    .id-code{text-align:center;font-size:13px;font-weight:900;letter-spacing:1px;color:#0f5132;font-variant-numeric:tabular-nums;}
-    .id-foot{margin-top:auto;padding-top:7px;border-top:1px solid #d1d5db;text-align:center;font-size:9px;color:#6b7280;}
-    @media print{.id-sheet{min-height:257mm;}.id-grid{gap:6mm;}}
-  </style>`+pages.join('');
-  _bukaCetakKegiatan(body,'ID Absen Peserta - '+(k.acara_nama||''));
+        function resetLayout(){
+          setFont(11.5);setLeft(8);setRight(8);
+        }
+
+        function checkFit(){
+          const pages=[...document.querySelectorAll('#previewRoot .id-page')];
+          const overflow=pages.filter(p=>p.scrollHeight>p.clientHeight+2 || p.scrollWidth>p.clientWidth+2);
+          const s=$('fitStatus');
+          if(overflow.length){
+            s.className='warn';
+            s.textContent='⚠ '+overflow.length+' halaman melewati batas A4';
+          }else{
+            s.className='ok';
+            s.textContent='✓ Semua halaman pas A4';
+          }
+        }
+
+        async function downloadPdf(){
+          checkFit();
+          const overflow=[...document.querySelectorAll('#previewRoot .id-page')]
+            .some(p=>p.scrollHeight>p.clientHeight+2 || p.scrollWidth>p.clientWidth+2);
+          if(overflow&&!confirm('Ada konten yang melewati batas A4 dan bisa terpotong. Tetap buat PDF?')) return;
+
+          if(!window.html2canvas || !window.jspdf?.jsPDF){
+            alert('Library PDF belum selesai dimuat. Tunggu beberapa detik lalu coba lagi.');
+            return;
+          }
+
+          const blocker=$('pdfWorking');
+          blocker.classList.add('show');
+          try{
+            const pages=[...document.querySelectorAll('#previewRoot .id-page')];
+            if(!pages.length) throw new Error('Halaman A4 tidak ditemukan');
+
+            const {jsPDF}=window.jspdf;
+            const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+
+            for(let i=0;i<pages.length;i++){
+              const page=pages[i];
+              const oldShadow=page.style.boxShadow;
+              const oldMargin=page.style.margin;
+              page.style.boxShadow='none';
+              page.style.margin='0';
+
+              const canvas=await html2canvas(page,{
+                scale:2,
+                backgroundColor:'#ffffff',
+                useCORS:true,
+                logging:false,
+                width:page.clientWidth,
+                height:page.clientHeight,
+                windowWidth:page.scrollWidth,
+                windowHeight:page.scrollHeight
+              });
+
+              page.style.boxShadow=oldShadow;
+              page.style.margin=oldMargin;
+
+              const img=canvas.toDataURL('image/jpeg',0.96);
+              if(i>0) pdf.addPage('a4','portrait');
+              pdf.addImage(img,'JPEG',0,0,210,297,undefined,'FAST');
+            }
+            pdf.save(PDF_NAME);
+          }catch(e){
+            alert('Gagal membuat PDF: '+(e?.message||e));
+          }finally{
+            blocker.classList.remove('show');
+          }
+        }
+
+        window.addEventListener('load',()=>setTimeout(checkFit,250));
+        window.addEventListener('resize',()=>requestAnimationFrame(checkFit));
+      <\/script>
+    </body></html>`);
+  w.document.close();
+}
+
+function cetakKegiatan(id){
+  curKegiatanId=id;
+  cetakDaftarHadir();
 }
 
 function cetakDaftarHadir(){
   const k=aKegiatan.find(x=>x.id===curKegiatanId);
   if(!k){toast('Kegiatan tidak ditemukan',true);return;}
-  const list=aHadir.filter(h=>h.kegiatan_id===curKegiatanId).sort((a,b)=>(a.jamaah_nama||'').localeCompare(b.jamaah_nama||''));
-  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-  // Helper: lookup gender per jamaah_did
-  const genderMap={};
-  aJamaah.forEach(j=>{
-    const g=(j.jenis_kelamin||'').charAt(0).toUpperCase();
-    if(g==='L'||g==='P') genderMap[j.did]=g;
-  });
-  // Pisah ke 3 grup: laki, perempuan, tidak diset
-  const grpL=[],grpP=[],grpX=[];
-  list.forEach(h=>{
-    const g=genderMap[h.jamaah_did];
-    if(g==='L') grpL.push(h);
-    else if(g==='P') grpP.push(h);
-    else grpX.push(h);
-  });
+  // Hanya peserta wajib pada acara yang sedang dipilih.
+  const list=aHadir
+    .filter(h=>h.kegiatan_id===curKegiatanId)
+    .slice();
 
-  // Tentukan apakah perlu dipisah: ada L DAN ada P
-  const perlu_pisah = (grpL.length>0 && grpP.length>0);
-
-  // Builder satu tabel section
-  function buildTabel(title,rows,startNo){
-    let h='';
-    if(title) h+=`<h2 style="font-size:14px;margin:14px 0 6px;color:#1a6640;border-bottom:2px solid #1a6640;padding-bottom:3px;">${title}</h2>`;
-    h+=`<table><thead><tr>
-      <th style="width:30px;">No</th>
-      <th>Nama</th>
-      <th>KK</th>
-      <th style="width:120px;">Tanda Tangan</th>
-      <th style="width:160px;">Status (H/I/S/T)</th>
-    </tr></thead><tbody>`;
-    rows.forEach((row,i)=>{
-      h+=`<tr>
-        <td class="no">${(startNo||1)+i}</td>
-        <td>${row.jamaah_nama||''}</td>
-        <td>${row.jamaah_kk||''}</td>
-        <td class="tt"></td>
-        <td class="st">H &nbsp; I &nbsp; S &nbsp; T</td>
-      </tr>`;
+  // aJamaahDesa memuat seluruh PW1-PW4 untuk scope Desa;
+  // aJamaah dipakai sebagai fallback untuk scope Kelompok.
+  const jMap=new Map();
+  [...(Array.isArray(aJamaahDesa)?aJamaahDesa:[]),...(Array.isArray(aJamaah)?aJamaah:[])]
+    .forEach(j=>{
+      if(j&&j.did!=null) jMap.set(String(j.did),j);
     });
-    // Pad: minimal 10 baris kosong untuk jaga tampilan rapi
-    const padTo=Math.max(rows.length+5, Math.ceil(rows.length/5)*5+5);
-    for(let i=rows.length;i<padTo;i++){
-      h+=`<tr><td class="no">${(startNo||1)+i}</td><td></td><td></td><td class="tt"></td><td class="st">H &nbsp; I &nbsp; S &nbsp; T</td></tr>`;
+
+  const escPrint=v=>String(v??'').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+  const normPrint=v=>String(v??'').trim().toLowerCase().replace(/\s+/g,' ');
+  const kelOrder={PW1:1,PW2:2,PW3:3,PW4:4};
+
+  const rows=list.map(h=>{
+    const j=jMap.get(String(h.jamaah_did))||{};
+    const jk=normPrint(j.jenis_kelamin);
+    const gender=jk.startsWith('l')?'L':jk.startsWith('p')?'P':'';
+    const nikah=normPrint(j.status_nikah);
+
+    let kategori='unknown';
+    if(nikah.includes('belum')) kategori='remaja';
+    else if(nikah.includes('menikah')||nikah.includes('janda')||nikah.includes('duda')) kategori='ortu';
+
+    return {
+      nama:h.jamaah_nama||j.nama||'',
+      did:h.jamaah_did,
+      absen_id:j.absen_id||h.absen_id||'',
+      kelompok:j.kelompok_nama||k.kelompok||'',
+      gender,
+      kategori,
+      status_nikah:j.status_nikah||''
+    };
+  }).sort((a,b)=>{
+    const ka=kelOrder[a.kelompok]||99;
+    const kb=kelOrder[b.kelompok]||99;
+    if(ka!==kb) return ka-kb;
+    return String(a.nama).localeCompare(String(b.nama),'id');
+  });
+
+  const grpL=rows.filter(r=>r.gender==='L');
+  const grpP=rows.filter(r=>r.gender==='P');
+  const grpX=rows.filter(r=>!r.gender);
+
+  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{
+    weekday:'long',day:'numeric',month:'long',year:'numeric'
+  });
+  const meta=[
+    tgl,
+    k.waktu?k.waktu.substring(0,5):'',
+    k.lokasi||'',
+    k.kelompok||'Desa Perwira'
+  ].filter(Boolean).join(' · ');
+
+  function buildIdTable(title,items){
+    let h=`<div class="id-col">
+      <div class="id-col-title">${escPrint(title)} <span>(${items.length})</span></div>
+      <table class="id-table">
+        <thead><tr>
+          <th class="id-no">No.</th>
+          <th>Nama Jamaah</th>
+          <th class="id-code">ID Absen</th>
+        </tr></thead><tbody>`;
+
+    if(!items.length){
+      h+=`<tr><td colspan="3" class="id-empty">— Tidak ada peserta —</td></tr>`;
+    }else{
+      let no=0;
+      let lastKel=null;
+      items.forEach(r=>{
+        if(r.kelompok&&r.kelompok!==lastKel){
+          h+=`<tr class="id-kel"><td colspan="3">${escPrint(r.kelompok)}</td></tr>`;
+          lastKel=r.kelompok;
+        }
+        no++;
+        h+=`<tr>
+          <td class="id-no">${no}</td>
+          <td class="id-name">${escPrint(r.nama)}</td>
+          <td class="id-code">${r.absen_id?`<b>${escPrint(r.absen_id)}</b>`:'<span class="id-missing">—</span>'}</td>
+        </tr>`;
+      });
     }
-    h+=`</tbody></table>`;
+    h+='</tbody></table></div>';
     return h;
   }
 
-  let body='';
-  // Helper: builder section komplit dengan header
-  function buildSection(subtitle,rows,withHeader){
-    let h='';
-    if(withHeader){
-      h+=`<h1>DAFTAR HADIR ${(k.acara_nama||'').toUpperCase()}</h1>
-        <div class="sub">${tgl}${k.waktu?' · '+k.waktu.substring(0,5):''}${k.lokasi?' · '+k.lokasi:''}<br>Kelompok: ${k.kelompok||'Desa Perwira'} · Total: ${list.length} peserta wajib</div>`;
+  function buildGenderPage(gender,items){
+    const male=gender==='L';
+    const dewasa=items.filter(r=>r.kategori==='ortu');
+    const remaja=items.filter(r=>r.kategori==='remaja');
+    const unknown=items.filter(r=>r.kategori==='unknown');
+
+    let h=`<section class="id-page">
+      <div class="id-head">
+        <div class="id-title">DAFTAR NOMOR ID ABSEN</div>
+        <div class="id-event">${escPrint(k.acara_nama||'')}</div>
+        <div class="id-meta">${escPrint(meta)}</div>
+        <div class="id-gender">${male?'LAKI-LAKI':'PEREMPUAN'} · ${items.length} PESERTA</div>
+      </div>
+      <div class="id-grid">
+        ${buildIdTable(male?'MENIKAH / DUDA':'MENIKAH / JANDA',dewasa)}
+        ${buildIdTable(male?'REMAJA PUTRA':'REMAJA PUTRI',remaja)}
+      </div>`;
+
+    if(unknown.length){
+      h+=`<div class="id-unknown">
+        <div class="id-unknown-title">STATUS NIKAH BELUM TERKLASIFIKASI (${unknown.length})</div>
+        <table class="id-table"><thead><tr>
+          <th class="id-no">No.</th><th>Nama Jamaah</th><th>Status</th><th class="id-code">ID Absen</th>
+        </tr></thead><tbody>`;
+      unknown.forEach((r,i)=>{
+        h+=`<tr><td class="id-no">${i+1}</td><td>${escPrint(r.nama)}</td>
+          <td>${escPrint(r.status_nikah||'Belum diisi')}</td>
+          <td class="id-code">${r.absen_id?escPrint(r.absen_id):'—'}</td></tr>`;
+      });
+      h+='</tbody></table></div>';
     }
-    if(subtitle) h+=`<h2 style="font-size:14px;margin:10px 0 6px;color:#1a6640;border-bottom:2px solid #1a6640;padding-bottom:3px;">${subtitle}</h2>`;
-    h+=buildTabel('',rows,1);
-    h+=`<div class="tt-foot">
-      <div><div class="area"></div>Pencatat</div>
-      <div><div class="area"></div>Pengurus</div>
-    </div>`;
+
+    h+='</section>';
     return h;
   }
 
-  if(perlu_pisah){
-    // Pisah L dan P, masing-masing punya header DAFTAR HADIR + TT footer sendiri
-    body+=buildSection('👨 LAKI-LAKI ('+grpL.length+' orang)', grpL, true);
-    body+=`<div class="break"></div>`;
-    body+=buildSection('👩 PEREMPUAN ('+grpP.length+' orang)', grpP, true);
-    if(grpX.length){
-      body+=`<div class="break"></div>`;
-      body+=buildSection('❓ JENIS KELAMIN BELUM DISET ('+grpX.length+' orang)', grpX, true);
+  let body=`<style>
+    @page{size:A4 portrait;margin:8mm!important;}
+    .pw{max-width:none!important;margin:0!important;padding:0!important;box-shadow:none!important;}
+    .id-page{background:#fff;min-height:276mm;padding:1mm 1mm 0;}
+    .id-page+.id-page{page-break-before:always;break-before:page;}
+    .id-head{text-align:center;margin:0 0 6mm;}
+    .id-title{font-size:17px;font-weight:800;letter-spacing:.4px;}
+    .id-event{font-size:14px;font-weight:800;margin-top:2px;}
+    .id-meta{font-size:9.5px;margin-top:2px;}
+    .id-gender{display:inline-block;margin-top:5px;padding:4px 12px;border:1.5px solid #000;border-radius:99px;font-size:11px;font-weight:800;}
+    .id-grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm;align-items:start;}
+    .id-col{min-width:0;}
+    .id-col-title{text-align:center;font-size:13px;font-weight:800;border:1px solid #000;border-bottom:0;padding:7px 5px;background:#f2f2f2;}
+    .id-col-title span{font-weight:600;}
+    table.id-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11.5px;border:1px solid #000;}
+    .id-table th,.id-table td{border:1px solid #000;padding:6.5px 5px;vertical-align:middle;line-height:1.35;}
+    .id-table th{background:#e8f5ee;text-align:center;font-weight:800;}
+    .id-table .id-no{width:32px;text-align:center;}
+    .id-table .id-code{width:82px;text-align:center;font-size:12px;letter-spacing:.25px;}
+    .id-table .id-name{word-break:normal;overflow-wrap:anywhere;}
+    .id-kel td{background:#f4f4f4;font-size:10.5px;font-weight:800;text-align:left;padding:5px 5px;}
+    .id-empty{text-align:center;color:#777;font-style:italic;padding:8px!important;}
+    .id-missing{color:#b91c1c;font-weight:800;}
+    .id-unknown{margin-top:5mm;}
+    .id-unknown-title{font-size:11px;font-weight:800;margin-bottom:4px;}
+    .id-table tr{break-inside:avoid;page-break-inside:avoid;}
+    @media print{
+      body{background:#fff!important;}
+      .id-page{min-height:auto;}
     }
-  } else {
-    // Gabung 1 section
-    body+=buildSection('', list, true);
+  </style>`;
+
+  if(grpL.length) body+=buildGenderPage('L',grpL);
+  if(grpP.length) body+=buildGenderPage('P',grpP);
+
+  if(grpX.length){
+    body+=`<section class="id-page">
+      <div class="id-head">
+        <div class="id-title">DAFTAR NOMOR ID ABSEN</div>
+        <div class="id-event">${escPrint(k.acara_nama||'')}</div>
+        <div class="id-meta">${escPrint(meta)}</div>
+        <div class="id-gender">JENIS KELAMIN BELUM DIISI · ${grpX.length} PESERTA</div>
+      </div>
+      <div class="id-unknown">
+        <table class="id-table"><thead><tr>
+          <th class="id-no">No.</th><th>Nama Jamaah</th><th>Status</th><th class="id-code">ID Absen</th>
+        </tr></thead><tbody>`;
+    grpX.forEach((r,i)=>{
+      body+=`<tr><td class="id-no">${i+1}</td><td>${escPrint(r.nama)}</td>
+        <td>${escPrint(r.status_nikah||'Belum diisi')}</td>
+        <td class="id-code">${r.absen_id?escPrint(r.absen_id):'—'}</td></tr>`;
+    });
+    body+='</tbody></table></div></section>';
   }
-  _bukaCetakKegiatan(body,'Daftar Hadir - '+(k.acara_nama||''));
+
+  if(!rows.length){
+    body+='<div style="padding:30px;text-align:center;font-weight:700;">Tidak ada peserta pada kegiatan ini.</div>';
+  }
+
+  _bukaPreviewIdAbsen(body,'Nomor ID Absen - '+(k.acara_nama||''));
 }
 
 function generateLaporanKegiatan(id){
@@ -8258,11 +8483,7 @@ function renderCalendarDetail(){
   else if(ready)participantInfo='<b style="color:#047857;">Sudah masuk H-7 — peserta dapat digenerate sekarang</b>';
   else participantInfo=`Peserta belum digenerate · dapat digenerate mulai <b>${calFmtDate(calendarH7Date(e),false)}</b>`;
   let actions='';
-  if(e.generated&&e.actual){
-    actions+=`<button class="primary" onclick="closeMod('modal-calendar-detail');bukaDaftarHadir(${e.id})">✅ Buka Absen</button>`;
-    actions+=`<button class="blue" onclick="cetakIdAbsenPeserta(${e.id})">🪪 ID Absen</button>`;
-    actions+=`<button style="background:#7c3aed;border-color:#7c3aed;color:#fff;" onclick="generateLaporanKegiatan(${e.id})">📊 Laporan Absen</button>`;
-  }
+  if(e.generated&&e.actual)actions+=`<button class="primary" onclick="closeMod('modal-calendar-detail');bukaDaftarHadir(${e.id})">✅ Buka Absen</button>`;
   if(manage&&!e.cancelled){
     if(!e.generated&&ready)actions+=`<button class="primary" onclick="generateCalendarParticipants('${e.key}')">⚡ Generate dari Kriteria</button>`;
     if(e.kind==='virtual'&&ready)actions+=`<button class="blue" onclick="openVirtualPeserta('${e.key}')">👥 Pilih Peserta Manual</button>`;
