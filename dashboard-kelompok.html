@@ -7648,7 +7648,7 @@ function openInvitationForEntry(key){
   if(_invSignatureData){pr.src=_invSignatureData;pr.style.display='block';if(st)st.textContent='TTD tersimpan. Pilih file baru untuk mengganti.';}else{pr.removeAttribute('src');pr.style.display='none';if(st)st.textContent='Opsional. Gambar akan diperkecil otomatis lalu disimpan pada undangan dan ikut tampil di PDF/link digital.';}
   invModelChanged();renderInvitationResult(inv);openMod('modal-invitation');closeMod('modal-calendar-detail');
 }
-function invModelChanged(){const model=document.getElementById('inv-model')?.value||'massal_kelompok',p=eventParticipantsGrouped(_invEntry||{}),slots=slotRowsForEntry(_invEntry||{});let text='';if(model==='massal_kelompok'){const groups=['PW1','PW2','PW3','PW4'].filter(g=>(p[g]||[]).length||eventSlotsForGroup(_invEntry,g).length);text=`📣 Akan dibuat <b>${groups.length} undangan kelompok</b>: ${groups.join(', ')||'tidak ada penerima'}. Setiap PDF memuat nama peserta dikelompokkan Laki-laki / Perempuan dan slot kuota.`;}else{text=`✉️ Akan dibuat <b>${calendarParticipantsForEntry(_invEntry||{}).length} undangan personal</b>, masing-masing memiliki link unik.`;}document.getElementById('inv-receiver-summary').innerHTML=text;}
+function invModelChanged(){const model=document.getElementById('inv-model')?.value||'massal_kelompok',p=eventParticipantsGrouped(_invEntry||{}),slots=slotRowsForEntry(_invEntry||{});let text='';if(model==='massal_kelompok'){const groups=['PW1','PW2','PW3','PW4'].filter(g=>(p[g]||[]).length||eventSlotsForGroup(_invEntry,g).length);text=`📣 Akan dibuat <b>${groups.length} undangan kelompok</b>: ${groups.join(', ')||'tidak ada penerima'}. Setiap PDF memuat peserta berurutan: Bapak-bapak / Ibu-ibu, lalu Remaja Putra / Remaja Putri, beserta slot kuota.`;}else{text=`✉️ Akan dibuat <b>${calendarParticipantsForEntry(_invEntry||{}).length} undangan personal</b>, masing-masing memiliki link unik.`;}document.getElementById('inv-receiver-summary').innerHTML=text;}
 function invApplyTemplate(){const id=Number(document.getElementById('inv-template')?.value||0),t=aUndanganTemplates.find(x=>Number(x.id)===id);if(!t)return;document.getElementById('inv-model').value=t.model||'massal_kelompok';document.getElementById('inv-judul').value=t.judul||'UNDANGAN';document.getElementById('inv-naskah').value=t.naskah||'';document.getElementById('inv-wa-text').value=t.wa_text||defaultInvitationWaText(t.model||'massal_kelompok');invModelChanged();}
 function invSignatureToData(file){return new Promise((resolve,reject)=>{const rd=new FileReader();rd.onerror=()=>reject(new Error('Gagal membaca file TTD'));rd.onload=()=>{const img=new Image();img.onerror=()=>reject(new Error('File TTD bukan gambar yang valid'));img.onload=()=>{try{const maxW=900,maxH=320,scale=Math.min(1,maxW/img.width,maxH/img.height),w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale)),cv=document.createElement('canvas');cv.width=w;cv.height=h;const ctx=cv.getContext('2d');if(!ctx)throw new Error('Canvas tidak tersedia');if(/^image\/jpe?g$/i.test(file.type||'')){ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);}ctx.drawImage(img,0,0,w,h);let out=cv.toDataURL(/^image\/jpe?g$/i.test(file.type||'')?'image/jpeg':'image/png',0.88);if(out.length>1400000)out=cv.toDataURL('image/jpeg',0.82);resolve(out);}catch(e){reject(e);}};img.src=String(rd.result||'');};rd.readAsDataURL(file);});}
 function invSignaturePicked(ev){const f=ev.target.files?.[0];if(!f)return;const st=document.getElementById('inv-signature-status');if(st)st.textContent='Memproses gambar TTD...';_invSignaturePending=invSignatureToData(f).then(data=>{_invSignatureData=data;const im=document.getElementById('inv-signature-preview');im.src=data;im.style.display='block';if(st)st.textContent='✅ TTD siap disimpan. Klik Generate / Update Undangan.';return data;}).catch(e=>{_invSignatureData=null;if(st)st.textContent='Gagal memproses TTD: '+(e.message||e);toast('Gagal memproses gambar TTD',true);throw e;});}
@@ -7658,7 +7658,7 @@ async function saveInvitationTemplateFromModal(){const nama=prompt('Nama templat
 async function updateInvitationTemplateFromModal(){const id=Number(document.getElementById('inv-template')?.value||0);if(!id){toast('Pilih template yang akan di-update',true);return;}const old=aUndanganTemplates.find(x=>Number(x.id)===id);if(!old)return;const nama=prompt('Nama template:',old.nama||'');if(!nama)return;const {data,error}=await sb.rpc('dk_invitation_save_template',{p_token:DK_ATT_TOKEN,p_id:id,p_payload:invitationTemplatePayload(nama)});if(error||data?.ok!==true){toast('Gagal update template: '+(error?.message||data?.error||'Unknown'),true);return;}await loadCalendarExtras();invRefreshTemplateSelect(id);toast('✅ Template diperbarui');}
 async function deleteInvitationTemplateFromModal(){const id=Number(document.getElementById('inv-template')?.value||0);if(!id){toast('Pilih template yang akan dihapus',true);return;}const t=aUndanganTemplates.find(x=>Number(x.id)===id);if(!confirm(`Hapus template "${t?.nama||''}"?`))return;const {data,error}=await sb.rpc('dk_invitation_delete_template',{p_token:DK_ATT_TOKEN,p_id:id});if(error||data?.ok!==true){toast('Gagal hapus template: '+(error?.message||data?.error||'Unknown'),true);return;}await loadCalendarExtras();invRefreshTemplateSelect('');toast('✅ Template dihapus');}
 function invitationPayloadRecipients(model){
-  const grouped=eventParticipantsGrouped(_invEntry);if(model==='massal_kelompok')return ['PW1','PW2','PW3','PW4'].map(g=>({recipient_type:'kelompok',kelompok:g,peserta:(grouped[g]||[]).map(j=>({did:j.did,nama:j.nama,kelompok:j.kelompok_nama,gender:pgNormGender(j.jenis_kelamin),nama_kk:j.nama_kk||null})),slots:eventSlotsForGroup(_invEntry,g).map(s=>({nama_slot:s.nama_slot,kuota:s.kuota,allow_over_quota:s.allow_over_quota,gender:s.gender||null}))})).filter(x=>x.peserta.length||x.slots.length);
+  const grouped=eventParticipantsGrouped(_invEntry);if(model==='massal_kelompok')return ['PW1','PW2','PW3','PW4'].map(g=>({recipient_type:'kelompok',kelompok:g,peserta:(grouped[g]||[]).map(j=>({did:j.did,nama:j.nama,kelompok:j.kelompok_nama,gender:pgNormGender(j.jenis_kelamin),status_nikah:j.status_nikah||null,nama_kk:j.nama_kk||null})),slots:eventSlotsForGroup(_invEntry,g).map(s=>({nama_slot:s.nama_slot,kuota:s.kuota,allow_over_quota:s.allow_over_quota,gender:s.gender||null}))})).filter(x=>x.peserta.length||x.slots.length);
   return calendarParticipantsForEntry(_invEntry).map(p=>({recipient_type:'jamaah',jamaah_did:p.did,slots:[]}));
 }
 async function generateInvitation(){
@@ -7761,17 +7761,60 @@ function invPdfEventBox(doc,y){
   doc.setTextColor(0,0,0);return y+h+7;
 }
 function invAddSignature(doc,inv,y){const start=y;let nameY=start;if(inv.signature_data){try{const fmt=inv.signature_data.includes('image/png')?'PNG':'JPEG';doc.addImage(inv.signature_data,fmt,140,start,45,20);nameY=start+25;}catch(_e){nameY=start;}}doc.setTextColor(30,30,30);doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text(inv.signer_name||'',162.5,nameY,{align:'center'});doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.text(inv.signer_title||'',162.5,nameY+5.5,{align:'center'});return nameY+11;}
+function invParticipantStatus(p){const live=p?.did?findJamaahAny(p.did):null;return String(p?.status_nikah||live?.status_nikah||'').trim();}
+function invParticipantBuckets(peserta){
+  const out={bapak:[],ibu:[],remajaPutra:[],remajaPutri:[]};
+  (Array.isArray(peserta)?peserta:[]).forEach(p=>{
+    const g=String(p?.gender||'').toUpperCase(),belum=invParticipantStatus(p)==='Belum Menikah';
+    if(g==='L')(belum?out.remajaPutra:out.bapak).push(p);
+    else if(g==='P')(belum?out.remajaPutri:out.ibu).push(p);
+  });
+  Object.values(out).forEach(a=>a.sort((x,y)=>String(x.nama||'').localeCompare(String(y.nama||''),'id')));
+  return out;
+}
+function invPdfParticipantPage(doc,inv,rec,label='Daftar Peserta'){
+  invPdfFooter(doc);doc.addPage('a4','portrait');let y=invPdfHeader(doc,inv,rec);
+  doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(15,91,70);doc.text(`${label} ${rec.kelompok||''}`.trim(),20,y);return y+7;
+}
+function invPdfPairHeader(doc,y,leftTitle,rightTitle,continuation=false){
+  const lx=20,rx=107,w=83,h=7,titleSuffix=continuation?' (lanjutan)':'';
+  doc.setFillColor(240,253,244);doc.setDrawColor(210,229,217);doc.setLineWidth(.25);
+  doc.roundedRect(lx,y-4.2,w,h,1.2,1.2,'FD');doc.roundedRect(rx,y-4.2,w,h,1.2,1.2,'FD');
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(15,91,70);
+  doc.text(leftTitle+titleSuffix,lx+4,y);doc.text(rightTitle+titleSuffix,rx+4,y);
+  return y+6.5;
+}
+function invPdfParticipantPair(doc,inv,rec,y,leftTitle,leftArr,rightTitle,rightArr){
+  let li=0,ri=0,continued=false;const rowH=5,maxY=269;
+  const begin=(cont=false)=>{if(cont)y=invPdfParticipantPage(doc,inv,rec,'Lanjutan Daftar Peserta');y=invPdfPairHeader(doc,y,leftTitle,rightTitle,cont);continued=cont;};
+  if(y>256)begin(true);else begin(false);
+  doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(35,35,35);
+  while(li<leftArr.length||ri<rightArr.length){
+    if(y>maxY){begin(true);doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(35,35,35);}
+    if(li<leftArr.length){doc.text(`${li+1}. ${leftArr[li].nama||'-'}`,24,y,{maxWidth:78});li++;}
+    if(ri<rightArr.length){doc.text(`${ri+1}. ${rightArr[ri].nama||'-'}`,111,y,{maxWidth:75});ri++;}
+    if(!leftArr.length&&li===0){doc.text('—',24,y);li=1;}
+    if(!rightArr.length&&ri===0){doc.text('—',111,y);ri=1;}
+    y+=rowH;
+  }
+  return y+3;
+}
 function invBuildPage(doc,inv,rec,first=true){
   if(!first)doc.addPage('a4','portrait');let y=invPdfHeader(doc,inv,rec);
   doc.setFont('times','normal');doc.setFontSize(11);doc.setTextColor(38,38,38);y=invPdfStyledText(doc,invResolvedText(inv,rec),20,y,170,5.25)+2;
   y=invPdfEventBox(doc,y);
   if(rec.recipient_type==='kelompok'){
-    const peserta=Array.isArray(rec.peserta_snapshot)?rec.peserta_snapshot:[];const male=peserta.filter(p=>String(p.gender||'')==='L').sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id')),female=peserta.filter(p=>String(p.gender||'')==='P').sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id'));
-    const newContinuation=()=>{invPdfFooter(doc);doc.addPage('a4','portrait');y=invPdfHeader(doc,inv,rec);doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(15,91,70);doc.text(`Lanjutan Daftar Peserta ${rec.kelompok||''}`,20,y);y+=7;};
+    const peserta=Array.isArray(rec.peserta_snapshot)?rec.peserta_snapshot:[],b=invParticipantBuckets(peserta);
+    if(y>252)y=invPdfParticipantPage(doc,inv,rec,'Daftar Peserta');
     doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(15,91,70);doc.text(`Daftar Peserta ${rec.kelompok||''}`,20,y);y+=7;
-    const addGroup=(title,arr)=>{if(y>252)newContinuation();doc.setFillColor(240,253,244);doc.setDrawColor(210,229,217);doc.roundedRect(20,y-3.8,170,6.5,1.2,1.2,'FD');doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(15,91,70);doc.text(title,24,y);y+=7;doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(35,35,35);if(!arr.length){doc.text('—',24,y);y+=5;}else arr.forEach((p,i)=>{if(y>270)newContinuation();doc.text(`${i+1}. ${p.nama||'-'}`,24,y);y+=5;});y+=2.5;};
-    addGroup('Laki-laki',male);addGroup('Perempuan',female);
-    const slots=Array.isArray(rec.slots_snapshot)?rec.slots_snapshot:[];if(slots.length){if(y>250)newContinuation();doc.setFillColor(255,251,235);doc.setDrawColor(237,211,144);doc.roundedRect(20,y-3.8,170,6.5,1.2,1.2,'FD');doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(146,92,17);doc.text('Slot / Kuota Tambahan',24,y);y+=7;doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(45,45,45);slots.forEach(s=>{if(y>270)newContinuation();doc.text(`• ${s.nama_slot}: ${s.kuota} orang${s.allow_over_quota?' (boleh lebih dari kuota)':' (maksimal sesuai kuota)'}`,24,y);y+=5;});}
+    y=invPdfParticipantPair(doc,inv,rec,y,'Bapak-bapak',b.bapak,'Ibu-ibu',b.ibu);
+    y=invPdfParticipantPair(doc,inv,rec,y,'Remaja Putra',b.remajaPutra,'Remaja Putri',b.remajaPutri);
+    const slots=Array.isArray(rec.slots_snapshot)?rec.slots_snapshot:[];
+    if(slots.length){
+      if(y>250)y=invPdfParticipantPage(doc,inv,rec,'Lanjutan Daftar Peserta');
+      doc.setFillColor(255,251,235);doc.setDrawColor(237,211,144);doc.roundedRect(20,y-3.8,170,6.5,1.2,1.2,'FD');doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(146,92,17);doc.text('Slot / Kuota Tambahan',24,y);y+=7;doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(45,45,45);
+      slots.forEach(s=>{if(y>270)y=invPdfParticipantPage(doc,inv,rec,'Lanjutan Daftar Peserta');doc.text(`• ${s.nama_slot}: ${s.kuota} orang${s.allow_over_quota?' (boleh lebih dari kuota)':' (maksimal sesuai kuota)'}`,24,y);y+=5;});
+    }
   }
   if(y>248){invPdfFooter(doc);doc.addPage('a4','portrait');y=invPdfHeader(doc,inv,rec);}
   invAddSignature(doc,inv,y+10);invPdfFooter(doc);
