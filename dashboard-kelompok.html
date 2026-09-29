@@ -9313,6 +9313,11 @@ function ensureFinalRecapModal(){
         <div class="fr-tabs fr-no-print">
           <button id="fr-tab-nama" onclick="setFinalRecapMode('nama')">👥 Dengan Nama</button>
           <button id="fr-tab-tanpa" onclick="setFinalRecapMode('tanpa')">📈 Tanpa Nama</button>
+          <select id="fr-orientation" title="Orientasi cetak" style="border:1px solid #d1d5db;background:#fff;color:#374151;padding:8px 10px;border-radius:7px;font-weight:800;cursor:pointer;">
+            <option value="auto">📐 Orientasi: Otomatis</option>
+            <option value="portrait">↕ Portrait</option>
+            <option value="landscape">↔ Landscape</option>
+          </select>
           <button onclick="printFinalRecap()">🖨️ Cetak / PDF</button>
           <button id="fr-copy-btn" onclick="copyFinalRecapSummary()">🔗 Salin Ringkasan</button>
         </div>
@@ -9393,16 +9398,23 @@ function renderFinalRecap(){
   }
 
   if(_finalRecapMode==='nama'){
-    const order={Hadir:0,Izin:1,Sakit:2,'Tidak Hadir':3};
-    const list=[...p].sort((a,b)=>(order[a.status_kehadiran]??9)-(order[b.status_kehadiran]??9)||String(a.kk||'').localeCompare(String(b.kk||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+    const groups=ubnbReportGroups(p);
+    let no=0,bodyRows='';
+    for(const g of groups){
+      bodyRows+=`<tr style="background:#eaf4ef"><td colspan="11" style="padding:7px 8px;font-weight:900;color:#0f5f46;border-top:2px solid #70a590">${escH(g.label)} · ${g.rows.length} orang <span style="font-size:9px;font-weight:600;color:#64748b">(${escH(g.note)})</span></td></tr>`;
+      for(const x of g.rows){
+        no++;
+        bodyRows+=`<tr>
+          <td>${no}</td><td><b>${escH(x.nama||'-')}</b>${x.auto_added?'<div style="font-size:8px;color:#92400e">⚠ masuk daftar saat absen</div>':''}</td>
+          <td>${escH(x.kk||'-')}</td><td>${escH(x.lp||'-')}</td><td>${x.usia==null?'-':x.usia}</td><td>${escH(x.kelas_kbm||'-')}</td>
+          <td>${escH(x.status_sambung||'-')}</td><td>${escH(x.status_menikah||'-')}</td><td>${finalRecapStatusBadge(x.status_kehadiran)}</td>
+          <td>${escH(x.jam_hadir||'-')}</td><td>${escH(x.input_via||'-')}${x.catatan?'<div style="font-size:8px;color:#64748b">'+escH(x.catatan)+'</div>':''}</td>
+        </tr>`;
+      }
+    }
     html+=`<div class="fr-table-wrap"><table class="fr-table"><thead><tr>
       <th>No.</th><th>Nama</th><th>KK</th><th>L/P</th><th>Usia</th><th>Kelas KBM</th><th>Sambung</th><th>Menikah</th><th>Kehadiran</th><th>Jam</th><th>Via / Keterangan</th>
-    </tr></thead><tbody>${list.map((x,i)=>`<tr>
-      <td>${i+1}</td><td><b>${escH(x.nama||'-')}</b>${x.auto_added?'<div style="font-size:8px;color:#92400e">⚠ masuk daftar saat absen</div>':''}</td>
-      <td>${escH(x.kk||'-')}</td><td>${escH(x.lp||'-')}</td><td>${x.usia==null?'-':x.usia}</td><td>${escH(x.kelas_kbm||'-')}</td>
-      <td>${escH(x.status_sambung||'-')}</td><td>${escH(x.status_menikah||'-')}</td><td>${finalRecapStatusBadge(x.status_kehadiran)}</td>
-      <td>${escH(x.jam_hadir||'-')}</td><td>${escH(x.input_via||'-')}${x.catatan?'<div style="font-size:8px;color:#64748b">'+escH(x.catatan)+'</div>':''}</td>
-    </tr>`).join('')}</tbody></table></div>`;
+    </tr></thead><tbody>${bodyRows}</tbody></table></div>`;
   }else{
     html+=`<div class="fr-note" style="background:#f8fafc;border-color:#cbd5e1;color:#334155">
       Mode <b>Tanpa Nama</b> hanya menampilkan statistik agregat. Nama, KK, ID, dan data personal tidak ikut ditampilkan.
@@ -9710,39 +9722,92 @@ function ubnbPrintBreak(title,obj){
   const entries=Object.entries(obj||{});if(!entries.length)return '';
   return `<div class="p-break"><h4>${ubnbPrintEsc(title)}</h4><div class="p-br-head"><span>Kategori</span><b>Hadir</b><b>Total</b></div>${entries.map(([k,v])=>`<div class="p-br-row"><span>${ubnbPrintEsc(k)}</span><b>${Number(v?.hadir||0)}</b><b>${Number(v?.total||0)}</b></div>`).join('')}</div>`;
 }
+
+function ubnbReportTimeKey(x){
+  const t=String(x?.jam_hadir||'').trim();
+  return /^\d{2}:\d{2}$/.test(t)?t:'99:99';
+}
+function ubnbReportGroups(p){
+  const all=[...(p||[])];
+  const byName=(a,b)=>String(a?.nama||'').localeCompare(String(b?.nama||''),'id',{sensitivity:'base'});
+  const byTime=(a,b)=>ubnbReportTimeKey(a).localeCompare(ubnbReportTimeKey(b))||byName(a,b);
+
+  const hadirL=all.filter(x=>(x.status_kehadiran||'')==='Hadir'&&String(x.lp||'').toUpperCase()==='L').sort(byTime);
+  const hadirP=all.filter(x=>(x.status_kehadiran||'')==='Hadir'&&String(x.lp||'').toUpperCase()==='P').sort(byTime);
+  const hadirUnknown=all.filter(x=>(x.status_kehadiran||'')==='Hadir'&&!['L','P'].includes(String(x.lp||'').toUpperCase())).sort(byTime);
+  const izin=all.filter(x=>(x.status_kehadiran||'')==='Izin').sort(byName);
+  const sakit=all.filter(x=>(x.status_kehadiran||'')==='Sakit').sort(byName);
+  const tidak=all.filter(x=>!['Hadir','Izin','Sakit'].includes(x.status_kehadiran||'Tidak Hadir')).sort(byName);
+
+  const groups=[
+    {key:'hadir-l',label:'HADIR · LAKI-LAKI',note:'urut waktu absen paling awal',rows:hadirL,status:'Hadir'},
+    {key:'hadir-p',label:'HADIR · PEREMPUAN',note:'urut waktu absen paling awal',rows:hadirP,status:'Hadir'},
+  ];
+  if(hadirUnknown.length)groups.push({key:'hadir-x',label:'HADIR · GENDER BELUM TERDATA',note:'urut waktu absen paling awal',rows:hadirUnknown,status:'Hadir'});
+  groups.push(
+    {key:'izin',label:'IZIN',note:'laki-laki & perempuan digabung · urut nama',rows:izin,status:'Izin'},
+    {key:'sakit',label:'SAKIT',note:'laki-laki & perempuan digabung · urut nama',rows:sakit,status:'Sakit'},
+    {key:'tidak',label:'TIDAK HADIR',note:'laki-laki & perempuan digabung · urut nama',rows:tidak,status:'Tidak Hadir'}
+  );
+  return groups.filter(g=>g.rows.length);
+}
+
 function ubnbPrintStatusClass(v){
   if(v==='Hadir')return 'hadir';if(v==='Izin')return 'izin';if(v==='Sakit')return 'sakit';return 'tidak';
 }
 function ubnbPrintStatusCount(r,status){
   if(status==='Hadir')return Number(r.hadir||0);if(status==='Izin')return Number(r.izin||0);if(status==='Sakit')return Number(r.sakit||0);return Number(r.tidak_hadir||0);
 }
-function ubnbPrintDetails(r,p){
-  const order={Hadir:0,Izin:1,Sakit:2,'Tidak Hadir':3};
-  const list=[...(p||[])].sort((a,b)=>(order[a.status_kehadiran]??9)-(order[b.status_kehadiran]??9)||String(a.kk||'').localeCompare(String(b.kk||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
-  let last='',n=0,rows='';
-  for(const x of list){
-    const st=x.status_kehadiran||'Tidak Hadir';
-    if(st!==last){
-      rows+=`<tr class="p-group"><td colspan="10">${ubnbPrintEsc(st)} - ${ubnbPrintStatusCount(r,st)} orang</td></tr>`;
-      last=st;
+function ubnbPrintDetails(r,p,orientation){
+  const groups=ubnbReportGroups(p);
+  const portrait=orientation==='portrait';
+  let n=0,rows='';
+  for(const g of groups){
+    rows+=`<tr class="p-group"><td colspan="${portrait?7:10}">${ubnbPrintEsc(g.label)} · ${g.rows.length} orang <small>${ubnbPrintEsc(g.note)}</small></td></tr>`;
+    for(const x of g.rows){
+      n++;
+      const st=x.status_kehadiran||'Tidak Hadir';
+      const notes=[];
+      if(x.auto_added)notes.push('Masuk daftar saat absen');
+      if(x.catatan)notes.push(x.catatan);
+      if(portrait){
+        rows+=`<tr>
+          <td class="c">${n}</td>
+          <td><strong>${ubnbPrintEsc(x.nama||'-')}</strong><small>KK: ${ubnbPrintEsc(x.kk||'-')}</small></td>
+          <td class="c"><b>${ubnbPrintEsc(x.lp||'-')}</b><small>${x.usia==null?'-':ubnbPrintEsc(x.usia)+' th'}</small></td>
+          <td>${ubnbPrintEsc(x.kelas_kbm||'-')}</td>
+          <td><b>${ubnbPrintEsc(x.status_sambung||'-')}</b><small>${ubnbPrintEsc(x.status_menikah||'-')}</small></td>
+          <td class="p-status ${ubnbPrintStatusClass(st)}">${ubnbPrintEsc(st)}${x.jam_hadir?`<small>${ubnbPrintEsc(x.jam_hadir)}</small>`:''}</td>
+          <td><b>${ubnbPrintEsc(x.input_via||'-')}</b>${notes.length?`<small>${notes.map(ubnbPrintEsc).join(' · ')}</small>`:''}</td>
+        </tr>`;
+      }else{
+        rows+=`<tr>
+          <td class="c">${n}</td>
+          <td><strong>${ubnbPrintEsc(x.nama||'-')}</strong><small>KK: ${ubnbPrintEsc(x.kk||'-')}</small></td>
+          <td class="c">${ubnbPrintEsc(x.lp||'-')}</td>
+          <td class="c">${x.usia==null?'-':ubnbPrintEsc(x.usia)}</td>
+          <td>${ubnbPrintEsc(x.kelas_kbm||'-')}</td>
+          <td>${ubnbPrintEsc(x.status_sambung||'-')}</td>
+          <td>${ubnbPrintEsc(x.status_menikah||'-')}</td>
+          <td class="p-status ${ubnbPrintStatusClass(st)}">${ubnbPrintEsc(st)}</td>
+          <td class="c">${ubnbPrintEsc(x.jam_hadir||'-')}</td>
+          <td><b>${ubnbPrintEsc(x.input_via||'-')}</b>${notes.length?`<small>${notes.map(ubnbPrintEsc).join(' · ')}</small>`:''}</td>
+        </tr>`;
+      }
     }
-    n++;
-    const notes=[];
-    if(x.auto_added)notes.push('Masuk daftar saat absen');
-    if(x.catatan)notes.push(x.catatan);
-    rows+=`<tr>
-      <td class="c">${n}</td>
-      <td><strong>${ubnbPrintEsc(x.nama||'-')}</strong><small>KK: ${ubnbPrintEsc(x.kk||'-')}</small></td>
-      <td class="c">${ubnbPrintEsc(x.lp||'-')}</td>
-      <td class="c">${x.usia==null?'-':ubnbPrintEsc(x.usia)}</td>
-      <td>${ubnbPrintEsc(x.kelas_kbm||'-')}</td>
-      <td>${ubnbPrintEsc(x.status_sambung||'-')}</td>
-      <td>${ubnbPrintEsc(x.status_menikah||'-')}</td>
-      <td class="p-status ${ubnbPrintStatusClass(st)}">${ubnbPrintEsc(st)}</td>
-      <td class="c">${ubnbPrintEsc(x.jam_hadir||'-')}</td>
-      <td><b>${ubnbPrintEsc(x.input_via||'-')}</b>${notes.length?`<small>${notes.map(ubnbPrintEsc).join(' · ')}</small>`:''}</td>
-    </tr>`;
   }
+
+  if(portrait){
+    return `<section class="p-details portrait-details">
+      <div class="p-section-title">Daftar Peserta & Kehadiran</div>
+      <table class="p-table portrait-table">
+        <colgroup><col style="width:8mm"><col style="width:55mm"><col style="width:18mm"><col style="width:25mm"><col style="width:32mm"><col style="width:25mm"><col style="width:40mm"></colgroup>
+        <thead><tr><th>No</th><th>Nama / KK</th><th>Profil</th><th>Kelas KBM</th><th>Status</th><th>Kehadiran</th><th>Via / Keterangan</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
+  }
+
   return `<section class="p-details">
     <div class="p-section-title">Daftar Peserta & Kehadiran</div>
     <table class="p-table">
@@ -9759,15 +9824,17 @@ printFinalRecap=function(){
   const named=_finalRecapMode==='nama';
   const statusText=d.final?'Rekap Final - data terkunci':'Preview Rekap - acara belum ditutup';
   const subtitle=[finalRecapFmtDate(r.tanggal),r.waktu?String(r.waktu).slice(0,5):'',r.waktu_selesai?String(r.waktu_selesai).slice(0,5):'',r.lokasi||'',r.kelompok||''].filter(Boolean);
-  let body=`<main class="report ${named?'named':'anon'}">
+  const pref=document.getElementById('fr-orientation')?.value||'auto';
+  const orientation=pref==='portrait'||pref==='landscape'?pref:(named?'landscape':'portrait');
+  let body=`<main class="report ${named?'named':'anon'} ${orientation}">
     <header class="p-head"><div><h1>${ubnbPrintEsc(r.acara||'Rekap Acara')}</h1><p>${ubnbPrintEsc(subtitle.join(' · '))}</p></div><div class="p-state">${ubnbPrintEsc(statusText)}</div></header>
     ${ubnbPrintSummaryCards(r)}
     <div class="p-breaks">${ubnbPrintBreak('Laki-laki / Perempuan',r.gender)}${ubnbPrintBreak('Status Menikah',r.status_menikah)}${ubnbPrintBreak('Status Sambung',r.status_sambung)}${ubnbPrintBreak('Kelas KBM - Belum Menikah',r.kelas_kbm)}</div>
     <div class="p-note">Absen pertama <b>${ubnbPrintEsc(r.hadir_pertama||'-')}</b> · terakhir <b>${ubnbPrintEsc(r.hadir_terakhir||'-')}</b>${r.cara_absen?' · '+Object.entries(r.cara_absen).map(([k,v])=>ubnbPrintEsc(k)+' <b>'+Number(v||0)+'</b>').join(' · '):''}</div>
-    ${named?ubnbPrintDetails(r,p):'<div class="p-anon-note"><b>Rekap tanpa nama.</b> Dokumen ini hanya menampilkan statistik agregat dan tidak memuat identitas peserta.</div>'}
+    ${named?ubnbPrintDetails(r,p,orientation):'<div class="p-anon-note"><b>Rekap tanpa nama.</b> Dokumen ini hanya menampilkan statistik agregat dan tidak memuat identitas peserta.</div>'}
   </main>`;
 
-  const page=named?'A4 landscape':'A4 portrait';
+  const page='A4 '+orientation;
   const w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rekap ${ubnbPrintEsc(r.acara||'Acara')}</title><style>
     *{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
@@ -9780,6 +9847,11 @@ printFinalRecap=function(){
     .p-anon-note{margin-top:5mm;border:1px solid #cbd5e1;background:#f8fafc;border-radius:2mm;padding:4mm;font-size:11pt;line-height:1.45}.p-details{break-before:page}.p-section-title{font-size:14pt;font-weight:800;color:#0e6449;margin:0 0 3mm;border-bottom:1.5px solid #0e6449;padding-bottom:2mm}
     .p-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt;line-height:1.25}.p-table thead{display:table-header-group}.p-table th{background:#146b50;color:#fff;border:1px solid #0d553f;padding:2.3mm 1.6mm;text-align:left;font-size:8.5pt;vertical-align:middle}.p-table td{border:1px solid #cfd8d3;padding:2.2mm 1.6mm;vertical-align:top;overflow-wrap:break-word;word-break:normal}.p-table tr{break-inside:avoid;page-break-inside:avoid}.p-table td.c{text-align:center;vertical-align:middle}.p-table td strong{font-size:9.3pt}.p-table td small{display:block;margin-top:.8mm;color:#5f6b65;font-size:7.8pt;line-height:1.25}.p-group td{background:#eaf4ef!important;color:#0f5f46!important;font-weight:800!important;font-size:10pt!important;padding:2.2mm 2mm!important;border-top:1.5px solid #70a590!important}.p-status{font-weight:800;text-align:center;vertical-align:middle!important}.p-status.hadir{background:#ecfdf5}.p-status.izin{background:#eff6ff}.p-status.sakit{background:#faf5ff}.p-status.tidak{background:#fff1f2}
     .anon .p-head h1{font-size:20pt}.anon .p-stats{grid-template-columns:repeat(2,1fr);gap:3mm}.anon .p-stat{min-height:23mm;padding:4mm}.anon .p-stat b{font-size:23pt}.anon .p-stat span{font-size:10pt}.anon .p-breaks{grid-template-columns:1fr;gap:3mm}.anon .p-break h4{font-size:12pt}.anon .p-br-head,.anon .p-br-row{font-size:10.5pt;padding:2.4mm 3.5mm}.anon .p-note{font-size:10.5pt}
+    .named.portrait .p-head{gap:5mm;padding:3.5mm 4mm}.named.portrait .p-head h1{font-size:16pt}.named.portrait .p-head p{font-size:9pt}.named.portrait .p-state{font-size:8pt}
+    .named.portrait .p-stats{grid-template-columns:repeat(2,1fr);gap:2mm}.named.portrait .p-stat{min-height:15mm;padding:2.6mm 2mm}.named.portrait .p-stat b{font-size:16pt}.named.portrait .p-stat span{font-size:8.5pt}
+    .named.portrait .p-breaks{grid-template-columns:1fr;gap:2.2mm}.named.portrait .p-break h4{font-size:9.5pt}.named.portrait .p-br-head,.named.portrait .p-br-row{font-size:8.8pt;padding:1.8mm 2.5mm}
+    .named.portrait .p-note{font-size:9pt}.portrait-table{font-size:8.7pt}.portrait-table th{font-size:8pt;padding:2.1mm 1.2mm}.portrait-table td{padding:2.1mm 1.25mm}.portrait-table td strong{font-size:9.1pt}.portrait-table td small{font-size:7.7pt}
+    .p-group td small{display:inline;margin-left:2mm;font-size:8pt;font-weight:600;color:#587369}
   </style></head><body>${body}<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
   w.document.close();
 };
