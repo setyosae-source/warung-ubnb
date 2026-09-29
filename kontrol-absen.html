@@ -116,6 +116,7 @@ button,input,select{font:inherit}
       <input id="search" placeholder="Cari nama / KK..." oninput="render()">
       <button class="btn-light" onclick="refreshNow()">↻ Refresh</button>
       <button class="btn-blue" onclick="openTerminal()">🖥 Terminal</button>
+      <button class="btn-light" onclick="shareControl()">🔗 Bagikan</button>
       <button class="btn-dark" onclick="openDashboard()">← Dashboard</button>
     </div>
   </header>
@@ -149,7 +150,7 @@ button,input,select{font:inherit}
       </div>
     </section>
 
-    <div class="footerbar">Auto-refresh setiap 3 detik · halaman kontrol bersifat read-only</div>
+    <div class="footerbar">Auto-refresh setiap 3 detik · read-only · link dapat dibagikan ke pengurus</div>
   </main>
 </div>
 
@@ -291,10 +292,34 @@ function openTerminal(){
   if(!k?.public_token){alert('Terminal belum diaktifkan untuk acara ini. Buka terminal dari Dashboard Kelompok terlebih dahulu.');return}
   window.open(location.origin+'/absen-terminal.html?token='+encodeURIComponent(k.public_token),'_blank');
 }
-function openDashboard(){window.open(location.origin+'/dashboard-kelompok.html','_blank')}
+function controlNextPath(){
+  return location.pathname+location.search;
+}
+function dashboardLoginUrl(){
+  return location.origin+'/dashboard-kelompok.html?next='+encodeURIComponent(controlNextPath());
+}
+function openDashboard(){
+  location.href=location.origin+'/dashboard-kelompok.html';
+}
+async function shareControl(){
+  const k=events.find(x=>Number(x.id)===Number(selectedId));
+  const u=new URL(location.origin+'/kontrol-absen.html');
+  if(k?.id)u.searchParams.set('kegiatan',k.id);
+  const link=u.toString();
+  try{
+    await navigator.clipboard.writeText(link);
+    const b=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Bagikan'));
+    if(b){
+      const old=b.textContent;b.textContent='✅ Link disalin';
+      setTimeout(()=>b.textContent=old,1400);
+    }
+  }catch(_e){
+    prompt('Salin link Kontrol Absen:',link);
+  }
+}
 if(!token){
-  showError('Sesi pengurus tidak ditemukan. Buka halaman Kontrol Absen melalui tombol di Dashboard Kelompok setelah login.');
-  setLive('Belum login',false);
+  setLive('Mengarahkan ke login pengurus…',false);
+  location.replace(dashboardLoginUrl());
 }else{
   refreshNow();
   setInterval(refreshNow,3000);
