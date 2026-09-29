@@ -1099,19 +1099,31 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div style="display:grid;grid-template-columns:minmax(170px,230px) 1fr;gap:10px;align-items:start;background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:10px;">
         <div>
           <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;">LAYOUT HALAMAN</label>
-          <select id="export-pdf-orientation" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+          <select id="export-pdf-orientation" onchange="updateExportPdfWidthStatus()" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
             <option value="portrait">Portrait</option>
             <option value="landscape" selected>Landscape</option>
           </select>
-          <div style="font-size:9px;color:var(--text-muted);margin-top:5px;line-height:1.4;">Ukuran kertas tetap dipilih otomatis (A4/A3/A2/A1) agar font tetap besar dan mudah dibaca.</div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin:9px 0 5px;">UKURAN KERTAS</label>
+          <select id="export-pdf-paper" onchange="updateExportPdfWidthStatus()" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+            <option value="auto" selected>Otomatis (A4 → A1)</option>
+            <option value="a4">Kunci A4</option>
+            <option value="a3">Kunci A3</option>
+            <option value="a2">Kunci A2</option>
+            <option value="a1">Kunci A1</option>
+          </select>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:5px;line-height:1.4;">Mode Otomatis akan naik ukuran kertas bila total lebar kolom tidak muat. Mode Kunci mempertahankan ukuran yang dipilih.</div>
         </div>
         <div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
             <label style="font-size:10px;font-weight:700;color:var(--text-muted);">LEBAR KOLOM PDF (mm)</label>
-            <button type="button" onclick="resetExportPdfWidths()" class="btn-cancel" style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;">Reset</button>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+              <button type="button" onclick="autoFitExportPdfWidths()" class="btn-cancel" style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;">↔ Auto 1 Baris</button>
+              <button type="button" onclick="resetExportPdfWidths()" class="btn-cancel" style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;">Reset</button>
+            </div>
           </div>
           <div id="export-width-controls" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;"></div>
-          <div style="font-size:9px;color:var(--text-muted);margin-top:5px;">Bisa diubah sesuai selera sebelum klik PDF. Angka lebih besar = kolom lebih lebar.</div>
+          <div id="export-pdf-width-summary" style="margin-top:7px;padding:7px 9px;border-radius:6px;background:#eef2ff;color:#3730a3;font-size:10px;line-height:1.45;font-weight:700;">Menghitung total lebar kolom...</div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:5px;">Tombol <b>Auto 1 Baris</b> menyesuaikan lebar berdasarkan isi data agar isi baris tidak turun. Header kolom tetap boleh turun baris.</div>
         </div>
       </div>
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">📁 Format file:</div>
@@ -1121,11 +1133,28 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button onclick="doExport('xlsx')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
         <button onclick="doExport('csv')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#3b82f6;">📄 CSV</button>
-        <button onclick="doExport('pdf')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#dc2626;">📕 PDF (.pdf)</button>
+        <button onclick="previewExportJamaahPDF()" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#7c3aed;">👁️ Preview PDF</button>
+        <button onclick="doExport('pdf')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#dc2626;">📕 Download PDF</button>
       </div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeMod('modal-export')" style="width:100%;">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW PDF JAMAAH -->
+<div class="modal-overlay" id="modal-export-pdf-preview">
+  <div class="modal" style="max-width:1100px;width:min(96vw,1100px);height:min(92vh,900px);display:flex;flex-direction:column;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div><strong style="font-size:14px;">👁️ Preview PDF Data Jamaah</strong><div id="export-pdf-preview-info" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div></div>
+      <button class="btn-cancel" onclick="closeExportPdfPreview()" style="padding:5px 9px;border-radius:6px;cursor:pointer;">✕</button>
+    </div>
+    <iframe id="export-pdf-preview-frame" title="Preview PDF Jamaah" style="flex:1;width:100%;border:0;background:#e5e7eb;min-height:520px;"></iframe>
+    <div class="modal-actions" style="display:flex;gap:8px;">
+      <button class="btn-cancel" onclick="closeExportPdfPreview()" style="flex:1;">Kembali Atur</button>
+      <button class="btn-save" onclick="doExport('pdf')" style="flex:1;background:#dc2626;">📕 Download PDF</button>
     </div>
   </div>
 </div>
@@ -4306,7 +4335,12 @@ const EXPORT_PDF_DEFAULT_WIDTHS={
   no:14,did:28,nama:50,nama_kk:46,kelompok:24,jenis_kelamin:20,tgl_lahir:32,umur:19,kelas_kbm:30,
   status_nikah:34,status_sambung:38,alamat:68,nomor_wa:34,is_aghnia:21,is_haji:21,is_sarjana:24
 };
+const EXPORT_PDF_PAPER_USABLE={
+  portrait:{a4:190,a3:277,a2:400,a1:574},
+  landscape:{a4:277,a3:400,a2:574,a1:821}
+};
 let EXPORT_PDF_WIDTHS={...EXPORT_PDF_DEFAULT_WIDTHS};
+let _exportPdfPreviewUrl='';
 
 function captureExportWidthInputs(){
   document.querySelectorAll('.exp-width').forEach(el=>{
@@ -4321,11 +4355,16 @@ function renderExportWidthControls(reset=false){
   const wrap=document.getElementById('export-width-controls');
   if(!wrap) return;
   const cols=getSelectedExportCols();
-  if(!cols.length){wrap.innerHTML='<span style="font-size:10px;color:var(--text-muted);">Pilih kolom terlebih dahulu.</span>';return;}
+  if(!cols.length){
+    wrap.innerHTML='<span style="font-size:10px;color:var(--text-muted);">Pilih kolom terlebih dahulu.</span>';
+    updateExportPdfWidthStatus();
+    return;
+  }
   wrap.innerHTML=cols.map(c=>{
     const w=EXPORT_PDF_WIDTHS[c.key]||EXPORT_PDF_DEFAULT_WIDTHS[c.key]||30;
-    return `<label style="display:flex;align-items:center;gap:5px;background:white;border:1px solid var(--border-light);border-radius:5px;padding:5px 7px;font-size:10px;"><span style="flex:1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.label}</span><input class="exp-width" data-key="${c.key}" type="number" min="8" max="140" step="1" value="${w}" style="width:52px;padding:4px;border:1px solid var(--border);border-radius:4px;font-size:11px;text-align:center;"/></label>`;
+    return `<label style="display:flex;align-items:center;gap:5px;background:white;border:1px solid var(--border-light);border-radius:5px;padding:5px 7px;font-size:10px;"><span style="flex:1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.label}</span><input class="exp-width" data-key="${c.key}" type="number" min="8" max="360" step="1" value="${Math.round(w*10)/10}" oninput="captureExportWidthInputs();updateExportPdfWidthStatus()" style="width:58px;padding:4px;border:1px solid var(--border);border-radius:4px;font-size:11px;text-align:center;"/><span style="color:var(--text-muted);font-size:9px;">mm</span></label>`;
   }).join('');
+  updateExportPdfWidthStatus();
 }
 function resetExportPdfWidths(){
   EXPORT_PDF_WIDTHS={...EXPORT_PDF_DEFAULT_WIDTHS};
@@ -4341,11 +4380,89 @@ function getExportPdfWidths(cols){
   return out;
 }
 function exportPdfFormatForWidth(orientation,requiredMm){
-  const widths=orientation==='portrait'
-    ? [['a4',190],['a3',277],['a2',400],['a1',574]]
-    : [['a4',277],['a3',400],['a2',574],['a1',821]];
-  for(const [name,usable] of widths){if(requiredMm<=usable) return name;}
+  const table=EXPORT_PDF_PAPER_USABLE[orientation]||EXPORT_PDF_PAPER_USABLE.landscape;
+  for(const name of ['a4','a3','a2','a1']) if(requiredMm<=table[name]) return name;
   return 'a1';
+}
+function getExportPdfLayoutState(){
+  captureExportWidthInputs();
+  const cols=getSelectedExportCols();
+  const orientation=document.getElementById('export-pdf-orientation')?.value==='portrait'?'portrait':'landscape';
+  const paperMode=document.getElementById('export-pdf-paper')?.value||'auto';
+  const totalWidth=cols.reduce((sum,c)=>sum+Number(EXPORT_PDF_WIDTHS[c.key]||EXPORT_PDF_DEFAULT_WIDTHS[c.key]||30),0);
+  const autoPaper=exportPdfFormatForWidth(orientation,totalWidth);
+  const paper=paperMode==='auto'?autoPaper:paperMode;
+  const usable=(EXPORT_PDF_PAPER_USABLE[orientation]||{})[paper]||277;
+  const over=Math.max(0,totalWidth-usable);
+  return {cols,orientation,paperMode,autoPaper,paper,totalWidth,usable,over};
+}
+function updateExportPdfWidthStatus(){
+  const box=document.getElementById('export-pdf-width-summary');
+  if(!box) return;
+  const st=getExportPdfLayoutState();
+  if(!st.cols.length){
+    box.style.background='#f8fafc';box.style.color='#64748b';
+    box.innerHTML='Pilih kolom untuk menghitung total lebar.';
+    return;
+  }
+  const ori=st.orientation==='portrait'?'Portrait':'Landscape';
+  const total=st.totalWidth.toFixed(1), usable=st.usable.toFixed(0);
+  if(st.paperMode==='auto'){
+    const table=EXPORT_PDF_PAPER_USABLE[st.orientation];
+    if(st.totalWidth>table.a1){
+      box.style.background='#fef2f2';box.style.color='#b91c1c';
+      box.innerHTML=`Total lebar kolom: <b>${total} mm</b>. ⚠️ Bahkan melebihi area isi <b>A1 ${ori} (${table.a1} mm)</b>. Kurangi jumlah/lebar kolom.`;
+      return;
+    }
+    const naik=st.autoPaper!=='a4';
+    const order=['a4','a3','a2','a1'];
+    const idx=order.indexOf(st.autoPaper);
+    const prev=idx>0?order[idx-1]:null;
+    box.style.background=naik?'#fff7ed':'#ecfdf5';
+    box.style.color=naik?'#9a3412':'#166534';
+    box.innerHTML=`Total lebar kolom: <b>${total} mm</b> · ${st.autoPaper.toUpperCase()} ${ori} area isi ±<b>${usable} mm</b>. ${naik?`⚠️ Melebihi ${prev.toUpperCase()} (${table[prev]} mm), ukuran kertas otomatis naik ke <b>${st.autoPaper.toUpperCase()}</b>.`:'✅ Masih muat di A4.'}`;
+  }else if(st.over>0){
+    box.style.background='#fef2f2';box.style.color='#b91c1c';
+    box.innerHTML=`🔒 <b>${st.paper.toUpperCase()} ${ori}</b> dikunci · total kolom <b>${total} mm</b>, area isi ±<b>${usable} mm</b>. ⚠️ Kelebihan <b>${st.over.toFixed(1)} mm</b>. Besarkan kertas atau kecilkan lebar kolom.`;
+  }else{
+    box.style.background='#ecfdf5';box.style.color='#166534';
+    box.innerHTML=`🔒 <b>${st.paper.toUpperCase()} ${ori}</b> dikunci · total kolom <b>${total} mm</b> dari area isi ±<b>${usable} mm</b>. ✅ Muat.`;
+  }
+}
+function autoFitExportPdfWidths(){
+  const cols=getSelectedExportCols();
+  if(!cols.length){toast('Pilih kolom terlebih dahulu',true);return;}
+  const list=getExportJamaahSorted();
+  if(!list.length){toast('Tidak ada data untuk dihitung',true);return;}
+  const jsPDFCtor=window.jspdf?.jsPDF;
+  let measure=null,measureBold=null;
+  if(jsPDFCtor){
+    const mdoc=new jsPDFCtor({unit:'mm',format:'a4'});
+    mdoc.setFontSize(12.5);
+    measure=t=>{mdoc.setFont('helvetica','normal');return mdoc.getTextWidth(String(t??''));};
+    measureBold=t=>{mdoc.setFont('helvetica','bold');return mdoc.getTextWidth(String(t??''));};
+  }else{
+    measure=t=>String(t??'').length*2.3;
+    measureBold=t=>String(t??'').length*2.5;
+  }
+  cols.forEach((c,ci)=>{
+    let widest=0;
+    list.forEach((j,idx)=>{
+      const val=c.key==='no'?idx+1:c.picker(j);
+      String(val??'').split(/\r?\n/).forEach(line=>{
+        const w=(c.key==='nama'&&exportJamaahIsKK(j))?measureBold(line):measure(line);
+        widest=Math.max(widest,w);
+      });
+    });
+    // +6 mm = cell padding kiri+kanan serta sedikit toleransi agar isi body tetap 1 baris.
+    let w=Math.ceil((widest+6)*2)/2;
+    if(c.key==='no') w=Math.max(13,w);
+    else w=Math.max(16,w);
+    EXPORT_PDF_WIDTHS[c.key]=Math.min(360,w);
+  });
+  renderExportWidthControls();
+  const st=getExportPdfLayoutState();
+  toast(`↔ Lebar kolom disesuaikan untuk isi 1 baris · total ${st.totalWidth.toFixed(1)} mm`);
 }
 
 function getSelectedExportCols(){
@@ -4418,75 +4535,107 @@ function exportJamaahPdfFilterText(){
   const total=aJamaah.length;
   return `${scope==='Desa'?'Semua Kelompok':scope} · ${list.length}${list.length!==total?` dari ${total}`:''} jamaah`;
 }
-function exportJamaahPDF(cols){
+function buildExportJamaahPDF(cols){
   const groups=buildExportFamilyGroups();
   const total=groups.reduce((n,g)=>n+g.rows.length,0);
-  if(!total){toast('Tidak ada data untuk di-export',true);return;}
+  if(!total) throw new Error('Tidak ada data untuk di-export');
   const jsPDFCtor=window.jspdf?.jsPDF;
-  if(!jsPDFCtor||typeof jsPDFCtor!=='function'){toast('Library PDF belum siap, refresh halaman',true);return;}
+  if(!jsPDFCtor||typeof jsPDFCtor!=='function') throw new Error('Library PDF belum siap, refresh halaman');
+
+  const st=getExportPdfLayoutState();
+  if(st.paperMode!=='auto'&&st.over>0){
+    throw new Error(`Total lebar kolom ${st.totalWidth.toFixed(1)} mm melebihi area isi ${st.paper.toUpperCase()} ${st.orientation==='portrait'?'Portrait':'Landscape'} (${st.usable.toFixed(0)} mm). Sesuaikan lebar kolom atau pilih kertas lebih besar.`);
+  }
+  if(st.paperMode==='auto'&&st.totalWidth>EXPORT_PDF_PAPER_USABLE[st.orientation].a1){
+    throw new Error(`Total lebar kolom ${st.totalWidth.toFixed(1)} mm melebihi area isi A1. Kurangi lebar kolom atau jumlah kolom.`);
+  }
+
+  const doc=new jsPDFCtor({orientation:st.orientation,unit:'mm',format:st.paper});
+  const pageW=doc.internal.pageSize.getWidth(),pageH=doc.internal.pageSize.getHeight();
+  const now=new Date();
+  const dateText=now.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  const head=cols.map(c=>c.label);
+  let no=0;
+  const body=[];
+  groups.forEach(g=>{
+    body.push([{content:`KK: ${g.label}  (${g.rows.length} jiwa)`,colSpan:cols.length,styles:{fillColor:[229,241,234],textColor:[23,76,50],fontStyle:'bold',fontSize:14.5,cellPadding:2.8,halign:'left'}}]);
+    g.rows.forEach(j=>{
+      no++;
+      body.push(cols.map(c=>{
+        const val=c.key==='no'?no:c.picker(j);
+        if(c.key==='nama'&&exportJamaahIsKK(j)) return {content:String(val??''),styles:{fontStyle:'bold'}};
+        return String(val??'');
+      }));
+    });
+  });
+  if(typeof doc.autoTable!=='function') throw new Error('Plugin autoTable belum siap');
+  const colStyles=getExportPdfWidths(cols);
+  cols.forEach((c,i)=>{
+    colStyles[i]=colStyles[i]||{};
+    if(['no','umur','jenis_kelamin','is_aghnia','is_haji','is_sarjana'].includes(c.key)) colStyles[i].halign='center';
+  });
+  const headerY=st.paper==='a4'?31:35;
+  doc.autoTable({
+    startY:headerY,
+    head:[head],
+    body,
+    theme:'grid',
+    showHead:'everyPage',
+    // Body boleh mengikuti lebar manual. Tombol Auto 1 Baris menghitung lebar agar isi body tidak wrap.
+    styles:{font:'helvetica',fontSize:12.5,cellPadding:2.5,valign:'middle',overflow:'linebreak',lineWidth:0.16,textColor:[25,32,40]},
+    headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:13.5,cellPadding:2.9,valign:'middle',overflow:'linebreak'},
+    columnStyles:colStyles,
+    margin:{left:10,right:10,top:headerY,bottom:12},
+    didDrawPage:()=>{
+      doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(23,76,50);
+      doc.text('DATA JAMAAH DESA PERWIRA',pageW/2,12,{align:'center'});
+      doc.setFont('helvetica','normal');doc.setFontSize(11.5);doc.setTextColor(75);
+      doc.text(exportJamaahPdfFilterText(),pageW/2,19,{align:'center'});
+      doc.setFontSize(10.5);
+      doc.text(`Group by KK · KK di atas · anggota tertua ke termuda · ${st.paper.toUpperCase()} ${st.orientation==='portrait'?'Portrait':'Landscape'} · Export ${dateText}`,pageW/2,25,{align:'center'});
+      doc.setFontSize(9.5);doc.setTextColor(110);
+      doc.text('Powered by UBNB Desa Perwira',10,pageH-5);
+      doc.text(`Halaman ${doc.internal.getCurrentPageInfo().pageNumber}`,pageW-10,pageH-5,{align:'right'});
+      doc.setTextColor(0);
+    }
+  });
+  return {doc,total,groups,layout:st};
+}
+function exportJamaahPDF(cols){
   try{
-    // Layout dapat dipilih Portrait/Landscape. Ukuran kertas membesar otomatis supaya font tetap besar.
-    captureExportWidthInputs();
-    const orientation=document.getElementById('export-pdf-orientation')?.value==='portrait'?'portrait':'landscape';
-    const requestedWidths=cols.map(c=>Number(EXPORT_PDF_WIDTHS[c.key]||EXPORT_PDF_DEFAULT_WIDTHS[c.key]||30));
-    const requiredMm=requestedWidths.reduce((a,b)=>a+(Number.isFinite(b)?b:30),0)+20;
-    const paper=exportPdfFormatForWidth(orientation,requiredMm);
-    const doc=new jsPDFCtor({orientation,unit:'mm',format:paper});
-    const pageW=doc.internal.pageSize.getWidth(),pageH=doc.internal.pageSize.getHeight();
-    const now=new Date();
-    const dateText=now.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-    const head=cols.map(c=>c.label);
-    let no=0;
-    const body=[];
-    groups.forEach(g=>{
-      body.push([{content:`KK: ${g.label}  (${g.rows.length} jiwa)`,colSpan:cols.length,styles:{fillColor:[229,241,234],textColor:[23,76,50],fontStyle:'bold',fontSize:14.5,cellPadding:2.8}}]);
-      g.rows.forEach(j=>{
-        no++;
-        body.push(cols.map(c=>{
-          const val=c.key==='no'?no:c.picker(j);
-          if(c.key==='nama'&&exportJamaahIsKK(j)) return {content:String(val??''),styles:{fontStyle:'bold'}};
-          return String(val??'');
-        }));
-      });
-    });
-    if(typeof doc.autoTable!=='function') throw new Error('Plugin autoTable belum siap');
-    const colStyles=getExportPdfWidths(cols);
-    cols.forEach((c,i)=>{
-      colStyles[i]=colStyles[i]||{};
-      if(['no','umur','jenis_kelamin','is_aghnia','is_haji','is_sarjana'].includes(c.key)) colStyles[i].halign='center';
-    });
-    const headerY=paper==='a4'?31:35;
-    doc.autoTable({
-      startY:headerY,
-      head:[head],
-      body,
-      theme:'grid',
-      showHead:'everyPage',
-      styles:{font:'helvetica',fontSize:12.5,cellPadding:2.5,valign:'middle',overflow:'linebreak',lineWidth:0.16,textColor:[25,32,40]},
-      headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:13.5,cellPadding:2.9,valign:'middle'},
-      columnStyles:colStyles,
-      margin:{left:10,right:10,top:headerY,bottom:12},
-      didDrawPage:()=>{
-        doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(23,76,50);
-        doc.text('DATA JAMAAH DESA PERWIRA',pageW/2,12,{align:'center'});
-        doc.setFont('helvetica','normal');doc.setFontSize(11.5);doc.setTextColor(75);
-        doc.text(exportJamaahPdfFilterText(),pageW/2,19,{align:'center'});
-        doc.setFontSize(10.5);
-        doc.text(`Group by KK · KK di atas · anggota tertua ke termuda · Export ${dateText}`,pageW/2,25,{align:'center'});
-        doc.setFontSize(9.5);doc.setTextColor(110);
-        doc.text('Powered by UBNB Desa Perwira',10,pageH-5);
-        doc.text(`Halaman ${doc.internal.getCurrentPageInfo().pageNumber}`,pageW-10,pageH-5,{align:'right'});
-        doc.setTextColor(0);
-      }
-    });
+    const built=buildExportJamaahPDF(cols);
     const ts=new Date().toISOString().slice(0,10);
     const scope=CU?.kelompok_scope||'Desa';
-    doc.save(`Jamaah_${scope}_${ts}.pdf`);
-    toast(`✅ PDF Jamaah diunduh (${total} jiwa · ${groups.length} group KK)`);
+    built.doc.save(`Jamaah_${scope}_${ts}.pdf`);
+    toast(`✅ PDF Jamaah diunduh (${built.total} jiwa · ${built.groups.length} group KK · ${built.layout.paper.toUpperCase()} ${built.layout.orientation==='portrait'?'Portrait':'Landscape'})`);
   }catch(e){
     console.error('[exportJamaahPDF]',e);
     toast('Gagal membuat PDF: '+(e.message||e),true);
   }
+}
+function previewExportJamaahPDF(){
+  const cols=getSelectedExportCols();
+  if(!cols.length){toast('Pilih minimal 1 kolom',true);return;}
+  try{
+    const built=buildExportJamaahPDF(cols);
+    if(_exportPdfPreviewUrl){URL.revokeObjectURL(_exportPdfPreviewUrl);_exportPdfPreviewUrl='';}
+    const blob=built.doc.output('blob');
+    _exportPdfPreviewUrl=URL.createObjectURL(blob);
+    const frame=document.getElementById('export-pdf-preview-frame');
+    if(frame) frame.src=_exportPdfPreviewUrl+'#toolbar=1&navpanes=0';
+    const info=document.getElementById('export-pdf-preview-info');
+    if(info) info.textContent=`${built.total} jamaah · ${built.groups.length} group KK · ${built.layout.paper.toUpperCase()} ${built.layout.orientation==='portrait'?'Portrait':'Landscape'} · total kolom ${built.layout.totalWidth.toFixed(1)} mm`;
+    openMod('modal-export-pdf-preview');
+  }catch(e){
+    console.error('[previewExportJamaahPDF]',e);
+    toast('Preview gagal: '+(e.message||e),true);
+  }
+}
+function closeExportPdfPreview(){
+  closeMod('modal-export-pdf-preview');
+  const frame=document.getElementById('export-pdf-preview-frame');
+  if(frame) frame.src='about:blank';
+  if(_exportPdfPreviewUrl){URL.revokeObjectURL(_exportPdfPreviewUrl);_exportPdfPreviewUrl='';}
 }
 
 function doExport(format){
