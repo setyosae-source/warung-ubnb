@@ -1112,6 +1112,14 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
             <option value="a1">Kunci A1</option>
           </select>
           <div style="font-size:9px;color:var(--text-muted);margin-top:5px;line-height:1.4;">Mode Otomatis akan naik ukuran kertas bila total lebar kolom tidak muat. Mode Kunci mempertahankan ukuran yang dipilih.</div>
+          <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin:10px 0 5px;">FONT TABEL</label>
+          <div style="display:flex;align-items:center;gap:7px;">
+            <input id="export-pdf-font-size" type="number" min="8" max="20" step="0.5" value="12.5"
+              oninput="updateExportPdfWidthStatus()"
+              style="width:82px;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;text-align:center;"/>
+            <span style="font-size:11px;color:var(--text-muted);">pt</span>
+          </div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:4px;line-height:1.4;">Mengatur font isi tabel. Header dan judul group KK ikut menyesuaikan agar tetap proporsional.</div>
         </div>
         <div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
@@ -4370,6 +4378,14 @@ function resetExportPdfWidths(){
   EXPORT_PDF_WIDTHS={...EXPORT_PDF_DEFAULT_WIDTHS};
   renderExportWidthControls(true);
 }
+function getExportPdfFontSize(){
+  const el=document.getElementById('export-pdf-font-size');
+  let v=Number(el?.value||12.5);
+  if(!Number.isFinite(v)) v=12.5;
+  v=Math.max(8,Math.min(20,v));
+  if(el && Number(el.value)!==v) el.value=v;
+  return v;
+}
 function getExportPdfWidths(cols){
   captureExportWidthInputs();
   const out={};
@@ -4394,7 +4410,8 @@ function getExportPdfLayoutState(){
   const paper=paperMode==='auto'?autoPaper:paperMode;
   const usable=(EXPORT_PDF_PAPER_USABLE[orientation]||{})[paper]||277;
   const over=Math.max(0,totalWidth-usable);
-  return {cols,orientation,paperMode,autoPaper,paper,totalWidth,usable,over};
+  const fontSize=getExportPdfFontSize();
+  return {cols,orientation,paperMode,autoPaper,paper,totalWidth,usable,over,fontSize};
 }
 function updateExportPdfWidthStatus(){
   const box=document.getElementById('export-pdf-width-summary');
@@ -4411,7 +4428,7 @@ function updateExportPdfWidthStatus(){
     const table=EXPORT_PDF_PAPER_USABLE[st.orientation];
     if(st.totalWidth>table.a1){
       box.style.background='#fef2f2';box.style.color='#b91c1c';
-      box.innerHTML=`Total lebar kolom: <b>${total} mm</b>. ⚠️ Bahkan melebihi area isi <b>A1 ${ori} (${table.a1} mm)</b>. Kurangi jumlah/lebar kolom.`;
+      box.innerHTML=`Total lebar kolom: <b>${total} mm</b> · Font <b>${st.fontSize} pt</b>. ⚠️ Bahkan melebihi area isi <b>A1 ${ori} (${table.a1} mm)</b>. Kurangi jumlah/lebar kolom.`;
       return;
     }
     const naik=st.autoPaper!=='a4';
@@ -4420,13 +4437,13 @@ function updateExportPdfWidthStatus(){
     const prev=idx>0?order[idx-1]:null;
     box.style.background=naik?'#fff7ed':'#ecfdf5';
     box.style.color=naik?'#9a3412':'#166534';
-    box.innerHTML=`Total lebar kolom: <b>${total} mm</b> · ${st.autoPaper.toUpperCase()} ${ori} area isi ±<b>${usable} mm</b>. ${naik?`⚠️ Melebihi ${prev.toUpperCase()} (${table[prev]} mm), ukuran kertas otomatis naik ke <b>${st.autoPaper.toUpperCase()}</b>.`:'✅ Masih muat di A4.'}`;
+    box.innerHTML=`Total lebar kolom: <b>${total} mm</b> · Font <b>${st.fontSize} pt</b> · ${st.autoPaper.toUpperCase()} ${ori} area isi ±<b>${usable} mm</b>. ${naik?`⚠️ Melebihi ${prev.toUpperCase()} (${table[prev]} mm), ukuran kertas otomatis naik ke <b>${st.autoPaper.toUpperCase()}</b>.`:'✅ Masih muat di A4.'}`;
   }else if(st.over>0){
     box.style.background='#fef2f2';box.style.color='#b91c1c';
-    box.innerHTML=`🔒 <b>${st.paper.toUpperCase()} ${ori}</b> dikunci · total kolom <b>${total} mm</b>, area isi ±<b>${usable} mm</b>. ⚠️ Kelebihan <b>${st.over.toFixed(1)} mm</b>. Besarkan kertas atau kecilkan lebar kolom.`;
+    box.innerHTML=`🔒 <b>${st.paper.toUpperCase()} ${ori}</b> dikunci · Font <b>${st.fontSize} pt</b> · total kolom <b>${total} mm</b>, area isi ±<b>${usable} mm</b>. ⚠️ Kelebihan <b>${st.over.toFixed(1)} mm</b>. Besarkan kertas atau kecilkan lebar kolom.`;
   }else{
     box.style.background='#ecfdf5';box.style.color='#166534';
-    box.innerHTML=`🔒 <b>${st.paper.toUpperCase()} ${ori}</b> dikunci · total kolom <b>${total} mm</b> dari area isi ±<b>${usable} mm</b>. ✅ Muat.`;
+    box.innerHTML=`🔒 <b>${st.paper.toUpperCase()} ${ori}</b> dikunci · Font <b>${st.fontSize} pt</b> · total kolom <b>${total} mm</b> dari area isi ±<b>${usable} mm</b>. ✅ Muat.`;
   }
 }
 function autoFitExportPdfWidths(){
@@ -4438,7 +4455,7 @@ function autoFitExportPdfWidths(){
   let measure=null,measureBold=null;
   if(jsPDFCtor){
     const mdoc=new jsPDFCtor({unit:'mm',format:'a4'});
-    mdoc.setFontSize(12.5);
+    mdoc.setFontSize(getExportPdfFontSize());
     measure=t=>{mdoc.setFont('helvetica','normal');return mdoc.getTextWidth(String(t??''));};
     measureBold=t=>{mdoc.setFont('helvetica','bold');return mdoc.getTextWidth(String(t??''));};
   }else{
@@ -4558,7 +4575,7 @@ function buildExportJamaahPDF(cols){
   let no=0;
   const body=[];
   groups.forEach(g=>{
-    body.push([{content:`KK: ${g.label}  (${g.rows.length} jiwa)`,colSpan:cols.length,styles:{fillColor:[229,241,234],textColor:[23,76,50],fontStyle:'bold',fontSize:14.5,cellPadding:2.8,halign:'left'}}]);
+    body.push([{content:`KK: ${g.label}  (${g.rows.length} jiwa)`,colSpan:cols.length,styles:{fillColor:[229,241,234],textColor:[23,76,50],fontStyle:'bold',fontSize:Math.min(22,st.fontSize+2),cellPadding:2.8,halign:'left'}}]);
     g.rows.forEach(j=>{
       no++;
       body.push(cols.map(c=>{
@@ -4582,8 +4599,8 @@ function buildExportJamaahPDF(cols){
     theme:'grid',
     showHead:'everyPage',
     // Body boleh mengikuti lebar manual. Tombol Auto 1 Baris menghitung lebar agar isi body tidak wrap.
-    styles:{font:'helvetica',fontSize:12.5,cellPadding:2.5,valign:'middle',overflow:'linebreak',lineWidth:0.16,textColor:[25,32,40]},
-    headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:13.5,cellPadding:2.9,valign:'middle',overflow:'linebreak'},
+    styles:{font:'helvetica',fontSize:st.fontSize,cellPadding:2.5,valign:'middle',overflow:'linebreak',lineWidth:0.16,textColor:[25,32,40]},
+    headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:Math.min(21,st.fontSize+1),cellPadding:2.9,valign:'middle',overflow:'linebreak'},
     columnStyles:colStyles,
     margin:{left:10,right:10,top:headerY,bottom:12},
     didDrawPage:()=>{
@@ -4592,7 +4609,7 @@ function buildExportJamaahPDF(cols){
       doc.setFont('helvetica','normal');doc.setFontSize(11.5);doc.setTextColor(75);
       doc.text(exportJamaahPdfFilterText(),pageW/2,19,{align:'center'});
       doc.setFontSize(10.5);
-      doc.text(`Group by KK · KK di atas · anggota tertua ke termuda · ${st.paper.toUpperCase()} ${st.orientation==='portrait'?'Portrait':'Landscape'} · Export ${dateText}`,pageW/2,25,{align:'center'});
+      doc.text(`Group by KK · KK di atas · anggota tertua ke termuda · Font ${st.fontSize} pt · ${st.paper.toUpperCase()} ${st.orientation==='portrait'?'Portrait':'Landscape'} · Export ${dateText}`,pageW/2,25,{align:'center'});
       doc.setFontSize(9.5);doc.setTextColor(110);
       doc.text('Powered by UBNB Desa Perwira',10,pageH-5);
       doc.text(`Halaman ${doc.internal.getCurrentPageInfo().pageNumber}`,pageW-10,pageH-5,{align:'right'});
