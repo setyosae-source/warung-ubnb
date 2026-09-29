@@ -992,7 +992,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         <div id="modal-hadir-meta" style="font-size:10px;color:var(--text-muted);"></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button onclick="cetakDaftarHadir()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖨️ Cetak Manual</button>
+        <button onclick="cetakIdAbsenPeserta()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Cetak ID Absen Peserta</button>
         <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
         <button onclick="closeMod('modal-hadir')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
       </div>
@@ -5073,7 +5073,7 @@ function kegiatanCard(k,phase){
     <div class="sensus-card-actions">
       <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
       ${canManageCalendar()?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
-      <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🖨️ Cetak</button>
+      <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🪪 ID Absen</button>
       <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
       <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
       <button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>
@@ -6183,9 +6183,133 @@ function _bukaCetakKegiatan(html,title){
   w.document.close();
 }
 
-function cetakKegiatan(id){
+async function cetakKegiatan(id){
   curKegiatanId=id;
-  cetakDaftarHadir();
+  await cetakIdAbsenPeserta(id);
+}
+
+function _mergeAbsenIds(rows){
+  const map=new Map((rows||[]).map(x=>[String(x.did),String(x.absen_id??'')]));
+  const apply=arr=>(arr||[]).forEach(j=>{
+    const v=map.get(String(j.did));
+    if(v!==undefined&&v!=='') j.absen_id=v.padStart(4,'0');
+  });
+  apply(aJamaahDesa);
+  apply(aJamaah);
+  return map;
+}
+
+async function _ensureIdAbsenPeserta(list){
+  const dids=[...new Set((list||[]).map(h=>String(h.jamaah_did??'')).filter(Boolean))];
+  const known=new Map();
+  (aJamaahDesa||[]).forEach(j=>{if(j.absen_id!==null&&j.absen_id!==undefined&&String(j.absen_id)!=='')known.set(String(j.did),String(j.absen_id).padStart(4,'0'));});
+  (aJamaah||[]).forEach(j=>{if(j.absen_id!==null&&j.absen_id!==undefined&&String(j.absen_id)!=='')known.set(String(j.did),String(j.absen_id).padStart(4,'0'));});
+  const missing=dids.filter(d=>!known.has(d));
+  if(!missing.length) return known;
+  if(!DK_ATT_TOKEN){toast('Sesi ID absen tidak tersedia. Silakan masuk ulang sebagai pengelola Acara.',true);return null;}
+  const {data,error}=await sb.rpc('dk_attendance_absen_ids',{p_token:DK_ATT_TOKEN});
+  if(error||!data||data.ok!==true){toast('Gagal memuat ID absen: '+(error?.message||data?.error||'Unknown error'),true);return null;}
+  const fresh=_mergeAbsenIds(Array.isArray(data.data)?data.data:[]);
+  fresh.forEach((v,k)=>known.set(k,String(v).padStart(4,'0')));
+  return known;
+}
+
+async function cetakIdAbsenPeserta(kegiatanId=null){
+  if(kegiatanId!==null&&kegiatanId!==undefined) curKegiatanId=kegiatanId;
+  const k=aKegiatan.find(x=>Number(x.id)===Number(curKegiatanId));
+  if(!k){toast('Kegiatan tidak ditemukan',true);return;}
+  const list=aHadir.filter(h=>Number(h.kegiatan_id)===Number(curKegiatanId));
+  if(!list.length){toast('Peserta acara belum tersedia',true);return;}
+
+  const idMap=await _ensureIdAbsenPeserta(list);
+  if(!idMap) return;
+
+  const jMap=new Map();
+  (aJamaahDesa||[]).forEach(j=>jMap.set(String(j.did),j));
+  (aJamaah||[]).forEach(j=>jMap.set(String(j.did),j));
+  const rows=list.map(h=>{
+    const did=String(h.jamaah_did??'');
+    const j=jMap.get(did)||{};
+    const jk=String(j.jenis_kelamin||'').trim().toUpperCase().charAt(0);
+    const sn=String(j.status_nikah||'').trim().toLowerCase();
+    const orangTua=(sn==='menikah'||sn.includes('janda')||sn.includes('duda'));
+    const rawId=idMap.get(did)??j.absen_id??'';
+    return {
+      did,
+      nama:h.jamaah_nama||j.nama||'',
+      jk:(jk==='L'||jk==='P')?jk:'',
+      status_nikah:j.status_nikah||'',
+      orangTua,
+      absen_id:rawId!==''?String(rawId).padStart(4,'0'):'—'
+    };
+  }).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
+
+  const male=rows.filter(r=>r.jk==='L');
+  const female=rows.filter(r=>r.jk==='P');
+  const unknown=rows.filter(r=>!r.jk);
+  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const meta=[tgl,k.waktu?String(k.waktu).substring(0,5)+' WIB':'',k.lokasi||'',k.kelompok||'Desa Perwira'].filter(Boolean).join(' · ');
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const ROWS_PER_PAGE=34;
+
+  function tableHtml(title,arr,start,captionColor){
+    let h=`<div style="font-size:11px;font-weight:800;color:${captionColor};margin:0 0 5px;display:flex;justify-content:space-between;gap:6px;"><span>${esc(title)}</span><span>${arr.length} orang</span></div>`;
+    h+=`<table class="id-table"><thead><tr><th style="width:28px;">No.</th><th>Nama Jamaah</th><th style="width:66px;">ID Absen</th></tr></thead><tbody>`;
+    if(!arr.length){h+=`<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px 4px;">— Tidak ada peserta —</td></tr>`;}
+    arr.forEach((r,i)=>{h+=`<tr><td class="no">${start+i+1}</td><td>${esc(r.nama)}</td><td class="id-code">${esc(r.absen_id||'—')}</td></tr>`;});
+    h+='</tbody></table>';
+    return h;
+  }
+
+  function buildGenderPages(genderRows,genderTitle,youthTitle,icon){
+    if(!genderRows.length)return [];
+    const parent=genderRows.filter(r=>r.orangTua).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
+    const youth=genderRows.filter(r=>!r.orangTua).sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'));
+    const pages=Math.max(1,Math.ceil(parent.length/ROWS_PER_PAGE),Math.ceil(youth.length/ROWS_PER_PAGE));
+    const out=[];
+    for(let p=0;p<pages;p++){
+      const pa=parent.slice(p*ROWS_PER_PAGE,(p+1)*ROWS_PER_PAGE);
+      const ya=youth.slice(p*ROWS_PER_PAGE,(p+1)*ROWS_PER_PAGE);
+      out.push(`<section class="id-sheet">
+        <h1>DAFTAR ID ABSEN PESERTA</h1>
+        <div class="sub"><b>${esc(k.acara_nama||'Acara UBNB')}</b><br>${esc(meta)}<br>${icon} <b>${esc(genderTitle)}</b> · ${genderRows.length} peserta${pages>1?` · Halaman ${p+1}/${pages}`:''}</div>
+        <div class="id-grid">
+          <div class="id-col">${tableHtml('ORANG TUA · Menikah + Janda/Duda',pa,p*ROWS_PER_PAGE,'#166534')}</div>
+          <div class="id-col">${tableHtml(youthTitle,ya,p*ROWS_PER_PAGE,'#1d4ed8')}</div>
+        </div>
+        <div class="id-foot">ID Absen tetap 4 digit · digunakan pada Terminal Absen UBNB</div>
+      </section>`);
+    }
+    return out;
+  }
+
+  const pages=[];
+  pages.push(...buildGenderPages(male,'LAKI-LAKI','REMAJA PUTRA','👨'));
+  pages.push(...buildGenderPages(female,'PEREMPUAN','REMAJA PUTRI','👩'));
+  if(unknown.length){
+    const chunks=[];for(let i=0;i<unknown.length;i+=ROWS_PER_PAGE*2)chunks.push(unknown.slice(i,i+ROWS_PER_PAGE*2));
+    chunks.forEach((chunk,p)=>pages.push(`<section class="id-sheet">
+      <h1>DAFTAR ID ABSEN PESERTA</h1>
+      <div class="sub"><b>${esc(k.acara_nama||'Acara UBNB')}</b><br>${esc(meta)}<br>❓ <b>JENIS KELAMIN BELUM DISET</b>${chunks.length>1?` · Halaman ${p+1}/${chunks.length}`:''}</div>
+      ${tableHtml('Perlu perbaikan data jamaah',chunk,p*ROWS_PER_PAGE*2,'#b45309')}
+      <div class="id-foot">Peserta di halaman ini belum dapat dipisahkan ke halaman laki-laki/perempuan.</div>
+    </section>`));
+  }
+  if(!pages.length){toast('Tidak ada peserta yang dapat dicetak',true);return;}
+
+  const body=`<style>
+    .id-sheet{page-break-after:always;min-height:255mm;display:flex;flex-direction:column;}
+    .id-sheet:last-child{page-break-after:auto;}
+    .id-grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm;align-items:start;margin-top:7px;}
+    .id-col{min-width:0;}
+    .id-table{table-layout:fixed;font-size:9.6px;}
+    .id-table th,.id-table td{padding:3px 4px;line-height:1.14;}
+    .id-table td:nth-child(2){word-break:break-word;}
+    .id-code{text-align:center;font-size:13px;font-weight:900;letter-spacing:1px;color:#0f5132;font-variant-numeric:tabular-nums;}
+    .id-foot{margin-top:auto;padding-top:7px;border-top:1px solid #d1d5db;text-align:center;font-size:9px;color:#6b7280;}
+    @media print{.id-sheet{min-height:257mm;}.id-grid{gap:6mm;}}
+  </style>`+pages.join('');
+  _bukaCetakKegiatan(body,'ID Absen Peserta - '+(k.acara_nama||''));
 }
 
 function cetakDaftarHadir(){
