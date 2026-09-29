@@ -2545,312 +2545,7 @@ function exportPengurusPDFFallback(rows,groups){
   const dateText=now.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Daftar Pengurus Desa Perwira</title><style>
     @page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:10px;margin:0}h1{font-size:18px;margin:0;text-align:center}.sub{text-align:center;margin:4px 0 2px;font-size:11px}.meta{text-align:center;color:#555;margin-bottom:12px}.report-section{margin:0 0 16px}.report-section+.report-section{page-break-before:always}h2{font-size:13px;margin:0;padding:7px 8px;background:#e8f5ee;border:1px solid #9bb9a8}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:5px 6px;vertical-align:top}th{background:#176b42;color:white;font-size:9px}td.center,th.center{text-align:center}@media print{button{display:none!important}}
-  </style></head><body><h1>DAFTAR PENGURUS DESA PERWIRA</h1><div class="sub">${escH(pgExportFilterDescription())}</div><div class="meta">Dicetak ${escH(dateText)} · ${rows.length} data</div>${groups.map(pgExportPdfTable).join('')}<script>setTimeout(()=>window.print(),350)<\/script>
-<script>
-/* ===== TUTUP ACARA + REKAP FINAL v1 ===== */
-let _finalRecapEventId=null;
-let _finalRecapData=null;
-let _finalRecapMode='nama';
-
-function ensureFinalRecapModal(){
-  if(document.getElementById('modal-final-rekap'))return;
-  const style=document.createElement('style');
-  style.textContent=`
-    #modal-final-rekap .modal{max-width:1180px;width:min(96vw,1180px);max-height:94vh;}
-    .fr-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
-    .fr-tabs button{border:1px solid #d1d5db;background:#fff;color:#374151;padding:8px 12px;border-radius:7px;font-weight:800;cursor:pointer}
-    .fr-tabs button.active{background:#0f5b46;color:#fff;border-color:#0f5b46}
-    .fr-head{padding:10px 12px;border:1px solid #dbe7df;background:#f6fbf8;border-radius:9px;margin-bottom:10px}
-    .fr-head h3{margin:0 0 3px;color:#0f5b46;font-size:17px}
-    .fr-muted{font-size:10px;color:#64748b}
-    .fr-stats{display:grid;grid-template-columns:repeat(5,minmax(105px,1fr));gap:7px;margin-bottom:10px}
-    .fr-stat{padding:9px 8px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center}
-    .fr-stat b{display:block;font-size:20px;line-height:1.1;color:#111827}
-    .fr-stat span{font-size:9px;color:#64748b}
-    .fr-stat.main{background:#ecfdf5;border-color:#a7f3d0}.fr-stat.main b{color:#047857}
-    .fr-stat.warn{background:#fffbeb;border-color:#fde68a}
-    .fr-stat.danger{background:#fef2f2;border-color:#fecaca}
-    .fr-breaks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
-    .fr-break{border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff}
-    .fr-break h4{margin:0;padding:7px 9px;background:#f8fafc;font-size:10px;color:#334155;border-bottom:1px solid #e5e7eb}
-    .fr-break-row{display:grid;grid-template-columns:minmax(90px,1fr) 62px 62px;gap:6px;padding:6px 9px;border-top:1px solid #f1f5f9;font-size:10px;align-items:center}
-    .fr-break-row:first-of-type{border-top:0}
-    .fr-break-row b{text-align:right}
-    .fr-table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:8px;max-height:48vh}
-    .fr-table{width:100%;border-collapse:collapse;font-size:9.5px;min-width:1040px}
-    .fr-table th{position:sticky;top:0;background:#0f5b46;color:#fff;padding:6px 5px;text-align:left;z-index:1}
-    .fr-table td{padding:5px;border-top:1px solid #e5e7eb;vertical-align:top}
-    .fr-table tr:nth-child(even) td{background:#fafafa}
-    .fr-badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:8.5px;font-weight:800}
-    .fr-badge.hadir{background:#dcfce7;color:#166534}.fr-badge.izin{background:#dbeafe;color:#1d4ed8}
-    .fr-badge.sakit{background:#f3e8ff;color:#7e22ce}.fr-badge.tidak{background:#fee2e2;color:#991b1b}
-    .fr-note{font-size:9px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:7px 9px;margin-bottom:9px}
-    @media(max-width:760px){
-      .fr-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .fr-breaks{grid-template-columns:1fr}
-      #modal-final-rekap .modal{width:98vw}
-    }
-    @media print{
-      .fr-no-print{display:none!important}
-      .fr-table-wrap{max-height:none;overflow:visible}
-    }
-  `;
-  document.head.appendChild(style);
-
-  const box=document.createElement('div');
-  box.id='modal-final-rekap';
-  box.className='modal-overlay';
-  box.style.display='none';
-  box.innerHTML=`
-    <div class="modal">
-      <div class="modal-head">
-        <div>
-          <b id="fr-title">📊 Rekap Final Acara</b>
-          <div id="fr-sub" class="fr-muted"></div>
-        </div>
-        <button onclick="closeFinalRecapModal()" style="font-size:20px;background:none;border:0;cursor:pointer">×</button>
-      </div>
-      <div class="modal-body" style="padding:12px">
-        <div class="fr-tabs fr-no-print">
-          <button id="fr-tab-nama" onclick="setFinalRecapMode('nama')">👥 Dengan Nama</button>
-          <button id="fr-tab-tanpa" onclick="setFinalRecapMode('tanpa')">📈 Tanpa Nama</button>
-          <button onclick="printFinalRecap()">🖨️ Cetak / PDF</button>
-          <button id="fr-copy-btn" onclick="copyFinalRecapSummary()">🔗 Salin Ringkasan</button>
-        </div>
-        <div id="fr-content"></div>
-      </div>
-    </div>`;
-  document.body.appendChild(box);
-}
-function closeFinalRecapModal(){
-  const e=document.getElementById('modal-final-rekap');if(e)e.style.display='none';
-}
-function finalRecapFmtDate(v){
-  if(!v)return '-';
-  try{return new Date(String(v).slice(0,10)+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}catch(_e){return v}
-}
-function finalRecapStatusBadge(s){
-  const v=String(s||'Tidak Hadir');
-  if(v==='Hadir')return '<span class="fr-badge hadir">Hadir</span>';
-  if(v==='Izin')return '<span class="fr-badge izin">Izin</span>';
-  if(v==='Sakit')return '<span class="fr-badge sakit">Sakit</span>';
-  return '<span class="fr-badge tidak">Tidak Hadir</span>';
-}
-function finalRecapBreak(title,obj){
-  const entries=Object.entries(obj||{});
-  if(!entries.length)return '';
-  return `<div class="fr-break"><h4>${escH(title)}</h4>
-    <div class="fr-break-row" style="font-weight:800;background:#f8fafc"><span>Kategori</span><b>Hadir</b><b>Total</b></div>
-    ${entries.map(([k,v])=>`<div class="fr-break-row"><span>${escH(k)}</span><b>${Number(v?.hadir||0)}</b><b>${Number(v?.total||0)}</b></div>`).join('')}
-  </div>`;
-}
-function finalRecapStatsHtml(r){
-  const pct=Number(r.kehadiran_pct||0).toLocaleString('id-ID',{maximumFractionDigits:1});
-  return `<div class="fr-stats">
-    <div class="fr-stat"><b>${Number(r.total_peserta||0)}</b><span>Peserta Wajib Final</span></div>
-    <div class="fr-stat main"><b>${Number(r.hadir||0)}</b><span>Hadir</span></div>
-    <div class="fr-stat warn"><b>${Number(r.izin||0)}</b><span>Izin</span></div>
-    <div class="fr-stat warn"><b>${Number(r.sakit||0)}</b><span>Sakit</span></div>
-    <div class="fr-stat danger"><b>${Number(r.tidak_hadir||0)}</b><span>Tidak Hadir</span></div>
-    <div class="fr-stat main"><b>${pct}%</b><span>Kehadiran Wajib</span></div>
-    <div class="fr-stat"><b>${Number(r.jumlah_kk||0)}</b><span>Jumlah KK</span></div>
-    <div class="fr-stat"><b>${Number(r.kk_lengkap_hadir||0)}</b><span>KK Seluruh Peserta Hadir</span></div>
-    <div class="fr-stat"><b>${Number(r.ditambahkan_saat_absen||0)}</b><span>Masuk Daftar Saat Absen</span></div>
-    <div class="fr-stat"><b>${Number(r.tamu_kunjungan||0)}</b><span>Tamu / Kunjungan</span></div>
-  </div>`;
-}
-function finalRecapHeaderHtml(r,d){
-  const closed=d?.closed_at||r.closed_at||null;
-  let closeText='';
-  if(closed){
-    try{closeText=' · Ditutup '+new Date(closed).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_e){}
-  }
-  return `<div class="fr-head">
-    <h3>${escH(r.acara||'Rekap Acara')}</h3>
-    <div>${escH(finalRecapFmtDate(r.tanggal))}${r.waktu?' · '+escH(String(r.waktu).slice(0,5)):''}${r.waktu_selesai?'–'+escH(String(r.waktu_selesai).slice(0,5)):''}${r.lokasi?' · '+escH(r.lokasi):''}${r.kelompok?' · '+escH(r.kelompok):''}</div>
-    <div class="fr-muted">${d?.final?'Rekap final terkunci':'Preview rekap — acara belum ditutup'}${closeText}${d?.closed_by?' · oleh '+escH(d.closed_by):''}</div>
-  </div>`;
-}
-function renderFinalRecap(){
-  ensureFinalRecapModal();
-  const d=_finalRecapData;if(!d||!d.rekap)return;
-  const r=d.rekap,p=Array.isArray(d.peserta)?d.peserta:[];
-  document.getElementById('fr-title').textContent=d.final?'📊 Rekap Final Acara':'📊 Preview Rekap Acara';
-  document.getElementById('fr-sub').textContent=(r.acara||'')+' · '+(r.kelompok||'');
-  document.getElementById('fr-tab-nama').classList.toggle('active',_finalRecapMode==='nama');
-  document.getElementById('fr-tab-tanpa').classList.toggle('active',_finalRecapMode==='tanpa');
-  document.getElementById('fr-copy-btn').style.display=_finalRecapMode==='tanpa'?'inline-block':'none';
-
-  let html=finalRecapHeaderHtml(r,d)+finalRecapStatsHtml(r);
-  html+=`<div class="fr-breaks">
-    ${finalRecapBreak('Laki-laki / Perempuan',r.gender)}
-    ${finalRecapBreak('Status Menikah',r.status_menikah)}
-    ${finalRecapBreak('Status Sambung',r.status_sambung)}
-    ${finalRecapBreak('Kelas KBM — Belum Menikah',r.kelas_kbm)}
-  </div>`;
-  if(r.hadir_pertama||r.hadir_terakhir){
-    html+=`<div class="fr-note">⏱️ Absen pertama <b>${escH(r.hadir_pertama||'-')}</b> · terakhir <b>${escH(r.hadir_terakhir||'-')}</b>
-    ${r.cara_absen?` · Cara absen: ${Object.entries(r.cara_absen).map(([k,v])=>`${escH(k)} <b>${v}</b>`).join(' · ')}`:''}</div>`;
-  }
-
-  if(_finalRecapMode==='nama'){
-    const order={Hadir:0,Izin:1,Sakit:2,'Tidak Hadir':3};
-    const list=[...p].sort((a,b)=>(order[a.status_kehadiran]??9)-(order[b.status_kehadiran]??9)||String(a.kk||'').localeCompare(String(b.kk||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
-    html+=`<div class="fr-table-wrap"><table class="fr-table"><thead><tr>
-      <th>No.</th><th>Nama</th><th>KK</th><th>L/P</th><th>Usia</th><th>Kelas KBM</th><th>Sambung</th><th>Menikah</th><th>Kehadiran</th><th>Jam</th><th>Via / Keterangan</th>
-    </tr></thead><tbody>${list.map((x,i)=>`<tr>
-      <td>${i+1}</td><td><b>${escH(x.nama||'-')}</b>${x.auto_added?'<div style="font-size:8px;color:#92400e">⚠ masuk daftar saat absen</div>':''}</td>
-      <td>${escH(x.kk||'-')}</td><td>${escH(x.lp||'-')}</td><td>${x.usia==null?'-':x.usia}</td><td>${escH(x.kelas_kbm||'-')}</td>
-      <td>${escH(x.status_sambung||'-')}</td><td>${escH(x.status_menikah||'-')}</td><td>${finalRecapStatusBadge(x.status_kehadiran)}</td>
-      <td>${escH(x.jam_hadir||'-')}</td><td>${escH(x.input_via||'-')}${x.catatan?'<div style="font-size:8px;color:#64748b">'+escH(x.catatan)+'</div>':''}</td>
-    </tr>`).join('')}</tbody></table></div>`;
-  }else{
-    html+=`<div class="fr-note" style="background:#f8fafc;border-color:#cbd5e1;color:#334155">
-      Mode <b>Tanpa Nama</b> hanya menampilkan statistik agregat. Nama, KK, ID, dan data personal tidak ikut ditampilkan.
-    </div>`;
-  }
-  document.getElementById('fr-content').innerHTML=html;
-}
-function setFinalRecapMode(mode){
-  _finalRecapMode=mode==='tanpa'?'tanpa':'nama';
-  renderFinalRecap();
-}
-async function bukaRekapFinal(id,mode='nama'){
-  ensureFinalRecapModal();
-  _finalRecapEventId=Number(id);
-  _finalRecapMode=mode==='tanpa'?'tanpa':'nama';
-  document.getElementById('fr-content').innerHTML='<div style="padding:30px;text-align:center;color:#64748b">Memuat rekap...</div>';
-  document.getElementById('modal-final-rekap').style.display='flex';
-  const {data,error}=await sb.rpc('dk_attendance_recap_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:_finalRecapEventId});
-  if(error||!data||data.ok!==true){
-    document.getElementById('fr-content').innerHTML='<div style="padding:20px;color:#b91c1c">Gagal memuat rekap: '+escH(error?.message||data?.error||'Unknown')+'</div>';
-    return;
-  }
-  _finalRecapData=data;
-  renderFinalRecap();
-}
-async function tutupKegiatanFinal(id){
-  const k=aKegiatan.find(x=>Number(x.id)===Number(id));
-  if(!k)return;
-  const rows=(aHadir||[]).filter(h=>Number(h.kegiatan_id)===Number(id));
-  const hadir=rows.filter(h=>h.status_hadir==='hadir').length;
-  const izin=rows.filter(h=>h.status_hadir==='izin').length;
-  const sakit=rows.filter(h=>h.status_hadir==='sakit').length;
-  const belum=rows.length-hadir-izin-sakit;
-  const msg=`Tutup acara "${k.acara_nama}"?\n\nPeserta: ${rows.length}\nHadir: ${hadir}\nIzin: ${izin}\nSakit: ${sakit}\nTidak hadir: ${belum}\n\nSetelah ditutup, terminal absen berhenti dan rekap final dikunci.`;
-  if(!confirm(msg))return;
-  const {data,error}=await sb.rpc('dk_attendance_close_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:Number(id)});
-  if(error||!data||data.ok!==true){
-    toast('Gagal menutup acara: '+(error?.message||data?.error||'Unknown'),true);return;
-  }
-  toast('✅ Acara ditutup. Rekap final sudah dikunci.');
-  await reloadAttendanceSecure(false);
-  renderKegiatanList();
-  _finalRecapData=data;_finalRecapEventId=Number(id);_finalRecapMode='nama';
-  ensureFinalRecapModal();document.getElementById('modal-final-rekap').style.display='flex';renderFinalRecap();
-}
-function finalRecapSummaryText(){
-  const r=_finalRecapData?.rekap;if(!r)return '';
-  const pct=Number(r.kehadiran_pct||0).toLocaleString('id-ID',{maximumFractionDigits:1});
-  const lines=[
-    `REKAP ${r.acara||'ACARA'}`,
-    `${finalRecapFmtDate(r.tanggal)}${r.kelompok?' · '+r.kelompok:''}`,
-    '',
-    `Peserta Wajib: ${r.total_peserta||0}`,
-    `Hadir: ${r.hadir||0}`,
-    `Izin: ${r.izin||0}`,
-    `Sakit: ${r.sakit||0}`,
-    `Tidak Hadir: ${r.tidak_hadir||0}`,
-    `Kehadiran: ${pct}%`,
-    `Jumlah KK: ${r.jumlah_kk||0}`,
-    `KK seluruh peserta hadir: ${r.kk_lengkap_hadir||0}`,
-    `Masuk daftar saat absen: ${r.ditambahkan_saat_absen||0}`,
-    `Tamu/Kunjungan: ${r.tamu_kunjungan||0}`,
-  ];
-  const addBreak=(title,obj)=>{
-    const e=Object.entries(obj||{});if(!e.length)return;
-    lines.push('',title+':');
-    e.forEach(([k,v])=>lines.push(`- ${k}: ${v.hadir||0}/${v.total||0} hadir`));
-  };
-  addBreak('L/P',r.gender);addBreak('Status Menikah',r.status_menikah);addBreak('Status Sambung',r.status_sambung);addBreak('Kelas KBM',r.kelas_kbm);
-  return lines.join('\n');
-}
-async function copyFinalRecapSummary(){
-  const text=finalRecapSummaryText();if(!text)return;
-  try{await navigator.clipboard.writeText(text);toast('✅ Ringkasan tanpa nama disalin');}
-  catch(_e){prompt('Salin ringkasan:',text);}
-}
-function printFinalRecap(){
-  if(!_finalRecapData?.rekap)return;
-  const content=document.getElementById('fr-content')?.innerHTML||'';
-  const w=window.open('','_blank');
-  if(!w){toast('Popup diblokir browser',true);return;}
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Rekap ${escH(_finalRecapData.rekap.acara||'Acara')}</title>
-  <style>
-    body{font-family:Arial,sans-serif;margin:12mm;color:#111827}h3{margin:0 0 4px;color:#0f5b46}
-    .fr-head{padding:8px 10px;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:8px}.fr-muted{font-size:9px;color:#64748b}
-    .fr-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px}.fr-stat{padding:7px;border:1px solid #cbd5e1;text-align:center;border-radius:6px}.fr-stat b{display:block;font-size:16px}.fr-stat span{font-size:8px}
-    .fr-breaks{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.fr-break{border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}.fr-break h4{margin:0;padding:5px;background:#f1f5f9;font-size:9px}.fr-break-row{display:grid;grid-template-columns:1fr 45px 45px;padding:4px 6px;border-top:1px solid #e5e7eb;font-size:8px}.fr-break-row b{text-align:right}
-    .fr-table-wrap{margin-top:8px}.fr-table{width:100%;border-collapse:collapse;font-size:7px}.fr-table th{background:#0f5b46;color:white;padding:4px}.fr-table td{border:1px solid #d1d5db;padding:3px}.fr-badge{font-weight:bold}.fr-note{margin-top:6px;padding:6px;border:1px solid #fde68a;background:#fffbeb;font-size:8px}
-    @page{size:A4 landscape;margin:8mm}
-  </style></head><body>${content}</body></html>`);
-  w.document.close();setTimeout(()=>w.print(),250);
-}
-
-/* Override card Acara: status selesai memakai rekap final; status aktif punya tombol Tutup Acara. */
-kegiatanCard=function(k,phase){
-  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-  const liveHadir=(aHadir||[]).filter(h=>Number(h.kegiatan_id)===Number(k.id)&&h.status_hadir==='hadir').length;
-  const finalR=k.final_rekap||null;
-  const hadirCount=finalR?Number(finalR.hadir||0):liveHadir;
-  const total=finalR?Number(finalR.total_peserta||0):Number(k.peserta_wajib_count||0);
-  const pct=finalR?Number(finalR.kehadiran_pct||0):(total>0?Math.round((hadirCount/total)*100):0);
-  let statusBadge='';
-  if(k.status==='dibatalkan')statusBadge='<span class="badge warning" style="background:#fee2e2;color:var(--red);">Batal</span>';
-  else if(k.status==='selesai'&&finalR)statusBadge='<span class="badge" style="background:#dcfce7;color:#166534;">🔒 Selesai & Terkunci</span>';
-  else if(phase==='akan')statusBadge='<span class="badge" style="background:#fef3c7;color:#92400e;">Akan Datang</span>';
-  else if(phase==='berlangsung')statusBadge='<span class="badge tetap">Sedang Berlangsung</span>';
-  else statusBadge='<span class="badge" style="background:var(--blue-light);color:var(--blue);">Waktu Acara Selesai</span>';
-  const modeStr=Array.isArray(k.mode)?k.mode.join(', '):(k.mode||'manual');
-  const isTpl=k.filter_peserta&&k.filter_peserta.sumber==='template';
-  const waktu=k.waktu?k.waktu.substring(0,5):'',selesai=k.waktu_selesai?k.waktu_selesai.substring(0,5):'';
-  const timeText=waktu?(' · '+waktu+(selesai?'–'+selesai:'')):'';
-  const locked=k.status==='selesai'&&!!finalR;
-  const canClose=canManageCalendar()&&k.status!=='dibatalkan'&&!locked&&(phase==='berlangsung'||phase==='selesai'||k.status==='selesai');
-  return `<div class="sensus-card">
-    <div class="sensus-card-head">
-      <div style="flex:1;min-width:0;">
-        <div class="sensus-card-title">${escH(k.acara_nama||'')}${isTpl?' <span class="badge" style="background:#ede9fe;color:#6d28d9;">📚 Template</span>':''}</div>
-        <div class="sensus-card-meta">${tgl}${timeText}${k.lokasi?' · '+escH(k.lokasi):''}${k.kelompok?' · '+escH(k.kelompok):' · Desa'}</div>
-      </div>${statusBadge}
-    </div>
-    <div class="sensus-card-stat">
-      <span>👥 <strong>${hadirCount}/${total}</strong> hadir (${Number(pct).toLocaleString('id-ID',{maximumFractionDigits:1})}%)</span>
-      <span>🎯 Mode: <strong>${escH(modeStr)}</strong></span>
-      ${finalR?`<span>📝 Izin <strong>${finalR.izin||0}</strong> · Sakit <strong>${finalR.sakit||0}</strong> · Tidak hadir <strong>${finalR.tidak_hadir||0}</strong></span>`:''}
-    </div>
-    <div class="sensus-card-actions">
-      ${locked?`
-        <button class="btn-sensus primary" onclick="bukaRekapFinal(${k.id},'nama')">📊 Rekap Final</button>
-        <button class="btn-sensus" style="background:#475569;color:white" onclick="bukaRekapFinal(${k.id},'tanpa')">📈 Tanpa Nama</button>
-        <button class="btn-sensus" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
-      `:`
-        <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
-        ${canManageCalendar()&&k.status==='aktif'?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
-        <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="bukaRekapFinal(${k.id},'nama')">📊 Preview Rekap</button>
-        ${canClose?`<button class="btn-sensus" style="background:#b45309;color:white;" onclick="tutupKegiatanFinal(${k.id})">🔒 Tutup Acara</button>`:''}
-        ${canManageCalendar()?`<button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>`:''}
-        ${canManageCalendar()?`<button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>`:''}
-      `}
-    </div>
-  </div>`;
-};
-
-document.addEventListener('DOMContentLoaded',()=>{ensureFinalRecapModal();setTimeout(()=>{try{renderKegiatanList();}catch(_e){}},250);});
-/* ===== END TUTUP ACARA + REKAP FINAL v1 ===== */
-</script>
-
-</body></html>`;
+  </style></head><body><h1>DAFTAR PENGURUS DESA PERWIRA</h1><div class="sub">${escH(pgExportFilterDescription())}</div><div class="meta">Dicetak ${escH(dateText)} · ${rows.length} data</div>${groups.map(pgExportPdfTable).join('')}<script>setTimeout(()=>window.print(),350)<\/script></body></html>`;
   const w=window.open('','_blank');
   if(!w){toast('Popup diblokir browser. Izinkan popup untuk cetak PDF.',true);return;}
   w.document.open();w.document.write(html);w.document.close();
@@ -9546,6 +9241,310 @@ function changeSlotCount(slotId,delta){const h=(aSlotHadir||[]).find(x=>Number(x
 
 /* ===== END TARGET PESERTA + SLOT KUOTA + UNDANGAN v1 ===== */
 
+</script>
+
+<script>
+/* ===== TUTUP ACARA + REKAP FINAL v1 ===== */
+let _finalRecapEventId=null;
+let _finalRecapData=null;
+let _finalRecapMode='nama';
+
+function ensureFinalRecapModal(){
+  if(document.getElementById('modal-final-rekap'))return;
+  const style=document.createElement('style');
+  style.textContent=`
+    #modal-final-rekap .modal{max-width:1180px;width:min(96vw,1180px);max-height:94vh;}
+    .fr-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+    .fr-tabs button{border:1px solid #d1d5db;background:#fff;color:#374151;padding:8px 12px;border-radius:7px;font-weight:800;cursor:pointer}
+    .fr-tabs button.active{background:#0f5b46;color:#fff;border-color:#0f5b46}
+    .fr-head{padding:10px 12px;border:1px solid #dbe7df;background:#f6fbf8;border-radius:9px;margin-bottom:10px}
+    .fr-head h3{margin:0 0 3px;color:#0f5b46;font-size:17px}
+    .fr-muted{font-size:10px;color:#64748b}
+    .fr-stats{display:grid;grid-template-columns:repeat(5,minmax(105px,1fr));gap:7px;margin-bottom:10px}
+    .fr-stat{padding:9px 8px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-align:center}
+    .fr-stat b{display:block;font-size:20px;line-height:1.1;color:#111827}
+    .fr-stat span{font-size:9px;color:#64748b}
+    .fr-stat.main{background:#ecfdf5;border-color:#a7f3d0}.fr-stat.main b{color:#047857}
+    .fr-stat.warn{background:#fffbeb;border-color:#fde68a}
+    .fr-stat.danger{background:#fef2f2;border-color:#fecaca}
+    .fr-breaks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
+    .fr-break{border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff}
+    .fr-break h4{margin:0;padding:7px 9px;background:#f8fafc;font-size:10px;color:#334155;border-bottom:1px solid #e5e7eb}
+    .fr-break-row{display:grid;grid-template-columns:minmax(90px,1fr) 62px 62px;gap:6px;padding:6px 9px;border-top:1px solid #f1f5f9;font-size:10px;align-items:center}
+    .fr-break-row:first-of-type{border-top:0}
+    .fr-break-row b{text-align:right}
+    .fr-table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:8px;max-height:48vh}
+    .fr-table{width:100%;border-collapse:collapse;font-size:9.5px;min-width:1040px}
+    .fr-table th{position:sticky;top:0;background:#0f5b46;color:#fff;padding:6px 5px;text-align:left;z-index:1}
+    .fr-table td{padding:5px;border-top:1px solid #e5e7eb;vertical-align:top}
+    .fr-table tr:nth-child(even) td{background:#fafafa}
+    .fr-badge{display:inline-block;padding:2px 6px;border-radius:999px;font-size:8.5px;font-weight:800}
+    .fr-badge.hadir{background:#dcfce7;color:#166534}.fr-badge.izin{background:#dbeafe;color:#1d4ed8}
+    .fr-badge.sakit{background:#f3e8ff;color:#7e22ce}.fr-badge.tidak{background:#fee2e2;color:#991b1b}
+    .fr-note{font-size:9px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:7px 9px;margin-bottom:9px}
+    @media(max-width:760px){
+      .fr-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .fr-breaks{grid-template-columns:1fr}
+      #modal-final-rekap .modal{width:98vw}
+    }
+    @media print{
+      .fr-no-print{display:none!important}
+      .fr-table-wrap{max-height:none;overflow:visible}
+    }
+  `;
+  document.head.appendChild(style);
+
+  const box=document.createElement('div');
+  box.id='modal-final-rekap';
+  box.className='modal-overlay';
+  box.style.display='none';
+  box.innerHTML=`
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <b id="fr-title">📊 Rekap Final Acara</b>
+          <div id="fr-sub" class="fr-muted"></div>
+        </div>
+        <button onclick="closeFinalRecapModal()" style="font-size:20px;background:none;border:0;cursor:pointer">×</button>
+      </div>
+      <div class="modal-body" style="padding:12px">
+        <div class="fr-tabs fr-no-print">
+          <button id="fr-tab-nama" onclick="setFinalRecapMode('nama')">👥 Dengan Nama</button>
+          <button id="fr-tab-tanpa" onclick="setFinalRecapMode('tanpa')">📈 Tanpa Nama</button>
+          <button onclick="printFinalRecap()">🖨️ Cetak / PDF</button>
+          <button id="fr-copy-btn" onclick="copyFinalRecapSummary()">🔗 Salin Ringkasan</button>
+        </div>
+        <div id="fr-content"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(box);
+}
+function closeFinalRecapModal(){
+  const e=document.getElementById('modal-final-rekap');if(e)e.style.display='none';
+}
+function finalRecapFmtDate(v){
+  if(!v)return '-';
+  try{return new Date(String(v).slice(0,10)+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}catch(_e){return v}
+}
+function finalRecapStatusBadge(s){
+  const v=String(s||'Tidak Hadir');
+  if(v==='Hadir')return '<span class="fr-badge hadir">Hadir</span>';
+  if(v==='Izin')return '<span class="fr-badge izin">Izin</span>';
+  if(v==='Sakit')return '<span class="fr-badge sakit">Sakit</span>';
+  return '<span class="fr-badge tidak">Tidak Hadir</span>';
+}
+function finalRecapBreak(title,obj){
+  const entries=Object.entries(obj||{});
+  if(!entries.length)return '';
+  return `<div class="fr-break"><h4>${escH(title)}</h4>
+    <div class="fr-break-row" style="font-weight:800;background:#f8fafc"><span>Kategori</span><b>Hadir</b><b>Total</b></div>
+    ${entries.map(([k,v])=>`<div class="fr-break-row"><span>${escH(k)}</span><b>${Number(v?.hadir||0)}</b><b>${Number(v?.total||0)}</b></div>`).join('')}
+  </div>`;
+}
+function finalRecapStatsHtml(r){
+  const pct=Number(r.kehadiran_pct||0).toLocaleString('id-ID',{maximumFractionDigits:1});
+  return `<div class="fr-stats">
+    <div class="fr-stat"><b>${Number(r.total_peserta||0)}</b><span>Peserta Wajib Final</span></div>
+    <div class="fr-stat main"><b>${Number(r.hadir||0)}</b><span>Hadir</span></div>
+    <div class="fr-stat warn"><b>${Number(r.izin||0)}</b><span>Izin</span></div>
+    <div class="fr-stat warn"><b>${Number(r.sakit||0)}</b><span>Sakit</span></div>
+    <div class="fr-stat danger"><b>${Number(r.tidak_hadir||0)}</b><span>Tidak Hadir</span></div>
+    <div class="fr-stat main"><b>${pct}%</b><span>Kehadiran Wajib</span></div>
+    <div class="fr-stat"><b>${Number(r.jumlah_kk||0)}</b><span>Jumlah KK</span></div>
+    <div class="fr-stat"><b>${Number(r.kk_lengkap_hadir||0)}</b><span>KK Seluruh Peserta Hadir</span></div>
+    <div class="fr-stat"><b>${Number(r.ditambahkan_saat_absen||0)}</b><span>Masuk Daftar Saat Absen</span></div>
+    <div class="fr-stat"><b>${Number(r.tamu_kunjungan||0)}</b><span>Tamu / Kunjungan</span></div>
+  </div>`;
+}
+function finalRecapHeaderHtml(r,d){
+  const closed=d?.closed_at||r.closed_at||null;
+  let closeText='';
+  if(closed){
+    try{closeText=' · Ditutup '+new Date(closed).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_e){}
+  }
+  return `<div class="fr-head">
+    <h3>${escH(r.acara||'Rekap Acara')}</h3>
+    <div>${escH(finalRecapFmtDate(r.tanggal))}${r.waktu?' · '+escH(String(r.waktu).slice(0,5)):''}${r.waktu_selesai?'–'+escH(String(r.waktu_selesai).slice(0,5)):''}${r.lokasi?' · '+escH(r.lokasi):''}${r.kelompok?' · '+escH(r.kelompok):''}</div>
+    <div class="fr-muted">${d?.final?'Rekap final terkunci':'Preview rekap — acara belum ditutup'}${closeText}${d?.closed_by?' · oleh '+escH(d.closed_by):''}</div>
+  </div>`;
+}
+function renderFinalRecap(){
+  ensureFinalRecapModal();
+  const d=_finalRecapData;if(!d||!d.rekap)return;
+  const r=d.rekap,p=Array.isArray(d.peserta)?d.peserta:[];
+  document.getElementById('fr-title').textContent=d.final?'📊 Rekap Final Acara':'📊 Preview Rekap Acara';
+  document.getElementById('fr-sub').textContent=(r.acara||'')+' · '+(r.kelompok||'');
+  document.getElementById('fr-tab-nama').classList.toggle('active',_finalRecapMode==='nama');
+  document.getElementById('fr-tab-tanpa').classList.toggle('active',_finalRecapMode==='tanpa');
+  document.getElementById('fr-copy-btn').style.display=_finalRecapMode==='tanpa'?'inline-block':'none';
+
+  let html=finalRecapHeaderHtml(r,d)+finalRecapStatsHtml(r);
+  html+=`<div class="fr-breaks">
+    ${finalRecapBreak('Laki-laki / Perempuan',r.gender)}
+    ${finalRecapBreak('Status Menikah',r.status_menikah)}
+    ${finalRecapBreak('Status Sambung',r.status_sambung)}
+    ${finalRecapBreak('Kelas KBM — Belum Menikah',r.kelas_kbm)}
+  </div>`;
+  if(r.hadir_pertama||r.hadir_terakhir){
+    html+=`<div class="fr-note">⏱️ Absen pertama <b>${escH(r.hadir_pertama||'-')}</b> · terakhir <b>${escH(r.hadir_terakhir||'-')}</b>
+    ${r.cara_absen?` · Cara absen: ${Object.entries(r.cara_absen).map(([k,v])=>`${escH(k)} <b>${v}</b>`).join(' · ')}`:''}</div>`;
+  }
+
+  if(_finalRecapMode==='nama'){
+    const order={Hadir:0,Izin:1,Sakit:2,'Tidak Hadir':3};
+    const list=[...p].sort((a,b)=>(order[a.status_kehadiran]??9)-(order[b.status_kehadiran]??9)||String(a.kk||'').localeCompare(String(b.kk||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+    html+=`<div class="fr-table-wrap"><table class="fr-table"><thead><tr>
+      <th>No.</th><th>Nama</th><th>KK</th><th>L/P</th><th>Usia</th><th>Kelas KBM</th><th>Sambung</th><th>Menikah</th><th>Kehadiran</th><th>Jam</th><th>Via / Keterangan</th>
+    </tr></thead><tbody>${list.map((x,i)=>`<tr>
+      <td>${i+1}</td><td><b>${escH(x.nama||'-')}</b>${x.auto_added?'<div style="font-size:8px;color:#92400e">⚠ masuk daftar saat absen</div>':''}</td>
+      <td>${escH(x.kk||'-')}</td><td>${escH(x.lp||'-')}</td><td>${x.usia==null?'-':x.usia}</td><td>${escH(x.kelas_kbm||'-')}</td>
+      <td>${escH(x.status_sambung||'-')}</td><td>${escH(x.status_menikah||'-')}</td><td>${finalRecapStatusBadge(x.status_kehadiran)}</td>
+      <td>${escH(x.jam_hadir||'-')}</td><td>${escH(x.input_via||'-')}${x.catatan?'<div style="font-size:8px;color:#64748b">'+escH(x.catatan)+'</div>':''}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+  }else{
+    html+=`<div class="fr-note" style="background:#f8fafc;border-color:#cbd5e1;color:#334155">
+      Mode <b>Tanpa Nama</b> hanya menampilkan statistik agregat. Nama, KK, ID, dan data personal tidak ikut ditampilkan.
+    </div>`;
+  }
+  document.getElementById('fr-content').innerHTML=html;
+}
+function setFinalRecapMode(mode){
+  _finalRecapMode=mode==='tanpa'?'tanpa':'nama';
+  renderFinalRecap();
+}
+async function bukaRekapFinal(id,mode='nama'){
+  ensureFinalRecapModal();
+  _finalRecapEventId=Number(id);
+  _finalRecapMode=mode==='tanpa'?'tanpa':'nama';
+  document.getElementById('fr-content').innerHTML='<div style="padding:30px;text-align:center;color:#64748b">Memuat rekap...</div>';
+  document.getElementById('modal-final-rekap').style.display='flex';
+  const {data,error}=await sb.rpc('dk_attendance_recap_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:_finalRecapEventId});
+  if(error||!data||data.ok!==true){
+    document.getElementById('fr-content').innerHTML='<div style="padding:20px;color:#b91c1c">Gagal memuat rekap: '+escH(error?.message||data?.error||'Unknown')+'</div>';
+    return;
+  }
+  _finalRecapData=data;
+  renderFinalRecap();
+}
+async function tutupKegiatanFinal(id){
+  const k=aKegiatan.find(x=>Number(x.id)===Number(id));
+  if(!k)return;
+  const rows=(aHadir||[]).filter(h=>Number(h.kegiatan_id)===Number(id));
+  const hadir=rows.filter(h=>h.status_hadir==='hadir').length;
+  const izin=rows.filter(h=>h.status_hadir==='izin').length;
+  const sakit=rows.filter(h=>h.status_hadir==='sakit').length;
+  const belum=rows.length-hadir-izin-sakit;
+  const msg=`Tutup acara "${k.acara_nama}"?\n\nPeserta: ${rows.length}\nHadir: ${hadir}\nIzin: ${izin}\nSakit: ${sakit}\nTidak hadir: ${belum}\n\nSetelah ditutup, terminal absen berhenti dan rekap final dikunci.`;
+  if(!confirm(msg))return;
+  const {data,error}=await sb.rpc('dk_attendance_close_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:Number(id)});
+  if(error||!data||data.ok!==true){
+    toast('Gagal menutup acara: '+(error?.message||data?.error||'Unknown'),true);return;
+  }
+  toast('✅ Acara ditutup. Rekap final sudah dikunci.');
+  await reloadAttendanceSecure(false);
+  renderKegiatanList();
+  _finalRecapData=data;_finalRecapEventId=Number(id);_finalRecapMode='nama';
+  ensureFinalRecapModal();document.getElementById('modal-final-rekap').style.display='flex';renderFinalRecap();
+}
+function finalRecapSummaryText(){
+  const r=_finalRecapData?.rekap;if(!r)return '';
+  const pct=Number(r.kehadiran_pct||0).toLocaleString('id-ID',{maximumFractionDigits:1});
+  const lines=[
+    `REKAP ${r.acara||'ACARA'}`,
+    `${finalRecapFmtDate(r.tanggal)}${r.kelompok?' · '+r.kelompok:''}`,
+    '',
+    `Peserta Wajib: ${r.total_peserta||0}`,
+    `Hadir: ${r.hadir||0}`,
+    `Izin: ${r.izin||0}`,
+    `Sakit: ${r.sakit||0}`,
+    `Tidak Hadir: ${r.tidak_hadir||0}`,
+    `Kehadiran: ${pct}%`,
+    `Jumlah KK: ${r.jumlah_kk||0}`,
+    `KK seluruh peserta hadir: ${r.kk_lengkap_hadir||0}`,
+    `Masuk daftar saat absen: ${r.ditambahkan_saat_absen||0}`,
+    `Tamu/Kunjungan: ${r.tamu_kunjungan||0}`,
+  ];
+  const addBreak=(title,obj)=>{
+    const e=Object.entries(obj||{});if(!e.length)return;
+    lines.push('',title+':');
+    e.forEach(([k,v])=>lines.push(`- ${k}: ${v.hadir||0}/${v.total||0} hadir`));
+  };
+  addBreak('L/P',r.gender);addBreak('Status Menikah',r.status_menikah);addBreak('Status Sambung',r.status_sambung);addBreak('Kelas KBM',r.kelas_kbm);
+  return lines.join('\n');
+}
+async function copyFinalRecapSummary(){
+  const text=finalRecapSummaryText();if(!text)return;
+  try{await navigator.clipboard.writeText(text);toast('✅ Ringkasan tanpa nama disalin');}
+  catch(_e){prompt('Salin ringkasan:',text);}
+}
+function printFinalRecap(){
+  if(!_finalRecapData?.rekap)return;
+  const content=document.getElementById('fr-content')?.innerHTML||'';
+  const w=window.open('','_blank');
+  if(!w){toast('Popup diblokir browser',true);return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Rekap ${escH(_finalRecapData.rekap.acara||'Acara')}</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:12mm;color:#111827}h3{margin:0 0 4px;color:#0f5b46}
+    .fr-head{padding:8px 10px;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:8px}.fr-muted{font-size:9px;color:#64748b}
+    .fr-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px}.fr-stat{padding:7px;border:1px solid #cbd5e1;text-align:center;border-radius:6px}.fr-stat b{display:block;font-size:16px}.fr-stat span{font-size:8px}
+    .fr-breaks{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.fr-break{border:1px solid #cbd5e1;border-radius:6px;overflow:hidden}.fr-break h4{margin:0;padding:5px;background:#f1f5f9;font-size:9px}.fr-break-row{display:grid;grid-template-columns:1fr 45px 45px;padding:4px 6px;border-top:1px solid #e5e7eb;font-size:8px}.fr-break-row b{text-align:right}
+    .fr-table-wrap{margin-top:8px}.fr-table{width:100%;border-collapse:collapse;font-size:7px}.fr-table th{background:#0f5b46;color:white;padding:4px}.fr-table td{border:1px solid #d1d5db;padding:3px}.fr-badge{font-weight:bold}.fr-note{margin-top:6px;padding:6px;border:1px solid #fde68a;background:#fffbeb;font-size:8px}
+    @page{size:A4 landscape;margin:8mm}
+  </style></head><body>${content}</body></html>`);
+  w.document.close();setTimeout(()=>w.print(),250);
+}
+
+/* Override card Acara: status selesai memakai rekap final; status aktif punya tombol Tutup Acara. */
+kegiatanCard=function(k,phase){
+  const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  const liveHadir=(aHadir||[]).filter(h=>Number(h.kegiatan_id)===Number(k.id)&&h.status_hadir==='hadir').length;
+  const finalR=k.final_rekap||null;
+  const hadirCount=finalR?Number(finalR.hadir||0):liveHadir;
+  const total=finalR?Number(finalR.total_peserta||0):Number(k.peserta_wajib_count||0);
+  const pct=finalR?Number(finalR.kehadiran_pct||0):(total>0?Math.round((hadirCount/total)*100):0);
+  let statusBadge='';
+  if(k.status==='dibatalkan')statusBadge='<span class="badge warning" style="background:#fee2e2;color:var(--red);">Batal</span>';
+  else if(k.status==='selesai'&&finalR)statusBadge='<span class="badge" style="background:#dcfce7;color:#166534;">🔒 Selesai & Terkunci</span>';
+  else if(phase==='akan')statusBadge='<span class="badge" style="background:#fef3c7;color:#92400e;">Akan Datang</span>';
+  else if(phase==='berlangsung')statusBadge='<span class="badge tetap">Sedang Berlangsung</span>';
+  else statusBadge='<span class="badge" style="background:var(--blue-light);color:var(--blue);">Waktu Acara Selesai</span>';
+  const modeStr=Array.isArray(k.mode)?k.mode.join(', '):(k.mode||'manual');
+  const isTpl=k.filter_peserta&&k.filter_peserta.sumber==='template';
+  const waktu=k.waktu?k.waktu.substring(0,5):'',selesai=k.waktu_selesai?k.waktu_selesai.substring(0,5):'';
+  const timeText=waktu?(' · '+waktu+(selesai?'–'+selesai:'')):'';
+  const locked=k.status==='selesai'&&!!finalR;
+  const canClose=canManageCalendar()&&k.status!=='dibatalkan'&&!locked&&(phase==='berlangsung'||phase==='selesai'||k.status==='selesai');
+  return `<div class="sensus-card">
+    <div class="sensus-card-head">
+      <div style="flex:1;min-width:0;">
+        <div class="sensus-card-title">${escH(k.acara_nama||'')}${isTpl?' <span class="badge" style="background:#ede9fe;color:#6d28d9;">📚 Template</span>':''}</div>
+        <div class="sensus-card-meta">${tgl}${timeText}${k.lokasi?' · '+escH(k.lokasi):''}${k.kelompok?' · '+escH(k.kelompok):' · Desa'}</div>
+      </div>${statusBadge}
+    </div>
+    <div class="sensus-card-stat">
+      <span>👥 <strong>${hadirCount}/${total}</strong> hadir (${Number(pct).toLocaleString('id-ID',{maximumFractionDigits:1})}%)</span>
+      <span>🎯 Mode: <strong>${escH(modeStr)}</strong></span>
+      ${finalR?`<span>📝 Izin <strong>${finalR.izin||0}</strong> · Sakit <strong>${finalR.sakit||0}</strong> · Tidak hadir <strong>${finalR.tidak_hadir||0}</strong></span>`:''}
+    </div>
+    <div class="sensus-card-actions">
+      ${locked?`
+        <button class="btn-sensus primary" onclick="bukaRekapFinal(${k.id},'nama')">📊 Rekap Final</button>
+        <button class="btn-sensus" style="background:#475569;color:white" onclick="bukaRekapFinal(${k.id},'tanpa')">📈 Tanpa Nama</button>
+        <button class="btn-sensus" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
+      `:`
+        <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
+        ${canManageCalendar()&&k.status==='aktif'?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
+        <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="bukaRekapFinal(${k.id},'nama')">📊 Preview Rekap</button>
+        ${canClose?`<button class="btn-sensus" style="background:#b45309;color:white;" onclick="tutupKegiatanFinal(${k.id})">🔒 Tutup Acara</button>`:''}
+        ${canManageCalendar()?`<button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>`:''}
+        ${canManageCalendar()?`<button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>`:''}
+      `}
+    </div>
+  </div>`;
+};
+
+document.addEventListener('DOMContentLoaded',()=>{ensureFinalRecapModal();setTimeout(()=>{try{renderKegiatanList();}catch(_e){}},250);});
+/* ===== END TUTUP ACARA + REKAP FINAL v1 ===== */
 </script>
 </body>
 </html>
