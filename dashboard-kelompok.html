@@ -993,7 +993,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button onclick="cetakDaftarHadir()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖨️ Cetak Manual</button>
-        <button onclick="bagikanLinkAbsen()" style="background:#3b82f6;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🔗 Link Online</button>
+        <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
         <button onclick="closeMod('modal-hadir')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
       </div>
     </div>
@@ -1108,6 +1108,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
           <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
             <button onclick="exportPilihSemua()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✓ Pilih Semua</button>
             <button onclick="exportPilihRingkas()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;background:#dbeafe;color:#1e40af;">↺ Default</button>
+            <button onclick="exportPilihIdAbsen()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;background:#ede9fe;color:#6d28d9;">🪪 Lembar ID Absen</button>
             <button onclick="exportPilihNone()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✗ Kosongkan</button>
           </div>
           <div id="export-columns" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;font-size:12px;max-height:34vh;overflow-y:auto;background:#f9fafb;padding:10px;border-radius:6px;"></div>
@@ -1938,6 +1939,9 @@ async function loadAll(){
   const qAttendance = DK_ATT_TOKEN
     ? sb.rpc('dk_attendance_snapshot',{p_token:DK_ATT_TOKEN})
     : Promise.resolve({data:null,error:null});
+  const qAbsenIds = (DK_ATT_TOKEN&&canManageCalendar())
+    ? sb.rpc('dk_attendance_absen_ids',{p_token:DK_ATT_TOKEN})
+    : Promise.resolve({data:{ok:true,data:[]},error:null});
   // ISRUN
   let qIsrunKat = sb.from('ubnb_isrun_kategori').select('*').order('urutan');
   let qIsrunPbyr = sb.from('ubnb_isrun_pembayar').select('*').eq('aktif',true).order('nama');
@@ -1952,9 +1956,12 @@ async function loadAll(){
     qIsrunPbyr = qIsrunPbyr.eq('kelompok',scope);
   }
 
-  const [j,s,att,ikt,ipb,ipy,pg,sp]=await Promise.all([qJamaah,qSensus,qAttendance,qIsrunKat,qIsrunPbyr,qIsrunPbyrn,qPengurus,qSpouse]);
+  const [j,s,att,aid,ikt,ipb,ipy,pg,sp]=await Promise.all([qJamaah,qSensus,qAttendance,qAbsenIds,qIsrunKat,qIsrunPbyr,qIsrunPbyrn,qPengurus,qSpouse]);
 
   let allJamaah=j.data||[];
+  const _absenRows=(aid&&!aid.error&&aid.data&&aid.data.ok===true&&Array.isArray(aid.data.data))?aid.data.data:[];
+  const _absenMap=new Map(_absenRows.map(x=>[String(x.did),String(x.absen_id||'')]));
+  allJamaah=allJamaah.map(x=>({...x,absen_id:_absenMap.get(String(x.did))||null}));
   aJamaahDesa=allJamaah.filter(x=>['PW1','PW2','PW3','PW4'].includes(x.kelompok_nama));
   if(scope){aJamaah=allJamaah.filter(x=>x.kelompok_nama===scope);}
   else{aJamaah=allJamaah;}
@@ -4439,6 +4446,7 @@ async function hapusLaporanSensus(id,label){
 const EXPORT_COLUMNS=[
   {key:'no',          label:'No',           desc:'Nomor urut',           tabel:true,  picker:j=>null}, // diisi runtime
   {key:'did',         label:'DID',          desc:'ID jamaah',            tabel:false, picker:j=>j.did||''},
+  {key:'absen_id',    label:'ID Absen',     desc:'ID tetap 4 digit',      tabel:false, picker:j=>j.absen_id||''},
   {key:'nama',        label:'Nama',         desc:'Nama lengkap',         tabel:true,  picker:j=>j.nama||''},
   {key:'nama_kk',     label:'Nama KK',      desc:'Kepala keluarga',      tabel:true,  picker:j=>j.nama_kk||''},
   {key:'kelompok',    label:'Kelompok',     desc:'PW1/PW2/PW3/PW4',      tabel:false, picker:j=>j.kelompok_nama||''},
@@ -4499,6 +4507,16 @@ function exportPilihRingkas(){
   });
   renderExportWidthControls();
   updateExportColumnsSummary();
+}
+function exportPilihIdAbsen(){
+  const want=new Set(['no','nama','absen_id','kelompok']);
+  document.querySelectorAll('.exp-col').forEach(cb=>cb.checked=want.has(cb.dataset.key));
+  const g=document.getElementById('export-group-by');if(g)g.value='kelompok';
+  const o=document.getElementById('export-group-order');if(o)o.value='asc';
+  const s=document.getElementById('export-member-sort');if(s)s.value='name_asc';
+  renderExportWidthControls();
+  updateExportColumnsSummary();
+  updateExportGroupSummary();
 }
 function exportPilihNone(){
   document.querySelectorAll('.exp-col').forEach(cb=>cb.checked=false);
@@ -4575,7 +4593,7 @@ function updateExportPdfSummary(){
 }
 
 const EXPORT_PDF_DEFAULT_WIDTHS={
-  no:14,did:28,nama:50,nama_kk:46,kelompok:24,jenis_kelamin:20,tgl_lahir:32,umur:19,kelas_kbm:30,
+  no:14,did:28,absen_id:24,nama:50,nama_kk:46,kelompok:24,jenis_kelamin:20,tgl_lahir:32,umur:19,kelas_kbm:30,
   status_nikah:34,status_sambung:38,alamat:68,nomor_wa:34,is_aghnia:21,is_haji:21,is_sarjana:24
 };
 const EXPORT_PDF_PAPER_USABLE={
@@ -5054,6 +5072,7 @@ function kegiatanCard(k,phase){
     </div>
     <div class="sensus-card-actions">
       <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
+      ${canManageCalendar()?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
       <button class="btn-sensus success" onclick="cetakKegiatan(${k.id})">🖨️ Cetak</button>
       <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="generateLaporanKegiatan(${k.id})">📊 Laporan</button>
       <button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>
@@ -6079,34 +6098,50 @@ async function bulkHadir(status){
   renderDaftarHadir();
 }
 
-async function bagikanLinkAbsen(){
-  const k=aKegiatan.find(x=>x.id===curKegiatanId);
-  if(!k) return;
-  if(!Array.isArray(k.mode)||!k.mode.includes('online')){
-    if(!confirm('Mode online belum aktif untuk kegiatan ini. Aktifkan sekarang & generate link?')) return;
-    const snap=await getAttendanceSnapshot(true);
-    if(!snap) return;
-    const {data,error}=await sb.rpc('dk_attendance_enable_online',{
-      p_token:DK_ATT_TOKEN,
-      p_kegiatan_id:k.id
-    });
-    if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown error'),true);return;}
-    const updated=data.data||k;
-    const idx=aKegiatan.findIndex(x=>x.id===k.id);
-    if(idx>=0) aKegiatan[idx]={...aKegiatan[idx],...updated};
-    bagikanLinkAbsenDirect(updated.public_token||k.public_token);
-    renderKegiatanList();
+
+async function bukaAbsenTerminal(){
+  if(!curKegiatanId){toast('Pilih acara terlebih dahulu',true);return;}
+  return bukaAbsenTerminalFor(curKegiatanId);
+}
+async function bukaAbsenTerminalFor(kegiatanId){
+  if(!canManageCalendar()){
+    toast('Pengelolaan terminal absen hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);
     return;
   }
-  bagikanLinkAbsenDirect(k.public_token);
-}
-function bagikanLinkAbsenDirect(token){
-  const url=window.location.origin+'/absen-kegiatan.html?token='+token;
-  if(navigator.share){
-    navigator.share({title:'Link Absen Kegiatan UBNB',url}).catch(()=>{});
-  } else {
-    prompt('Bagikan link absen ini:',url);
+  const k=aKegiatan.find(x=>Number(x.id)===Number(kegiatanId));
+  if(!k){toast('Acara tidak ditemukan',true);return;}
+
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap)return;
+
+  const {data,error}=await sb.rpc('dk_attendance_enable_terminal',{
+    p_token:DK_ATT_TOKEN,
+    p_kegiatan_id:k.id
+  });
+  if(error||!data||data.ok!==true){
+    toast('Gagal membuka terminal: '+(error?.message||data?.error||'Unknown error'),true);
+    return;
   }
+
+  const updated=data.data||{};
+  const idx=aKegiatan.findIndex(x=>Number(x.id)===Number(k.id));
+  if(idx>=0)aKegiatan[idx]={...aKegiatan[idx],...updated};
+  const token=updated.public_token||k.public_token;
+  if(!token){toast('Token terminal tidak tersedia',true);return;}
+
+  const url=window.location.origin+'/absen-terminal.html?token='+encodeURIComponent(token);
+  const w=window.open(url,'_blank');
+  if(!w) prompt('Popup diblokir. Buka link terminal ini:',url);
+  else toast('✅ Terminal absen dibuka di tab baru');
+  renderKegiatanList();
+}
+function salinLinkAbsenTerminal(kegiatanId){
+  const k=aKegiatan.find(x=>Number(x.id)===Number(kegiatanId));
+  if(!k?.public_token){toast('Buka Terminal Absen sekali untuk membuat link',true);return;}
+  const url=window.location.origin+'/absen-terminal.html?token='+encodeURIComponent(k.public_token);
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(url).then(()=>toast('✅ Link terminal disalin')).catch(()=>prompt('Salin link terminal:',url));
+  }else prompt('Salin link terminal:',url);
 }
 
 // ===== CETAK DAFTAR HADIR =====
