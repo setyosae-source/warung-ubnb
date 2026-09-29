@@ -1095,9 +1095,13 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       </div>
       <div id="export-columns" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;font-size:12px;max-height:40vh;overflow-y:auto;background:#f9fafb;padding:10px;border-radius:6px;"></div>
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin:14px 0 8px;">📁 Format file:</div>
-      <div style="display:flex;gap:8px;">
-        <button onclick="doExport('xlsx')" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
-        <button onclick="doExport('csv')" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#3b82f6;">📄 CSV</button>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:10px;font-size:11px;color:var(--text-muted);line-height:1.45;">
+        PDF disusun <b>group by Kepala Keluarga</b> (nama KK alfabet). Di dalam setiap KK, <b>Kepala Keluarga di paling atas</b>, kemudian anggota diurutkan berdasarkan usia dari tertua ke termuda. Jamaah tanpa data KK digabung dalam satu group <b>Tanpa Data KK</b>. Kolom PDF mengikuti pilihan kolom di atas.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="doExport('xlsx')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
+        <button onclick="doExport('csv')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#3b82f6;">📄 CSV</button>
+        <button onclick="doExport('pdf')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#dc2626;">📕 PDF (.pdf)</button>
       </div>
     </div>
     <div class="modal-actions">
@@ -4296,29 +4300,40 @@ function getSelectedExportCols(){
   return EXPORT_COLUMNS.filter(c=>selectedKeys.includes(c.key));
 }
 
+function exportJamaahFamilyLabel(j){
+  return String(j?.nama_kk||'').trim();
+}
+function exportJamaahIsKK(j){
+  const nama=String(j?.nama||'').trim().toLocaleLowerCase('id');
+  const kk=String(j?.nama_kk||'').trim().toLocaleLowerCase('id');
+  return !!nama && !!kk && nama===kk;
+}
+function exportJamaahFamilySort(a,b){
+  const ka=exportJamaahFamilyLabel(a),kb=exportJamaahFamilyLabel(b);
+  // Jamaah tanpa KK selalu menjadi satu group terakhir.
+  if(!ka&&kb) return 1;
+  if(ka&&!kb) return -1;
+  if(ka&&kb){
+    const kc=ka.localeCompare(kb,'id',{sensitivity:'base'});
+    if(kc) return kc;
+  }
+  // Dalam KK: posisi KK paling atas.
+  const ha=exportJamaahIsKK(a)?0:1,hb=exportJamaahIsKK(b)?0:1;
+  if(ha!==hb) return ha-hb;
+  // Setelah KK: usia tertua ke termuda, usia kosong di paling bawah.
+  const ua=umurFromTgl(a.tgl_lahir),ub=umurFromTgl(b.tgl_lahir);
+  if(ua!==ub){
+    if(ua===null) return 1;
+    if(ub===null) return -1;
+    return ub-ua;
+  }
+  return String(a.nama||'').localeCompare(String(b.nama||''),'id',{sensitivity:'base'});
+}
+function getExportJamaahSorted(){
+  return getFilteredJamaah().slice().sort(exportJamaahFamilySort);
+}
 function buildExportRows(cols){
-  const list=getFilteredJamaah();
-  // Sort sesuai sort tabel sekarang
-  const cmp=(a,b)=>{
-    let va,vb;
-    switch(_sortBy){
-      case 'nama_kk': va=(a.nama_kk||'').toLowerCase(); vb=(b.nama_kk||'').toLowerCase(); break;
-      case 'nama':    va=(a.nama||'').toLowerCase(); vb=(b.nama||'').toLowerCase(); break;
-      case 'jk':      va=(a.jenis_kelamin||'').charAt(0).toUpperCase(); vb=(b.jenis_kelamin||'').charAt(0).toUpperCase(); break;
-      case 'umur':    va=umurFromTgl(a.tgl_lahir); vb=umurFromTgl(b.tgl_lahir);
-                      if(va===null) va=_sortDir===1?9999:-1;
-                      if(vb===null) vb=_sortDir===1?9999:-1;
-                      break;
-      case 'nikah':   va=a.status_nikah||'~'; vb=b.status_nikah||'~'; break;
-      case 'sambung': va=a.status_sambung||'~'; vb=b.status_sambung||'~'; break;
-      default:        va=(a.nama||'').toLowerCase(); vb=(b.nama||'').toLowerCase();
-    }
-    if(va<vb) return -1*_sortDir;
-    if(va>vb) return 1*_sortDir;
-    return 0;
-  };
-  list.sort(cmp);
-  // Build rows
+  const list=getExportJamaahSorted();
   const rows=[cols.map(c=>c.label)];
   list.forEach((j,idx)=>{
     rows.push(cols.map(c=>{
@@ -4327,6 +4342,96 @@ function buildExportRows(cols){
     }));
   });
   return rows;
+}
+function buildExportFamilyGroups(){
+  const list=getExportJamaahSorted();
+  const groups=[];
+  let curKey=null,cur=null;
+  list.forEach(j=>{
+    const label=exportJamaahFamilyLabel(j);
+    const key=label?('kk:'+label.toLocaleLowerCase('id')):'__tanpa_kk__';
+    if(key!==curKey){
+      cur={key,label:label||'Tanpa Data KK',rows:[]};
+      groups.push(cur);curKey=key;
+    }
+    cur.rows.push(j);
+  });
+  return groups;
+}
+function exportJamaahPdfFilterText(){
+  const scope=CU?.kelompok_scope||'Desa';
+  const list=getFilteredJamaah();
+  const total=aJamaah.length;
+  return `${scope==='Desa'?'Semua Kelompok':scope} · ${list.length}${list.length!==total?` dari ${total}`:''} jamaah`;
+}
+function exportJamaahPDF(cols){
+  const groups=buildExportFamilyGroups();
+  const total=groups.reduce((n,g)=>n+g.rows.length,0);
+  if(!total){toast('Tidak ada data untuk di-export',true);return;}
+  const jsPDFCtor=window.jspdf?.jsPDF;
+  if(!jsPDFCtor||typeof jsPDFCtor!=='function'){toast('Library PDF belum siap, refresh halaman',true);return;}
+  try{
+    // Banyak kolom tetap memakai font besar dengan memperbesar ukuran kertas.
+    const paper=cols.length<=6?'a4':(cols.length<=10?'a3':'a2');
+    const doc=new jsPDFCtor({orientation:'landscape',unit:'mm',format:paper});
+    const pageW=doc.internal.pageSize.getWidth(),pageH=doc.internal.pageSize.getHeight();
+    const now=new Date();
+    const dateText=now.toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+    const head=cols.map(c=>c.label);
+    let no=0;
+    const body=[];
+    groups.forEach(g=>{
+      body.push([{content:`KK: ${g.label}  (${g.rows.length} jiwa)`,colSpan:cols.length,styles:{fillColor:[229,241,234],textColor:[23,76,50],fontStyle:'bold',fontSize:13.5,cellPadding:2.6}}]);
+      g.rows.forEach(j=>{
+        no++;
+        body.push(cols.map(c=>{
+          const val=c.key==='no'?no:c.picker(j);
+          if(c.key==='nama'&&exportJamaahIsKK(j)) return {content:String(val??''),styles:{fontStyle:'bold'}};
+          return String(val??'');
+        }));
+      });
+    });
+    if(typeof doc.autoTable!=='function') throw new Error('Plugin autoTable belum siap');
+    const colStyles={};
+    cols.forEach((c,i)=>{
+      if(c.key==='no') colStyles[i]={cellWidth:15,halign:'center'};
+      else if(['umur','jenis_kelamin','is_aghnia','is_haji','is_sarjana'].includes(c.key)) colStyles[i]={cellWidth:22,halign:'center'};
+      else if(c.key==='tgl_lahir') colStyles[i]={cellWidth:33};
+      else if(c.key==='nama') colStyles[i]={cellWidth:paper==='a4'?50:62};
+      else if(c.key==='nama_kk') colStyles[i]={cellWidth:paper==='a4'?48:60};
+    });
+    const headerY=paper==='a4'?31:35;
+    doc.autoTable({
+      startY:headerY,
+      head:[head],
+      body,
+      theme:'grid',
+      showHead:'everyPage',
+      styles:{font:'helvetica',fontSize:11.5,cellPadding:2.3,valign:'middle',overflow:'linebreak',lineWidth:0.16,textColor:[25,32,40]},
+      headStyles:{fillColor:[23,107,66],textColor:255,fontStyle:'bold',fontSize:12.5,cellPadding:2.7,valign:'middle'},
+      columnStyles:colStyles,
+      margin:{left:10,right:10,top:headerY,bottom:12},
+      didDrawPage:()=>{
+        doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(23,76,50);
+        doc.text('DATA JAMAAH DESA PERWIRA',pageW/2,12,{align:'center'});
+        doc.setFont('helvetica','normal');doc.setFontSize(11.5);doc.setTextColor(75);
+        doc.text(exportJamaahPdfFilterText(),pageW/2,19,{align:'center'});
+        doc.setFontSize(10.5);
+        doc.text(`Group by KK · KK di atas · anggota tertua ke termuda · Export ${dateText}`,pageW/2,25,{align:'center'});
+        doc.setFontSize(9.5);doc.setTextColor(110);
+        doc.text('Powered by UBNB Desa Perwira',10,pageH-5);
+        doc.text(`Halaman ${doc.internal.getCurrentPageInfo().pageNumber}`,pageW-10,pageH-5,{align:'right'});
+        doc.setTextColor(0);
+      }
+    });
+    const ts=new Date().toISOString().slice(0,10);
+    const scope=CU?.kelompok_scope||'Desa';
+    doc.save(`Jamaah_${scope}_${ts}.pdf`);
+    toast(`✅ PDF Jamaah diunduh (${total} jiwa · ${groups.length} group KK)`);
+  }catch(e){
+    console.error('[exportJamaahPDF]',e);
+    toast('Gagal membuat PDF: '+(e.message||e),true);
+  }
 }
 
 function doExport(format){
@@ -4338,7 +4443,9 @@ function doExport(format){
   const scope=CU.kelompok_scope||(isViewer()?'umum':'desa');
   const filename='Jamaah_'+scope+'_'+ts;
   
-  if(format==='csv'){
+  if(format==='pdf'){
+    exportJamaahPDF(cols);
+  } else if(format==='csv'){
     // Build CSV
     const csv=rows.map(r=>r.map(cell=>{
       let s=String(cell??'');
