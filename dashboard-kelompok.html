@@ -5032,15 +5032,15 @@ function timeToMinutes(v){
   return Number.isFinite(p[0])&&Number.isFinite(p[1])?p[0]*60+p[1]:null;
 }
 function kegiatanPhase(k,now=new Date()){
+  // Status "selesai" hanya boleh terjadi setelah acara ditutup manual.
   if(k.status==='selesai'||k.status==='dibatalkan') return 'selesai';
   const today=localDateISO(now),tgl=String(k.tanggal||'');
   if(tgl>today) return 'akan';
-  if(tgl<today) return 'selesai';
+  if(tgl<today) return 'berlangsung'; // acara lewat tanggal tetapi belum ditutup
   const nowMin=now.getHours()*60+now.getMinutes();
-  const start=timeToMinutes(k.waktu),end=timeToMinutes(k.waktu_selesai);
+  const start=timeToMinutes(k.waktu);
   if(start!=null&&nowMin<start) return 'akan';
-  if(end!=null&&nowMin>end) return 'selesai';
-  return 'berlangsung';
+  return 'berlangsung'; // melewati waktu selesai tetap aktif sampai tombol Tutup Acara ditekan
 }
 function kegiatanMonthKey(k){return String(k.tanggal||'').substring(0,7)||'0000-00';}
 function kegiatanMonthLabel(key){
@@ -9302,7 +9302,7 @@ function ensureFinalRecapModal(){
     <div class="modal">
       <div class="modal-head">
         <div>
-          <b id="fr-title">📊 Rekap Final Acara</b>
+          <b id="fr-title">📊 Report Final Acara</b>
           <div id="fr-sub" class="fr-muted"></div>
         </div>
         <button onclick="closeFinalRecapModal()" style="font-size:20px;background:none;border:0;cursor:pointer">×</button>
@@ -9372,7 +9372,7 @@ function renderFinalRecap(){
   ensureFinalRecapModal();
   const d=_finalRecapData;if(!d||!d.rekap)return;
   const r=d.rekap,p=Array.isArray(d.peserta)?d.peserta:[];
-  document.getElementById('fr-title').textContent=d.final?'📊 Rekap Final Acara':'📊 Preview Rekap Acara';
+  document.getElementById('fr-title').textContent=d.final?'📊 Report Final Acara':'📊 Report / Rekap Acara';
   document.getElementById('fr-sub').textContent=(r.acara||'')+' · '+(r.kelompok||'');
   document.getElementById('fr-tab-nama').classList.toggle('active',_finalRecapMode==='nama');
   document.getElementById('fr-tab-tanpa').classList.toggle('active',_finalRecapMode==='tanpa');
@@ -9494,6 +9494,16 @@ function printFinalRecap(){
   w.document.close();setTimeout(()=>w.print(),250);
 }
 
+
+function kegiatanBelumDitutupLewatWaktu(k,now=new Date()){
+  if(!k||k.status!=='aktif')return false;
+  const today=localDateISO(now),tgl=String(k.tanggal||'');
+  if(tgl<today)return true;
+  if(tgl>today)return false;
+  const end=timeToMinutes(k.waktu_selesai);
+  return end!=null&&(now.getHours()*60+now.getMinutes())>end;
+}
+
 /* Override card Acara: status selesai memakai rekap final; status aktif punya tombol Tutup Acara. */
 kegiatanCard=function(k,phase){
   const tgl=new Date(k.tanggal+'T00:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
@@ -9506,8 +9516,9 @@ kegiatanCard=function(k,phase){
   if(k.status==='dibatalkan')statusBadge='<span class="badge warning" style="background:#fee2e2;color:var(--red);">Batal</span>';
   else if(k.status==='selesai'&&finalR)statusBadge='<span class="badge" style="background:#dcfce7;color:#166534;">🔒 Selesai & Terkunci</span>';
   else if(phase==='akan')statusBadge='<span class="badge" style="background:#fef3c7;color:#92400e;">Akan Datang</span>';
+  else if(kegiatanBelumDitutupLewatWaktu(k))statusBadge='<span class="badge" style="background:#fff7ed;color:#9a3412;">⏳ Menunggu Ditutup</span>';
   else if(phase==='berlangsung')statusBadge='<span class="badge tetap">Sedang Berlangsung</span>';
-  else statusBadge='<span class="badge" style="background:var(--blue-light);color:var(--blue);">Waktu Acara Selesai</span>';
+  else statusBadge='<span class="badge" style="background:var(--blue-light);color:var(--blue);">Selesai</span>';
   const modeStr=Array.isArray(k.mode)?k.mode.join(', '):(k.mode||'manual');
   const isTpl=k.filter_peserta&&k.filter_peserta.sumber==='template';
   const waktu=k.waktu?k.waktu.substring(0,5):'',selesai=k.waktu_selesai?k.waktu_selesai.substring(0,5):'';
@@ -9528,13 +9539,13 @@ kegiatanCard=function(k,phase){
     </div>
     <div class="sensus-card-actions">
       ${locked?`
-        <button class="btn-sensus primary" onclick="bukaRekapFinal(${k.id},'nama')">📊 Rekap Final</button>
+        <button class="btn-sensus primary" onclick="bukaRekapFinal(${k.id},'nama')">📊 Report Final</button>
         <button class="btn-sensus" style="background:#475569;color:white" onclick="bukaRekapFinal(${k.id},'tanpa')">📈 Tanpa Nama</button>
         <button class="btn-sensus" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
       `:`
         <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
         ${canManageCalendar()&&k.status==='aktif'?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
-        <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="bukaRekapFinal(${k.id},'nama')">📊 Preview Rekap</button>
+        <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="bukaRekapFinal(${k.id},'nama')">📊 Report / Rekap</button>
         ${canClose?`<button class="btn-sensus" style="background:#b45309;color:white;" onclick="tutupKegiatanFinal(${k.id})">🔒 Tutup Acara</button>`:''}
         ${canManageCalendar()?`<button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>`:''}
         ${canManageCalendar()?`<button class="btn-sensus danger" onclick="hapusKegiatan(${k.id},'${String(k.acara_nama||'').replace(/'/g,'')}')">🗑️</button>`:''}
