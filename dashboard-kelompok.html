@@ -893,10 +893,10 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         <button type="button" class="btn-cancel" onclick="deleteInvitationTemplateFromModal()" style="font-size:10px;color:#b91c1c;">🗑 Hapus Template</button>
       </div>
       <div class="modal-row"><label>Judul</label><input id="inv-judul" type="text" value="UNDANGAN"></div>
-      <div style="padding:7px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel naskah: <b>{{nama_penerima}}</b>, <b>{{nama_acara}}</b>, <b>{{tanggal}}</b>, <b>{{waktu}}</b>, <b>{{lokasi}}</b>, <b>{{kelompok}}</b>.</div>
+      <div style="padding:7px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel naskah: <b>{{nama_penerima}}</b>, <b>{{nama_acara}}</b>, <b>{{tanggal}}</b>, <b>{{waktu}}</b>, <b>{{lokasi}}</b>, <b>{{kelompok}}</b>.<br>Format: <b>*tebal*</b> · <i>_miring_</i> · <s>~coret~</s> · <u>\\garis bawah/</u> · <b><i>*_tebal miring_*</i></b>.</div>
       <div class="modal-row" style="align-items:flex-start;"><label>Naskah</label><textarea id="inv-naskah" rows="11" style="flex:1;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;"></textarea></div>
       <div style="padding:8px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;border-bottom:1px solid #bbf7d0;font-size:11px;font-weight:800;color:#166534;">📱 NASKAH WHATSAPP</div>
-      <div style="padding:6px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel WA tambahan: <b>{{sapaan_penerima}}</b>, <b>{{judul_undangan}}</b>, dan <b>{{link_undangan}}</b>. Naskah ini ikut tersimpan di template.</div>
+      <div style="padding:6px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel WA tambahan: <b>{{sapaan_penerima}}</b>, <b>{{judul_undangan}}</b>, dan <b>{{link_undangan}}</b>. Naskah ini ikut tersimpan di template. Format WhatsApp dapat langsung dipakai: <b>*tebal*</b>, <i>_miring_</i>, <s>~coret~</s>.</div>
       <div class="modal-row" style="align-items:flex-start;"><label>Pesan WA</label><textarea id="inv-wa-text" rows="6" style="flex:1;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;"></textarea></div>
       <div style="padding:8px 16px;background:#f8fafc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:11px;font-weight:800;color:var(--green);">✍️ PENANDATANGAN</div>
       <div class="modal-row"><label>Nama</label><select id="inv-signer-name" onchange="invSignerChanged()"><option value="">— Pilih Pengurus —</option></select></div>
@@ -7676,6 +7676,74 @@ function invTemplateValues(inv,rec,link=''){const nama=rec.recipient_type==='jam
 function invResolveVars(text,vals){let t=String(text||'');Object.entries(vals||{}).forEach(([k,v])=>t=t.split(`{{${k}}}`).join(v??''));return t;}
 function invShareWA(id){const r=invRecipientById(id);if(!r)return;const inv=aUndangan.find(x=>Number(x.id)===Number(r.undangan_id));if(!inv)return;const url=invitationLink(r.token),msg=invResolveVars(inv.wa_text||defaultInvitationWaText(inv.model),invTemplateValues(inv,r,url));window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');}
 function invResolvedText(inv,rec){return invResolveVars(inv.naskah||'',invTemplateValues(inv,rec,''));}
+function invWaStyledSegments(text){
+  const s=String(text||''),out=[];let buf='',bold=false,italic=false,strike=false,underline=false;
+  const flush=()=>{if(buf){out.push({text:buf,bold,italic,strike,underline});buf='';}};
+  const propFor={'*':'bold','_':'italic','~':'strike'};
+  for(let i=0;i<s.length;i++){
+    const ch=s[i],prop=propFor[ch];
+    if(ch==='\\'){
+      if(underline||s.indexOf('/',i+1)!==-1){flush();underline=!underline;continue;}
+    }
+    if(ch==='/'&&underline){flush();underline=false;continue;}
+    if(prop){
+      const active=prop==='bold'?bold:prop==='italic'?italic:strike;
+      if(active||s.indexOf(ch,i+1)!==-1){
+        flush();
+        if(prop==='bold')bold=!bold;else if(prop==='italic')italic=!italic;else strike=!strike;
+        continue;
+      }
+    }
+    buf+=ch;
+  }
+  flush();return out;
+}
+function invPdfSetInlineStyle(doc,seg){
+  const style=seg.bold&&seg.italic?'bolditalic':seg.bold?'bold':seg.italic?'italic':'normal';
+  doc.setFont('times',style);
+}
+function invPdfStyledText(doc,text,x,y,maxWidth,lineHeight=5.25){
+  const xmax=x+maxWidth;let cx=x,cy=y;
+  const nextLine=()=>{cx=x;cy+=lineHeight;};
+  const drawPiece=(piece,seg)=>{
+    if(!piece)return;
+    invPdfSetInlineStyle(doc,seg);
+    const w=doc.getTextWidth(piece);
+    doc.text(piece,cx,cy);
+    if(seg.strike){
+      const off=Math.max(1.05,doc.getFontSize()*0.352778*0.27);
+      doc.setLineWidth(.18);doc.line(cx,cy-off,cx+w,cy-off);
+    }
+    if(seg.underline){
+      const off=Math.max(.7,doc.getFontSize()*0.352778*0.12);
+      doc.setLineWidth(.18);doc.line(cx,cy+off,cx+w,cy+off);
+    }
+    cx+=w;
+  };
+  for(const seg of invWaStyledSegments(text)){
+    const parts=String(seg.text||'').split(/(\n|[ \t]+)/);
+    for(const part of parts){
+      if(part==='')continue;
+      if(part==='\n'){nextLine();continue;}
+      invPdfSetInlineStyle(doc,seg);
+      if(/^[ \t]+$/.test(part)){
+        const w=doc.getTextWidth(part);
+        if(cx>x&&cx+w>xmax)nextLine();else cx+=w;
+        continue;
+      }
+      let w=doc.getTextWidth(part);
+      if(cx>x&&cx+w>xmax)nextLine();
+      if(w<=maxWidth){drawPiece(part,seg);continue;}
+      let piece='';
+      for(const ch of part){
+        const test=piece+ch;invPdfSetInlineStyle(doc,seg);
+        if(piece&&doc.getTextWidth(test)>maxWidth){drawPiece(piece,seg);nextLine();piece=ch;}else piece=test;
+      }
+      if(piece)drawPiece(piece,seg);
+    }
+  }
+  doc.setFont('times','normal');return cy+lineHeight;
+}
 function invPdfFooter(doc){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(135,135,135);doc.text('Powered by UBNB Desa Perwira',105,289,{align:'center'});doc.setTextColor(0,0,0);}
 function invPdfHeader(doc,inv,rec){
   const penerima=rec.recipient_type==='kelompok'?`Jamaah Kelompok ${rec.kelompok||''}`:(rec.nama_snapshot||'');
@@ -7695,7 +7763,7 @@ function invPdfEventBox(doc,y){
 function invAddSignature(doc,inv,y){const start=y;let nameY=start;if(inv.signature_data){try{const fmt=inv.signature_data.includes('image/png')?'PNG':'JPEG';doc.addImage(inv.signature_data,fmt,140,start,45,20);nameY=start+25;}catch(_e){nameY=start;}}doc.setTextColor(30,30,30);doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text(inv.signer_name||'',162.5,nameY,{align:'center'});doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.text(inv.signer_title||'',162.5,nameY+5.5,{align:'center'});return nameY+11;}
 function invBuildPage(doc,inv,rec,first=true){
   if(!first)doc.addPage('a4','portrait');let y=invPdfHeader(doc,inv,rec);
-  doc.setFont('times','normal');doc.setFontSize(11);doc.setTextColor(38,38,38);const body=doc.splitTextToSize(invResolvedText(inv,rec),170);doc.text(body,20,y);y+=body.length*5.25+7;
+  doc.setFont('times','normal');doc.setFontSize(11);doc.setTextColor(38,38,38);y=invPdfStyledText(doc,invResolvedText(inv,rec),20,y,170,5.25)+2;
   y=invPdfEventBox(doc,y);
   if(rec.recipient_type==='kelompok'){
     const peserta=Array.isArray(rec.peserta_snapshot)?rec.peserta_snapshot:[];const male=peserta.filter(p=>String(p.gender||'')==='L').sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id')),female=peserta.filter(p=>String(p.gender||'')==='P').sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id'));
