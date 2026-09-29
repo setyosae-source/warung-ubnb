@@ -875,6 +875,36 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   </div>
 </div>
 
+
+<!-- MODAL UNDANGAN ACARA -->
+<div class="modal-overlay" id="modal-invitation">
+  <div class="modal" style="max-width:900px;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);">
+      <div><strong id="inv-title-head" style="font-size:14px;">✉️ Undangan Acara</strong><div id="inv-sub" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div></div>
+      <button onclick="closeMod('modal-invitation')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:10px 14px;max-height:74vh;overflow:auto;">
+      <div class="modal-row"><label>Model Undangan</label><select id="inv-model" onchange="invModelChanged()"><option value="massal_kelompok">📣 Massal · 1 undangan per kelompok</option><option value="perorangan">✉️ Khusus · 1 undangan per orang</option></select></div>
+      <div class="modal-row"><label>Template Naskah</label><select id="inv-template" onchange="invApplyTemplate()"></select></div>
+      <div class="modal-row"><label>Judul</label><input id="inv-judul" type="text" value="UNDANGAN"></div>
+      <div style="padding:7px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel yang dapat dipakai: <b>{{nama_penerima}}</b>, <b>{{nama_acara}}</b>, <b>{{tanggal}}</b>, <b>{{waktu}}</b>, <b>{{lokasi}}</b>, <b>{{kelompok}}</b>.</div>
+      <div class="modal-row" style="align-items:flex-start;"><label>Naskah</label><textarea id="inv-naskah" rows="11" style="flex:1;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;"></textarea></div>
+      <div style="padding:8px 16px;background:#f8fafc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:11px;font-weight:800;color:var(--green);">✍️ PENANDATANGAN</div>
+      <div class="modal-row"><label>Nama</label><input id="inv-signer-name" type="text" placeholder="Nama yang mengundang"></div>
+      <div class="modal-row"><label>Jabatan</label><input id="inv-signer-title" type="text" placeholder="Contoh: Ketua Desa Perwira"></div>
+      <div class="modal-row" style="align-items:flex-start;"><label>Tanda Tangan</label><div style="flex:1;"><input id="inv-signature-file" type="file" accept="image/png,image/jpeg,image/webp" onchange="invSignaturePicked(event)" style="width:100%;"><div style="font-size:9px;color:var(--text-muted);margin-top:3px;">Opsional. Gambar TTD disimpan pada undangan ini dan ikut tampil di PDF/link digital.</div><img id="inv-signature-preview" style="display:none;max-width:160px;max-height:70px;margin-top:6px;object-fit:contain;"></div></div>
+      <div id="inv-receiver-summary" style="margin:8px 0;padding:10px 12px;background:var(--gold-light);border:1px solid #fde68a;border-radius:7px;font-size:11px;color:var(--gold-dark);"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:4px 0 8px;"><button class="btn-cancel" onclick="saveInvitationTemplateFromModal()" style="font-size:10px;">💾 Simpan Naskah sebagai Template</button></div>
+      <div id="inv-result"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-invitation')">Tutup</button>
+      <button class="btn-save" onclick="generateInvitation()">✉️ Generate / Update Undangan</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL DAFTAR HADIR -->
 <div class="modal-overlay" id="modal-hadir">
   <div class="modal" style="max-width:96vw;width:96vw;">
@@ -7376,6 +7406,232 @@ function onLokasiSearch(){
   const input=document.getElementById('kg-lokasi'),dd=document.getElementById('kg-lokasi-list');if(!input||!dd)return;const q=(input.value||'').toLowerCase().trim();const seen=new Set(),unique=[];[...(aKegiatan||[]).map(x=>x.lokasi),...(aJadwal||[]).map(x=>x.lokasi)].filter(Boolean).forEach(l=>{const k=l.toLowerCase();if(!seen.has(k)){seen.add(k);unique.push(l);}});const matches=q?unique.filter(l=>l.toLowerCase().includes(q)):unique;if(!matches.length){dd.style.display='none';return;}dd.innerHTML=matches.slice(0,10).map(l=>`<div onclick="pilihLokasi('${String(l).replace(/'/g,"\\'")}')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;">📍 ${escH(l)}</div>`).join('');dd.style.display='block';
 }
 
+
+
+/* ===== TARGET PESERTA + SLOT KUOTA + UNDANGAN v1 ===== */
+var aTargetPeserta=[],aAcaraSlots=[],aSlotHadir=[],aUndangan=[],aUndanganRecipients=[],aUndanganTemplates=[];
+var _kgTargetSelected=new Set(),_kgSlotsDraft=[],_kpContext='snapshot',_kpTargetOwner=null,_kpTargetScope=null;
+var _invEntry=null,_invEditId=null,_invSignatureData=null;
+
+function isInvitationMasterUser(){return !!CU&&String(CU.did||CU.id||'')==='4075';}
+function ownerMatch(row,kegiatanId,jadwalId){return (kegiatanId&&Number(row.kegiatan_id)===Number(kegiatanId))||(jadwalId&&Number(row.jadwal_id)===Number(jadwalId));}
+function calendarOwnerFromEntry(e){
+  if(!e)return {kegiatan_id:null,jadwal_id:null};
+  if(e.kind==='virtual')return {kegiatan_id:null,jadwal_id:Number(e.jadwal_id)};
+  if(e.actual)return {kegiatan_id:Number(e.id),jadwal_id:e.jadwal_id?Number(e.jadwal_id):null};
+  return {kegiatan_id:null,jadwal_id:null};
+}
+function targetRowsForOwner(kegiatanId,jadwalId){
+  let rows=(aTargetPeserta||[]).filter(x=>ownerMatch(x,kegiatanId,jadwalId));
+  if(!rows.length&&kegiatanId){const k=(aKegiatan||[]).find(x=>Number(x.id)===Number(kegiatanId));if(k?.jadwal_id)rows=(aTargetPeserta||[]).filter(x=>Number(x.jadwal_id)===Number(k.jadwal_id));}
+  return rows;
+}
+function targetRowsForEntry(e){const o=calendarOwnerFromEntry(e);return targetRowsForOwner(o.kegiatan_id,o.jadwal_id);}
+function slotRowsForOwner(kegiatanId,jadwalId){
+  let rows=(aAcaraSlots||[]).filter(x=>ownerMatch(x,kegiatanId,jadwalId));
+  if(!rows.length&&kegiatanId){const k=(aKegiatan||[]).find(x=>Number(x.id)===Number(kegiatanId));if(k?.jadwal_id)rows=(aAcaraSlots||[]).filter(x=>Number(x.jadwal_id)===Number(k.jadwal_id));}
+  return rows.sort((a,b)=>(a.urutan||0)-(b.urutan||0)||Number(a.id)-Number(b.id));
+}
+function slotRowsForEntry(e){const o=calendarOwnerFromEntry(e);return slotRowsForOwner(o.kegiatan_id,o.jadwal_id);}
+function targetModeOfFilter(f){const v=f?.participant_selection;return ['criteria','manual','combined'].includes(v)?v:'criteria';}
+function targetModeLabel(v){return v==='manual'?'Jamaah tertentu':v==='combined'?'Kriteria + jamaah tertentu':'Berdasarkan kriteria';}
+
+async function loadCalendarExtras(){
+  if(!DK_ATT_TOKEN)return false;
+  const {data,error}=await sb.rpc('dk_calendar_extras_snapshot',{p_token:DK_ATT_TOKEN});
+  if(error||!data||data.ok!==true){console.warn('calendar extras:',error?.message||data?.error);return false;}
+  aTargetPeserta=Array.isArray(data.targets)?data.targets:[];
+  aAcaraSlots=Array.isArray(data.slots)?data.slots:[];
+  aSlotHadir=Array.isArray(data.slot_hadir)?data.slot_hadir:[];
+  aUndangan=Array.isArray(data.invitations)?data.invitations:[];
+  aUndanganRecipients=Array.isArray(data.invitation_recipients)?data.invitation_recipients:[];
+  aUndanganTemplates=Array.isArray(data.invitation_templates)?data.invitation_templates:[];
+  return true;
+}
+const _reloadAttendanceSecureBeforeExtras=reloadAttendanceSecure;
+reloadAttendanceSecure=async function(interactive=false){
+  const ok=await _reloadAttendanceSecureBeforeExtras(interactive);
+  if(ok){await loadCalendarExtras();renderKegiatanList();if(curKegiatanId&&document.getElementById('modal-hadir')?.classList.contains('show'))renderDaftarHadir();}
+  return ok;
+};
+
+function manualParticipantsForEntry(e){
+  const seen=new Set(),out=[];targetRowsForEntry(e).forEach(r=>{const j=findJamaahAny(r.jamaah_did);if(j&&!seen.has(String(j.did))){seen.add(String(j.did));out.push(jamaahToPeserta(j));}});return out;
+}
+const _calendarParticipantsForEntryBase=calendarParticipantsForEntry;
+calendarParticipantsForEntry=function(e){
+  const f=e?.filter_peserta||{},mode=targetModeOfFilter(f),criteria=mode==='manual'?[]:calendarParticipantsForFilter(f,e.scope_level,e.scope_kelompok),manual=mode==='criteria'?[]:manualParticipantsForEntry(e);
+  const map=new Map();[...criteria,...manual].forEach(p=>{if(p?.did)map.set(String(p.did),p);});return [...map.values()];
+};
+
+const _calendarFilterFromFormBase=calendarFilterFromForm;
+calendarFilterFromForm=function(){const f={...(_calendarFilterFromFormBase()||{})};f.participant_selection=document.getElementById('kg-participant-mode')?.value||f.participant_selection||'criteria';return f;};
+
+function kgExistingTargets(k,j){
+  const rows=targetRowsForOwner(k?.id||null,j?.id||null);return new Set(rows.map(x=>String(x.jamaah_did)));
+}
+function kgExistingSlots(k,j){return slotRowsForOwner(k?.id||null,j?.id||null).map(x=>({nama_slot:x.nama_slot||'',scope_kelompok:x.scope_kelompok||'',kuota:Number(x.kuota||1),allow_over_quota:!!x.allow_over_quota,gender:x.gender||'',catatan:x.catatan||''}));}
+
+const _renderCalendarEventFormBase=_renderCalendarEventForm;
+_renderCalendarEventForm=function(k,j,m){
+  _kgTargetSelected=kgExistingTargets(k,j);_kgSlotsDraft=kgExistingSlots(k,j);
+  _renderCalendarEventFormBase(k,j,m);enhanceCalendarParticipantForm(k,j,m);
+};
+function enhanceCalendarParticipantForm(k,j,m){
+  const fp=j?(j.kriteria_peserta||{}):(k?.filter_peserta||{});const source=document.getElementById('kg-sumber-row');if(!source)return;
+  source.insertAdjacentHTML('beforebegin',`<div style="padding:9px 16px;background:#ecfdf5;border-top:1px solid #d1fae5;border-bottom:1px solid #d1fae5;font-size:11px;font-weight:800;color:#166534;">🎯 TARGET PESERTA ACARA</div>
+    <div class="modal-row"><label>Cara Menentukan</label><select id="kg-participant-mode" onchange="onTargetModeChange()"><option value="criteria">Berdasarkan Kriteria</option><option value="manual">Pilih Jamaah Tertentu</option><option value="combined">Kriteria + Jamaah Tertentu</option></select></div>
+    <div class="modal-row" id="kg-target-manual-row" style="display:none;"><label>Jamaah Tertentu</label><div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><button type="button" class="btn-save" onclick="openFormTargetParticipants()" style="padding:6px 10px;font-size:10px;">👥 Pilih Jamaah</button><span id="kg-target-count" style="font-size:10px;color:var(--text-muted);"></span></div></div>`);
+  const mode=document.getElementById('kg-participant-mode');if(mode)mode.value=targetModeOfFilter(fp);
+  const cat=document.getElementById('kg-catatan')?.closest('.modal-row');if(cat)cat.insertAdjacentHTML('beforebegin',`<div style="padding:9px 16px;background:#fffbeb;border-top:1px solid #fde68a;border-bottom:1px solid #fde68a;font-size:11px;font-weight:800;color:#92400e;display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>🎟️ SLOT / KUOTA TAMBAHAN</span><button type="button" onclick="kgSlotAdd()" style="border:0;background:#92400e;color:white;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:700;cursor:pointer;">＋ Tambah Slot</button></div><div id="kg-slot-list" style="padding:8px 14px;background:#fffdf5;"></div>`);
+  onTargetModeChange();renderKgSlots();previewPeserta();
+}
+function onTargetModeChange(){
+  const mode=document.getElementById('kg-participant-mode')?.value||'criteria';
+  const manual=document.getElementById('kg-target-manual-row');if(manual)manual.style.display=mode==='criteria'?'none':'flex';
+  ['kg-sumber-row','kg-filter-title','kg-filter-jamaah','kg-filter-pengurus','kg-template-summary'].forEach(id=>{const el=document.getElementById(id);if(!el)return;if(mode==='manual')el.style.display='none';});
+  if(mode!=='manual')onSumberChange();
+  const c=document.getElementById('kg-target-count');if(c)c.textContent=`${_kgTargetSelected.size} nama dipilih`;previewPeserta();
+}
+function kgSlotAdd(){const sc=currentCalendarScopeFromForm();_kgSlotsDraft.push({nama_slot:'Pendamping',scope_kelompok:sc.level==='kelompok'?sc.kelompok:'ALL',kuota:1,allow_over_quota:false,gender:'',catatan:''});renderKgSlots();previewPeserta();}
+function kgSlotUpdate(i,f,v){if(!_kgSlotsDraft[i])return;if(f==='kuota')v=Math.max(1,parseInt(v||1));if(f==='allow_over_quota')v=!!v;_kgSlotsDraft[i][f]=v;previewPeserta();}
+function kgSlotRemove(i){_kgSlotsDraft.splice(i,1);renderKgSlots();previewPeserta();}
+function renderKgSlots(){
+  const box=document.getElementById('kg-slot-list');if(!box)return;const sc=currentCalendarScopeFromForm();
+  if(!_kgSlotsDraft.length){box.innerHTML='<div style="font-size:10px;color:var(--text-muted);padding:4px 2px;">Tidak ada slot. Slot tidak membutuhkan nama; cukup tentukan kuota dan apakah boleh melebihi kuota.</div>';return;}
+  const groups=sc.level==='kelompok'?[sc.kelompok]:['ALL','PW1','PW2','PW3','PW4'];
+  box.innerHTML=_kgSlotsDraft.map((x,i)=>`<div style="display:grid;grid-template-columns:minmax(135px,1.4fr) 105px 70px 95px 120px 32px;gap:6px;align-items:center;margin-bottom:6px;">
+    <input value="${escH(x.nama_slot||'')}" placeholder="Nama slot" oninput="kgSlotUpdate(${i},'nama_slot',this.value)" style="padding:6px;border:1px solid var(--border);border-radius:5px;font-size:10px;">
+    <select onchange="kgSlotUpdate(${i},'scope_kelompok',this.value)" ${sc.level==='kelompok'?'disabled':''} style="padding:6px;border:1px solid var(--border);border-radius:5px;font-size:10px;">${groups.map(g=>`<option value="${g}" ${(x.scope_kelompok||'ALL')===g?'selected':''}>${g==='ALL'?'Semua Klp':g}</option>`).join('')}</select>
+    <input type="number" min="1" value="${Number(x.kuota||1)}" onchange="kgSlotUpdate(${i},'kuota',this.value)" title="Kuota" style="padding:6px;border:1px solid var(--border);border-radius:5px;font-size:10px;">
+    <select onchange="kgSlotUpdate(${i},'gender',this.value)" style="padding:6px;border:1px solid var(--border);border-radius:5px;font-size:10px;"><option value="" ${!x.gender?'selected':''}>Gender bebas</option><option value="L" ${x.gender==='L'?'selected':''}>Laki-laki</option><option value="P" ${x.gender==='P'?'selected':''}>Perempuan</option></select>
+    <label style="font-size:9px;display:flex;align-items:center;gap:4px;"><input type="checkbox" ${x.allow_over_quota?'checked':''} onchange="kgSlotUpdate(${i},'allow_over_quota',this.checked)"> Boleh > kuota</label>
+    <button type="button" onclick="kgSlotRemove(${i})" style="border:0;background:#fee2e2;color:#b91c1c;border-radius:5px;padding:5px;cursor:pointer;">×</button>
+  </div>`).join('')+`<div style="font-size:9px;color:var(--text-muted);">Slot tidak perlu diisi nama, termasuk saat acara berlangsung. Kehadiran dicatat sebagai jumlah pengisi slot.</div>`;
+}
+const _onCalendarScopeChangeBase=onCalendarScopeChange;
+onCalendarScopeChange=function(){_onCalendarScopeChangeBase();if(document.getElementById('kg-slot-list'))renderKgSlots();};
+
+previewPeserta=function(){
+  const el=document.getElementById('kg-preview');if(!el)return;const sc=currentCalendarScopeFromForm(),filter=calendarFilterFromForm(),mode=targetModeOfFilter(filter);
+  const criteria=mode==='manual'?[]:calendarParticipantsForFilter(filter,sc.level,sc.kelompok);const manual=[..._kgTargetSelected].map(d=>findJamaahAny(d)).filter(Boolean).map(j=>jamaahToPeserta(j));const map=new Map();[...criteria,...manual].forEach(p=>p?.did&&map.set(String(p.did),p));
+  const slots=_kgSlotsDraft.reduce((n,x)=>n+(x.scope_kelompok==='ALL'&&sc.level!=='kelompok'?Number(x.kuota||1)*4:Number(x.kuota||1)),0);
+  el.innerHTML=`🎯 <b>${map.size} target bernama</b> (${targetModeLabel(mode)})${slots?` + <b>${slots} kuota slot</b>`:''}. Nama target dapat dipakai untuk undangan sejak sekarang; snapshot absensi aktual tetap dibuat mulai H-7.`;
+  const c=document.getElementById('kg-target-count');if(c)c.textContent=`${_kgTargetSelected.size} nama dipilih`;
+};
+
+function setupKpScopeOptions(sc){const sel=document.getElementById('kp-filter-kelompok');if(!sel)return;const opts=sc.level==='kelompok'?[sc.kelompok]:['PW1','PW2','PW3','PW4'];sel.innerHTML='<option value="">Semua Kelompok</option>'+opts.map(x=>`<option>${x}</option>`).join('');if(sc.level==='kelompok'){sel.value=sc.kelompok;sel.disabled=true;}else sel.disabled=false;['kp-filter-gender','kp-filter-nikah','kp-filter-kelas','kp-filter-text'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});}
+function openFormTargetParticipants(){
+  _kpContext='target-form';_kpTargetScope=currentCalendarScopeFromForm();_kpSelected=new Set(_kgTargetSelected);_kpKegiatanId=null;_kpVirtualKey=null;
+  document.getElementById('kp-title').textContent='🎯 Pilih Target Jamaah';document.getElementById('kp-sub').textContent='Nama ini disimpan sejak acara dibuat dan dapat digunakan untuk undangan sebelum H-7.';setupKpScopeOptions(_kpTargetScope);renderKegiatanParticipantEditor();openMod('modal-kegiatan-peserta');
+}
+function openTargetParticipantsEntry(key){
+  const e=calendarFindEntry(key);if(!e||!calendarCanManageEntry(e))return;_kpContext='target-entry';_kpTargetOwner={...calendarOwnerFromEntry(e),entry:e};_kpTargetScope={level:e.scope_level,kelompok:e.scope_kelompok};_kpSelected=new Set(targetRowsForEntry(e).map(x=>String(x.jamaah_did)));_kpKegiatanId=null;_kpVirtualKey=null;
+  document.getElementById('kp-title').textContent='🎯 Target Peserta: '+e.name;document.getElementById('kp-sub').textContent='Dapat diubah kapan saja sebelum snapshot H-7.';setupKpScopeOptions(_kpTargetScope);renderKegiatanParticipantEditor();openMod('modal-kegiatan-peserta');closeMod('modal-calendar-detail');
+}
+const _kpCandidatePoolBase=kpCandidatePool;
+kpCandidatePool=function(){if(_kpContext==='target-form'||_kpContext==='target-entry'){let pool=(aJamaahDesa||[]).filter(j=>j.status_sambung==='Tetap');if(_kpTargetScope?.level==='kelompok')pool=pool.filter(j=>j.kelompok_nama===_kpTargetScope.kelompok);return pool;}return _kpCandidatePoolBase();};
+const _saveKegiatanParticipantSelectionBase=saveKegiatanParticipantSelection;
+saveKegiatanParticipantSelection=async function(){
+  if(_kpContext==='target-form'){_kgTargetSelected=new Set(_kpSelected);closeMod('modal-kegiatan-peserta');_kpContext='snapshot';previewPeserta();return;}
+  if(_kpContext==='target-entry'){
+    const ids=[..._kpSelected];const o=_kpTargetOwner||{};const {data,error}=await sb.rpc('dk_calendar_save_targets',{p_token:DK_ATT_TOKEN,p_kegiatan_id:o.kegiatan_id||null,p_jadwal_id:o.jadwal_id||null,p_dids:ids});if(error||!data||data.ok!==true){toast('Gagal simpan target: '+(error?.message||data?.error||'Unknown'),true);return;}
+    closeMod('modal-kegiatan-peserta');_kpContext='snapshot';await loadCalendarExtras();_calCurrentEntry=o.entry;renderCalendarDetail();openMod('modal-calendar-detail');toast(`✅ ${data.count||0} target jamaah disimpan`);return;
+  }
+  return _saveKegiatanParticipantSelectionBase();
+};
+
+async function persistEventTargetsAndSlots(kegiatanId,jadwalId){
+  const mode=document.getElementById('kg-participant-mode')?.value||'criteria';const dids=mode==='criteria'?[]:[..._kgTargetSelected];
+  let r=await sb.rpc('dk_calendar_save_targets',{p_token:DK_ATT_TOKEN,p_kegiatan_id:kegiatanId||null,p_jadwal_id:jadwalId||null,p_dids:dids});if(r.error||r.data?.ok!==true)throw new Error(r.error?.message||r.data?.error||'Gagal simpan target peserta');
+  r=await sb.rpc('dk_calendar_save_slots',{p_token:DK_ATT_TOKEN,p_kegiatan_id:kegiatanId||null,p_jadwal_id:jadwalId||null,p_slots:_kgSlotsDraft});if(r.error||r.data?.ok!==true)throw new Error(r.error?.message||r.data?.error||'Gagal simpan slot');
+}
+
+simpanKegiatan=async function(){
+  const snap=await getAttendanceSnapshot(true);if(!snap)return;
+  const kind=document.getElementById('kg-jenis')?.value||'insidentil',name=(document.getElementById('kg-acara-input')?.value||'').trim();if(!name){toast('Nama acara wajib diisi',true);return;}
+  const sc=currentCalendarScopeFromForm();if(!calendarCanManageScope(sc.level,sc.kelompok)){toast('Scope acara di luar hak kelola akun',true);return;}
+  const modes=[];if(document.getElementById('kg-mode-manual')?.checked)modes.push('manual');if(document.getElementById('kg-mode-online')?.checked)modes.push('online');if(!modes.length)modes.push('manual');
+  const filter=calendarFilterFromForm();const acaraIdVal=document.getElementById('kg-acara-id')?.value;let acaraId=acaraIdVal?Number(acaraIdVal):null;
+  const common={acara_id:acaraId,acara_nama:name,scope_level:sc.level,scope_kelompok:sc.kelompok,kelompok:sc.level==='kelompok'?sc.kelompok:null,waktu:document.getElementById('kg-waktu')?.value||null,waktu_selesai:document.getElementById('kg-waktu-selesai')?.value||null,lokasi:(document.getElementById('kg-lokasi')?.value||'').trim()||null,mode:modes,filter_peserta:filter,catatan:(document.getElementById('kg-catatan')?.value||'').trim()||null};
+  try{
+    if(kind==='rutin'){
+      const start=document.getElementById('kg-start-date')?.value;if(!start){toast('Tanggal mulai wajib diisi',true);return;}const rule=buildCalendarRecurrenceRule();if((rule.freq==='weekly'||rule.freq==='monthly_week')&&!(rule.weekdays||[]).length){toast('Pilih minimal satu hari',true);return;}if(rule.freq==='monthly_week'&&!(rule.weeks||[]).length){toast('Pilih minggu ke berapa',true);return;}if(rule.freq==='monthly_date'&&!(rule.days||[]).length){toast('Masukkan tanggal bulanan',true);return;}
+      const payload={...common,tanggal_mulai:start,tanggal_selesai:document.getElementById('kg-end-date')?.value||null,waktu_mulai:common.waktu,waktu_selesai:common.waktu_selesai,recurrence_rule:rule};const {data,error}=await sb.rpc('dk_calendar_save_schedule',{p_token:DK_ATT_TOKEN,p_id:_editingScheduleId||null,p_payload:payload});if(error||!data||data.ok!==true)throw new Error(error?.message||data?.error||'Gagal simpan jadwal');const jid=Number(data.data?.id||_editingScheduleId);await persistEventTargetsAndSlots(null,jid);toast(_editingScheduleId?'✅ Jadwal rutin diperbarui':'✅ Jadwal rutin dibuat');
+    }else{
+      const tgl=document.getElementById('kg-tgl')?.value;if(!tgl){toast('Tanggal wajib diisi',true);return;}const payload={...common,tanggal:tgl,status:curKegiatanId?(document.getElementById('kg-status')?.value||'aktif'):'aktif',created_by:CU.username,updated_at:new Date().toISOString()};const {data,error}=await sb.rpc('dk_attendance_save_kegiatan',{p_token:DK_ATT_TOKEN,p_id:curKegiatanId||null,p_payload:payload,p_peserta:[]});if(error||!data||data.ok!==true)throw new Error(error?.message||data?.error||'Gagal simpan acara');const kid=Number(data.data?.id||curKegiatanId);await persistEventTargetsAndSlots(kid,null);toast(curKegiatanId?'✅ Acara diperbarui':'✅ Acara insidentil dibuat');
+    }
+  }catch(e){toast('Gagal simpan: '+(e.message||e),true);return;}
+  closeMod('modal-kegiatan');_editingScheduleId=null;curKegiatanId=null;await reloadAttendanceSecure(false);renderKegiatanList();
+};
+
+const _renderCalendarDetailBase=renderCalendarDetail;
+renderCalendarDetail=function(){
+  _renderCalendarDetailBase();const e=_calCurrentEntry,box=document.getElementById('calendar-detail-content');if(!e||!box)return;
+  const mode=targetModeOfFilter(e.filter_peserta||{}),targets=calendarParticipantsForEntry(e),manual=manualParticipantsForEntry(e),slots=slotRowsForEntry(e);const quota=slots.reduce((n,s)=>n+Number(s.kuota||0),0);const manage=calendarCanManageEntry(e);
+  const inv=isInvitationMasterUser()?findInvitationForEntry(e):null;let invHtml='';
+  if(isInvitationMasterUser()&&!e.cancelled&&e.status!=='dibatalkan')invHtml=`<div style="margin-top:9px;padding:10px 11px;border:1px solid #ddd6fe;background:#faf5ff;border-radius:7px;font-size:11px;"><b>✉️ Undangan</b><br>${inv?`${escH(inv.model==='massal_kelompok'?'Massal per kelompok':'Perorangan')} · ${(aUndanganRecipients||[]).filter(x=>Number(x.undangan_id)===Number(inv.id)).length} penerima/link`:'Belum dibuat dari acara ini.'}<div style="margin-top:7px;"><button class="blue" onclick="openInvitationForEntry('${e.key}')">${inv?'✏️ Kelola Undangan':'✉️ Buat Undangan'}</button></div></div>`;
+  box.insertAdjacentHTML('beforeend',`<div style="margin-top:9px;padding:10px 11px;border:1px solid #bae6fd;background:#f0f9ff;border-radius:7px;font-size:11px;"><b>🎯 Target Peserta</b><br>${targetModeLabel(mode)} · <b>${targets.length} nama saat ini</b>${manual.length?` · ${manual.length} dipilih manual`:''}${manage?`<div style="margin-top:7px;"><button class="blue" onclick="openTargetParticipantsEntry('${e.key}')">👥 Edit Jamaah Tertentu</button></div>`:''}</div>
+  <div style="margin-top:9px;padding:10px 11px;border:1px solid #fde68a;background:#fffbeb;border-radius:7px;font-size:11px;"><b>🎟️ Slot Kuota</b><br>${slots.length?`${slots.length} slot · total kuota ${quota}`:'Tidak ada slot tambahan.'}${slots.length?`<div style="margin-top:5px;">${slots.map(s=>`${escH(s.scope_kelompok||'Semua')} · ${escH(s.nama_slot)}: <b>${s.kuota}</b>${s.allow_over_quota?' (boleh lebih)':' (maksimal)'}`).join('<br>')}</div>`:''}</div>${invHtml}`);
+};
+
+function eventSlotsForGroup(e,group){return slotRowsForEntry(e).filter(s=>!s.scope_kelompok||s.scope_kelompok===group);}
+function eventParticipantsGrouped(e){const out={PW1:[],PW2:[],PW3:[],PW4:[]};calendarParticipantsForEntry(e).forEach(p=>{const j=findJamaahAny(p.did)||p;const g=j.kelompok_nama||p.kelompok_nama||p.kelompok;if(out[g])out[g].push(j);});return out;}
+function findInvitationForEntry(e){return (aUndangan||[]).find(u=>{if(e.kind==='virtual')return Number(u.jadwal_id)===Number(e.jadwal_id)&&String(u.occurrence_date||'').slice(0,10)===String(e.original_date||'').slice(0,10);if(Number(u.kegiatan_id)===Number(e.id))return true;return !!e.jadwal_id&&Number(u.jadwal_id)===Number(e.jadwal_id)&&String(u.occurrence_date||'').slice(0,10)===String(e.original_date||'').slice(0,10);})||null;}
+function invitationRecipients(invId){return (aUndanganRecipients||[]).filter(x=>Number(x.undangan_id)===Number(invId));}
+function invitationLink(token){let base='undangan.html';try{base=new URL('undangan.html',location.href).href.split('?')[0].split('#')[0];}catch(_e){}return base+'?token='+encodeURIComponent(token);}
+function defaultInvitationText(model){return model==='perorangan'?`Assalamu'alaikum Wr. Wb.\n\nKepada Yth. {{nama_penerima}}\n\nDengan hormat, kami mengundang Bapak/Ibu/Saudara untuk hadir dalam kegiatan:\n\n{{nama_acara}}\nHari/Tanggal : {{tanggal}}\nWaktu        : {{waktu}}\nTempat       : {{lokasi}}\n\nDemikian undangan ini kami sampaikan. Atas kehadiran dan amal sholehnya kami ucapkan Alhamdulillah Jaza Kumullahu Khoiro.\n\nWassalamu'alaikum Wr. Wb.`:`Assalamu'alaikum Wr. Wb.\n\nDengan hormat, kami mengundang untuk hadir dalam kegiatan:\n\n{{nama_acara}}\nHari/Tanggal : {{tanggal}}\nWaktu        : {{waktu}}\nTempat       : {{lokasi}}\n\nDemikian undangan ini kami sampaikan. Atas kehadiran dan amal sholehnya kami ucapkan Alhamdulillah Jaza Kumullahu Khoiro.\n\nWassalamu'alaikum Wr. Wb.`;}
+function openInvitationForEntry(key){
+  if(!isInvitationMasterUser()){toast('Fitur Undangan khusus master user',true);return;}_invEntry=calendarFindEntry(key);if(!_invEntry)return;const inv=findInvitationForEntry(_invEntry);_invEditId=inv?.id||null;_invSignatureData=inv?.signature_data||null;
+  document.getElementById('inv-title-head').textContent=inv?'✉️ Kelola Undangan':'✉️ Buat Undangan';document.getElementById('inv-sub').textContent=`${_invEntry.name} · ${calFmtDate(_invEntry.date)} · ${calScopeLabel(_invEntry.scope_level,_invEntry.scope_kelompok)}`;
+  const model=document.getElementById('inv-model');model.value=inv?.model||(_invEntry.routine?'massal_kelompok':'perorangan');
+  const tpl=document.getElementById('inv-template');tpl.innerHTML='<option value="">— Naskah saat ini / kosong —</option>'+aUndanganTemplates.map(t=>`<option value="${t.id}">${escH(t.nama)}</option>`).join('');
+  document.getElementById('inv-judul').value=inv?.judul||'UNDANGAN';document.getElementById('inv-naskah').value=inv?.naskah||defaultInvitationText(model.value);document.getElementById('inv-signer-name').value=inv?.signer_name||SENSUS_SIGNER||'';document.getElementById('inv-signer-title').value=inv?.signer_title||'Ketua Desa Perwira';
+  const pr=document.getElementById('inv-signature-preview');if(_invSignatureData){pr.src=_invSignatureData;pr.style.display='block';}else{pr.removeAttribute('src');pr.style.display='none';}
+  invModelChanged();renderInvitationResult(inv);openMod('modal-invitation');closeMod('modal-calendar-detail');
+}
+function invModelChanged(){const model=document.getElementById('inv-model')?.value||'massal_kelompok',p=eventParticipantsGrouped(_invEntry||{}),slots=slotRowsForEntry(_invEntry||{});let text='';if(model==='massal_kelompok'){const groups=['PW1','PW2','PW3','PW4'].filter(g=>(p[g]||[]).length||eventSlotsForGroup(_invEntry,g).length);text=`📣 Akan dibuat <b>${groups.length} undangan kelompok</b>: ${groups.join(', ')||'tidak ada penerima'}. Setiap PDF memuat nama peserta dikelompokkan Laki-laki / Perempuan dan slot kuota.`;}else{text=`✉️ Akan dibuat <b>${calendarParticipantsForEntry(_invEntry||{}).length} undangan personal</b>, masing-masing memiliki link unik.`;}document.getElementById('inv-receiver-summary').innerHTML=text;}
+function invApplyTemplate(){const id=Number(document.getElementById('inv-template')?.value||0),t=aUndanganTemplates.find(x=>Number(x.id)===id);if(!t)return;document.getElementById('inv-model').value=t.model||'massal_kelompok';document.getElementById('inv-judul').value=t.judul||'UNDANGAN';document.getElementById('inv-naskah').value=t.naskah||'';invModelChanged();}
+function invSignaturePicked(ev){const f=ev.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{_invSignatureData=String(rd.result||'');const im=document.getElementById('inv-signature-preview');im.src=_invSignatureData;im.style.display='block';};rd.readAsDataURL(f);}
+async function saveInvitationTemplateFromModal(){const nama=prompt('Nama template naskah:');if(!nama)return;const payload={nama,model:document.getElementById('inv-model').value,judul:document.getElementById('inv-judul').value,naskah:document.getElementById('inv-naskah').value};const {data,error}=await sb.rpc('dk_invitation_save_template',{p_token:DK_ATT_TOKEN,p_id:null,p_payload:payload});if(error||data?.ok!==true){toast('Gagal simpan template: '+(error?.message||data?.error||'Unknown'),true);return;}await loadCalendarExtras();toast('✅ Template undangan disimpan');openInvitationForEntry(_invEntry.key);}
+function invitationPayloadRecipients(model){
+  const grouped=eventParticipantsGrouped(_invEntry);if(model==='massal_kelompok')return ['PW1','PW2','PW3','PW4'].map(g=>({recipient_type:'kelompok',kelompok:g,peserta:(grouped[g]||[]).map(j=>({did:j.did,nama:j.nama,kelompok:j.kelompok_nama,gender:pgNormGender(j.jenis_kelamin),nama_kk:j.nama_kk||null})),slots:eventSlotsForGroup(_invEntry,g).map(s=>({nama_slot:s.nama_slot,kuota:s.kuota,allow_over_quota:s.allow_over_quota,gender:s.gender||null}))})).filter(x=>x.peserta.length||x.slots.length);
+  return calendarParticipantsForEntry(_invEntry).map(p=>({recipient_type:'jamaah',jamaah_did:p.did,slots:[]}));
+}
+async function generateInvitation(){
+  if(!_invEntry)return;const model=document.getElementById('inv-model').value,naskah=document.getElementById('inv-naskah').value.trim();if(!naskah){toast('Naskah undangan wajib diisi',true);return;}const o=calendarOwnerFromEntry(_invEntry);const recipients=invitationPayloadRecipients(model);if(!recipients.length){toast('Belum ada target peserta/slot untuk dibuatkan undangan',true);return;}
+  const payload={kegiatan_id:o.kegiatan_id||null,jadwal_id:_invEntry.kind==='virtual'?o.jadwal_id:null,occurrence_date:_invEntry.kind==='virtual'?_invEntry.original_date:null,model,judul:document.getElementById('inv-judul').value||'UNDANGAN',naskah,signer_name:document.getElementById('inv-signer-name').value||null,signer_title:document.getElementById('inv-signer-title').value||null,signature_data:_invSignatureData||null};
+  const {data,error}=await sb.rpc('dk_invitation_generate',{p_token:DK_ATT_TOKEN,p_id:_invEditId||null,p_payload:payload,p_recipients:recipients});if(error||data?.ok!==true){toast('Gagal generate undangan: '+(error?.message||data?.error||'Unknown'),true);return;}_invEditId=Number(data.data.id);await loadCalendarExtras();const inv=aUndangan.find(x=>Number(x.id)===_invEditId);renderInvitationResult(inv);toast(`✅ ${data.count||recipients.length} undangan/link dibuat`);
+}
+function renderInvitationResult(inv){const box=document.getElementById('inv-result');if(!box)return;if(!inv){box.innerHTML='';return;}const recs=invitationRecipients(inv.id);box.innerHTML=`<div style="margin-top:8px;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;"><div style="padding:8px 10px;background:#f0fdf4;font-size:11px;font-weight:800;color:#166534;display:flex;justify-content:space-between;gap:6px;align-items:center;"><span>✅ Undangan tergenerate · ${recs.length} penerima</span><button class="btn-save" onclick="invDownloadAll(${inv.id})" style="font-size:9px;padding:5px 8px;">🖨️ PDF Semua</button></div>${recs.map(r=>`<div style="padding:8px 10px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;"><div><b>${escH(r.recipient_type==='kelompok'?(r.kelompok+' · Undangan Massal'):(r.nama_snapshot||'-'))}</b><div style="color:var(--text-muted);">${r.recipient_type==='kelompok'?`${(r.peserta_snapshot||[]).length} nama peserta`:`${escH(r.kelompok||'')}`}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;"><button onclick="invCopyLink(${r.id})">🔗 Salin Link</button><button onclick="invShareWA(${r.id})">WA</button><button onclick="invDownloadOne(${r.id})">PDF</button></div></div>`).join('')}</div>`;}
+function invRecipientById(id){return aUndanganRecipients.find(x=>Number(x.id)===Number(id));}
+async function invCopyLink(id){const r=invRecipientById(id);if(!r)return;const url=invitationLink(r.token);try{await navigator.clipboard.writeText(url);toast('✅ Link undangan disalin');}catch(_e){prompt('Salin link:',url);}}
+function invShareWA(id){const r=invRecipientById(id);if(!r)return;const inv=aUndangan.find(x=>Number(x.id)===Number(r.undangan_id));const who=r.recipient_type==='kelompok'?`Kelompok ${r.kelompok}`:(r.nama_snapshot||'');const msg=`Assalamu'alaikum Wr. Wb.\n${who}, berikut kami sampaikan ${inv?.judul||'undangan'} untuk kegiatan ${_invEntry?.name||''}.\n\n${invitationLink(r.token)}\n\nAlhamdulillah Jaza Kumullahu Khoiro.`;window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');}
+function invFmtDate(s){return calFmtDate(s,false);}
+function invResolvedText(inv,rec){let t=String(inv.naskah||'');const vals={nama_penerima:rec.recipient_type==='jamaah'?(rec.nama_snapshot||''):('Jamaah '+(rec.kelompok||'')),nama_acara:_invEntry?.name||'',tanggal:invFmtDate(_invEntry?.date||''),waktu:[_invEntry?.time,_invEntry?.end_time].filter(Boolean).join(' - '),lokasi:_invEntry?.location||'-',kelompok:rec.kelompok||''};Object.entries(vals).forEach(([k,v])=>t=t.split(`{{${k}}}`).join(v||''));return t;}
+function invAddSignature(doc,inv,y){if(inv.signature_data){try{const fmt=inv.signature_data.includes('image/png')?'PNG':'JPEG';doc.addImage(inv.signature_data,fmt,145,y,35,16);}catch(_e){}}doc.setFontSize(9);doc.text(inv.signer_name||'',162.5,y+21,{align:'center'});doc.setFontSize(8);doc.text(inv.signer_title||'',162.5,y+26,{align:'center'});}
+function invBuildPage(doc,inv,rec,first=true){if(!first)doc.addPage('a4','portrait');doc.setFont('helvetica','bold');doc.setFontSize(15);doc.text(inv.judul||'UNDANGAN',105,18,{align:'center'});doc.setFont('helvetica','normal');doc.setFontSize(9.5);let y=30;const body=doc.splitTextToSize(invResolvedText(inv,rec),170);doc.text(body,20,y);y+=body.length*4.6+7;
+  if(rec.recipient_type==='kelompok'){
+    doc.setFont('helvetica','bold');doc.text(`Daftar Peserta ${rec.kelompok}`,20,y);y+=5;const peserta=Array.isArray(rec.peserta_snapshot)?rec.peserta_snapshot:[];const male=peserta.filter(p=>String(p.gender||'')==='L'),female=peserta.filter(p=>String(p.gender||'')==='P');
+    const addGroup=(title,arr)=>{doc.setFontSize(9);doc.setFont('helvetica','bold');doc.text(title,20,y);y+=4;doc.setFont('helvetica','normal');if(!arr.length){doc.text('—',24,y);y+=4;}else arr.forEach((p,i)=>{if(y>255){doc.addPage('a4','portrait');y=20;}doc.text(`${i+1}. ${p.nama||'-'}`,24,y);y+=4;});y+=2;};addGroup('Laki-laki',male);addGroup('Perempuan',female);
+    const slots=Array.isArray(rec.slots_snapshot)?rec.slots_snapshot:[];if(slots.length){doc.setFont('helvetica','bold');doc.text('Slot / Kuota Tambahan',20,y);y+=5;doc.setFont('helvetica','normal');slots.forEach(s=>{doc.text(`• ${s.nama_slot}: ${s.kuota} orang${s.allow_over_quota?' (boleh lebih)':' (maksimal)'}`,24,y);y+=4;});}
+  }
+  invAddSignature(doc,inv,Math.min(Math.max(y+10,220),250));
+}
+function invDownloadOne(id){const r=invRecipientById(id);if(!r)return;const inv=aUndangan.find(x=>Number(x.id)===Number(r.undangan_id));if(!inv)return;const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});invBuildPage(doc,inv,r,true);doc.save(`Undangan_${(r.recipient_type==='kelompok'?r.kelompok:r.nama_snapshot||'Penerima').replace(/[^a-z0-9_-]+/gi,'_')}.pdf`);}
+function invDownloadAll(invId){const inv=aUndangan.find(x=>Number(x.id)===Number(invId));const recs=invitationRecipients(invId);if(!inv||!recs.length)return;const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});recs.forEach((r,i)=>invBuildPage(doc,inv,r,i===0));doc.save(`Undangan_${(_invEntry?.name||'Acara').replace(/[^a-z0-9_-]+/gi,'_')}.pdf`);}
+
+const _renderDaftarHadirBase=renderDaftarHadir;
+renderDaftarHadir=function(){
+  _renderDaftarHadirBase();const k=aKegiatan.find(x=>Number(x.id)===Number(curKegiatanId));if(!k)return;const slots=slotRowsForOwner(k.id,null).filter(s=>!s.scope_kelompok||k.scope_level!=='kelompok'||s.scope_kelompok===k.scope_kelompok);if(!slots.length)return;const box=document.getElementById('modal-hadir-content');if(!box)return;
+  const rows=slots.map(s=>{const h=(aSlotHadir||[]).find(x=>Number(x.kegiatan_id)===Number(k.id)&&Number(x.slot_id)===Number(s.id));const n=Number(h?.jumlah_hadir||0),over=Math.max(0,n-Number(s.kuota||0));return `<div style="display:grid;grid-template-columns:minmax(150px,1fr) 80px 150px;gap:8px;align-items:center;padding:7px 8px;border-top:1px solid #fde68a;font-size:10px;"><div><b>${escH(s.nama_slot)}</b><div style="color:var(--text-muted);">${escH(s.scope_kelompok||'Umum')} · kuota ${s.kuota}${s.allow_over_quota?' · boleh lebih':' · maksimal'}</div></div><div><b>${n}/${s.kuota}</b>${over?` <span style="color:#b91c1c;">+${over}</span>`:''}</div><div style="display:flex;gap:4px;align-items:center;"><button onclick="changeSlotCount(${s.id},-1)">−</button><input id="slot-count-${s.id}" type="number" min="0" value="${n}" onchange="setSlotCount(${s.id},this.value)" style="width:58px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;"><button onclick="changeSlotCount(${s.id},1)">＋</button></div></div>`;}).join('');
+  box.insertAdjacentHTML('afterbegin',`<div style="margin-bottom:10px;border:1px solid #fde68a;background:#fffbeb;border-radius:8px;overflow:hidden;"><div style="padding:8px 10px;font-size:11px;font-weight:800;color:#92400e;">🎟️ Kehadiran Slot / Kuota — tidak perlu nama</div>${rows}</div>`);
+  const sh=(aSlotHadir||[]).filter(x=>Number(x.kegiatan_id)===Number(k.id)).reduce((n,x)=>n+Number(x.jumlah_hadir||0),0),sq=slots.reduce((n,x)=>n+Number(x.kuota||0),0);document.getElementById('hadir-stats')?.insertAdjacentHTML('beforeend',`<span class="stat-pill"><span class="pl">🎟️</span><span class="pv">${sh}/${sq}</span><span class="pl">slot hadir</span></span>`);
+};
+async function setSlotCount(slotId,val){const n=Math.max(0,parseInt(val||0));const {data,error}=await sb.rpc('dk_attendance_set_slot_count',{p_token:DK_ATT_TOKEN,p_kegiatan_id:curKegiatanId,p_slot_id:slotId,p_count:n});if(error||data?.ok!==true){toast(error?.message||data?.error||'Gagal ubah slot',true);renderDaftarHadir();return;}await loadCalendarExtras();renderDaftarHadir();}
+function changeSlotCount(slotId,delta){const h=(aSlotHadir||[]).find(x=>Number(x.kegiatan_id)===Number(curKegiatanId)&&Number(x.slot_id)===Number(slotId));setSlotCount(slotId,Math.max(0,Number(h?.jumlah_hadir||0)+delta));}
+
+/* ===== END TARGET PESERTA + SLOT KUOTA + UNDANGAN v1 ===== */
 
 </script>
 </body>
