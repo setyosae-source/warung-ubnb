@@ -574,8 +574,8 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   <div class="page" id="page-absen">
     <div class="cal-toolbar">
       <div class="cal-toolbar-main">
-        <button class="btn-save" onclick="bukaModalKegiatan()" style="padding:8px 13px;border-radius:7px;font-size:12px;">＋ Buat Acara</button>
-        <button class="btn-cancel" onclick="bukaModalAcaraMaster()" style="padding:8px 13px;border-radius:7px;font-size:12px;">📚 Template / Kriteria</button>
+        <button id="btn-acara-create" class="btn-save" onclick="bukaModalKegiatan()" style="padding:8px 13px;border-radius:7px;font-size:12px;">＋ Buat Acara</button>
+        <button id="btn-acara-template" class="btn-cancel" onclick="bukaModalAcaraMaster()" style="padding:8px 13px;border-radius:7px;font-size:12px;">📚 Template / Kriteria</button>
       </div>
       <div class="cal-view-toggle">
         <button id="cal-view-list-btn" class="active" onclick="setCalendarView('list')">☷ List</button>
@@ -1868,7 +1868,7 @@ function dapukanModuleMatch(label,module){
   const norm=(' '+raw.replace(/[._/\\-]+/g,' ')+' ').replace(/\s+/g,' ');
   const hasKI=/(^|\s)ki(\s|$)/.test(norm);       // KI Desa/Kelompok & Wakil KI
   const hasMT=/(^|\s)mt(\s|$)/.test(norm);       // MT Desa/Kelompok/MT. Kelompok
-  if(module==='invitation'){
+  if(module==='invitation'||module==='calendar'){
     return raw.includes('penerobos')||hasMT||hasKI;
   }
   if(module==='marriage'){
@@ -1882,6 +1882,7 @@ function canAccessModule(module){
 }
 function canAccessInvitation(){return canAccessModule('invitation');}
 function canAccessMarriage(){return canAccessModule('marriage');}
+function canManageCalendar(){return canAccessModule('calendar');}
 
 function applyRoleRestrictions(){
   const btnMarriageTab=document.getElementById('subtab-btn-marriage');
@@ -1889,6 +1890,12 @@ function applyRoleRestrictions(){
   const allowMarriage=canAccessMarriage();
   if(btnMarriageTab)btnMarriageTab.style.display=allowMarriage?'':'none';
   if(btnMarriageData)btnMarriageData.style.display=allowMarriage?'':'none';
+
+  const allowCalendarManage=canManageCalendar();
+  const btnAcaraCreate=document.getElementById('btn-acara-create');
+  const btnAcaraTemplate=document.getElementById('btn-acara-template');
+  if(btnAcaraCreate)btnAcaraCreate.style.display=allowCalendarManage?'':'none';
+  if(btnAcaraTemplate)btnAcaraTemplate.style.display=allowCalendarManage?'':'none';
 
   // Untuk viewer: sembunyikan tab Absen & ISRUN
   if(isViewer()){
@@ -7683,7 +7690,7 @@ function calScopeLabel(level,kel){
 }
 function calScopeIcon(level){return level==='daerah'?'🌐':level==='kelompok'?'📍':'🏘️';}
 function calendarCanManageScope(level,kel){
-  if(!CU||isViewer())return false;
+  if(!CU||isViewer()||!canManageCalendar())return false;
   if(isDesaAttendanceManager())return true;
   return level==='kelompok' && !!CU.kelompok_scope && CU.kelompok_scope===kel;
 }
@@ -8141,6 +8148,7 @@ function recurrenceFormHtml(rule,startDate,endDate){
   </div>`;
 }
 function editJadwal(id,effectiveDate=null){
+  if(!canManageCalendar()){toast('Tambah/edit Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}
   const j=(aJadwal||[]).find(x=>Number(x.id)===Number(id));if(!j){toast('Jadwal tidak ditemukan',true);return;}
   _editingScheduleId=Number(id);_calNewKind='rutin';
   const base=String(j.tanggal_mulai||calToday()).slice(0,10),candidate=effectiveDate||calToday();
@@ -8150,8 +8158,12 @@ function editJadwal(id,effectiveDate=null){
   _renderCalendarEventForm(null,j,m);
   closeMod('modal-calendar-detail');
 }
-function bukaModalKegiatan(type='insidentil'){_kgTemplateId=null;_editingScheduleId=null;_calEditEffectiveDate=null;_calNewKind=type||'insidentil';_renderCalendarEventForm(null,null,null);}
+function bukaModalKegiatan(type='insidentil'){
+  if(!canManageCalendar()){toast('Tambah/edit Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}
+  _kgTemplateId=null;_editingScheduleId=null;_calEditEffectiveDate=null;_calNewKind=type||'insidentil';_renderCalendarEventForm(null,null,null);
+}
 function editKegiatan(id){
+  if(!canManageCalendar()){toast('Tambah/edit Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}
   const k=id?(aKegiatan||[]).find(x=>Number(x.id)===Number(id)):null;if(id&&!k){toast('Kegiatan tidak ditemukan',true);return;}
   if(!id){bukaModalKegiatan('insidentil');return;}
   _editingScheduleId=null;_calNewKind='insidentil';const fp=k.filter_peserta||{};_kgTemplateId=(fp.sumber==='template'&&fp.template_id)?Number(fp.template_id):null;
@@ -8213,6 +8225,7 @@ function onAcaraSearch(){
   dd.innerHTML=html;dd.style.display=html?'block':'none';const exact=matches.find(a=>(a.nama||'').toLowerCase()===q);if(hid)hid.value=exact?exact.id:'';
 }
 async function simpanKegiatan(){
+  if(!canManageCalendar()){toast('Tambah/edit Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}
   const snap=await getAttendanceSnapshot(true);if(!snap)return;
   const kind=document.getElementById('kg-jenis')?.value||'insidentil',name=(document.getElementById('kg-acara-input')?.value||'').trim();if(!name){toast('Nama acara wajib diisi',true);return;}
   const sc=currentCalendarScopeFromForm();if(!calendarCanManageScope(sc.level,sc.kelompok)){toast('Scope acara di luar hak kelola akun',true);return;}
@@ -8236,16 +8249,18 @@ async function simpanKegiatan(){
 }
 
 function openCalendarException(key,action){
+  if(!canManageCalendar()){toast('Perubahan Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}
   const e=calendarFindEntry(key);if(!e||e.kind!=='virtual'||!calendarCanManageEntry(e))return;_calCurrentEntry=e;
   const ex=e.exception||{};document.getElementById('ce-jadwal-id').value=e.jadwal_id;document.getElementById('ce-tanggal-asli').value=e.original_date;document.getElementById('ce-aksi').value=action||ex.aksi||'ubah';document.getElementById('ce-tanggal-baru').value=ex.tanggal_baru?String(ex.tanggal_baru).slice(0,10):(action==='pindah'?e.date:'');document.getElementById('ce-waktu').value=calNormTime(ex.waktu_mulai||e.time);document.getElementById('ce-waktu-selesai').value=calNormTime(ex.waktu_selesai||e.end_time);document.getElementById('ce-lokasi').value=ex.lokasi!=null?ex.lokasi:e.location||'';document.getElementById('ce-catatan').value=ex.catatan||'';document.getElementById('calendar-exception-title').textContent='Ubah: '+e.name;document.getElementById('calendar-exception-sub').textContent='Jadwal normal '+calFmtDate(e.original_date);calendarExceptionActionChanged();openMod('modal-calendar-exception');
 }
 function calendarExceptionActionChanged(){const a=document.getElementById('ce-aksi')?.value||'ubah';document.getElementById('ce-tanggal-row').style.display=a==='pindah'?'flex':'none';['ce-waktu-row','ce-waktu-selesai-row','ce-lokasi-row'].forEach(id=>document.getElementById(id).style.display=a==='mansuh'?'none':'flex');}
 async function saveCalendarException(){
+  if(!canManageCalendar()){toast('Perubahan Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}
   const jid=Number(document.getElementById('ce-jadwal-id').value),orig=document.getElementById('ce-tanggal-asli').value,aksi=document.getElementById('ce-aksi').value;const payload={aksi,tanggal_baru:aksi==='pindah'?document.getElementById('ce-tanggal-baru').value:null,waktu_mulai:aksi==='mansuh'?null:document.getElementById('ce-waktu').value||null,waktu_selesai:aksi==='mansuh'?null:document.getElementById('ce-waktu-selesai').value||null,lokasi:aksi==='mansuh'?null:(document.getElementById('ce-lokasi').value||null),catatan:document.getElementById('ce-catatan').value||null};
   const {data,error}=await sb.rpc('dk_calendar_save_exception',{p_token:DK_ATT_TOKEN,p_jadwal_id:jid,p_tanggal_asli:orig,p_payload:payload});if(error||!data||data.ok!==true){toast('Gagal simpan perubahan: '+(error?.message||data?.error||'Unknown'),true);return;}closeMod('modal-calendar-exception');closeMod('modal-calendar-detail');toast(aksi==='mansuh'?'✅ Acara tanggal ini dimansuh':'✅ Perubahan jadwal tanggal ini disimpan');await reloadAttendanceSecure(false);renderKegiatanList();
 }
-async function restoreCalendarException(key){const e=calendarFindEntry(key);if(!e||!e.exception)return;if(!confirm('Kembalikan occurrence ini ke jadwal rutin normal?'))return;const {data,error}=await sb.rpc('dk_calendar_delete_exception',{p_token:DK_ATT_TOKEN,p_jadwal_id:e.jadwal_id,p_tanggal_asli:e.original_date});if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown'),true);return;}closeMod('modal-calendar-detail');toast('✅ Dikembalikan ke jadwal normal');await reloadAttendanceSecure(false);renderKegiatanList();}
-async function hapusJadwal(id){if(!confirm('Nonaktifkan jadwal rutin ini? Riwayat acara yang sudah digenerate tidak dihapus.'))return;const {data,error}=await sb.rpc('dk_calendar_delete_schedule',{p_token:DK_ATT_TOKEN,p_jadwal_id:id});if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown'),true);return;}closeMod('modal-calendar-detail');toast('✅ Jadwal rutin dinonaktifkan');await reloadAttendanceSecure(false);renderKegiatanList();}
+async function restoreCalendarException(key){if(!canManageCalendar()){toast('Perubahan Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}const e=calendarFindEntry(key);if(!e||!e.exception)return;if(!confirm('Kembalikan occurrence ini ke jadwal rutin normal?'))return;const {data,error}=await sb.rpc('dk_calendar_delete_exception',{p_token:DK_ATT_TOKEN,p_jadwal_id:e.jadwal_id,p_tanggal_asli:e.original_date});if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown'),true);return;}closeMod('modal-calendar-detail');toast('✅ Dikembalikan ke jadwal normal');await reloadAttendanceSecure(false);renderKegiatanList();}
+async function hapusJadwal(id){if(!canManageCalendar()){toast('Pengelolaan Acara hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);return;}if(!confirm('Nonaktifkan jadwal rutin ini? Riwayat acara yang sudah digenerate tidak dihapus.'))return;const {data,error}=await sb.rpc('dk_calendar_delete_schedule',{p_token:DK_ATT_TOKEN,p_jadwal_id:id});if(error||!data||data.ok!==true){toast('Gagal: '+(error?.message||data?.error||'Unknown'),true);return;}closeMod('modal-calendar-detail');toast('✅ Jadwal rutin dinonaktifkan');await reloadAttendanceSecure(false);renderKegiatanList();}
 
 function openVirtualPeserta(key){
   const e=calendarFindEntry(key);if(!e||e.kind!=='virtual')return;if(!calendarCanManageEntry(e)){toast('Acara ini hanya dapat dilihat',true);return;}if(!calendarH7Ready(e)){toast('Peserta baru bisa diatur mulai H-7',true);return;}
