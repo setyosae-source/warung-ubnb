@@ -1847,6 +1847,10 @@ async function init(){
   }
   // Apply role-based UI restrictions
   applyRoleRestrictions();
+  if(!canAccessMarriage() && document.getElementById('subview-marriage')?.style.display!=='none'){
+    const dataBtn=document.getElementById('subtab-btn-data');
+    if(dataBtn)showJamaahSub('data',dataBtn);
+  }
   await loadAll();
   // Login pengurus memakai sessionStorage seperti halaman Edit Jamaah; tidak membutuhkan session password UBNBAuth.
 }
@@ -1855,7 +1859,37 @@ async function init(){
 function isViewer(){return CU?.role==='viewer';}
 function canEdit(){return !isViewer();}
 
+function dashboardDapukanLabels(){
+  const roles=Array.isArray(CU?.dapukan)?CU.dapukan:[];
+  return roles.map(r=>typeof r==='string'?r:(r?.dapukan||'')).filter(Boolean);
+}
+function dapukanModuleMatch(label,module){
+  const raw=String(label||'').toLowerCase();
+  const norm=(' '+raw.replace(/[._/\\-]+/g,' ')+' ').replace(/\s+/g,' ');
+  const hasKI=/(^|\s)ki(\s|$)/.test(norm);       // KI Desa/Kelompok & Wakil KI
+  const hasMT=/(^|\s)mt(\s|$)/.test(norm);       // MT Desa/Kelompok/MT. Kelompok
+  if(module==='invitation'){
+    return raw.includes('penerobos')||hasMT||hasKI;
+  }
+  if(module==='marriage'){
+    return raw.includes('pnkb')||raw.includes('pkw')||raw.includes('penerobos')||hasKI;
+  }
+  return false;
+}
+function canAccessModule(module){
+  if(!CU||isViewer())return false;
+  return dashboardDapukanLabels().some(x=>dapukanModuleMatch(x,module));
+}
+function canAccessInvitation(){return canAccessModule('invitation');}
+function canAccessMarriage(){return canAccessModule('marriage');}
+
 function applyRoleRestrictions(){
+  const btnMarriageTab=document.getElementById('subtab-btn-marriage');
+  const btnMarriageData=document.getElementById('btn-marriage-from-data');
+  const allowMarriage=canAccessMarriage();
+  if(btnMarriageTab)btnMarriageTab.style.display=allowMarriage?'':'none';
+  if(btnMarriageData)btnMarriageData.style.display=allowMarriage?'':'none';
+
   // Untuk viewer: sembunyikan tab Absen & ISRUN
   if(isViewer()){
     const tabs=document.querySelectorAll('.page-tabs > .page-tab');
@@ -1865,9 +1899,7 @@ function applyRoleRestrictions(){
     // Sembunyikan tombol "Tambah Jamaah Baru"
     const btnTambah=document.querySelector('button[onclick="bukaModalTambah()"]');
     if(btnTambah) btnTambah.style.display='none';
-    const btnMarriageTab=document.getElementById('subtab-btn-marriage');
     if(btnMarriageTab) btnMarriageTab.style.display='none';
-    const btnMarriageData=document.getElementById('btn-marriage-from-data');
     if(btnMarriageData) btnMarriageData.style.display='none';
     // Sembunyikan generate sensus card (whole card with button)
     const cardGen=document.getElementById('sensus-generate-card');
@@ -2014,6 +2046,10 @@ function showTab(tab,btn){
 
 // ===== SUB-TAB JAMAAH: DATA vs PENGURUS vs PERNIKAHAN =====
 function showJamaahSub(sub,btn){
+  if(sub==='marriage'&&!canAccessMarriage()){
+    toast('Akses modul Pernikahan hanya untuk dapukan PNKB, PKW, Penerobos, KI, atau Wakil KI.',true);
+    return;
+  }
   document.querySelectorAll('#page-jamaah > .subtab-bar > .subtab').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   document.getElementById('subview-jamaah-data').style.display=(sub==='data')?'':'none';
@@ -2803,7 +2839,7 @@ function marriageGroupOptions(selected=''){
   return KELOMPOK_LIST.map(k=>`<option value="${k.singkat}" ${selected===k.singkat?'selected':''}>${k.singkat} - ${k.lengkap}</option>`).join('');
 }
 function bukaModalMarriage(){
-  if(!canEdit()){toast('Akses proses pernikahan hanya untuk pengurus',true);return;}
+  if(!canEdit()||!canAccessMarriage()){toast('Akses modul Pernikahan hanya untuk dapukan PNKB, PKW, Penerobos, KI, atau Wakil KI.',true);return;}
   mrgResetPicks();
   const today=new Date();
   const ds=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
@@ -2897,7 +2933,7 @@ function marriageUpdateContext(){
   }
 }
 async function simpanMarriage(){
-  if(!canEdit()){toast('Akses ditolak',true);return;}
+  if(!canEdit()||!canAccessMarriage()){toast('Akses modul Pernikahan tidak diberikan untuk dapukan ini.',true);return;}
   const mode=document.getElementById('mrg-mode')?.value;
   const date=document.getElementById('mrg-date')?.value;
   const aDid=document.getElementById('mrg-a-did')?.value||'';
@@ -2944,7 +2980,7 @@ async function simpanMarriage(){
   finally{if(btn){btn.disabled=false;btn.textContent='💍 Proses & Simpan';}}
 }
 async function loadMarriageData(render=true){
-  if(!canEdit())return;
+  if(!canEdit()||!canAccessMarriage())return;
   const sel=document.getElementById('marriage-year');
   if(sel&&sel.value!=='')curMarriageYear=parseInt(sel.value)||new Date().getFullYear();
   const {data,error}=await sb.rpc('dashboard_marriage_summary',{p_editor_did:CU.did,p_year:curMarriageYear||null});
@@ -3029,6 +3065,7 @@ function ynFilteredRows(){
 }
 async function loadYouthMarriageData(force=false){
   const wrap=document.getElementById('yn-list-wrap');if(!wrap)return;
+  if(!canAccessMarriage()){wrap.innerHTML='<div class="empty"><div class="ei">🔒</div><div>Akses modul Pernikahan tidak diberikan untuk dapukan ini.</div></div>';return;}
   if(aYouthMarriage.length&&!force){renderYouthList();return;}
   wrap.innerHTML='<div class="loading">Memuat daftar usia nikah...</div>';
   const {data,error}=await sb.rpc('dashboard_marriage_youth_list',{p_editor_did:CU.did});
@@ -3047,6 +3084,7 @@ function renderYouthList(){
   wrap.innerHTML=html;
 }
 async function bukaYouthProfile(did){
+  if(!canAccessMarriage()){toast('Akses modul Pernikahan tidak diberikan untuk dapukan ini.',true);return;}
   _ynCurrent=null;_ynPhotoPending=undefined;document.getElementById('yn-profile-content').innerHTML='<div class="loading">Memuat profil...</div>';openMod('modal-youth-profile');
   const {data,error}=await sb.rpc('dashboard_marriage_youth_profile',{p_editor_did:CU.did,p_jamaah_did:did});
   if(error||!data?.ok){document.getElementById('yn-profile-content').innerHTML=`<div class="empty"><div class="ei">⚠️</div><div>${escH(error?.message||data?.error||'Profil tidak dapat dibuka')}</div></div>`;return;}
@@ -3095,7 +3133,7 @@ function ynPickCamera(){document.getElementById('yn-photo-camera')?.click();}
 function ynRefreshPhotoPreview(){const d=_ynPhotoPending===undefined?_ynCurrent?.foto_data:_ynPhotoPending,el=document.getElementById('yn-main-photo');if(!el)return;if(d&&el.tagName==='IMG')el.src=d;else if(d){const img=document.createElement('img');img.id='yn-main-photo';img.className='yn-profile-photo';img.alt='Foto';img.title='Klik untuk ganti foto';img.onclick=ynPickGallery;img.src=d;el.replaceWith(img);}else if(el.tagName==='IMG'){const dv=document.createElement('div');dv.id='yn-main-photo';dv.className='yn-profile-photo placeholder';dv.title='Klik untuk pilih foto';dv.onclick=ynPickGallery;dv.textContent=ynGender(_ynCurrent?.jenis_kelamin)==='L'?'👨':'👩';el.replaceWith(dv);}}
 function ynPhotoSelected(ev){const file=ev.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){toast('File harus berupa gambar',true);return;}const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const maxW=1000,maxH=1400,scale=Math.min(1,maxW/img.width,maxH/img.height),c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*scale));c.height=Math.max(1,Math.round(img.height*scale));c.getContext('2d').drawImage(img,0,0,c.width,c.height);let q=.88,d=c.toDataURL('image/jpeg',q);while(d.length>560000&&q>.55){q-=.07;d=c.toDataURL('image/jpeg',q);}_ynPhotoPending=d;ynRefreshPhotoPreview();toast('Foto siap. Klik Simpan untuk menyimpan profil.');};img.src=rd.result;};rd.readAsDataURL(file);ev.target.value='';}
 function ynRemovePhoto(){_ynPhotoPending=null;ynRefreshPhotoPreview();toast('Foto akan dihapus setelah klik Simpan.');}
-async function saveYouthProfile(){const p=ynLiveProfileFromForm();if(!p)return;const btns=[...document.querySelectorAll('.yn-save-btn')];btns.forEach(b=>{b.disabled=true;b.dataset.old=b.textContent;b.textContent='⏳ Menyimpan...';});const payload={nama_orang_tua:p.nama_orang_tua,tempat_lahir:p.tempat_lahir,suku:p.suku,status_biodata:p.status_biodata,anak_ke:p.anak_ke,jumlah_saudara:p.jumlah_saudara,tinggi_badan:p.tinggi_badan,berat_badan:p.berat_badan,pekerjaan:p.pekerjaan,pendidikan_terakhir:p.pendidikan_terakhir,dapukan:p.dapukan,kelompok_sambung:p.kelompok_sambung,desa_sambung:p.desa_sambung,daerah_sambung:p.daerah_sambung,hobby:p.hobby,kriteria:p.kriteria,catatan_internal:p.catatan_internal,is_publish:p.is_publish};if(_ynPhotoPending!==undefined)payload.foto_data=_ynPhotoPending;try{const {data,error}=await sb.rpc('dashboard_marriage_youth_save',{p_editor_did:CU.did,p_jamaah_did:p.did,p_payload:payload});if(error)throw error;if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan profil');await dkLog('UPDATE_PROFIL_USIA_NIKAH',{jamaah_did:p.did,nama:p.nama,publish:payload.is_publish});const fresh=await sb.rpc('dashboard_marriage_youth_profile',{p_editor_did:CU.did,p_jamaah_did:p.did});if(fresh.error||!fresh.data?.ok)throw new Error(fresh.error?.message||fresh.data?.error||'Gagal membaca ulang profil');_ynCurrent=fresh.data.data;_ynPhotoPending=undefined;toast('✅ Profil tersimpan');renderYouthProfile();await loadYouthMarriageData(true);}catch(e){toast('Gagal simpan profil: '+(e.message||e),true);}finally{btns.forEach(b=>{b.disabled=false;b.textContent=b.dataset.old||'💾 Simpan';});}}
+async function saveYouthProfile(){if(!canAccessMarriage()){toast('Akses modul Pernikahan tidak diberikan untuk dapukan ini.',true);return;}const p=ynLiveProfileFromForm();if(!p)return;const btns=[...document.querySelectorAll('.yn-save-btn')];btns.forEach(b=>{b.disabled=true;b.dataset.old=b.textContent;b.textContent='⏳ Menyimpan...';});const payload={nama_orang_tua:p.nama_orang_tua,tempat_lahir:p.tempat_lahir,suku:p.suku,status_biodata:p.status_biodata,anak_ke:p.anak_ke,jumlah_saudara:p.jumlah_saudara,tinggi_badan:p.tinggi_badan,berat_badan:p.berat_badan,pekerjaan:p.pekerjaan,pendidikan_terakhir:p.pendidikan_terakhir,dapukan:p.dapukan,kelompok_sambung:p.kelompok_sambung,desa_sambung:p.desa_sambung,daerah_sambung:p.daerah_sambung,hobby:p.hobby,kriteria:p.kriteria,catatan_internal:p.catatan_internal,is_publish:p.is_publish};if(_ynPhotoPending!==undefined)payload.foto_data=_ynPhotoPending;try{const {data,error}=await sb.rpc('dashboard_marriage_youth_save',{p_editor_did:CU.did,p_jamaah_did:p.did,p_payload:payload});if(error)throw error;if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan profil');await dkLog('UPDATE_PROFIL_USIA_NIKAH',{jamaah_did:p.did,nama:p.nama,publish:payload.is_publish});const fresh=await sb.rpc('dashboard_marriage_youth_profile',{p_editor_did:CU.did,p_jamaah_did:p.did});if(fresh.error||!fresh.data?.ok)throw new Error(fresh.error?.message||fresh.data?.error||'Gagal membaca ulang profil');_ynCurrent=fresh.data.data;_ynPhotoPending=undefined;toast('✅ Profil tersimpan');renderYouthProfile();await loadYouthMarriageData(true);}catch(e){toast('Gagal simpan profil: '+(e.message||e),true);}finally{btns.forEach(b=>{b.disabled=false;b.textContent=b.dataset.old||'💾 Simpan';});}}
 function ynProfileText(p){const isL=ynGender(p.jenis_kelamin)==='L',rows=ynBiodataRows(p);return [`PROFIL BIODATA ${isL?'Pemuda':'Pemudi'}`,'',...rows.map(([k,v])=>`${k} : ${ynVal(v)}`),'',...ynTeamRows(p).map(([k,v])=>`${k} : ${v}`),'','Powered by UBNB Desa Perwira'].join('\n');}
 function ynWrapText(ctx,text,maxWidth){const paras=String(text??'').split(/\n/),lines=[];paras.forEach(para=>{const words=para.split(/\s+/).filter(Boolean);if(!words.length){lines.push('');return;}let line='';words.forEach(w=>{const t=line?line+' '+w:w;if(ctx.measureText(t).width>maxWidth&&line){lines.push(line);line=w;}else line=t;});if(line)lines.push(line);});return lines;}
 function ynLoadImage(src){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=src;});}
@@ -8268,8 +8306,9 @@ function onLokasiSearch(){
 var aTargetPeserta=[],aAcaraSlots=[],aSlotHadir=[],aUndangan=[],aUndanganRecipients=[],aUndanganTemplates=[];
 var _kgTargetSelected=new Set(),_kgSlotsDraft=[],_kpContext='snapshot',_kpTargetOwner=null,_kpTargetScope=null;
 var _invEntry=null,_invEditId=null,_invSignatureData=null,_invSignaturePending=null;
+var _invitationAccess=false;
 
-function isInvitationMasterUser(){return !!CU&&String(CU.did||CU.id||'')==='4075';}
+function isInvitationMasterUser(){return canAccessInvitation()&&(_invitationAccess||!DK_ATT_TOKEN);}
 function ownerMatch(row,kegiatanId,jadwalId){return (kegiatanId&&Number(row.kegiatan_id)===Number(kegiatanId))||(jadwalId&&Number(row.jadwal_id)===Number(jadwalId));}
 function calendarOwnerFromEntry(e){
   if(!e)return {kegiatan_id:null,jadwal_id:null};
@@ -8302,6 +8341,7 @@ async function loadCalendarExtras(){
   aUndangan=Array.isArray(data.invitations)?data.invitations:[];
   aUndanganRecipients=Array.isArray(data.invitation_recipients)?data.invitation_recipients:[];
   aUndanganTemplates=Array.isArray(data.invitation_templates)?data.invitation_templates:[];
+  _invitationAccess=data.invitation_master===true;
   return true;
 }
 const _reloadAttendanceSecureBeforeExtras=reloadAttendanceSecure;
@@ -8501,7 +8541,7 @@ function invRefreshTemplateSelect(selectedId=''){
   if(selectedId&&aUndanganTemplates.some(t=>Number(t.id)===Number(selectedId)))tpl.value=String(selectedId);
 }
 function openInvitationForEntry(key){
-  if(!isInvitationMasterUser()){toast('Fitur Undangan khusus master user',true);return;}_invEntry=calendarFindEntry(key);if(!_invEntry)return;const inv=findInvitationForEntry(_invEntry);_invEditId=inv?.id||null;_invSignatureData=inv?.signature_data||null;_invSignaturePending=null;
+  if(!isInvitationMasterUser()){toast('Akses Undangan hanya untuk dapukan Penerobos, MT, KI, atau Wakil KI.',true);return;}_invEntry=calendarFindEntry(key);if(!_invEntry)return;const inv=findInvitationForEntry(_invEntry);_invEditId=inv?.id||null;_invSignatureData=inv?.signature_data||null;_invSignaturePending=null;
   document.getElementById('inv-title-head').textContent=inv?'✉️ Kelola Undangan':'✉️ Buat Undangan';document.getElementById('inv-sub').textContent=`${_invEntry.name} · ${calFmtDate(_invEntry.date)} · ${calScopeLabel(_invEntry.scope_level,_invEntry.scope_kelompok)}`;
   const model=document.getElementById('inv-model');model.value=inv?.model||(_invEntry.routine?'massal_kelompok':'perorangan');
   invRefreshTemplateSelect(inv?.template_id||'');
