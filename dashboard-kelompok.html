@@ -9655,5 +9655,135 @@ renderDaftarHadir=function(){
 document.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>{try{const pending=(aKegiatan||[]).map(calendarEntryFromActual).filter(ubnbEventNeedsManualClose);if(pending.length&&calListTab==='selesai')calListTab='berlangsung';renderKegiatanList();}catch(_e){}},700);});
 /* ===== END INTEGRASI UI KALENDER + REPORT + TUTUP MANUAL v3 ===== */
 </script>
+
+<style id="ubnb-readable-card-print-v4">
+/* ===== CARD ACARA MOBILE - RAPAT & RAPI ===== */
+.ubnb-active-card{padding:14px 14px 13px!important;overflow:hidden}
+.ubnb-active-card .ubnb-active-name{font-size:16px!important;line-height:1.22!important;font-weight:900!important;color:#18231f;margin:0;word-break:normal;overflow-wrap:break-word}
+.ubnb-active-card .ubnb-active-meta{font-size:11.5px!important;line-height:1.5!important;color:#6b7280;margin-top:7px;white-space:normal;word-break:normal}
+.ubnb-active-card .ubnb-active-badges{display:flex!important;flex-wrap:wrap!important;gap:5px!important;justify-content:flex-start!important;align-items:center!important;margin-top:7px}
+.ubnb-active-card .ubnb-close-notice{margin-top:10px;padding:9px 11px;border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;font-size:10.5px;line-height:1.4;color:#9a3412;font-weight:800}
+@media(min-width:700px){
+  .ubnb-active-card .ubnb-active-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
+  .ubnb-active-card .ubnb-active-badges{margin-top:0;justify-content:flex-end;max-width:390px}
+}
+</style>
+<script>
+/* ===== REPORT CETAK READABLE v4 =====
+   Prinsip: jangan mengecilkan font demi memaksa data muat sedikit halaman.
+   Dengan Nama = A4 landscape, 9pt+, multi-page dengan header berulang.
+   Tanpa Nama = A4 portrait, statistik besar. */
+
+ubnbActiveEventCard=function(e){
+  if(!ubnbEventNeedsManualClose(e))return calendarTodayActionCard(e);
+  const time=[e.time,e.end_time].filter(Boolean).join('–');
+  return `<div class="cal-event-card scope-${e.scope_level} ubnb-active-card" onclick="openCalendarEntry('${e.key}')">
+    <div class="ubnb-active-head">
+      <div style="min-width:0;">
+        <div class="cal-event-name ubnb-active-name">${escH(e.name)}</div>
+        <div class="cal-event-meta ubnb-active-meta">📅 ${escH(calFmtDate(e.date))}${time?' · ⏰ '+escH(time):''}${e.location?' · 📍 '+escH(e.location):''}</div>
+      </div>
+      <div class="cal-event-badges ubnb-active-badges">${calendarEntryBadges(e)}</div>
+    </div>
+    <div class="ubnb-close-notice">⏳ Jadwal sudah berakhir, tetapi acara belum ditutup. Buka detail lalu pilih <b>Tutup Acara</b>.</div>
+  </div>`;
+};
+
+function ubnbPrintEsc(v){return escH(v==null?'':String(v));}
+function ubnbPrintFmtPct(v){return Number(v||0).toLocaleString('id-ID',{maximumFractionDigits:1})+'%';}
+function ubnbPrintSummaryCards(r){
+  const cards=[
+    ['Peserta Wajib',r.total_peserta||0,''],
+    ['Hadir',r.hadir||0,'good'],
+    ['Izin',r.izin||0,'warn'],
+    ['Sakit',r.sakit||0,'warn'],
+    ['Tidak Hadir',r.tidak_hadir||0,'bad'],
+    ['Kehadiran',ubnbPrintFmtPct(r.kehadiran_pct),'good'],
+    ['Jumlah KK',r.jumlah_kk||0,''],
+    ['KK Hadir Lengkap',r.kk_lengkap_hadir||0,''],
+    ['Masuk Saat Absen',r.ditambahkan_saat_absen||0,''],
+    ['Tamu / Kunjungan',r.tamu_kunjungan||0,'']
+  ];
+  return `<div class="p-stats">${cards.map(c=>`<div class="p-stat ${c[2]}"><b>${ubnbPrintEsc(c[1])}</b><span>${ubnbPrintEsc(c[0])}</span></div>`).join('')}</div>`;
+}
+function ubnbPrintBreak(title,obj){
+  const entries=Object.entries(obj||{});if(!entries.length)return '';
+  return `<div class="p-break"><h4>${ubnbPrintEsc(title)}</h4><div class="p-br-head"><span>Kategori</span><b>Hadir</b><b>Total</b></div>${entries.map(([k,v])=>`<div class="p-br-row"><span>${ubnbPrintEsc(k)}</span><b>${Number(v?.hadir||0)}</b><b>${Number(v?.total||0)}</b></div>`).join('')}</div>`;
+}
+function ubnbPrintStatusClass(v){
+  if(v==='Hadir')return 'hadir';if(v==='Izin')return 'izin';if(v==='Sakit')return 'sakit';return 'tidak';
+}
+function ubnbPrintStatusCount(r,status){
+  if(status==='Hadir')return Number(r.hadir||0);if(status==='Izin')return Number(r.izin||0);if(status==='Sakit')return Number(r.sakit||0);return Number(r.tidak_hadir||0);
+}
+function ubnbPrintDetails(r,p){
+  const order={Hadir:0,Izin:1,Sakit:2,'Tidak Hadir':3};
+  const list=[...(p||[])].sort((a,b)=>(order[a.status_kehadiran]??9)-(order[b.status_kehadiran]??9)||String(a.kk||'').localeCompare(String(b.kk||''),'id')||String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+  let last='',n=0,rows='';
+  for(const x of list){
+    const st=x.status_kehadiran||'Tidak Hadir';
+    if(st!==last){
+      rows+=`<tr class="p-group"><td colspan="10">${ubnbPrintEsc(st)} - ${ubnbPrintStatusCount(r,st)} orang</td></tr>`;
+      last=st;
+    }
+    n++;
+    const notes=[];
+    if(x.auto_added)notes.push('Masuk daftar saat absen');
+    if(x.catatan)notes.push(x.catatan);
+    rows+=`<tr>
+      <td class="c">${n}</td>
+      <td><strong>${ubnbPrintEsc(x.nama||'-')}</strong><small>KK: ${ubnbPrintEsc(x.kk||'-')}</small></td>
+      <td class="c">${ubnbPrintEsc(x.lp||'-')}</td>
+      <td class="c">${x.usia==null?'-':ubnbPrintEsc(x.usia)}</td>
+      <td>${ubnbPrintEsc(x.kelas_kbm||'-')}</td>
+      <td>${ubnbPrintEsc(x.status_sambung||'-')}</td>
+      <td>${ubnbPrintEsc(x.status_menikah||'-')}</td>
+      <td class="p-status ${ubnbPrintStatusClass(st)}">${ubnbPrintEsc(st)}</td>
+      <td class="c">${ubnbPrintEsc(x.jam_hadir||'-')}</td>
+      <td><b>${ubnbPrintEsc(x.input_via||'-')}</b>${notes.length?`<small>${notes.map(ubnbPrintEsc).join(' · ')}</small>`:''}</td>
+    </tr>`;
+  }
+  return `<section class="p-details">
+    <div class="p-section-title">Daftar Peserta & Kehadiran</div>
+    <table class="p-table">
+      <colgroup><col style="width:8mm"><col style="width:48mm"><col style="width:8mm"><col style="width:11mm"><col style="width:23mm"><col style="width:24mm"><col style="width:30mm"><col style="width:25mm"><col style="width:14mm"><col style="width:65mm"></colgroup>
+      <thead><tr><th>No</th><th>Nama / KK</th><th>L/P</th><th>Usia</th><th>Kelas KBM</th><th>Sambung</th><th>Status Menikah</th><th>Kehadiran</th><th>Jam</th><th>Via / Keterangan</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </section>`;
+}
+
+printFinalRecap=function(){
+  const d=_finalRecapData;if(!d?.rekap)return;
+  const r=d.rekap,p=Array.isArray(d.peserta)?d.peserta:[];
+  const named=_finalRecapMode==='nama';
+  const statusText=d.final?'Rekap Final - data terkunci':'Preview Rekap - acara belum ditutup';
+  const subtitle=[finalRecapFmtDate(r.tanggal),r.waktu?String(r.waktu).slice(0,5):'',r.waktu_selesai?String(r.waktu_selesai).slice(0,5):'',r.lokasi||'',r.kelompok||''].filter(Boolean);
+  let body=`<main class="report ${named?'named':'anon'}">
+    <header class="p-head"><div><h1>${ubnbPrintEsc(r.acara||'Rekap Acara')}</h1><p>${ubnbPrintEsc(subtitle.join(' · '))}</p></div><div class="p-state">${ubnbPrintEsc(statusText)}</div></header>
+    ${ubnbPrintSummaryCards(r)}
+    <div class="p-breaks">${ubnbPrintBreak('Laki-laki / Perempuan',r.gender)}${ubnbPrintBreak('Status Menikah',r.status_menikah)}${ubnbPrintBreak('Status Sambung',r.status_sambung)}${ubnbPrintBreak('Kelas KBM - Belum Menikah',r.kelas_kbm)}</div>
+    <div class="p-note">Absen pertama <b>${ubnbPrintEsc(r.hadir_pertama||'-')}</b> · terakhir <b>${ubnbPrintEsc(r.hadir_terakhir||'-')}</b>${r.cara_absen?' · '+Object.entries(r.cara_absen).map(([k,v])=>ubnbPrintEsc(k)+' <b>'+Number(v||0)+'</b>').join(' · '):''}</div>
+    ${named?ubnbPrintDetails(r,p):'<div class="p-anon-note"><b>Rekap tanpa nama.</b> Dokumen ini hanya menampilkan statistik agregat dan tidak memuat identitas peserta.</div>'}
+  </main>`;
+
+  const page=named?'A4 landscape':'A4 portrait';
+  const w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rekap ${ubnbPrintEsc(r.acara||'Acara')}</title><style>
+    *{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+    html,body{margin:0;padding:0;background:white;color:#17201c;font-family:Arial,Helvetica,sans-serif;font-size:10pt}
+    @page{size:${page};margin:9mm}
+    .report{max-width:none;margin:0 auto}.p-head{display:flex;justify-content:space-between;gap:12mm;align-items:flex-start;border:1px solid #b8c8c0;border-left:4px solid #147a59;border-radius:2.5mm;padding:4mm 5mm;margin-bottom:4mm}
+    .p-head h1{font-size:18pt;line-height:1.05;margin:0 0 1.5mm;color:#0e6449}.p-head p{font-size:10pt;line-height:1.35;margin:0;color:#374151}.p-state{font-size:9pt;font-weight:700;color:#475569;text-align:right;white-space:nowrap;padding-top:1mm}
+    .p-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:2.2mm;margin-bottom:4mm}.p-stat{border:1px solid #c9d3ce;border-radius:2mm;padding:3mm 2mm;text-align:center;min-height:17mm;background:#fff}.p-stat b{display:block;font-size:18pt;line-height:1;color:#17201c;margin-bottom:1.5mm}.p-stat span{font-size:8.5pt;font-weight:700;color:#4b5563}.p-stat.good{background:#f0fdf4}.p-stat.warn{background:#fffbeb}.p-stat.bad{background:#fef2f2}
+    .p-breaks{display:grid;grid-template-columns:repeat(2,1fr);gap:3mm;margin-bottom:3mm}.p-break{border:1px solid #c9d3ce;border-radius:2mm;overflow:hidden;break-inside:avoid}.p-break h4{font-size:10pt;margin:0;padding:2.4mm 3mm;background:#eef6f2;color:#124f3c}.p-br-head,.p-br-row{display:grid;grid-template-columns:minmax(0,1fr) 18mm 18mm;gap:2mm;align-items:center;padding:1.7mm 3mm;border-top:1px solid #e4e9e6;font-size:9pt}.p-br-head{font-weight:700;background:#fafcfb}.p-br-head b,.p-br-row b{text-align:right}.p-note{border:1px solid #eadb9a;background:#fffdf1;border-radius:2mm;padding:2.5mm 3mm;font-size:9.5pt;line-height:1.4;margin-bottom:4mm}
+    .p-anon-note{margin-top:5mm;border:1px solid #cbd5e1;background:#f8fafc;border-radius:2mm;padding:4mm;font-size:11pt;line-height:1.45}.p-details{break-before:page}.p-section-title{font-size:14pt;font-weight:800;color:#0e6449;margin:0 0 3mm;border-bottom:1.5px solid #0e6449;padding-bottom:2mm}
+    .p-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt;line-height:1.25}.p-table thead{display:table-header-group}.p-table th{background:#146b50;color:#fff;border:1px solid #0d553f;padding:2.3mm 1.6mm;text-align:left;font-size:8.5pt;vertical-align:middle}.p-table td{border:1px solid #cfd8d3;padding:2.2mm 1.6mm;vertical-align:top;overflow-wrap:break-word;word-break:normal}.p-table tr{break-inside:avoid;page-break-inside:avoid}.p-table td.c{text-align:center;vertical-align:middle}.p-table td strong{font-size:9.3pt}.p-table td small{display:block;margin-top:.8mm;color:#5f6b65;font-size:7.8pt;line-height:1.25}.p-group td{background:#eaf4ef!important;color:#0f5f46!important;font-weight:800!important;font-size:10pt!important;padding:2.2mm 2mm!important;border-top:1.5px solid #70a590!important}.p-status{font-weight:800;text-align:center;vertical-align:middle!important}.p-status.hadir{background:#ecfdf5}.p-status.izin{background:#eff6ff}.p-status.sakit{background:#faf5ff}.p-status.tidak{background:#fff1f2}
+    .anon .p-head h1{font-size:20pt}.anon .p-stats{grid-template-columns:repeat(2,1fr);gap:3mm}.anon .p-stat{min-height:23mm;padding:4mm}.anon .p-stat b{font-size:23pt}.anon .p-stat span{font-size:10pt}.anon .p-breaks{grid-template-columns:1fr;gap:3mm}.anon .p-break h4{font-size:12pt}.anon .p-br-head,.anon .p-br-row{font-size:10.5pt;padding:2.4mm 3.5mm}.anon .p-note{font-size:10.5pt}
+  </style></head><body>${body}<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  w.document.close();
+};
+/* ===== END REPORT CETAK READABLE v4 ===== */
+</script>
 </body>
 </html>
