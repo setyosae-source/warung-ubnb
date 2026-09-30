@@ -14248,5 +14248,111 @@ ${table.outerHTML}
 })();
 </script>
 
+
+
+<script id="ubnb-v28-pengurus-ibu-tab-fix">
+(function(){
+  // Shared state. Patch v11 sebelumnya menyimpan pengTab di lexical scope,
+  // sementara renderPengurus v15 berada di scope lain sehingga selalu kembali ke Bapak-bapak.
+  if(!window.__ubnbPengurusTab){
+    window.__ubnbPengurusTab = (_pengurusGenderTab==='perempuan') ? 'ibu' : 'bapak';
+  }
+
+  function v28PengMatches(r,q){
+    if(!q)return true;
+    const j=r.jamaah||pgJamaahRow(r.did)||{};
+    const hay=[
+      r.dapukan,r.level,r.kelompok_nama,r.unit_nama,
+      j.nama,j.nama_kk,j.kelompok_nama,
+      r.husband?.nama,(r.husband_dapukan||[]).join(' ')
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  }
+
+  window.v11SetPengTab=function(t){
+    window.__ubnbPengurusTab = (t==='ibu') ? 'ibu' : 'bapak';
+    _pengurusGenderTab = window.__ubnbPengurusTab==='ibu' ? 'perempuan' : 'utama';
+    renderPengurus();
+  };
+
+  // Sinkronkan juga handler lama bila masih terpanggil dari elemen legacy.
+  window.showPengurusGenderTab=function(tab){
+    window.__ubnbPengurusTab = tab==='perempuan' ? 'ibu' : 'bapak';
+    _pengurusGenderTab = tab==='perempuan' ? 'perempuan' : 'utama';
+    renderPengurus();
+  };
+
+  window.renderPengurus=function(){
+    const wrap=document.getElementById('pengurus-wrap');
+    if(!wrap)return;
+
+    const q=(document.getElementById('v11-peng-search')?.value||'').trim().toLowerCase();
+    const appointed=pgSortRows(pgBuildAppointedRows());
+    const males=appointed
+      .filter(r=>pgNormGender(r.jamaah?.jenis_kelamin)==='L')
+      .filter(r=>v28PengMatches(r,q));
+    const women=pgBuildWomenRows().rows.filter(r=>v28PengMatches(r,q));
+
+    const current=window.__ubnbPengurusTab==='ibu'?'ibu':'bapak';
+    _pengurusGenderTab=current==='ibu'?'perempuan':'utama';
+    const rows=current==='ibu'?women:males;
+
+    wrap.innerHTML=`
+      <div class="v11-peng-toolbar">
+        <button type="button"
+          class="v11-peng-card ${current==='bapak'?'active':''}"
+          onclick="v11SetPengTab('bapak')">
+          <span class="v15-peng-label">Bapak-bapak</span>
+          <span class="v15-peng-count">${males.length} data</span>
+        </button>
+
+        <button type="button"
+          class="v11-peng-card ${current==='ibu'?'active':''}"
+          onclick="v11SetPengTab('ibu')">
+          <span class="v15-peng-label">Ibu-ibu</span>
+          <span class="v15-peng-count">${women.length} data</span>
+        </button>
+
+        <button type="button"
+          class="v11-peng-card"
+          onclick="bukaModalExportPengurus()">
+          <span class="v15-peng-label">↓ Export</span>
+        </button>
+      </div>
+
+      <input id="v11-peng-search"
+        class="v11-peng-search"
+        value="${escH(q)}"
+        placeholder="Cari nama, dapukan, KK, kelompok..."
+        oninput="renderPengurus()">
+
+      <div id="v11-peng-tables">${pgRenderGroupedTables(rows)}</div>`;
+
+    wrap.querySelectorAll('.peng-table-section').forEach(sec=>{
+      const title=sec.querySelector('.peng-table-title');
+      if(title&&!title.dataset.v28){
+        title.dataset.v28='1';
+        title.addEventListener('click',e=>{
+          if(e.target.closest('button'))return;
+          sec.classList.toggle('v11-collapsed');
+        });
+      }
+    });
+  };
+
+  // Saat membuka subtab Pengurus, pertahankan pilihan terakhir.
+  const prevShowSub=window.showJamaahSub;
+  if(typeof prevShowSub==='function'){
+    window.showJamaahSub=function(sub){
+      const r=prevShowSub.apply(this,arguments);
+      if(sub==='pengurus'){
+        setTimeout(()=>renderPengurus(),25);
+      }
+      return r;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
