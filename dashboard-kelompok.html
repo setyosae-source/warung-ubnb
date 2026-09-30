@@ -13767,5 +13767,220 @@ ${table.outerHTML}
 })();
 </script>
 
+
+
+<style id="ubnb-v25-agenda-aligned-rows-style">
+#agenda-table tbody tr.v25-agenda-event-row td{
+  vertical-align:top!important;
+}
+#agenda-table tbody tr.v25-agenda-event-row + tr.v25-agenda-event-row td{
+  border-top:1px solid #d7dfda!important;
+}
+#agenda-table td.v25-date-cell{
+  vertical-align:top!important;
+  font-weight:500;
+  white-space:nowrap!important;
+}
+#agenda-table td.v25-event-cell{
+  padding-top:7px!important;
+  padding-bottom:7px!important;
+}
+#agenda-table .v25-empty-cell{
+  color:#94a3b8;
+}
+#agenda-table tr.v22-sunday-row td{
+  background:#eef6f1!important;
+}
+#agenda-table tr.v24-family-row td{
+  background:#fff4dc!important;
+}
+#agenda-table .v22-event-line{
+  padding:0!important;
+  border-top:0!important;
+  margin:0!important;
+}
+</style>
+
+
+<script id="ubnb-v25-agenda-aligned-rows-script">
+(function(){
+  function v25ParseISO(iso){
+    const [y,m,d]=String(iso||'').split('-').map(Number);
+    return new Date(Date.UTC(y,m-1,d));
+  }
+  function v25ISO(dt){ return dt.toISOString().slice(0,10); }
+  function v25AddDays(iso,n){
+    const d=v25ParseISO(iso);
+    d.setUTCDate(d.getUTCDate()+n);
+    return v25ISO(d);
+  }
+  function v25Dates(from,to){
+    const out=[];
+    let cur=from;
+    while(cur<=to && out.length<31){
+      out.push(cur);
+      cur=v25AddDays(cur,1);
+    }
+    return out;
+  }
+  function v25DayName(iso){
+    return new Intl.DateTimeFormat('id-ID',{weekday:'long',timeZone:'UTC'}).format(v25ParseISO(iso));
+  }
+  function v25DateText(iso){
+    return new Intl.DateTimeFormat('id-ID',{
+      day:'numeric',month:'short',year:'numeric',timeZone:'UTC'
+    }).format(v25ParseISO(iso));
+  }
+  function v25IsSunday(iso){
+    return v25ParseISO(iso).getUTCDay()===0;
+  }
+  function v25WeekNo(iso){
+    const d=v25ParseISO(iso);
+    if(d.getUTCDay()!==0)return null;
+    const day=d.getUTCDate();
+    if(day===1)return null;
+    let n=0;
+    const y=d.getUTCFullYear();
+    const m=d.getUTCMonth();
+    for(let dd=2; dd<=day; dd++){
+      const x=new Date(Date.UTC(y,m,dd));
+      if(x.getUTCDay()===0)n++;
+    }
+    return n||null;
+  }
+  function v25ScopeMatch(e,scope,group){
+    if(e.cancelled||e.status==='dibatalkan')return false;
+    if(scope==='desa')return ['daerah','desa'].includes(e.scope_level);
+    return e.scope_level==='daerah' ||
+           e.scope_level==='desa' ||
+           (e.scope_level==='kelompok' && e.scope_kelompok===group);
+  }
+  function v25EventsByDate(from,to){
+    const scope=document.getElementById('agenda-scope')?.value||'desa';
+    const group=document.getElementById('agenda-group')?.value||'PW1';
+    const map=new Map();
+
+    const rows=calendarEntries(from,to)
+      .filter(e=>v25ScopeMatch(e,scope,group) || e.family_day)
+      .sort((a,b)=>
+        a.date.localeCompare(b.date) ||
+        (a.time||'99:99').localeCompare(b.time||'99:99') ||
+        String(a.name||'').localeCompare(String(b.name||''),'id')
+      );
+
+    rows.forEach(e=>{
+      if(!map.has(e.date))map.set(e.date,[]);
+      map.get(e.date).push(e);
+    });
+    return map;
+  }
+  function v25Time(e){
+    if(!e?.time)return '—';
+    return escH(e.time)+(e.end_time?`–${escH(e.end_time)}`:'');
+  }
+  function v25Place(e){
+    return escH(e?.location||'—');
+  }
+  function v25Name(e){
+    return `<b>${escH(e?.name||'—')}</b>`;
+  }
+  function v25Note(e){
+    return escH(e?.catatan||'—');
+  }
+  function v25DateCell(date,rowspan){
+    const sunday=v25IsSunday(date);
+    const week=v25WeekNo(date);
+    const tag=(sunday&&week)?` <span class="v22-week-tag">Minggu ke-${week}</span>`:'';
+    return `<td class="v25-date-cell" rowspan="${rowspan}" contenteditable="true">
+      <b>${escH(v25DayName(date))}</b>, ${escH(v25DateText(date))}${tag}
+    </td>`;
+  }
+
+  window.createAgendaPreview=function(){
+    const box=document.getElementById('agenda-preview');
+    if(!box)return;
+
+    const from=document.getElementById('agenda-from')?.value;
+    const to=document.getElementById('agenda-to')?.value;
+
+    if(!from||!to){
+      box.innerHTML='<div class="cal-empty">Tentukan rentang tanggal terlebih dahulu.</div>';
+      return;
+    }
+    if(from>to){
+      box.innerHTML='<div class="cal-empty">Tanggal akhir tidak boleh sebelum tanggal awal.</div>';
+      return;
+    }
+
+    const days=Math.floor((v25ParseISO(to)-v25ParseISO(from))/86400000)+1;
+    if(days>31){
+      box.innerHTML='<div class="cal-empty">Rentang Agenda maksimal 31 hari.</div>';
+      return;
+    }
+
+    const dates=v25Dates(from,to);
+    const events=v25EventsByDate(from,to);
+    const rowHtml=[];
+
+    dates.forEach(date=>{
+      const list=events.get(date)||[];
+      const sunday=v25IsSunday(date);
+
+      if(!list.length){
+        rowHtml.push(`
+          <tr class="${sunday?'v22-sunday-row':''}">
+            ${v25DateCell(date,1)}
+            <td class="v25-event-cell v25-empty-cell" contenteditable="true">—</td>
+            <td class="v25-event-cell v25-empty-cell" contenteditable="true">—</td>
+            <td class="v25-event-cell v25-empty-cell" contenteditable="true">—</td>
+            <td class="v25-event-cell v25-empty-cell" contenteditable="true">—</td>
+          </tr>`);
+        return;
+      }
+
+      list.forEach((e,idx)=>{
+        const family=e?.family_day || String(e?.name||'').trim().toLowerCase()==='hari keluarga';
+        const classes=[
+          'v25-agenda-event-row',
+          sunday?'v22-sunday-row':'',
+          family?'v24-family-row':''
+        ].filter(Boolean).join(' ');
+
+        rowHtml.push(`
+          <tr class="${classes}">
+            ${idx===0?v25DateCell(date,list.length):''}
+            <td class="v25-event-cell" contenteditable="true">${v25Time(e)}</td>
+            <td class="v25-event-cell" contenteditable="true">${v25Place(e)}</td>
+            <td class="v25-event-cell" contenteditable="true">${v25Name(e)}</td>
+            <td class="v25-event-cell" contenteditable="true">${v25Note(e)}</td>
+          </tr>`);
+      });
+    });
+
+    box.innerHTML=`
+      <div class="v11-agenda-tools">
+        <label>Ukuran font</label>
+        <input id="agenda-font" type="number" min="9" max="15" value="11" onchange="agendaFontChange(this.value)">
+        <button onclick="printAgendaPDF()">Cetak / PDF</button>
+        <small style="font-size:11px;color:#64748b">Tap cell untuk edit.</small>
+      </div>
+      <div class="v11-agenda-table-wrap">
+        <table id="agenda-table" class="v11-agenda-table" style="font-size:11px">
+          <thead>
+            <tr>
+              <th>Hari / Tanggal</th>
+              <th>Waktu</th>
+              <th>Tempat</th>
+              <th>Kegiatan / Acara</th>
+              <th>Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>${rowHtml.join('')}</tbody>
+        </table>
+      </div>`;
+  };
+})();
+</script>
+
 </body>
 </html>
