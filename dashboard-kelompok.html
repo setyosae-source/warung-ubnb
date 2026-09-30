@@ -13204,5 +13204,263 @@ ${table.outerHTML}
 })();
 </script>
 
+
+
+<style id="ubnb-v23-agenda-week-date-style">
+/* Hari/Tanggal dibuat lebih lebar dan dipaksa 1 baris */
+.v11-agenda-table th:nth-child(1),
+.v11-agenda-table td:nth-child(1){
+  width:190px!important;
+  min-width:190px!important;
+  white-space:nowrap!important;
+}
+.v11-agenda-table th:nth-child(2),
+.v11-agenda-table td:nth-child(2){width:95px!important}
+.v11-agenda-table th:nth-child(3),
+.v11-agenda-table td:nth-child(3){width:125px!important}
+.v11-agenda-table th:nth-child(4),
+.v11-agenda-table td:nth-child(4){width:185px!important}
+.v11-agenda-table th:nth-child(5),
+.v11-agenda-table td:nth-child(5){width:auto!important}
+
+.v22-week-tag{
+  white-space:nowrap!important;
+}
+
+@media print{
+  .v11-agenda-table th:nth-child(1),
+  .v11-agenda-table td:nth-child(1){
+    width:24%!important;
+    min-width:0!important;
+    white-space:nowrap!important;
+  }
+  .v11-agenda-table th:nth-child(2),
+  .v11-agenda-table td:nth-child(2){width:12%!important}
+  .v11-agenda-table th:nth-child(3),
+  .v11-agenda-table td:nth-child(3){width:16%!important}
+  .v11-agenda-table th:nth-child(4),
+  .v11-agenda-table td:nth-child(4){width:23%!important}
+  .v11-agenda-table th:nth-child(5),
+  .v11-agenda-table td:nth-child(5){width:25%!important}
+}
+</style>
+
+
+<script id="ubnb-v23-agenda-week-date-script">
+(function(){
+  function p23Parse(iso){
+    const [y,m,d]=String(iso||'').split('-').map(Number);
+    return new Date(Date.UTC(y,m-1,d));
+  }
+  function p23ISO(dt){ return dt.toISOString().slice(0,10); }
+  function p23Add(iso,n){
+    const d=p23Parse(iso);
+    d.setUTCDate(d.getUTCDate()+n);
+    return p23ISO(d);
+  }
+  function p23Dates(from,to){
+    const out=[];
+    let cur=from;
+    while(cur<=to && out.length<31){
+      out.push(cur);
+      cur=p23Add(cur,1);
+    }
+    return out;
+  }
+  function p23IsSunday(iso){
+    return p23Parse(iso).getUTCDay()===0;
+  }
+  function p23DayName(iso){
+    return new Intl.DateTimeFormat('id-ID',{weekday:'long',timeZone:'UTC'}).format(p23Parse(iso));
+  }
+  function p23DateText(iso){
+    return new Intl.DateTimeFormat('id-ID',{
+      day:'numeric',month:'short',year:'numeric',timeZone:'UTC'
+    }).format(p23Parse(iso));
+  }
+
+  // Ketentuan user:
+  // Minggu ke-1 = hari Minggu pertama dalam bulan yang tanggalnya BUKAN tanggal 1.
+  // Jika tanggal 1 jatuh pada Minggu, tanggal 1 tetap diberi shade tetapi belum bernomor.
+  // Minggu berikutnya (tgl 8) menjadi Minggu ke-1.
+  function p23WeekNo(iso){
+    const d=p23Parse(iso);
+    if(d.getUTCDay()!==0)return null;
+    const day=d.getUTCDate();
+    if(day===1)return null;
+
+    let n=0;
+    const y=d.getUTCFullYear();
+    const m=d.getUTCMonth();
+    for(let dd=2; dd<=day; dd++){
+      const x=new Date(Date.UTC(y,m,dd));
+      if(x.getUTCDay()===0)n++;
+    }
+    return n || null;
+  }
+
+  function p23ScopeMatch(e,scope,group){
+    if(e.cancelled||e.status==='dibatalkan')return false;
+    if(scope==='desa')return ['daerah','desa'].includes(e.scope_level);
+    return e.scope_level==='daerah'||
+           e.scope_level==='desa'||
+           (e.scope_level==='kelompok'&&e.scope_kelompok===group);
+  }
+  function p23EventsByDate(from,to){
+    const scope=document.getElementById('agenda-scope')?.value||'desa';
+    const group=document.getElementById('agenda-group')?.value||'PW1';
+    const map=new Map();
+    const rows=calendarEntries(from,to)
+      .filter(e=>p23ScopeMatch(e,scope,group))
+      .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+    rows.forEach(e=>{
+      if(!map.has(e.date))map.set(e.date,[]);
+      map.get(e.date).push(e);
+    });
+    return map;
+  }
+  function p23Line(value,empty='—'){
+    if(!value)return `<div class="v22-event-line v22-empty">${empty}</div>`;
+    return `<div class="v22-event-line">${value}</div>`;
+  }
+  function p23Time(e){
+    if(!e.time)return '—';
+    return escH(e.time)+(e.end_time?`–${escH(e.end_time)}`:'');
+  }
+
+  window.createAgendaPreview=function(){
+    const box=document.getElementById('agenda-preview');
+    if(!box)return;
+
+    const from=document.getElementById('agenda-from')?.value;
+    const to=document.getElementById('agenda-to')?.value;
+    if(!from||!to){
+      box.innerHTML='<div class="cal-empty">Tentukan rentang tanggal terlebih dahulu.</div>';
+      return;
+    }
+    if(from>to){
+      box.innerHTML='<div class="cal-empty">Tanggal akhir tidak boleh sebelum tanggal awal.</div>';
+      return;
+    }
+
+    const days=Math.floor((p23Parse(to)-p23Parse(from))/86400000)+1;
+    if(days>31){
+      box.innerHTML='<div class="cal-empty">Rentang Agenda maksimal 31 hari.</div>';
+      return;
+    }
+
+    const dates=p23Dates(from,to);
+    const events=p23EventsByDate(from,to);
+
+    const rows=dates.map(date=>{
+      const list=events.get(date)||[];
+      const sunday=p23IsSunday(date);
+      const week=p23WeekNo(date);
+
+      // Hari/tanggal dalam 1 baris.
+      const firstCell=
+        `<span><b>${escH(p23DayName(date))}</b>, ${escH(p23DateText(date))}</span>`+
+        (sunday&&week?` <span class="v22-week-tag">Minggu ke-${week}</span>`:'');
+
+      const times=list.length
+        ?list.map(e=>p23Line(p23Time(e))).join('')
+        :p23Line('');
+      const places=list.length
+        ?list.map(e=>p23Line(escH(e.location||'—'))).join('')
+        :p23Line('');
+      const names=list.length
+        ?list.map(e=>p23Line(`<b>${escH(e.name||'—')}</b>`)).join('')
+        :p23Line('');
+      const notes=list.length
+        ?list.map(e=>p23Line(escH(e.catatan||'—'))).join('')
+        :p23Line('');
+
+      return `<tr class="${sunday?'v22-sunday-row':''}">
+        <td contenteditable="true">${firstCell}</td>
+        <td contenteditable="true">${times}</td>
+        <td contenteditable="true">${places}</td>
+        <td contenteditable="true">${names}</td>
+        <td contenteditable="true">${notes}</td>
+      </tr>`;
+    }).join('');
+
+    box.innerHTML=`
+      <div class="v11-agenda-tools">
+        <label>Ukuran font</label>
+        <input id="agenda-font" type="number" min="9" max="15" value="11" onchange="agendaFontChange(this.value)">
+        <button onclick="printAgendaPDF()">Cetak / PDF</button>
+        <small style="font-size:11px;color:#64748b">Tap cell untuk edit.</small>
+      </div>
+      <div class="v11-agenda-table-wrap">
+        <table id="agenda-table" class="v11-agenda-table" style="font-size:11px">
+          <thead>
+            <tr>
+              <th>Hari / Tanggal</th>
+              <th>Waktu</th>
+              <th>Tempat</th>
+              <th>Kegiatan / Acara</th>
+              <th>Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  };
+
+  // Override PDF supaya kolom Hari/Tanggal juga tetap 1 baris.
+  window.printAgendaPDF=function(){
+    const table=document.getElementById('agenda-table');
+    if(!table)return;
+    const fs=Math.max(9,Math.min(15,Number(document.getElementById('agenda-font')?.value)||11));
+    const from=document.getElementById('agenda-from')?.value||'';
+    const to=document.getElementById('agenda-to')?.value||'';
+    const scope=document.getElementById('agenda-scope')?.selectedOptions?.[0]?.textContent||'';
+    const group=document.getElementById('agenda-group')?.value||'';
+    const scopeText=(document.getElementById('agenda-scope')?.value==='kelompok' && group)
+      ?`${scope} · ${group}`:scope;
+
+    const w=window.open('','_blank');
+    if(!w){toast('Popup diblokir browser',true);return;}
+
+    w.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Agenda Kegiatan</title>
+<style>
+@page{size:A4 portrait;margin:9mm}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;color:#111;margin:0}
+h2{font-size:16px;margin:0 0 3px;color:#176a41}
+.meta{font-size:10.5px;color:#475569;margin-bottom:8px}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:${fs}px}
+th{background:#176a41;color:#fff;padding:6px 5px;text-align:left;border:1px solid #176a41}
+td{border:1px solid #cbd5e1;padding:5px;vertical-align:top;line-height:1.3;overflow-wrap:anywhere}
+th:nth-child(1),td:nth-child(1){width:24%;white-space:nowrap}
+th:nth-child(2),td:nth-child(2){width:12%}
+th:nth-child(3),td:nth-child(3){width:16%}
+th:nth-child(4),td:nth-child(4){width:23%}
+th:nth-child(5),td:nth-child(5){width:25%}
+.v22-sunday-row td{background:#eef6f1!important;border-top:2px solid #6f9f82}
+.v22-sunday-row td:first-child{box-shadow:inset 3px 0 0 #176a41}
+.v22-week-tag{display:inline-block;margin-left:3px;padding:1px 4px;background:#dceee4;color:#176a41;font-size:.78em;font-weight:bold;white-space:nowrap}
+.v22-event-line{padding:1px 0}
+.v22-event-line+.v22-event-line{border-top:1px dashed #cbd5e1;margin-top:2px;padding-top:3px}
+.v22-empty{color:#94a3b8}
+b{font-weight:600}
+</style>
+</head>
+<body>
+<h2>Agenda Kegiatan</h2>
+<div class="meta">${escH(scopeText)} · ${escH(p23DateText(from))} s.d. ${escH(p23DateText(to))}</div>
+${table.outerHTML}
+</body>
+</html>`);
+    w.document.close();
+    setTimeout(()=>w.print(),250);
+  };
+})();
+</script>
+
 </body>
 </html>
