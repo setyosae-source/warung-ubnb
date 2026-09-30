@@ -12889,5 +12889,320 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
 }
 </style>
 
+
+
+<style id="ubnb-v22-agenda-calendar-style">
+/* Agenda v22: semua tanggal berurutan, Minggu diberi shade */
+#modal-agenda-kegiatan .modal{max-width:820px!important}
+.v22-agenda-range-note{
+  grid-column:1/-1;
+  font-size:12px;
+  color:#64748b;
+  line-height:1.35;
+  margin-top:-1px;
+}
+.v11-agenda-table{min-width:720px!important}
+.v11-agenda-table th,
+.v11-agenda-table td{padding:7px!important}
+.v11-agenda-table th:nth-child(1){width:150px}
+.v11-agenda-table th:nth-child(2){width:105px}
+.v11-agenda-table th:nth-child(3){width:150px}
+.v11-agenda-table th:nth-child(4){width:210px}
+.v11-agenda-table th:nth-child(5){width:auto}
+.v22-sunday-row td{
+  background:#eef6f1!important;
+  border-top:2px solid #8fb6a0!important;
+}
+.v22-sunday-row td:first-child{
+  box-shadow:inset 4px 0 0 #176a41;
+}
+.v22-week-tag{
+  display:inline-block;
+  margin-top:4px;
+  padding:2px 6px;
+  border-radius:4px;
+  background:#dceee4;
+  color:#176a41;
+  font-size:11px;
+  font-weight:700;
+}
+.v22-event-line{
+  padding:2px 0;
+  min-height:18px;
+}
+.v22-event-line + .v22-event-line{
+  border-top:1px dashed #d7dfda;
+  margin-top:3px;
+  padding-top:5px;
+}
+.v22-empty{
+  color:#94a3b8;
+}
+@media(max-width:650px){
+  .v11-agenda-table{min-width:760px!important}
+}
+</style>
+
+
+<script id="ubnb-v22-agenda-calendar-script">
+(function(){
+  function v22ParseISO(iso){
+    const [y,m,d]=String(iso||'').split('-').map(Number);
+    return new Date(Date.UTC(y,m-1,d));
+  }
+  function v22ISO(dt){
+    return dt.toISOString().slice(0,10);
+  }
+  function v22AddDays(iso,n){
+    const d=v22ParseISO(iso);
+    d.setUTCDate(d.getUTCDate()+n);
+    return v22ISO(d);
+  }
+  function v22DaysInclusive(from,to){
+    return Math.floor((v22ParseISO(to)-v22ParseISO(from))/86400000)+1;
+  }
+  function v22Dates(from,to){
+    const out=[];
+    let cur=from;
+    while(cur<=to && out.length<31){
+      out.push(cur);
+      cur=v22AddDays(cur,1);
+    }
+    return out;
+  }
+  function v22DayName(iso){
+    return new Intl.DateTimeFormat('id-ID',{weekday:'long',timeZone:'UTC'}).format(v22ParseISO(iso));
+  }
+  function v22DateText(iso){
+    return new Intl.DateTimeFormat('id-ID',{
+      day:'numeric',month:'short',year:'numeric',timeZone:'UTC'
+    }).format(v22ParseISO(iso));
+  }
+  function v22IsSunday(iso){
+    return v22ParseISO(iso).getUTCDay()===0;
+  }
+  function v22WeekNo(from,iso){
+    let w=1,cur=from;
+    while(cur<iso){
+      cur=v22AddDays(cur,1);
+      if(cur<=iso && v22IsSunday(cur))w++;
+    }
+    return w;
+  }
+  function v22ScopeMatch(e,scope,group){
+    if(e.cancelled||e.status==='dibatalkan')return false;
+    if(scope==='desa')return ['daerah','desa'].includes(e.scope_level);
+    return e.scope_level==='daerah'||
+           e.scope_level==='desa'||
+           (e.scope_level==='kelompok'&&e.scope_kelompok===group);
+  }
+  function v22EventsByDate(from,to){
+    const scope=document.getElementById('agenda-scope')?.value||'desa';
+    const group=document.getElementById('agenda-group')?.value||'PW1';
+    const map=new Map();
+    const rows=calendarEntries(from,to)
+      .filter(e=>v22ScopeMatch(e,scope,group))
+      .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+    rows.forEach(e=>{
+      if(!map.has(e.date))map.set(e.date,[]);
+      map.get(e.date).push(e);
+    });
+    return map;
+  }
+  function v22EventLine(value,empty='—'){
+    if(!value)return `<div class="v22-event-line v22-empty">${empty}</div>`;
+    return `<div class="v22-event-line">${value}</div>`;
+  }
+  function v22Time(e){
+    if(!e.time)return '—';
+    return escH(e.time)+(e.end_time?`–${escH(e.end_time)}`:'');
+  }
+  function v22Place(e){
+    return escH(e.location||'—');
+  }
+  function v22Name(e){
+    return `<b>${escH(e.name||'—')}</b>`;
+  }
+  function v22Note(e){
+    return escH(e.catatan||'—');
+  }
+
+  function v22LimitDateInputs(){
+    const from=document.getElementById('agenda-from');
+    const to=document.getElementById('agenda-to');
+    if(!from||!to)return;
+    if(from.value){
+      to.min=from.value;
+      to.max=v22AddDays(from.value,30);
+      if(to.value && (to.value<from.value || to.value>to.max)){
+        to.value=to.max;
+      }
+    }
+  }
+  window.v22AgendaFromChanged=function(){
+    v22LimitDateInputs();
+  };
+
+  function v22PatchModal(){
+    const from=document.getElementById('agenda-from');
+    const to=document.getElementById('agenda-to');
+    if(!from||!to)return;
+    from.setAttribute('onchange','v22AgendaFromChanged()');
+    const config=from.closest('.v11-agenda-config');
+    if(config && !config.querySelector('.v22-agenda-range-note')){
+      const note=document.createElement('div');
+      note.className='v22-agenda-range-note';
+      note.textContent='Rentang maksimal 31 hari. Semua tanggal tetap tampil berurutan, termasuk hari tanpa kegiatan.';
+      const btn=config.querySelector('.v11-agenda-create');
+      if(btn)config.insertBefore(note,btn);
+      else config.appendChild(note);
+    }
+    v22LimitDateInputs();
+  }
+
+  const oldOpen=window.openAgendaKegiatan;
+  window.openAgendaKegiatan=function(){
+    const r=typeof oldOpen==='function'?oldOpen.apply(this,arguments):undefined;
+    setTimeout(v22PatchModal,0);
+    return r;
+  };
+
+  window.createAgendaPreview=function(){
+    const box=document.getElementById('agenda-preview');
+    if(!box)return;
+
+    const from=document.getElementById('agenda-from')?.value;
+    const to=document.getElementById('agenda-to')?.value;
+    if(!from||!to){
+      box.innerHTML='<div class="cal-empty">Tentukan rentang tanggal terlebih dahulu.</div>';
+      return;
+    }
+    if(from>to){
+      box.innerHTML='<div class="cal-empty">Tanggal akhir tidak boleh sebelum tanggal awal.</div>';
+      return;
+    }
+    const days=v22DaysInclusive(from,to);
+    if(days>31){
+      box.innerHTML='<div class="cal-empty">Rentang Agenda maksimal 31 hari.</div>';
+      return;
+    }
+
+    const dates=v22Dates(from,to);
+    const events=v22EventsByDate(from,to);
+
+    const rows=dates.map(date=>{
+      const list=events.get(date)||[];
+      const sunday=v22IsSunday(date);
+      const week=v22WeekNo(from,date);
+      const firstCell=
+        `<b>${escH(v22DayName(date))}</b><br>${escH(v22DateText(date))}`+
+        (sunday?`<br><span class="v22-week-tag">Minggu ke-${week}</span>`:'');
+
+      const times=list.length
+        ?list.map(e=>v22EventLine(v22Time(e))).join('')
+        :v22EventLine('');
+      const places=list.length
+        ?list.map(e=>v22EventLine(v22Place(e))).join('')
+        :v22EventLine('');
+      const names=list.length
+        ?list.map(e=>v22EventLine(v22Name(e))).join('')
+        :v22EventLine('');
+      const notes=list.length
+        ?list.map(e=>v22EventLine(v22Note(e))).join('')
+        :v22EventLine('');
+
+      return `<tr class="${sunday?'v22-sunday-row':''}">
+        <td contenteditable="true">${firstCell}</td>
+        <td contenteditable="true">${times}</td>
+        <td contenteditable="true">${places}</td>
+        <td contenteditable="true">${names}</td>
+        <td contenteditable="true">${notes}</td>
+      </tr>`;
+    }).join('');
+
+    box.innerHTML=`
+      <div class="v11-agenda-tools">
+        <label>Ukuran font</label>
+        <input id="agenda-font" type="number" min="9" max="15" value="11" onchange="agendaFontChange(this.value)">
+        <button onclick="printAgendaPDF()">Cetak / PDF</button>
+        <small style="font-size:11px;color:#64748b">Tap cell untuk edit.</small>
+      </div>
+      <div class="v11-agenda-table-wrap">
+        <table id="agenda-table" class="v11-agenda-table" style="font-size:11px">
+          <thead>
+            <tr>
+              <th>Hari / Tanggal</th>
+              <th>Waktu</th>
+              <th>Tempat</th>
+              <th>Kegiatan / Acara</th>
+              <th>Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  };
+
+  window.agendaFontChange=function(v){
+    const t=document.getElementById('agenda-table');
+    if(t)t.style.fontSize=`${Math.max(9,Math.min(15,Number(v)||11))}px`;
+  };
+
+  window.printAgendaPDF=function(){
+    const table=document.getElementById('agenda-table');
+    if(!table)return;
+    const fs=Math.max(9,Math.min(15,Number(document.getElementById('agenda-font')?.value)||11));
+    const from=document.getElementById('agenda-from')?.value||'';
+    const to=document.getElementById('agenda-to')?.value||'';
+    const scope=document.getElementById('agenda-scope')?.selectedOptions?.[0]?.textContent||'';
+    const group=document.getElementById('agenda-group')?.value||'';
+    const scopeText=(document.getElementById('agenda-scope')?.value==='kelompok' && group)
+      ?`${scope} · ${group}`:scope;
+
+    const w=window.open('','_blank');
+    if(!w){toast('Popup diblokir browser',true);return;}
+
+    w.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Agenda Kegiatan</title>
+<style>
+@page{size:A4 portrait;margin:10mm}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;color:#111;margin:0}
+h2{font-size:16px;margin:0 0 3px;color:#176a41}
+.meta{font-size:10.5px;color:#475569;margin-bottom:8px}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:${fs}px}
+th{background:#176a41;color:#fff;padding:6px 5px;text-align:left;border:1px solid #176a41}
+td{border:1px solid #cbd5e1;padding:5px;vertical-align:top;line-height:1.3;overflow-wrap:anywhere}
+th:nth-child(1),td:nth-child(1){width:20%}
+th:nth-child(2),td:nth-child(2){width:13%}
+th:nth-child(3),td:nth-child(3){width:17%}
+th:nth-child(4),td:nth-child(4){width:25%}
+th:nth-child(5),td:nth-child(5){width:25%}
+.v22-sunday-row td{background:#eef6f1!important;border-top:2px solid #6f9f82}
+.v22-sunday-row td:first-child{box-shadow:inset 3px 0 0 #176a41}
+.v22-week-tag{display:inline-block;margin-top:3px;padding:1px 4px;background:#dceee4;color:#176a41;font-size:.82em;font-weight:bold}
+.v22-event-line{padding:1px 0}
+.v22-event-line+.v22-event-line{border-top:1px dashed #cbd5e1;margin-top:2px;padding-top:3px}
+.v22-empty{color:#94a3b8}
+b{font-weight:600}
+</style>
+</head>
+<body>
+<h2>Agenda Kegiatan</h2>
+<div class="meta">${escH(scopeText)} · ${escH(v22DateText(from))} s.d. ${escH(v22DateText(to))}</div>
+${table.outerHTML}
+</body>
+</html>`);
+    w.document.close();
+    setTimeout(()=>w.print(),250);
+  };
+
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(v22PatchModal,350));
+})();
+</script>
+
 </body>
 </html>
