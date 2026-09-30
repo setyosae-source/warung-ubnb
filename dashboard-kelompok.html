@@ -12058,7 +12058,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     const all=critAllActive(row);
     const opts=(def.options||[]).map(([v,l])=>{
       const on=!all&&(row.values||[]).includes(v);
-      return `<label class="kg-opt ${on?'active':''}"><input type="checkbox" ${on?'checked':''} onchange="kgCriterionToggle(${index},${JSON.stringify(v)},this.checked)">${escH(l)}</label>`;
+      return `<label class="kg-opt ${on?'active':''}"><input type="checkbox" value="${escH(v)}" ${on?'checked':''} onchange="kgCriterionToggle(${index},${JSON.stringify(v)},this.checked,this)">${escH(l)}</label>`;
     }).join('');
     return `<button type="button" class="kg-opt ${all?'active':''}" onclick="kgCriterionAll(${index})">Semua</button>${opts||'<span class="kg-all-note">Belum ada opsi data.</span>'}`;
   }
@@ -12081,11 +12081,21 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
   window.kgCriterionRemove=function(i){_kgCriteriaRows.splice(i,1);renderKgCriteriaBuilder();previewPeserta();};
   window.kgCriterionType=function(i,type){_kgCriteriaRows[i]={type,values:[],min:'',max:''};renderKgCriteriaBuilder();previewPeserta();};
   window.kgCriterionAll=function(i){if(_kgCriteriaRows[i])_kgCriteriaRows[i].values=[];renderKgCriteriaBuilder();previewPeserta();};
-  window.kgCriterionToggle=function(i,v,checked){
+  window.kgCriterionToggle=function(i,v,checked,inputEl){
     const r=_kgCriteriaRows[i];if(!r)return;
     let vals=Array.isArray(r.values)?[...r.values]:[];
-    if(checked&&!vals.includes(v))vals.push(v);if(!checked)vals=vals.filter(x=>x!==v);
-    r.values=vals;renderKgCriteriaBuilder();previewPeserta();
+    if(checked&&!vals.includes(v))vals.push(v);
+    if(!checked)vals=vals.filter(x=>x!==v);
+    r.values=vals;
+
+    const row=inputEl?.closest('.kg-criteria-row');
+    if(row){
+      const allBtn=row.querySelector('button.kg-opt');
+      if(allBtn)allBtn.classList.toggle('active',vals.length===0);
+      const label=inputEl.closest('label.kg-opt');
+      if(label)label.classList.toggle('active',checked);
+    }
+    previewPeserta();
   };
   window.kgCriterionRange=function(i,k,v){if(_kgCriteriaRows[i])_kgCriteriaRows[i][k]=v;previewPeserta();};
 
@@ -13979,6 +13989,262 @@ ${table.outerHTML}
         </table>
       </div>`;
   };
+})();
+</script>
+
+
+
+<script id="ubnb-v26-remove-template-from-acara-search">
+(function(){
+  function v26IsTemplateMaster(a){
+    return !!(
+      a &&
+      (
+        a.template_rutin === true ||
+        (a.default_filter && a.default_filter.template_code) ||
+        (a.default_filter && a.default_filter.sumber === 'template')
+      )
+    );
+  }
+
+  window.onAcaraSearch=function(){
+    const input=document.getElementById('kg-acara-input');
+    const dd=document.getElementById('kg-acara-list');
+    const hid=document.getElementById('kg-acara-id');
+    if(!input||!dd)return;
+
+    const q=(input.value||'').toLowerCase().trim();
+    const sc=currentCalendarScopeFromForm();
+
+    // Hanya tampilkan master acara biasa. Template lama tidak ditampilkan lagi.
+    const matches=(aAcaraMaster||[])
+      .filter(a=>!v26IsTemplateMaster(a))
+      .filter(a=>{
+        const s=calScopeOfMaster(a);
+        return s.level===sc.level &&
+               s.kelompok===sc.kelompok &&
+               (a.nama||'').toLowerCase().includes(q);
+      });
+
+    if(!matches.length&&!q){
+      dd.style.display='none';
+      if(hid)hid.value='';
+      return;
+    }
+
+    let html=matches.slice(0,12).map(a=>`
+      <div class="kg-ac-item"
+           onclick="pilihAcara(${a.id})"
+           style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;">
+        ${escH(a.nama)}
+        <span style="font-size:10px;color:var(--text-muted);">📝 acara</span>
+      </div>
+    `).join('');
+
+    const exact=matches.find(a=>(a.nama||'').toLowerCase()===q);
+
+    if(q&&!exact){
+      html+=`
+        <div class="kg-ac-item"
+             onclick="pilihAcaraBaru()"
+             style="padding:9px 12px;cursor:pointer;background:var(--gold-light);font-size:13px;font-weight:700;color:var(--gold-dark);">
+          ＋ Nama baru: “${escH(input.value)}”
+        </div>`;
+    }
+
+    dd.innerHTML=html;
+    dd.style.display=html?'block':'none';
+    if(hid)hid.value=exact?exact.id:'';
+  };
+
+  const oldPilihAcara=window.pilihAcara;
+  window.pilihAcara=function(id){
+    const a=(aAcaraMaster||[]).find(x=>Number(x.id)===Number(id));
+    if(!a || v26IsTemplateMaster(a))return;
+
+    const input=document.getElementById('kg-acara-input');
+    const hidden=document.getElementById('kg-acara-id');
+    const list=document.getElementById('kg-acara-list');
+
+    if(input){
+      input.value=a.nama||'';
+      input.disabled=false;
+      input.style.background='';
+    }
+    if(hidden)hidden.value=a.id;
+    if(list)list.style.display='none';
+
+    // Jangan pernah aktifkan kembali perilaku Template Acara.
+    _kgTemplateId=null;
+  };
+})();
+</script>
+
+
+
+<style id="ubnb-v27-criteria-fix-style">
+#kg-preview.v27-updated{
+  outline:2px solid rgba(22,101,52,.08);
+}
+.kg-criteria-options .kg-opt input[type="checkbox"]{
+  accent-color:#15803d;
+}
+</style>
+
+<script id="ubnb-v27-criteria-fix-script">
+(function(){
+  function v27RowsFromDOM(){
+    const wrap=document.getElementById('kg-criteria-builder-wrap');
+    if(!wrap)return [];
+
+    return [...wrap.querySelectorAll('.kg-criteria-row')].map(row=>{
+      const type=row.querySelector('.kg-criteria-type')?.value||'';
+      if(!type)return null;
+
+      if(type==='usia'){
+        const nums=[...row.querySelectorAll('.kg-range input')];
+        return {
+          type,
+          values:[],
+          min:nums[0]?.value||'',
+          max:nums[1]?.value||''
+        };
+      }
+
+      const checked=[...row.querySelectorAll('.kg-criteria-options input[type="checkbox"]:checked')];
+      const values=checked.map(inp=>{
+        if(inp.value)return inp.value;
+        // fallback untuk file lama yang belum punya attribute value
+        const on=inp.getAttribute('onchange')||'';
+        const start=on.indexOf(',');
+        const end=on.lastIndexOf(',this.checked');
+        if(start>=0&&end>start){
+          try{return JSON.parse(on.slice(start+1,end));}catch(_e){}
+        }
+        return (inp.closest('label')?.textContent||'').trim();
+      }).filter(Boolean);
+
+      return {type,values,min:'',max:''};
+    }).filter(Boolean);
+  }
+
+  function v27SyncVisual(){
+    document.querySelectorAll('#kg-criteria-builder-wrap .kg-criteria-row').forEach(row=>{
+      const checked=[...row.querySelectorAll('.kg-criteria-options input[type="checkbox"]:checked')];
+      const allBtn=row.querySelector('.kg-criteria-options button.kg-opt');
+      if(allBtn)allBtn.classList.toggle('active',checked.length===0);
+      row.querySelectorAll('.kg-criteria-options label.kg-opt').forEach(label=>{
+        const cb=label.querySelector('input[type="checkbox"]');
+        label.classList.toggle('active',!!cb?.checked);
+      });
+    });
+  }
+
+  // DOM menjadi source-of-truth terakhir sebelum preview dan save.
+  const prevFilter=window.calendarFilterFromForm;
+  window.calendarFilterFromForm=function(){
+    const f=(typeof prevFilter==='function'?prevFilter.apply(this,arguments):{})||{};
+    const wrap=document.getElementById('kg-criteria-builder-wrap');
+    const mode=document.getElementById('kg-participant-mode')?.value||f.participant_selection||'criteria';
+
+    if(wrap && mode!=='manual'){
+      const rows=v27RowsFromDOM();
+      f.sumber='criteria_builder';
+      f.criteria_version=3;
+      f.criteria_builder=rows;
+      f.participant_selection=mode;
+    }
+    return f;
+  };
+
+  // Preview selalu dihitung dari kondisi checkbox yang benar-benar terlihat.
+  window.previewPeserta=function(){
+    const el=document.getElementById('kg-preview');
+    if(!el)return;
+
+    v27SyncVisual();
+
+    const sc=currentCalendarScopeFromForm();
+    const filter=calendarFilterFromForm();
+    const mode=targetModeOfFilter(filter);
+
+    const criteria=mode==='manual'
+      ?[]
+      :calendarParticipantsForFilter(filter,sc.level,sc.kelompok);
+
+    const manual=[..._kgTargetSelected]
+      .map(d=>findJamaahAny(d))
+      .filter(Boolean)
+      .map(j=>jamaahToPeserta(j));
+
+    const map=new Map();
+    [...criteria,...manual].forEach(p=>{
+      if(p?.did)map.set(String(p.did),p);
+    });
+
+    const slots=_kgSlotsDraft.reduce((n,x)=>
+      n+(x.scope_kelompok==='ALL'&&sc.level!=='kelompok'
+        ?Number(x.kuota||1)*4
+        :Number(x.kuota||1)),0);
+
+    el.classList.add('v27-updated');
+    el.innerHTML=`🎯 <b>${map.size} target bernama</b> (${targetModeLabel(mode)})${slots?` + <b>${slots} kuota slot</b>`:''}. Nama target dapat dipakai untuk undangan sejak sekarang; snapshot absensi aktual tetap dibuat mulai H-7.`;
+
+    const c=document.getElementById('kg-target-count');
+    if(c)c.textContent=`${_kgTargetSelected.size} nama dipilih`;
+  };
+
+  // Tangkap perubahan walaupun handler inline lama gagal/re-render.
+  document.addEventListener('change',function(e){
+    if(!e.target.closest?.('#kg-criteria-builder-wrap'))return;
+    setTimeout(()=>{
+      v27SyncVisual();
+      try{previewPeserta();}catch(_e){}
+    },0);
+  });
+
+  document.addEventListener('input',function(e){
+    if(!e.target.closest?.('#kg-criteria-builder-wrap .kg-range'))return;
+    setTimeout(()=>{try{previewPeserta();}catch(_e){}},0);
+  });
+
+  // Setelah builder dirender ulang, samakan state visual dengan checkbox.
+  const prevRender=window.renderKgCriteriaBuilder;
+  if(typeof prevRender==='function'){
+    window.renderKgCriteriaBuilder=function(){
+      const r=prevRender.apply(this,arguments);
+      setTimeout(()=>{
+        v27SyncVisual();
+        try{previewPeserta();}catch(_e){}
+      },0);
+      return r;
+    };
+  }
+
+  // Diagnostik save: criteria dari DOM harus ikut payload.
+  const prevSave=window.simpanKegiatan;
+  if(typeof prevSave==='function'){
+    window.simpanKegiatan=async function(){
+      try{
+        const mode=document.getElementById('kg-participant-mode')?.value||'criteria';
+        if(mode!=='manual'){
+          const rows=v27RowsFromDOM();
+          if(!rows.length){
+            toast('Kriteria peserta belum tersedia.',true);
+            return;
+          }
+        }
+      }catch(_e){}
+      return prevSave.apply(this,arguments);
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    setTimeout(()=>{
+      v27SyncVisual();
+      try{previewPeserta();}catch(_e){}
+    },500);
+  });
 })();
 </script>
 
