@@ -12315,5 +12315,490 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
 })();
 </script>
 
+
+
+<script id="ubnb-v18-stats-gender-fix">
+(function(){
+  const previousRenderStats = window.renderStats;
+
+  window.renderStats = function(){
+    // Jalankan render bawaan lebih dulu agar Mode Statistik aktif sudah tertulis.
+    if (typeof previousRenderStats === 'function') {
+      previousRenderStats.apply(this, arguments);
+    }
+
+    const box = document.getElementById('jamaah-stats');
+    if (!box || typeof getFilteredJamaah !== 'function') return;
+
+    const modeTitle = (box.querySelector('.mode-title')?.textContent || '').trim();
+
+    // HANYA 2 mode ini yang boleh menampilkan Jiwa + KK.
+    const populationMode =
+      modeTitle === 'Sambung: Tetap' ||
+      modeTitle === 'Tetap + Pindah Sementara' ||
+      modeTitle === 'Sambung: Tetap + Pindah Sementara';
+
+    if (populationMode) return;
+
+    // SEMUA mode lain wajib menampilkan Laki-laki + Perempuan.
+    const list = getFilteredJamaah();
+    const male = list.filter(j =>
+      String(j.jenis_kelamin || '').trim().toUpperCase().startsWith('L')
+    ).length;
+    const female = list.filter(j =>
+      String(j.jenis_kelamin || '').trim().toUpperCase().startsWith('P')
+    ).length;
+
+    const cards = box.querySelectorAll('.mod-stat-card');
+    if (cards.length < 2) return;
+
+    const label1 = cards[0].querySelector('.s-label');
+    const value1 = cards[0].querySelector('.s-value');
+    const label2 = cards[1].querySelector('.s-label');
+    const value2 = cards[1].querySelector('.s-value');
+
+    if (label1) label1.textContent = 'Laki-laki';
+    if (value1) value1.textContent = male;
+    if (label2) label2.textContent = 'Perempuan';
+    if (value2) value2.textContent = female;
+  };
+
+  // Pastikan tampilan awal ikut dikoreksi setelah data selesai dimuat.
+  function applyFix(){
+    try { window.renderStats(); } catch(e) {}
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(applyFix, 300);
+    setTimeout(applyFix, 900);
+  });
+})();
+</script>
+
+
+
+<style id="ubnb-v19-pengurus-target-fix-style">
+/* v19: target peserta pengurus */
+#kp-target-kind-wrap{margin-bottom:8px}
+.kp-v19-top{
+  display:grid;
+  grid-template-columns:180px 170px minmax(180px,1fr);
+  gap:7px;
+  align-items:start;
+}
+.kp-v19-top select{
+  width:100%;
+  min-height:40px;
+  border:1px solid #cbd5e1;
+  border-radius:5px;
+  background:#fff;
+  padding:0 9px;
+  font-size:13px;
+  font-weight:500;
+  color:#1f2937;
+}
+#kp-v19-dapukan-block{
+  margin-top:7px;
+  padding:8px 9px;
+  border:1px solid #dbe4df;
+  border-radius:5px;
+  background:#f8fbf9;
+}
+#kp-v19-dapukan-title{
+  font-size:12px;
+  font-weight:600;
+  color:#475569;
+  margin-bottom:6px;
+}
+#kp-v19-dapukan-filter{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+.kp-v19-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-height:32px;
+  padding:5px 8px;
+  border:1px solid #cfd8d2;
+  border-radius:5px;
+  background:#fff;
+  color:#334155;
+  font-size:12px;
+  cursor:pointer;
+}
+.kp-v19-chip.active{
+  background:#e8f5ee;
+  border-color:#73a98b;
+  color:#155d38;
+  font-weight:600;
+}
+.kp-v19-chip input{margin:0}
+.kp-v19-role{
+  display:block;
+  margin-top:3px;
+  font-size:12px;
+  line-height:1.3;
+  color:#166534;
+  font-weight:600;
+}
+.kp-v19-home{
+  display:block;
+  margin-top:2px;
+  font-size:11.5px;
+  line-height:1.3;
+  color:#64748b;
+}
+.kp-v19-result-info{
+  padding:6px 10px;
+  border-top:1px solid #edf1ee;
+  background:#fafcfb;
+  font-size:11.5px;
+  color:#64748b;
+}
+@media(max-width:650px){
+  .kp-v19-top{grid-template-columns:1fr}
+}
+</style>
+
+
+<script id="ubnb-v19-pengurus-target-fix">
+(function(){
+  let v19Kind='jamaah';
+  let v19Scope='all';
+  let v19Unit='';
+  let v19Dapukan=new Set();
+  let v19RoleMeta=new Map();
+
+  function norm(x){return String(x??'').trim();}
+  function activePengurus(){
+    return (aPengurus||[]).filter(p=>p&&p.aktif!==false&&p.did);
+  }
+  function pengurusJamaah(p){
+    const j=findJamaahAny(p.did);
+    if(j)return j;
+    const x=p.jamaah_desa||{};
+    if(!x.nama)return null;
+    return {
+      did:p.did,
+      nama:x.nama||'',
+      nama_kk:x.nama_kk||'',
+      kelompok_nama:x.kelompok_nama||p.kelompok_nama||'',
+      status_sambung:'Tetap',
+      status_nikah:'',
+      jenis_kelamin:'',
+      kelas_kbm:''
+    };
+  }
+  function allowedRoleForAccount(p){
+    // Pengurus Desa: seluruh role yang terlihat.
+    // Pengurus Kelompok: Pengurus Desa + kelompok sendiri.
+    const own=CU?.kelompok_scope||'';
+    if(!own)return true;
+    if(p.level==='desa')return true;
+    return p.level==='kelompok' && norm(p.kelompok_nama)===norm(own);
+  }
+  function roleScopeKey(p){
+    if(p.level==='desa')return 'desa';
+    if(p.level==='kelompok')return norm(p.kelompok_nama);
+    if(p.level==='khusus')return 'khusus';
+    return norm(p.level);
+  }
+  function roleRowsForScope(){
+    let rows=activePengurus().filter(allowedRoleForAccount);
+    if(v19Scope && v19Scope!=='all'){
+      if(v19Scope==='desa')rows=rows.filter(p=>p.level==='desa');
+      else if(v19Scope==='khusus')rows=rows.filter(p=>p.level==='khusus');
+      else rows=rows.filter(p=>p.level==='kelompok'&&norm(p.kelompok_nama)===v19Scope);
+    }
+    if(v19Scope==='khusus'&&v19Unit){
+      rows=rows.filter(p=>norm(p.unit_nama)===v19Unit);
+    }
+    return rows;
+  }
+  function roleLabel(p){
+    const sc=p.level==='desa'
+      ?'Desa'
+      :p.level==='kelompok'
+        ?(p.kelompok_nama||'Kelompok')
+        :(p.unit_nama||'Unit Khusus');
+    return `${sc} · ${p.dapukan||'-'}`;
+  }
+  function v19ScopeOptions(){
+    const own=CU?.kelompok_scope||'';
+    const opts=[['all','Semua Scope Dapukan'],['desa','Pengurus Desa']];
+    if(own){
+      opts.push([own,`Pengurus ${own}`]);
+    }else{
+      ['PW1','PW2','PW3','PW4'].forEach(k=>opts.push([k,`Pengurus ${k}`]));
+      opts.push(['khusus','Unit Khusus']);
+    }
+    return opts;
+  }
+  function v19UnitOptions(){
+    return [...new Set(
+      activePengurus()
+        .filter(allowedRoleForAccount)
+        .filter(p=>p.level==='khusus')
+        .map(p=>norm(p.unit_nama))
+        .filter(Boolean)
+    )].sort((a,b)=>a.localeCompare(b,'id'));
+  }
+
+  function buildTargetUI(){
+    const wrap=document.getElementById('kp-target-kind-wrap');
+    if(!wrap)return;
+    const scopeOpts=v19ScopeOptions();
+    if(!scopeOpts.some(x=>x[0]===v19Scope))v19Scope='all';
+    const units=v19UnitOptions();
+    if(v19Unit&&!units.includes(v19Unit))v19Unit='';
+
+    wrap.innerHTML=`
+      <div class="kp-v19-top">
+        <select id="kp-target-kind" onchange="kpTargetKindChanged()">
+          <option value="jamaah" ${v19Kind==='jamaah'?'selected':''}>Tambah Jamaah Biasa</option>
+          <option value="pengurus" ${v19Kind==='pengurus'?'selected':''}>Tambah Pengurus</option>
+        </select>
+        <select id="kp-pengurus-scope" onchange="kpPengurusFilterChanged()" ${v19Kind==='pengurus'?'':'style="display:none"'}>
+          ${scopeOpts.map(x=>`<option value="${escH(x[0])}" ${v19Scope===x[0]?'selected':''}>${escH(x[1])}</option>`).join('')}
+        </select>
+        <select id="kp-pengurus-unit" onchange="kpPengurusUnitChanged()" ${(v19Kind==='pengurus'&&v19Scope==='khusus')?'':'style="display:none"'}>
+          <option value="">Semua Unit Khusus</option>
+          ${units.map(x=>`<option value="${escH(x)}" ${v19Unit===x?'selected':''}>${escH(x)}</option>`).join('')}
+        </select>
+      </div>
+      <div id="kp-v19-dapukan-block" ${v19Kind==='pengurus'?'':'style="display:none"'}>
+        <div id="kp-v19-dapukan-title">Dapukan tertentu · kosong = semua dapukan pada scope</div>
+        <div id="kp-v19-dapukan-filter"></div>
+      </div>`;
+    renderV19Dapukan();
+    applyFilterVisibility();
+  }
+
+  function renderV19Dapukan(){
+    const box=document.getElementById('kp-v19-dapukan-filter');
+    if(!box)return;
+    const vals=[...new Set(roleRowsForScope().map(p=>norm(p.dapukan)).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'id'));
+
+    v19Dapukan=new Set([...v19Dapukan].filter(x=>vals.includes(x)));
+
+    box.innerHTML=vals.length
+      ? vals.map(v=>`<label class="kp-v19-chip ${v19Dapukan.has(v)?'active':''}">
+          <input type="checkbox" ${v19Dapukan.has(v)?'checked':''}
+            onchange="kpDapukanToggle(${JSON.stringify(v)},this.checked)">
+          ${escH(v)}
+        </label>`).join('')
+      : '<span style="font-size:12px;color:#64748b;">Tidak ada dapukan pada scope ini.</span>';
+  }
+
+  function applyFilterVisibility(){
+    const isP=v19Kind==='pengurus';
+    ['kp-filter-kelompok','kp-filter-gender','kp-filter-nikah','kp-filter-kelas'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el)el.style.display=isP?'none':'block';
+    });
+    const inp=document.getElementById('kp-filter-text');
+    if(inp)inp.placeholder=isP?'Cari nama / KK / dapukan...':'Ketik nama / KK...';
+
+    const candidateBox=document.getElementById('kp-candidate-list');
+    const head=candidateBox?.parentElement?.querySelector('div:first-child');
+    if(head)head.textContent=isP?'🔎 Cari / Filter Pengurus':'🔎 Cari / Filter Jamaah';
+  }
+
+  function pengurusCandidates(){
+    let rows=roleRowsForScope();
+    if(v19Dapukan.size){
+      rows=rows.filter(p=>v19Dapukan.has(norm(p.dapukan)));
+    }
+
+    const byDid=new Map();
+    rows.forEach(p=>{
+      const j=pengurusJamaah(p);
+      if(!j)return;
+      const did=String(p.did);
+      if(!byDid.has(did)){
+        byDid.set(did,{...j,__v19Roles:[]});
+      }
+      byDid.get(did).__v19Roles.push(p);
+    });
+
+    const q=norm(document.getElementById('kp-filter-text')?.value).toLowerCase();
+    let list=[...byDid.values()];
+    if(q){
+      list=list.filter(j=>{
+        const roles=(j.__v19Roles||[]).map(p=>`${p.dapukan||''} ${p.level||''} ${p.kelompok_nama||''} ${p.unit_nama||''}`).join(' ');
+        return `${j.nama||''} ${j.nama_kk||''} ${j.kelompok_nama||''} ${roles}`.toLowerCase().includes(q);
+      });
+    }
+
+    list.sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+    v19RoleMeta=new Map(list.map(j=>[String(j.did),j.__v19Roles||[]]));
+    return list;
+  }
+
+  /* setup modal */
+  const oldSetup=window.setupKpScopeOptions;
+  window.setupKpScopeOptions=function(sc){
+    if(typeof oldSetup==='function')oldSetup.apply(this,arguments);
+    if(['target-form','target-entry'].includes(_kpContext)){
+      v19Kind='jamaah';
+      v19Scope='all';
+      v19Unit='';
+      v19Dapukan.clear();
+      setTimeout(buildTargetUI,0);
+    }
+  };
+
+  window.kpTargetKindChanged=function(){
+    v19Kind=document.getElementById('kp-target-kind')?.value||'jamaah';
+    v19Scope='all';
+    v19Unit='';
+    v19Dapukan.clear();
+    buildTargetUI();
+    renderKegiatanParticipantCandidates();
+  };
+
+  window.kpPengurusFilterChanged=function(){
+    v19Scope=document.getElementById('kp-pengurus-scope')?.value||'all';
+    v19Unit='';
+    v19Dapukan.clear();
+    buildTargetUI();
+    renderKegiatanParticipantCandidates();
+  };
+
+  window.kpPengurusUnitChanged=function(){
+    v19Unit=document.getElementById('kp-pengurus-unit')?.value||'';
+    v19Dapukan.clear();
+    renderV19Dapukan();
+    renderKegiatanParticipantCandidates();
+  };
+
+  window.kpDapukanToggle=function(v,on){
+    if(on)v19Dapukan.add(v);
+    else v19Dapukan.delete(v);
+    renderV19Dapukan();
+    renderKegiatanParticipantCandidates();
+  };
+
+  const oldPool=window.kpCandidatePool;
+  window.kpCandidatePool=function(){
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='pengurus'){
+      return pengurusCandidates();
+    }
+    return typeof oldPool==='function'?oldPool.apply(this,arguments):[];
+  };
+
+  const oldFiltered=window.kpFilteredCandidates;
+  window.kpFilteredCandidates=function(){
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='pengurus'){
+      return pengurusCandidates();
+    }
+    return typeof oldFiltered==='function'?oldFiltered.apply(this,arguments):[];
+  };
+
+  const oldSelected=window.renderKegiatanSelected;
+  window.renderKegiatanSelected=function(){
+    if(!['target-form','target-entry'].includes(_kpContext)||v19Kind!=='pengurus'){
+      return typeof oldSelected==='function'?oldSelected.apply(this,arguments):undefined;
+    }
+    const box=document.getElementById('kp-selected-list');
+    const count=document.getElementById('kp-selected-count');
+    if(!box)return;
+
+    const rows=[..._kpSelected].map(did=>{
+      const j=findJamaahAny(did);
+      if(j)return j;
+      const p=activePengurus().find(x=>String(x.did)===String(did));
+      return p?pengurusJamaah(p):null;
+    }).filter(Boolean).sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+
+    if(count)count.textContent=`${rows.length} peserta`;
+    box.innerHTML=rows.length?rows.map(j=>{
+      const meta=v19RoleMeta.get(String(j.did))||[];
+      const roles=meta.map(roleLabel).join(' | ');
+      return `<div class="kp-selected-row">
+        <div>
+          <b>${escH(j.nama)}</b>
+          <div style="font-size:11.5px;color:#64748b;">${escH(j.kelompok_nama||'')} · KK ${escH(j.nama_kk||'-')}</div>
+          ${roles?`<div class="kp-v19-role">${escH(roles)}</div>`:''}
+        </div>
+        <button onclick="kpRemove('${escH(j.did)}')" style="border:0;background:#fef2f2;color:#b91c1c;border-radius:5px;padding:4px 7px;cursor:pointer;">×</button>
+      </div>`;
+    }).join(''):'<div class="cal-empty" style="padding:16px;">Belum ada nama terpilih.</div>';
+  };
+
+  const oldRenderCandidates=window.renderKegiatanParticipantCandidates;
+  window.renderKegiatanParticipantCandidates=function(){
+    if(!['target-form','target-entry'].includes(_kpContext)||v19Kind!=='pengurus'){
+      return typeof oldRenderCandidates==='function'?oldRenderCandidates.apply(this,arguments):undefined;
+    }
+
+    const box=document.getElementById('kp-candidate-list');
+    if(!box)return;
+    _kpFiltered=pengurusCandidates().filter(j=>!_kpSelected.has(String(j.did)));
+
+    const scopeLabel=(document.getElementById('kp-pengurus-scope')?.selectedOptions?.[0]?.textContent||'Semua Scope Dapukan').trim();
+    const selectedDap=[...v19Dapukan];
+
+    box.innerHTML=`
+      <div class="kp-v19-result-info">
+        Hasil: <b>${_kpFiltered.length}</b> pengurus · ${escH(scopeLabel)}
+        ${selectedDap.length?` · Dapukan: ${escH(selectedDap.join(', '))}`:''}
+      </div>
+      ${_kpFiltered.length?_kpFiltered.map(j=>{
+        const roles=(j.__v19Roles||[]).map(roleLabel).join(' | ');
+        return `<label class="kp-candidate">
+          <input class="kp-cb" type="checkbox" value="${escH(j.did)}" onchange="kpUpdateCheckedCount()">
+          <div>
+            <b>${escH(j.nama)}</b>
+            <span class="kp-v19-role">${escH(roles||'Pengurus')}</span>
+            <span class="kp-v19-home">Jamaah ${escH(j.kelompok_nama||'-')} · KK ${escH(j.nama_kk||'-')}</span>
+          </div>
+        </label>`;
+      }).join(''):'<div class="cal-empty" style="padding:16px;">Tidak ada pengurus sesuai Scope Dapukan dan Dapukan yang dipilih.</div>'}`;
+    kpUpdateCheckedCount();
+  };
+
+  // Saat tambah hasil/tercentang, metadata role tetap dipertahankan pada tampilan terpilih.
+  const oldAddAll=window.kpAddAllFiltered;
+  window.kpAddAllFiltered=function(){
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='pengurus'){
+      _kpFiltered.forEach(j=>_kpSelected.add(String(j.did)));
+      renderKegiatanParticipantEditor();
+      buildTargetUI();
+      return;
+    }
+    return oldAddAll.apply(this,arguments);
+  };
+
+  const oldAddChecked=window.kpAddChecked;
+  window.kpAddChecked=function(){
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='pengurus'){
+      document.querySelectorAll('.kp-cb:checked').forEach(cb=>_kpSelected.add(String(cb.value)));
+      renderKegiatanParticipantEditor();
+      buildTargetUI();
+      return;
+    }
+    return oldAddChecked.apply(this,arguments);
+  };
+
+  // Re-render new UI after editor refreshes.
+  const oldEditor=window.renderKegiatanParticipantEditor;
+  window.renderKegiatanParticipantEditor=function(){
+    const r=typeof oldEditor==='function'?oldEditor.apply(this,arguments):undefined;
+    if(['target-form','target-entry'].includes(_kpContext)){
+      buildTargetUI();
+      if(v19Kind==='pengurus'){
+        renderKegiatanParticipantCandidates();
+        renderKegiatanSelected();
+      }
+    }
+    return r;
+  };
+})();
+</script>
+
 </body>
 </html>
