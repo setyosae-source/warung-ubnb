@@ -12000,7 +12000,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     const dapukan=[...new Set((aPengurus||[]).filter(p=>p?.aktif!==false&&p.dapukan).map(p=>String(p.dapukan).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
     const units=[...new Set((aPengurus||[]).filter(p=>p?.aktif!==false&&p.level==='khusus'&&p.unit_nama).map(p=>String(p.unit_nama).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
     return {
-      participant_type:{label:'Jenis Peserta',options:[['jamaah','Jamaah'],['pengurus','Pengurus']]},
+      participant_type:{label:'Jenis Peserta',options:[['jamaah','Jamaah'],['pengurus','Pengurus'],['istri_pengurus','Istri Pengurus']]},
       status_sambung:{label:'Status Sambung',options:[['Tetap','Tetap'],['Pindah Sementara','Pindah Sementara'],['Pindah Sambung','Pindah Sambung'],['Meninggal Dunia','Meninggal Dunia']]},
       kelompok:{label:'Kelompok',options:[['PW1','PW1'],['PW2','PW2'],['PW3','PW3'],['PW4','PW4']]},
       gender:{label:'Gender',options:[['L','Laki-laki'],['P','Perempuan']]},
@@ -12009,7 +12009,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
       posisi_kk:{label:'Posisi Keluarga',options:[['kk','KK'],['non_kk','Bukan KK']]},
       atribut:{label:'Atribut',options:[['aghnia','Aghnia'],['haji','Haji'],['sarjana','Sarjana']]},
       pengurus_scope:{label:'Scope Dapukan',options:[['desa','Desa'],['kelompok','Kelompok'],['khusus','Unit Khusus']]},
-      dapukan:{label:'Dapukan Tertentu',options:dapukan.map(x=>[x,x])},
+      dapukan:{label:'Dapukan / Dapukan Suami',options:dapukan.map(x=>[x,x])},
       unit_khusus:{label:'Unit Khusus',options:units.map(x=>[x,x])},
       usia:{label:'Range Usia',range:true}
     };
@@ -12162,6 +12162,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     const m=criterionMap(filter),types=selectedVals(m,'participant_type');
     const wantJamaah=!types.length||types.includes('jamaah');
     const wantPengurus=!types.length||types.includes('pengurus');
+    const wantIstriPengurus=!types.length||types.includes('istri_pengurus');
     const map=new Map();
     const allJ=(aJamaahDesa&&aJamaahDesa.length?aJamaahDesa:aJamaah||[]);
 
@@ -12179,6 +12180,53 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
       const daps=selectedVals(m,'dapukan');if(daps.length)pool=pool.filter(p=>daps.includes(p.dapukan));
       const units=selectedVals(m,'unit_khusus');if(units.length)pool=pool.filter(p=>p.level==='khusus'&&units.includes(p.unit_nama));
       pool.forEach(p=>{const j=findJamaahAny(p.did);if(j&&commonJamaahPass(j,m))map.set(String(j.did),jamaahToPeserta(j));});
+    }
+
+    if(wantIstriPengurus){
+      // Dibangun dari suami yang benar-benar didapuk, sehingga istri yang juga
+      // punya dapukan sendiri tetap dapat dipilih sebagai "Istri Pengurus".
+      const groups=new Map();
+      (aPengurus||[]).filter(p=>p&&p.aktif!==false&&p.did).forEach(p=>{
+        const husband=findJamaahAny(p.did);
+        if(!husband||pgNormGender(husband.jenis_kelamin)!=='L')return;
+        const key=[String(p.did),p.level||'',p.kelompok_nama||'',p.unit_nama||''].join('|');
+        if(!groups.has(key))groups.set(key,{
+          husband,level:p.level,kelompok_nama:p.kelompok_nama||null,unit_nama:p.unit_nama||null,
+          dapukan:[],pendamping:[]
+        });
+        const g=groups.get(key);
+        if(p.dapukan&&!g.dapukan.includes(p.dapukan))g.dapukan.push(p.dapukan);
+        if(p.pendamping_did&&!g.pendamping.includes(String(p.pendamping_did)))g.pendamping.push(String(p.pendamping_did));
+      });
+
+      let wives=[];
+      groups.forEach(g=>{
+        let wife=null;
+        if(g.level==='khusus'&&g.pendamping.length===1){
+          wife=findJamaahAny(g.pendamping[0]);
+        }
+        if(!wife){
+          const found=pgFindWife(g.husband);
+          if(found&&!found.ambiguous)wife=found.wife;
+        }
+        if(!wife||pgNormGender(wife.jenis_kelamin)!=='P')return;
+        wives.push({...g,jamaah:wife});
+      });
+
+      const pScope=selectedVals(m,'pengurus_scope');
+      if(pScope.length)wives=wives.filter(r=>pScope.includes(r.level));
+      else if(scopeLevel==='kelompok')wives=wives.filter(r=>r.level==='kelompok'&&r.kelompok_nama===scopeKelompok);
+
+      const daps=selectedVals(m,'dapukan');
+      if(daps.length)wives=wives.filter(r=>(r.dapukan||[]).some(d=>daps.includes(d)));
+
+      const units=selectedVals(m,'unit_khusus');
+      if(units.length)wives=wives.filter(r=>r.level==='khusus'&&units.includes(r.unit_nama));
+
+      wives.forEach(r=>{
+        const j=r.jamaah;
+        if(j&&commonJamaahPass(j,m))map.set(String(j.did),jamaahToPeserta(j));
+      });
     }
     return [...map.values()];
   }
@@ -12569,17 +12617,18 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
         <select id="kp-target-kind" onchange="kpTargetKindChanged()">
           <option value="jamaah" ${v19Kind==='jamaah'?'selected':''}>Tambah Jamaah Biasa</option>
           <option value="pengurus" ${v19Kind==='pengurus'?'selected':''}>Tambah Pengurus</option>
+          <option value="istri_pengurus" ${v19Kind==='istri_pengurus'?'selected':''}>Tambah Istri Pengurus</option>
         </select>
-        <select id="kp-pengurus-scope" onchange="kpPengurusFilterChanged()" ${v19Kind==='pengurus'?'':'style="display:none"'}>
+        <select id="kp-pengurus-scope" onchange="kpPengurusFilterChanged()" ${(v19Kind==='pengurus'||v19Kind==='istri_pengurus')?'':'style="display:none"'}>
           ${scopeOpts.map(x=>`<option value="${escH(x[0])}" ${v19Scope===x[0]?'selected':''}>${escH(x[1])}</option>`).join('')}
         </select>
-        <select id="kp-pengurus-unit" onchange="kpPengurusUnitChanged()" ${(v19Kind==='pengurus'&&v19Scope==='khusus')?'':'style="display:none"'}>
+        <select id="kp-pengurus-unit" onchange="kpPengurusUnitChanged()" ${((v19Kind==='pengurus'||v19Kind==='istri_pengurus')&&v19Scope==='khusus')?'':'style="display:none"'}>
           <option value="">Semua Unit Khusus</option>
           ${units.map(x=>`<option value="${escH(x)}" ${v19Unit===x?'selected':''}>${escH(x)}</option>`).join('')}
         </select>
       </div>
-      <div id="kp-v19-dapukan-block" ${v19Kind==='pengurus'?'':'style="display:none"'}>
-        <div id="kp-v19-dapukan-title">Dapukan tertentu · kosong = semua dapukan pada scope</div>
+      <div id="kp-v19-dapukan-block" ${(v19Kind==='pengurus'||v19Kind==='istri_pengurus')?'':'style="display:none"'}>
+        <div id="kp-v19-dapukan-title">${v19Kind==='istri_pengurus'?'Dapukan suami':'Dapukan tertentu'} · kosong = semua dapukan pada scope</div>
         <div id="kp-v19-dapukan-filter"></div>
       </div>`;
     renderV19Dapukan();
@@ -12604,17 +12653,21 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
   }
 
   function applyFilterVisibility(){
-    const isP=v19Kind==='pengurus';
+    const isP=(v19Kind==='pengurus'||v19Kind==='istri_pengurus');
     ['kp-filter-kelompok','kp-filter-gender','kp-filter-nikah','kp-filter-kelas'].forEach(id=>{
       const el=document.getElementById(id);
       if(el)el.style.display=isP?'none':'block';
     });
     const inp=document.getElementById('kp-filter-text');
-    if(inp)inp.placeholder=isP?'Cari nama / KK / dapukan...':'Ketik nama / KK...';
+    if(inp)inp.placeholder=v19Kind==='istri_pengurus'
+      ?'Cari nama istri / suami / dapukan...'
+      :(isP?'Cari nama / KK / dapukan...':'Ketik nama / KK...');
 
     const candidateBox=document.getElementById('kp-candidate-list');
     const head=candidateBox?.parentElement?.querySelector('div:first-child');
-    if(head)head.textContent=isP?'🔎 Cari / Filter Pengurus':'🔎 Cari / Filter Jamaah';
+    if(head)head.textContent=v19Kind==='istri_pengurus'
+      ?'🔎 Cari / Filter Istri Pengurus'
+      :(isP?'🔎 Cari / Filter Pengurus':'🔎 Cari / Filter Jamaah');
   }
 
   function pengurusCandidates(){
@@ -12640,6 +12693,74 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
       list=list.filter(j=>{
         const roles=(j.__v19Roles||[]).map(p=>`${p.dapukan||''} ${p.level||''} ${p.kelompok_nama||''} ${p.unit_nama||''}`).join(' ');
         return `${j.nama||''} ${j.nama_kk||''} ${j.kelompok_nama||''} ${roles}`.toLowerCase().includes(q);
+      });
+    }
+
+    list.sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id'));
+    v19RoleMeta=new Map(list.map(j=>[String(j.did),j.__v19Roles||[]]));
+    return list;
+  }
+
+  function v31WifeRows(){
+    const groups=new Map();
+    activePengurus().filter(allowedRoleForAccount).forEach(p=>{
+      const husband=pengurusJamaah(p);
+      if(!husband||pgNormGender(husband.jenis_kelamin)!=='L')return;
+      const key=[String(p.did),p.level||'',p.kelompok_nama||'',p.unit_nama||''].join('|');
+      if(!groups.has(key))groups.set(key,{
+        husband,level:p.level,kelompok_nama:p.kelompok_nama||null,unit_nama:p.unit_nama||null,
+        dapukan:[],pendamping:[]
+      });
+      const g=groups.get(key);
+      if(p.dapukan&&!g.dapukan.includes(p.dapukan))g.dapukan.push(p.dapukan);
+      if(p.pendamping_did&&!g.pendamping.includes(String(p.pendamping_did)))g.pendamping.push(String(p.pendamping_did));
+    });
+
+    const rows=[]; const seen=new Set();
+    groups.forEach(g=>{
+      let wife=null;
+      if(g.level==='khusus'&&g.pendamping.length===1)wife=findJamaahAny(g.pendamping[0]);
+      if(!wife){
+        const f=pgFindWife(g.husband);
+        if(f&&!f.ambiguous)wife=f.wife;
+      }
+      if(!wife||pgNormGender(wife.jenis_kelamin)!=='P')return;
+      const key=[String(wife.did),g.level||'',g.kelompok_nama||'',g.unit_nama||''].join('|');
+      if(seen.has(key))return; seen.add(key);
+      rows.push({...g,jamaah:wife});
+    });
+    return rows;
+  }
+
+  function istriCandidates(){
+    let rows=v31WifeRows();
+
+    if(v19Scope&&v19Scope!=='all'){
+      if(v19Scope==='desa')rows=rows.filter(r=>r.level==='desa');
+      else if(v19Scope==='khusus')rows=rows.filter(r=>r.level==='khusus');
+      else rows=rows.filter(r=>r.level==='kelompok'&&norm(r.kelompok_nama)===v19Scope);
+    }
+    if(v19Scope==='khusus'&&v19Unit){
+      rows=rows.filter(r=>norm(r.unit_nama)===v19Unit);
+    }
+    if(v19Dapukan.size){
+      rows=rows.filter(r=>(r.dapukan||[]).some(d=>v19Dapukan.has(norm(d))));
+    }
+
+    const q=norm(document.getElementById('kp-filter-text')?.value).toLowerCase();
+    let list=rows.map(r=>({
+      ...r.jamaah,
+      __v31Wife:r,
+      __v19Roles:(r.dapukan||[]).map(d=>({
+        level:r.level,kelompok_nama:r.kelompok_nama,unit_nama:r.unit_nama,dapukan:d
+      }))
+    }));
+
+    if(q){
+      list=list.filter(j=>{
+        const r=j.__v31Wife||{};
+        const role=(r.dapukan||[]).join(' ');
+        return `${j.nama||''} ${j.nama_kk||''} ${j.kelompok_nama||''} ${r.husband?.nama||''} ${role} ${r.level||''} ${r.kelompok_nama||''} ${r.unit_nama||''}`.toLowerCase().includes(q);
       });
     }
 
@@ -12694,16 +12815,22 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
 
   const oldPool=window.kpCandidatePool;
   window.kpCandidatePool=function(){
-    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='pengurus'){
+    if(['target-form','target-entry'].includes(_kpContext)&&(v19Kind==='pengurus'||v19Kind==='istri_pengurus')){
       return pengurusCandidates();
+    }
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='istri_pengurus'){
+      return istriCandidates();
     }
     return typeof oldPool==='function'?oldPool.apply(this,arguments):[];
   };
 
   const oldFiltered=window.kpFilteredCandidates;
   window.kpFilteredCandidates=function(){
-    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='pengurus'){
+    if(['target-form','target-entry'].includes(_kpContext)&&(v19Kind==='pengurus'||v19Kind==='istri_pengurus')){
       return pengurusCandidates();
+    }
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='istri_pengurus'){
+      return istriCandidates();
     }
     return typeof oldFiltered==='function'?oldFiltered.apply(this,arguments):[];
   };
@@ -12741,6 +12868,38 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
 
   const oldRenderCandidates=window.renderKegiatanParticipantCandidates;
   window.renderKegiatanParticipantCandidates=function(){
+    if(['target-form','target-entry'].includes(_kpContext)&&v19Kind==='istri_pengurus'){
+      const box=document.getElementById('kp-candidate-list');
+      if(!box)return;
+      _kpFiltered=istriCandidates().filter(j=>!_kpSelected.has(String(j.did)));
+
+      const scopeLabel=(document.getElementById('kp-pengurus-scope')?.selectedOptions?.[0]?.textContent||'Semua Scope Dapukan').trim();
+      const selectedDap=[...v19Dapukan];
+
+      box.innerHTML=`
+        <div class="kp-v19-result-info">
+          Hasil: <b>${_kpFiltered.length}</b> istri pengurus · ${escH(scopeLabel)}
+          ${selectedDap.length?` · Dapukan suami: ${escH(selectedDap.join(', '))}`:''}
+        </div>
+        ${_kpFiltered.length?_kpFiltered.map(j=>{
+          const r=j.__v31Wife||{};
+          const role=(r.dapukan||[]).map(d=>{
+            const sc=r.level==='desa'?'Desa':r.level==='kelompok'?(r.kelompok_nama||'Kelompok'):(r.unit_nama||'Unit Khusus');
+            return `${sc} · ${d}`;
+          }).join(' | ');
+          return `<label class="kp-candidate">
+            <input class="kp-cb" type="checkbox" value="${escH(j.did)}" onchange="kpUpdateCheckedCount()">
+            <div>
+              <b>${escH(j.nama)}</b>
+              <span class="kp-v19-role">Istri: ${escH(r.husband?.nama||'-')} · ${escH(role||'Pengurus')}</span>
+              <span class="kp-v19-home">Jamaah ${escH(j.kelompok_nama||'-')} · KK ${escH(j.nama_kk||'-')}</span>
+            </div>
+          </label>`;
+        }).join(''):'<div class="cal-empty" style="padding:16px;">Tidak ada istri pengurus sesuai Scope Dapukan dan Dapukan Suami yang dipilih.</div>'}`;
+      kpUpdateCheckedCount();
+      return;
+    }
+
     if(!['target-form','target-entry'].includes(_kpContext)||v19Kind!=='pengurus'){
       return typeof oldRenderCandidates==='function'?oldRenderCandidates.apply(this,arguments):undefined;
     }
@@ -12800,7 +12959,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     const r=typeof oldEditor==='function'?oldEditor.apply(this,arguments):undefined;
     if(['target-form','target-entry'].includes(_kpContext)){
       buildTargetUI();
-      if(v19Kind==='pengurus'){
+      if(v19Kind==='pengurus'||v19Kind==='istri_pengurus'){
         renderKegiatanParticipantCandidates();
         renderKegiatanSelected();
       }
@@ -14817,6 +14976,60 @@ ${table.outerHTML}
   }
 }
 </style>
+
+
+
+<style id="ubnb-v31-istri-pengurus-style">
+.kg-criteria-wife-note{
+  margin-top:6px;
+  padding:7px 9px;
+  border:1px solid #d9e7df;
+  border-radius:5px;
+  background:#f4faf6;
+  color:#35604a;
+  font-size:11.5px;
+  line-height:1.35;
+}
+</style>
+<script id="ubnb-v31-istri-pengurus-helper">
+(function(){
+  function refreshWifeNote(){
+    const wrap=document.getElementById('kg-criteria-builder-wrap');
+    if(!wrap)return;
+    let note=document.getElementById('kg-criteria-wife-note');
+    const has=[...wrap.querySelectorAll('.kg-criteria-row')].some(row=>{
+      const sel=row.querySelector('.kg-criteria-type');
+      if(sel?.value!=='participant_type')return false;
+      return [...row.querySelectorAll('input[type="checkbox"]:checked')].some(cb=>cb.value==='istri_pengurus');
+    });
+    if(has){
+      if(!note){
+        note=document.createElement('div');
+        note.id='kg-criteria-wife-note';
+        note.className='kg-criteria-wife-note';
+        wrap.appendChild(note);
+      }
+      note.innerHTML='<b>Istri Pengurus:</b> Scope Dapukan dan Dapukan yang dipilih dibaca dari <b>suaminya</b>. Nama target yang masuk tetap nama istrinya.';
+    }else if(note){
+      note.remove();
+    }
+  }
+
+  document.addEventListener('change',e=>{
+    if(e.target.closest?.('#kg-criteria-builder-wrap'))setTimeout(refreshWifeNote,0);
+  });
+
+  const oldRender=window.renderKgCriteriaBuilder;
+  if(typeof oldRender==='function'){
+    window.renderKgCriteriaBuilder=function(){
+      const r=oldRender.apply(this,arguments);
+      setTimeout(refreshWifeNote,0);
+      return r;
+    };
+  }
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshWifeNote,500));
+})();
+</script>
 
 </body>
 </html>
