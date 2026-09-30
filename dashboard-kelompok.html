@@ -14354,5 +14354,389 @@ ${table.outerHTML}
 })();
 </script>
 
+
+
+<style id="ubnb-v29-jamaah-youth-layout-style">
+/* ===== v29: Jamaah grouped by Kelompok + nama utama, Youth compact photo ===== */
+
+/* Data Jamaah */
+.v29-kelompok-section{
+  margin:0;
+  border-top:1px solid #d7dfda;
+}
+.v29-kelompok-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:7px 10px;
+  background:#eef6f1;
+  color:#155d38;
+  border-bottom:1px solid #d7dfda;
+  font-size:13px;
+  font-weight:700;
+  line-height:1.2;
+}
+.v29-kelompok-meta{
+  color:#64748b;
+  font-size:11.5px;
+  font-weight:500;
+  white-space:nowrap;
+}
+.v29-family-start td{
+  border-top:2px solid #d9e6de!important;
+}
+.v29-name-main{
+  font-weight:600;
+  color:#18211c;
+  line-height:1.25;
+}
+.v29-name-meta{
+  margin-top:2px;
+  color:#6b7280;
+  font-size:11.5px;
+  font-weight:400;
+  line-height:1.2;
+}
+.v29-kk-head{
+  color:#166534;
+  font-weight:600;
+}
+#jamaah-list-wrap .tbl-jamaah{
+  min-width:720px!important;
+}
+#jamaah-list-wrap .tbl-jamaah td{
+  padding-top:5px!important;
+  padding-bottom:5px!important;
+}
+#jamaah-list-wrap .foto-avatar,
+#jamaah-list-wrap .foto-avatar-placeholder{
+  width:30px!important;
+  height:30px!important;
+  min-width:30px!important;
+  min-height:30px!important;
+  max-width:30px!important;
+  max-height:30px!important;
+  font-size:13px!important;
+}
+
+/* Youth marriage list: compact like general Jamaah */
+#yn-list-wrap .tbl-jamaah td{
+  padding-top:4px!important;
+  padding-bottom:4px!important;
+  height:auto!important;
+  min-height:0!important;
+}
+.v29-youth-photo,
+.v29-youth-photo-placeholder{
+  width:30px!important;
+  height:30px!important;
+  min-width:30px!important;
+  min-height:30px!important;
+  max-width:30px!important;
+  max-height:30px!important;
+  border-radius:50%!important;
+  object-fit:cover;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  box-sizing:border-box!important;
+  flex:0 0 30px!important;
+}
+.v29-youth-photo{
+  border:1px solid #d5ded8;
+  background:#f8fafc;
+}
+.v29-youth-photo-placeholder{
+  background:#eef6f1!important;
+  border:1px dashed #c7d6cd!important;
+  color:#667085!important;
+  font-size:13px!important;
+}
+.v29-youth-photo-placeholder.has-photo{
+  border-style:solid!important;
+  color:#177245!important;
+}
+#yn-list-wrap .yn-photo-mark{
+  width:30px!important;
+  height:30px!important;
+  min-width:30px!important;
+  min-height:30px!important;
+  max-width:30px!important;
+  max-height:30px!important;
+  border-radius:50%!important;
+}
+
+@media(max-width:600px){
+  .v29-kelompok-head{padding:6px 8px}
+  .v29-kelompok-meta{font-size:11px}
+  #jamaah-list-wrap .tbl-jamaah{min-width:690px!important}
+}
+</style>
+
+
+<script id="ubnb-v29-jamaah-youth-layout-script">
+(function(){
+  function v29GroupRank(k){
+    const m=String(k||'').match(/PW\s*(\d+)/i);
+    return m?Number(m[1]):999;
+  }
+
+  function v29FamilyPosition(j){
+    const nama=String(j.nama||'').trim().toLowerCase();
+    const kk=String(j.nama_kk||'').trim().toLowerCase();
+    if(nama&&kk&&nama===kk)return 0;
+    if(j.status_nikah==='Menikah')return 1;
+    if(j.status_nikah==='Belum Menikah')return 2;
+    return 3;
+  }
+
+  function v29FamilySort(a,b){
+    const kka=String(a.nama_kk||a.nama||'').trim().toLowerCase();
+    const kkb=String(b.nama_kk||b.nama||'').trim().toLowerCase();
+    if(kka!==kkb)return kka.localeCompare(kkb,'id',{sensitivity:'base'});
+
+    const pa=v29FamilyPosition(a),pb=v29FamilyPosition(b);
+    if(pa!==pb)return pa-pb;
+
+    const ua=umurFromTgl(a.tgl_lahir),ub=umurFromTgl(b.tgl_lahir);
+    if(ua!==ub){
+      if(ua===null)return 1;
+      if(ub===null)return -1;
+      return ub-ua;
+    }
+    return String(a.nama||'').localeCompare(String(b.nama||''),'id',{sensitivity:'base'});
+  }
+
+  function v29CurrentSort(list){
+    // Default = family/KK. Bila user memilih sort lain, sort tetap berlaku di dalam tiap kelompok.
+    if(_sortBy==='family') return list.sort(v29FamilySort);
+
+    return list.sort((a,b)=>{
+      let va,vb;
+      switch(_sortBy){
+        case 'nama_kk':
+          va=String(a.nama_kk||'').toLowerCase();
+          vb=String(b.nama_kk||'').toLowerCase();
+          break;
+        case 'nama':
+          va=String(a.nama||'').toLowerCase();
+          vb=String(b.nama||'').toLowerCase();
+          break;
+        case 'jk':
+          va=String(a.jenis_kelamin||'').charAt(0).toUpperCase();
+          vb=String(b.jenis_kelamin||'').charAt(0).toUpperCase();
+          break;
+        case 'umur':
+          va=umurFromTgl(a.tgl_lahir); vb=umurFromTgl(b.tgl_lahir);
+          if(va===null)va=_sortDir===1?9999:-1;
+          if(vb===null)vb=_sortDir===1?9999:-1;
+          break;
+        case 'kelas':
+          va=kelasKbmAktual(a)||'~'; vb=kelasKbmAktual(b)||'~';
+          break;
+        case 'nikah':
+          va=a.status_nikah||'~'; vb=b.status_nikah||'~';
+          break;
+        case 'sambung':
+          va=a.status_sambung||'~'; vb=b.status_sambung||'~';
+          break;
+        default:
+          return v29FamilySort(a,b);
+      }
+      if(va<vb)return -1*_sortDir;
+      if(va>vb)return 1*_sortDir;
+      return String(a.nama||'').localeCompare(String(b.nama||''),'id',{sensitivity:'base'});
+    });
+  }
+
+  window.renderJamaah=function(){
+    const list=getFilteredJamaah();
+    const el=document.getElementById('jamaah-list-wrap');
+    if(!el)return;
+
+    const pengSet=new Set((aPengurus||[]).filter(p=>p.aktif!==false).map(p=>p.did));
+    const info=document.getElementById('tbl-info');
+    if(info)info.textContent='Menampilkan '+list.length+' dari '+aJamaah.length+' jamaah';
+
+    if(!list.length){
+      el.innerHTML='<div class="empty-tbl"><div class="ei">👥</div>Tidak ada data sesuai filter</div>';
+      return;
+    }
+
+    const grouped=new Map();
+    list.forEach(j=>{
+      const k=j.kelompok_nama||'Tanpa Kelompok';
+      if(!grouped.has(k))grouped.set(k,[]);
+      grouped.get(k).push(j);
+    });
+
+    const groups=[...grouped.entries()].sort((a,b)=>
+      v29GroupRank(a[0])-v29GroupRank(b[0]) ||
+      String(a[0]).localeCompare(String(b[0]),'id')
+    );
+
+    let globalNo=0;
+    let out='';
+
+    groups.forEach(([kelompok,rows])=>{
+      v29CurrentSort(rows);
+
+      const kkCount=new Set(rows.map(j=>j.nama_kk||j.nama).filter(Boolean)).size;
+
+      out+=`<section class="v29-kelompok-section">
+        <div class="v29-kelompok-head">
+          <span>🏘️ ${escH(kelompok)}</span>
+          <span class="v29-kelompok-meta">${rows.length} jiwa · ${kkCount} KK</span>
+        </div>
+        <table class="tbl-jamaah">
+          <thead><tr>
+            <th style="width:36px;text-align:center;cursor:default;">#</th>
+            <th style="width:44px;text-align:center;cursor:default;">📷</th>
+            <th onclick="setSort('nama')" class="${_sortBy==='nama'?'sorted':''}" style="min-width:210px;">Nama${sortInd('nama')}</th>
+            <th onclick="setSort('jk')" class="${_sortBy==='jk'?'sorted':''}" style="width:46px;text-align:center;">L/P${sortInd('jk')}</th>
+            <th onclick="setSort('umur')" class="${_sortBy==='umur'?'sorted':''}" style="width:55px;text-align:center;">Umur${sortInd('umur')}</th>
+            <th onclick="setSort('kelas')" class="${_sortBy==='kelas'?'sorted':''}">Kelas KBM${sortInd('kelas')}</th>
+            <th onclick="setSort('nikah')" class="${_sortBy==='nikah'?'sorted':''}">Status Nikah${sortInd('nikah')}</th>
+            <th onclick="setSort('sambung')" class="${_sortBy==='sambung'?'sorted':''}">Sambung${sortInd('sambung')}</th>
+          </tr></thead><tbody>`;
+
+      let prevKK=null;
+      rows.forEach(j=>{
+        globalNo++;
+        const currentKK=String(j.nama_kk||j.nama||'').trim();
+        const familyStart=currentKK!==prevKK;
+        prevKK=currentKK;
+
+        const isKK=String(j.nama||'').trim().toLowerCase()===String(j.nama_kk||'').trim().toLowerCase();
+        const jk=j.jenis_kelamin||'';
+        const jkIcon=(jk==='Laki-laki'||jk==='L')
+          ?'<span class="jk-icon jk-l">♂</span>'
+          :(jk==='Perempuan'||jk==='P')
+            ?'<span class="jk-icon jk-p">♀</span>'
+            :'<span class="jk-icon" style="color:var(--text-muted);">—</span>';
+
+        const umur=umurFromTgl(j.tgl_lahir);
+        const umurStr=umur===null?'<span style="color:var(--text-muted);">—</span>':String(umur);
+
+        const fotoCell=j.foto_url
+          ?`<img src="${j.foto_url}" class="foto-avatar" alt="foto" onclick="event.stopPropagation();bukaModalEdit('${j.did}')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+             <div class="foto-avatar-placeholder" style="display:none;" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`
+          :`<div class="foto-avatar-placeholder" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`;
+
+        const kkMeta=isKK
+          ?`<span class="v29-kk-head">👑 Kepala KK</span> · KK: ${escH(currentKK||'-')}`
+          :`KK: ${escH(currentKK||'-')}`;
+
+        out+=`<tr class="${familyStart?'v29-family-start ':''}${isKK?'row-iskk':''}" onclick="bukaModalEdit('${j.did}')">
+          <td class="tc-num">${globalNo}</td>
+          <td style="text-align:center;padding:4px 5px;">${fotoCell}</td>
+          <td>
+            <div class="v29-name-main">${pengSet.has(j.did)?'🛡️ ':''}${escH(j.nama||'')}</div>
+            <div class="v29-name-meta">${kkMeta}</div>
+          </td>
+          <td class="tc-jk">${jkIcon}</td>
+          <td class="tc-umur">${umurStr}</td>
+          <td>${kelasKbmAktual(j)
+            ?`<span class="kelas-generus">${escH(kelasKbmAktual(j))}</span>`
+            :'<span style="color:var(--text-muted);">—</span>'}</td>
+          <td>${escH(j.status_nikah||'—')}</td>
+          <td>${ssBadgeRow(j.status_sambung)}</td>
+        </tr>`;
+      });
+
+      out+='</tbody></table></section>';
+    });
+
+    el.innerHTML=out;
+  };
+
+  /* Youth marriage compact photo rows */
+  const prevYouthRender=window.renderYouthList;
+  window.renderYouthList=function(){
+    const wrap=document.getElementById('yn-list-wrap');
+    if(!wrap)return;
+
+    const rows=ynFilteredRows();
+    const st=document.getElementById('yn-stats');
+
+    if(st){
+      const all=aYouthMarriage,total=all.length,
+        male=all.filter(x=>ynGender(x.jenis_kelamin)==='L').length,
+        female=all.filter(x=>ynGender(x.jenis_kelamin)==='P').length,
+        ready=all.filter(x=>x.profile_status==='Siap dibagikan').length,
+        photo=all.filter(x=>x.has_photo).length;
+      st.innerHTML=`<span class="stat-pill"><span class="pl">💚</span><span class="pv">${total}</span><span class="pl">Usia Nikah</span></span>
+        <span class="stat-pill blue"><span class="pv">${male}</span><span class="pl">Pemuda</span></span>
+        <span class="stat-pill gold"><span class="pv">${female}</span><span class="pl">Pemudi</span></span>
+        <span class="stat-pill"><span class="pv">${ready}</span><span class="pl">Siap Dibagikan</span></span>
+        <span class="stat-pill purple"><span class="pv">${photo}</span><span class="pl">Ada Foto</span></span>`;
+    }
+
+    if(!rows.length){
+      wrap.innerHTML='<div class="empty"><div class="ei">💚</div><div>Tidak ada data sesuai filter.</div></div>';
+      return;
+    }
+
+    const sections=[['L','PEMUDA'],['P','PEMUDI']]
+      .map(([g,label])=>[g,label,ynSortRows(rows.filter(r=>ynGender(r.jenis_kelamin)===g))])
+      .filter(x=>x[2].length);
+
+    let html='';
+    sections.forEach(([g,label,list])=>{
+      html+=`<div class="yn-section-title ${g==='L'?'male':'female'}">${g==='L'?'♂':'♀'} ${label} · ${list.length} orang</div>
+        <table class="tbl-jamaah" style="min-width:790px;">
+          <thead><tr>
+            <th style="width:42px;">No</th>
+            <th style="width:75px;">Kelompok</th>
+            <th style="width:46px;">Foto</th>
+            <th>Nama</th>
+            <th style="width:55px;">Umur</th>
+            <th>Pekerjaan</th>
+            <th>Pendidikan</th>
+            <th>Profil</th>
+          </tr></thead><tbody>`;
+
+      list.forEach((r,i)=>{
+        const did=JSON.stringify(String(r.did));
+        let photoHtml;
+        const src=r.foto_url||r.foto_data||'';
+
+        if(src){
+          photoHtml=`<img src="${escH(src)}" class="v29-youth-photo" alt="foto"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'">
+            <span class="v29-youth-photo-placeholder" style="display:none;">👤</span>`;
+        }else if(r.has_photo){
+          photoHtml='<span class="v29-youth-photo-placeholder has-photo">📷</span>';
+        }else{
+          photoHtml='<span class="v29-youth-photo-placeholder">👤</span>';
+        }
+
+        html+=`<tr onclick='bukaYouthProfile(${did})'>
+          <td style="text-align:center;font-weight:600;">${i+1}</td>
+          <td><b>${escH(r.kelompok_nama||'-')}</b></td>
+          <td style="text-align:center;padding:3px 5px;">${photoHtml}</td>
+          <td><b>${escH(r.nama)}</b><div style="font-size:11px;color:var(--text-muted);">KK: ${escH(r.nama_kk||'-')}</div></td>
+          <td style="text-align:center;font-weight:600;">${r.umur??'-'}</td>
+          <td>${escH(r.pekerjaan||'-')}</td>
+          <td>${escH(r.pendidikan_terakhir||'-')}</td>
+          <td><span class="yn-status ${ynStatusClass(r.profile_status)}">${escH(r.profile_status||'Belum dibuat')}</span></td>
+        </tr>`;
+      });
+      html+='</tbody></table>';
+    });
+
+    wrap.innerHTML=html;
+  };
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    setTimeout(()=>{
+      try{renderJamaah();}catch(_e){}
+      try{if(document.getElementById('marriage-panel-youth')?.classList.contains('active'))renderYouthList();}catch(_e){}
+    },450);
+  });
+})();
+</script>
+
 </body>
 </html>
