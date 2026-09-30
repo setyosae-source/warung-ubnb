@@ -13462,5 +13462,310 @@ ${table.outerHTML}
 })();
 </script>
 
+
+
+<style id="ubnb-v24-hari-keluarga-style">
+.v24-family-note{
+  margin:8px 0 2px;
+  padding:8px 10px;
+  border:1px solid #f1c27d;
+  border-radius:5px;
+  background:#fff8e8;
+  color:#7c4a03;
+  font-size:12px;
+  line-height:1.4;
+}
+.v24-family-note b{font-weight:650}
+.cal-event-card.v24-family-card{
+  border-color:#e2b866!important;
+  background:#fffaf0!important;
+  cursor:default!important;
+}
+.cal-event-card.v24-family-card .cal-event-name{
+  color:#8a5700!important;
+}
+.cal-badge.v24-family-badge{
+  background:#fff1cc!important;
+  border-color:#e8bd63!important;
+  color:#7a4c00!important;
+}
+.v24-family-status{
+  margin-top:7px;
+  padding:7px 9px;
+  border-radius:5px;
+  background:#fff3d6;
+  color:#7a4c00;
+  font-size:12px;
+  font-weight:600;
+}
+.v22-sunday-row.v24-family-row td{
+  background:#fff4dc!important;
+  border-top:2px solid #d5a544!important;
+}
+.v22-sunday-row.v24-family-row td:first-child{
+  box-shadow:inset 4px 0 0 #b7791f!important;
+}
+</style>
+
+
+<script id="ubnb-v24-hari-keluarga-script">
+(function(){
+  function v24Parse(iso){
+    const [y,m,d]=String(iso||'').slice(0,10).split('-').map(Number);
+    return new Date(Date.UTC(y,m-1,d));
+  }
+  function v24ISO(dt){ return dt.toISOString().slice(0,10); }
+  function v24Add(iso,n){
+    const d=v24Parse(iso);
+    d.setUTCDate(d.getUTCDate()+n);
+    return v24ISO(d);
+  }
+  function v24IsHariKeluarga(iso){
+    if(!iso)return false;
+    const d=v24Parse(iso);
+    if(d.getUTCDay()!==0)return false;
+
+    const y=d.getUTCFullYear(), m=d.getUTCMonth();
+    const monthStart=new Date(Date.UTC(y,m,1));
+    let first=new Date(monthStart);
+    first.setUTCDate(1 + ((7-monthStart.getUTCDay())%7));
+
+    // Jika tanggal 1 hari Minggu, Minggu itu tidak dihitung sebagai Minggu ke-1.
+    if(first.getUTCDate()===1){
+      first.setUTCDate(first.getUTCDate()+7);
+    }
+
+    const family=new Date(first);
+    family.setUTCDate(first.getUTCDate()+14);
+    return v24ISO(d)===v24ISO(family);
+  }
+  function v24IsFamilyName(name){
+    return String(name||'').trim().toLowerCase()==='hari keluarga';
+  }
+  function v24FamilyDates(from,to){
+    const out=[];
+    let d=from, guard=0;
+    while(d<=to && guard++<400){
+      if(v24IsHariKeluarga(d))out.push(d);
+      d=v24Add(d,1);
+    }
+    return out;
+  }
+  function v24FamilyEntry(date){
+    return {
+      key:`F${date}`,
+      kind:'family_day',
+      family_day:true,
+      actual:false,
+      id:null,
+      kegiatan_id:null,
+      jadwal_id:null,
+      occurrence_date:date,
+      original_date:date,
+      date,
+      name:'Hari Keluarga',
+      time:'',
+      end_time:'',
+      location:'',
+      scope_level:'desa',
+      scope_kelompok:null,
+      status:'aktif',
+      catatan:'Hari khusus keluarga · tidak ada kegiatan lain.',
+      filter_peserta:{},
+      generated:false,
+      participant_count:0,
+      routine:false,
+      raw:null
+    };
+  }
+
+  /* ===== Kalender: Minggu ke-3 hanya Hari Keluarga ===== */
+  const baseCalendarEntries = window.calendarEntries;
+  if(typeof baseCalendarEntries==='function'){
+    window.calendarEntries=function(fromStr,toStr){
+      let rows=baseCalendarEntries.apply(this,arguments)||[];
+
+      // Kegiatan lain pada Hari Keluarga tidak ditampilkan sebagai agenda valid.
+      rows=rows.filter(e=>{
+        if(!v24IsHariKeluarga(e.date))return true;
+        return v24IsFamilyName(e.name);
+      });
+
+      // Hari Keluarga otomatis muncul meskipun tidak dibuat manual sebagai event.
+      for(const date of v24FamilyDates(fromStr,toStr)){
+        const exists=rows.some(e=>e.date===date && v24IsFamilyName(e.name));
+        if(!exists)rows.push(v24FamilyEntry(date));
+      }
+
+      return rows.sort((a,b)=>
+        a.date.localeCompare(b.date) ||
+        (a.time||'99:99').localeCompare(b.time||'99:99') ||
+        String(a.name||'').localeCompare(String(b.name||''),'id')
+      );
+    };
+  }
+
+  const baseCalendarFilterEntries=window.calendarFilterEntries;
+  if(typeof baseCalendarFilterEntries==='function'){
+    window.calendarFilterEntries=function(list){
+      const q=(document.getElementById('calendar-search')?.value||'').trim().toLowerCase();
+      return (list||[]).filter(e=>{
+        // Hari Keluarga berlaku untuk semua scope.
+        if(e.family_day){
+          if(q && !`${e.name} ${e.catatan||''}`.toLowerCase().includes(q))return false;
+          return true;
+        }
+        return baseCalendarFilterEntries([e]).length>0;
+      });
+    };
+  }
+
+  const baseBadges=window.calendarEntryBadges;
+  window.calendarEntryBadges=function(e){
+    if(e?.family_day){
+      return `<span class="cal-badge v24-family-badge">👨‍👩‍👧‍👦 Hari Keluarga</span>
+              <span class="cal-badge v24-family-badge">Tidak ada kegiatan lain</span>`;
+    }
+    return typeof baseBadges==='function'?baseBadges.apply(this,arguments):'';
+  };
+
+  const baseEntryCard=window.calendarEntryCard;
+  window.calendarEntryCard=function(e){
+    if(e?.family_day){
+      return `<div class="cal-event-card v24-family-card">
+        <div class="cal-event-top">
+          <div style="min-width:0;flex:1;">
+            <div class="cal-event-name">👨‍👩‍👧‍👦 Hari Keluarga</div>
+            <div class="cal-event-meta">📅 ${escH(calFmtDate(e.date))}</div>
+          </div>
+          <div class="cal-event-badges">${calendarEntryBadges(e)}</div>
+        </div>
+        <div class="v24-family-status">Minggu ke-3 dikhususkan untuk keluarga. Tidak dijadwalkan kegiatan lain.</div>
+      </div>`;
+    }
+    return typeof baseEntryCard==='function'?baseEntryCard.apply(this,arguments):'';
+  };
+
+  const baseTodayCard=window.calendarTodayActionCard;
+  window.calendarTodayActionCard=function(e){
+    if(e?.family_day)return calendarEntryCard(e);
+    return typeof baseTodayCard==='function'?baseTodayCard.apply(this,arguments):'';
+  };
+
+  const baseOpenEntry=window.openCalendarEntry;
+  if(typeof baseOpenEntry==='function'){
+    window.openCalendarEntry=function(key){
+      if(String(key||'').startsWith('F')){
+        toast('👨‍👩‍👧‍👦 Hari Keluarga · tidak ada kegiatan lain pada Minggu ke-3');
+        return;
+      }
+      return baseOpenEntry.apply(this,arguments);
+    };
+  }
+
+  /* ===== Form Buat / Edit Acara ===== */
+  function v24PatchEventForm(){
+    const body=document.getElementById('modal-kegiatan-body');
+    if(!body)return;
+
+    if(!body.querySelector('#v24-family-rule-note')){
+      const note=document.createElement('div');
+      note.id='v24-family-rule-note';
+      note.className='v24-family-note';
+      note.innerHTML='<b>Hari Keluarga:</b> setiap Minggu ke-3 tidak boleh ada kegiatan lain. Jika tanggal 1 jatuh hari Minggu, tanggal 1 tidak dihitung sebagai Minggu ke-1.';
+      const target=document.getElementById('kg-incident-date-row') || body.firstElementChild;
+      if(target)target.insertAdjacentElement('afterend',note);
+      else body.prepend(note);
+    }
+
+    const tgl=document.getElementById('kg-tgl');
+    if(tgl && !tgl.dataset.v24){
+      tgl.dataset.v24='1';
+      tgl.addEventListener('change',v24RefreshFamilyNotice);
+    }
+    const nama=document.getElementById('kg-acara-input');
+    if(nama && !nama.dataset.v24){
+      nama.dataset.v24='1';
+      nama.addEventListener('input',v24RefreshFamilyNotice);
+    }
+    v24RefreshFamilyNotice();
+  }
+
+  function v24RefreshFamilyNotice(){
+    const note=document.getElementById('v24-family-rule-note');
+    const kind=document.getElementById('kg-jenis')?.value||'insidentil';
+    if(!note)return;
+
+    if(kind==='rutin'){
+      note.innerHTML='<b>Hari Keluarga:</b> occurrence jadwal rutin yang jatuh pada Minggu ke-3 otomatis tidak dilaksanakan. Hari tersebut ditampilkan sebagai <b>Hari Keluarga</b>.';
+      return;
+    }
+
+    const date=document.getElementById('kg-tgl')?.value||'';
+    const family=v24IsHariKeluarga(date);
+    if(family){
+      note.innerHTML='<b>👨‍👩‍👧‍👦 Hari Keluarga.</b> Tanggal ini adalah Minggu ke-3. Hanya acara bernama <b>Hari Keluarga</b> yang diperbolehkan.';
+    }else{
+      note.innerHTML='<b>Hari Keluarga:</b> setiap Minggu ke-3 tidak boleh ada kegiatan lain. Jika tanggal 1 jatuh hari Minggu, tanggal 1 tidak dihitung sebagai Minggu ke-1.';
+    }
+  }
+
+  const baseRenderEventForm=window._renderCalendarEventForm;
+  if(typeof baseRenderEventForm==='function'){
+    window._renderCalendarEventForm=function(){
+      const r=baseRenderEventForm.apply(this,arguments);
+      setTimeout(v24PatchEventForm,0);
+      return r;
+    };
+  }
+
+  const baseSave=window.simpanKegiatan;
+  if(typeof baseSave==='function'){
+    window.simpanKegiatan=async function(){
+      const kind=document.getElementById('kg-jenis')?.value||'insidentil';
+      if(kind==='insidentil'){
+        const date=document.getElementById('kg-tgl')?.value||'';
+        const name=(document.getElementById('kg-acara-input')?.value||'').trim();
+        const family=v24IsHariKeluarga(date);
+
+        if(family && !v24IsFamilyName(name)){
+          toast('Minggu ke-3 adalah Hari Keluarga. Tidak boleh membuat kegiatan lain pada tanggal ini.',true);
+          return;
+        }
+        if(!family && v24IsFamilyName(name)){
+          toast('Hari Keluarga hanya digunakan pada Minggu ke-3.',true);
+          return;
+        }
+      }
+      return baseSave.apply(this,arguments);
+    };
+  }
+
+  /* ===== Agenda: tandai row Hari Keluarga ===== */
+  const baseAgendaPreview=window.createAgendaPreview;
+  if(typeof baseAgendaPreview==='function'){
+    window.createAgendaPreview=function(){
+      const r=baseAgendaPreview.apply(this,arguments);
+      setTimeout(()=>{
+        const table=document.getElementById('agenda-table');
+        if(!table)return;
+        [...table.tBodies[0]?.rows||[]].forEach(tr=>{
+          const txt=(tr.cells[3]?.textContent||'').trim().toLowerCase();
+          if(txt.includes('hari keluarga')){
+            tr.classList.add('v24-family-row');
+            if(tr.cells[4] && !tr.cells[4].textContent.trim()){
+              tr.cells[4].textContent='Hari khusus keluarga · tidak ada kegiatan lain.';
+            }
+          }
+        });
+      },0);
+      return r;
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(v24PatchEventForm,500));
+})();
+</script>
+
 </body>
 </html>
