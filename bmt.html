@@ -3979,8 +3979,14 @@ function lihatAkadSigned(){
 
 // Preview Cetak
 let _printFn=null;
-function bukaPreviewCetak(judul, previewHTML, printFn){
+let _printDownloadName='dokumen';
+function safeNamaFile(v){
+  return String(v||'dokumen').trim().replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'')||'dokumen';
+}
+function bukaPreviewCetak(judul, previewHTML, printFn, downloadName=''){
   _printFn=printFn;
+  const fallback=window._kartuAkad?('kartu-angsuran-'+(window._kartuAkad.nama_jamaah||'kartu')):'dokumen';
+  _printDownloadName=safeNamaFile(downloadName||fallback);
   document.getElementById('preview-cetak-title').textContent=judul;
   document.getElementById('preview-cetak-paper').innerHTML=previewHTML;
   openModal('preview-cetak');
@@ -4009,8 +4015,7 @@ async function executeJPG(){
       logging:false,
     });
     const link=document.createElement('a');
-    const nama=(window._kartuAkad?window._kartuAkad.nama_jamaah.replace(/\s+/g,'_'):'kartu');
-    link.download='kartu-angsuran-'+nama+'.jpg';
+    link.download=_printDownloadName+'.jpg';
     link.href=canvas.toDataURL('image/jpeg',0.92);
     link.click();
     toast('✅ Gambar tersimpan');
@@ -4598,6 +4603,111 @@ function initBHIDropdown(){
 
 
 // ═══════════════════════════════════════════
+// TANDA BUKTI PENYERTAAN MODAL
+// ═══════════════════════════════════════════
+function terbilangID(nilai){
+  const n=Math.floor(Math.abs(Number(nilai)||0));
+  const a=['','satu','dua','tiga','empat','lima','enam','tujuh','delapan','sembilan','sepuluh','sebelas'];
+  function b(x){
+    x=Math.floor(x);
+    if(x<12)return a[x];
+    if(x<20)return b(x-10)+' belas';
+    if(x<100)return b(Math.floor(x/10))+' puluh '+b(x%10);
+    if(x<200)return 'seratus '+b(x-100);
+    if(x<1000)return b(Math.floor(x/100))+' ratus '+b(x%100);
+    if(x<2000)return 'seribu '+b(x-1000);
+    if(x<1000000)return b(Math.floor(x/1000))+' ribu '+b(x%1000);
+    if(x<1000000000)return b(Math.floor(x/1000000))+' juta '+b(x%1000000);
+    if(x<1000000000000)return b(Math.floor(x/1000000000))+' miliar '+b(x%1000000000);
+    if(x<1000000000000000)return b(Math.floor(x/1000000000000))+' triliun '+b(x%1000000000000);
+    return String(x);
+  }
+  if(n===0)return 'Nol rupiah';
+  const out=b(n).replace(/\s+/g,' ').trim();
+  return out.charAt(0).toUpperCase()+out.slice(1)+' rupiah';
+}
+function hitungJangkaBulan(tglMulai,tglJT,explicit){
+  const e=parseInt(explicit,10);
+  if(e>0)return e;
+  if(!tglMulai||!tglJT)return null;
+  const a=new Date(tglMulai+'T00:00:00'), b=new Date(tglJT+'T00:00:00');
+  if(isNaN(a)||isNaN(b)||b<a)return null;
+  const hari=(b-a)/86400000;
+  const m=Math.max(1,Math.round(hari/30.4375));
+  return m;
+}
+function dataBuktiPenyertaan(tipe,id){
+  const internal=tipe.startsWith('internal');
+  const p=internal?aPenyertaanInternal.find(x=>x.id===id):aPenyertaanEksternal.find(x=>x.id===id);
+  if(!p)return null;
+  const mitra=internal?null:aMitra.find(m=>m.id===p.mitra_id);
+  const anggota=internal?(p.ubnb_anggota||{}):null;
+  const jenisP=internal?(p.jenis||'penuh'):(p.jenis_penyertaan||'spesifik');
+  const nama=internal?(anggota?.nama||'—'):(mitra?.nama||'—');
+  const nisbahP=internal?parseFloat(p.nisbah_anggota||0):parseFloat(p.nisbah_mitra_pct||0);
+  const nisbahB=internal?parseFloat(p.nisbah_ubnb||100-nisbahP):parseFloat(p.nisbah_ubnb_pct||100-nisbahP);
+  const akad=jenisP==='spesifik'?(internal?(p.akad_no||'—'):((p.akad_nos||[]).join(', ')||'—')):'—';
+  return {
+    tipe,internal,p,mitra,anggota,jenisP,nama,
+    noP:p.no_penyertaan||'—',modal:parseFloat(p.jumlah_modal||0),nisbahP,nisbahB,
+    tglMulai:p.tgl_mulai||null,tglJT:p.tgl_jatuh_tempo||null,
+    jangka:hitungJangkaBulan(p.tgl_mulai,p.tgl_jatuh_tempo,p.jangka_bulan),
+    akad,catatan:p.catatan||'',status:p.status||'—',
+    identitas:internal
+      ? [anggota?.no_anggota?('No. Anggota: '+anggota.no_anggota):'',anggota?.kelompok?('Kelompok: '+anggota.kelompok):''].filter(Boolean).join(' · ')
+      : [mitra?.kode?('Kode: '+mitra.kode):'',mitra?.jenis?('Jenis: '+mitra.jenis):'',mitra?.pic?('PIC: '+mitra.pic):''].filter(Boolean).join(' · ')
+  };
+}
+function _buktiPenyertaanHTML(d,printMode=false){
+  const H=printMode?'ph':'ppr-header', SEC=printMode?'sec':'ppr-sec', TBL=printMode?'pd':'ppr-data', SUM=printMode?'sum-box':'ppr-sum';
+  const TTD=printMode?'ttd':'ppr-ttd', TTDB=printMode?'ttd-box':'ppr-ttd-box', FOOT=printMode?'pfooter':'ppr-footer';
+  const jenisLabel=d.jenisP==='penuh'?'Penyertaan Penuh':'Penyertaan Spesifik';
+  const jangkaText=d.jangka?d.jangka+' bulan':'—';
+  const akadRow=d.jenisP==='spesifik'?`<tr><td class="lbl">Akad Terkait</td><td>${d.akad}</td></tr>`:'';
+  const catatanRow=d.catatan?`<tr><td class="lbl">Catatan</td><td>${d.catatan}</td></tr>`:'';
+  return `<div class="${H}"><div><h2>TANDA BUKTI PENYERTAAN MODAL</h2><p>BMT UBNB PERWIRA · Desa Perwira</p></div><div><h3>${d.noP}</h3><div class="${printMode?'no':'ppr-no'}">BUKTI PENYERTAAN</div></div></div>
+<div style="font-size:9pt;line-height:1.6;margin:4px 0 10px;color:#333">Dengan ini menerangkan bahwa BMT UBNB Perwira telah mencatat penerimaan dana penyertaan modal dari pemodal sebagaimana rincian berikut.</div>
+<div class="${SEC}">Data Pemodal</div>
+<table class="${TBL}">
+  <tr><td class="lbl">Nama Pemodal</td><td class="hl">${d.nama}</td></tr>
+  <tr><td class="lbl">Kategori</td><td>${d.internal?'Internal — Anggota UBNB':'Eksternal — Mitra / Lembaga'}</td></tr>
+  ${d.identitas?`<tr><td class="lbl">Identitas</td><td>${d.identitas}</td></tr>`:''}
+</table>
+<div class="${SEC}">Rincian Penyertaan</div>
+<table class="${TBL}">
+  <tr><td class="lbl">Nomor Penyertaan</td><td><strong>${d.noP}</strong></td></tr>
+  <tr><td class="lbl">Jenis Penyertaan</td><td>${jenisLabel}</td></tr>
+  <tr><td class="lbl">Tanggal Mulai</td><td>${fmtTgl(d.tglMulai)}</td></tr>
+  <tr><td class="lbl">Jatuh Tempo</td><td>${fmtTgl(d.tglJT)}</td></tr>
+  <tr><td class="lbl">Jangka Waktu</td><td>${jangkaText}</td></tr>
+  ${akadRow}
+  <tr><td class="lbl">Status</td><td>${String(d.status).toUpperCase()}</td></tr>
+  ${catatanRow}
+</table>
+<div class="${SUM}">
+  <div><div class="s-lbl">Penyertaan Modal</div><div class="s-val">${rp(d.modal)}</div></div>
+  <div><div class="s-lbl">Nisbah Pemodal</div><div class="s-val">${d.nisbahP}%</div></div>
+  <div><div class="s-lbl">Nisbah BMT</div><div class="s-val">${d.nisbahB}%</div></div>
+</div>
+<div style="border:1px solid #d8d5cc;background:#faf8f3;padding:9px 11px;margin:8px 0;font-size:8.5pt;line-height:1.55">
+  <strong>Terbilang:</strong> ${terbilangID(d.modal)}.<br>
+  Bukti ini merupakan tanda bukti administrasi pencatatan penyertaan modal. Ketentuan bagi hasil, pengembalian modal, serta hak dan kewajiban para pihak mengikuti akad/kesepakatan penyertaan yang berlaku.
+</div>
+<div class="${TTD}">
+  <div class="${TTDB}"><div style="font-size:8pt;margin-bottom:2px">Pemodal</div><div class="area"></div><div class="nama">${d.nama}</div></div>
+  <div class="${TTDB}"><div style="font-size:8pt;margin-bottom:2px">Pengelola BMT UBNB Perwira</div><div class="area"></div><div class="nama">( ................................ )</div></div>
+</div>
+<div class="${FOOT}">Dicetak: ${fmtTgl(today())} · Operator: ${CU?.username||'—'} · BMT UBNB PERWIRA</div>`;
+}
+function cetakBuktiPenyertaan(tipe,id){
+  const d=dataBuktiPenyertaan(tipe,id);
+  if(!d){toast('Data penyertaan tidak ditemukan',true);return;}
+  closeModal('modal-detail-penyertaan');
+  const file='bukti-penyertaan-'+d.noP+'-'+d.nama;
+  bukaPreviewCetak('Bukti Penyertaan — '+d.nama,_buktiPenyertaanHTML(d,false),()=>_buktiPenyertaanHTML(d,true),file);
+}
+
+// ═══════════════════════════════════════════
 // DETAIL PENYERTAAN
 // ═══════════════════════════════════════════
 function bukaDetailPenyertaan(tipe, id){
@@ -4624,7 +4734,7 @@ function bukaDetailPenyertaan(tipe, id){
   const nisbahB = 100-nisbahP;
   const tglMulai = p.tgl_mulai;
   const tglJT = p.tgl_jatuh_tempo;
-  const jangka = p.jangka_bulan||'—';
+  const jangka = hitungJangkaBulan(p.tgl_mulai,p.tgl_jatuh_tempo,p.jangka_bulan);
   const status = p.status;
 
   // BH summary
@@ -4712,12 +4822,12 @@ function bukaDetailPenyertaan(tipe, id){
   document.getElementById('dp-bh-section').innerHTML=bhHtml;
 
   // Aksi
-  let aksiHtml='';
+  let aksiHtml=`<button class="btn secondary" onclick="cetakBuktiPenyertaan('${tipe}',${id})">🧾 Bukti Penyertaan</button>`;
   if(tipe.startsWith('internal')){
-    aksiHtml=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');openModal('modal-bh-internal')">💰 Input BH</button>`;
+    aksiHtml+=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');openModal('modal-bh-internal')">💰 Input BH</button>`;
     if(pendingBH.length)aksiHtml+=`<button class="btn primary" onclick="closeModal('modal-detail-penyertaan');bayarBHInternal(${pendingBH[0].id})">✅ Bayar BH Pending</button>`;
   }else{
-    if(pendingBH.length)aksiHtml=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');bukaBayarBH(${pendingBH[0].id})">✅ Bayar BH Pending (${pendingBH.length})</button>`;
+    if(pendingBH.length)aksiHtml+=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');bukaBayarBH(${pendingBH[0].id})">✅ Bayar BH Pending (${pendingBH.length})</button>`;
   }
   document.getElementById('dp-actions').innerHTML=aksiHtml;
 
