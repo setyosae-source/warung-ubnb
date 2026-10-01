@@ -31,7 +31,7 @@
   html.printing-raster #print-raster-host .print-raster-page{display:block!important;width:100%!important;height:auto!important;margin:0!important;padding:0!important;page-break-after:always!important;break-after:page!important}
   html.printing-raster #print-raster-host .print-raster-page:last-child{page-break-after:auto!important;break-after:auto!important}
 }
-#capture-stage-peny{position:fixed;left:0;top:0;width:650px;background:#fff;z-index:2147483646;pointer-events:none}
+#capture-stage-peny{position:absolute;left:0;top:0;width:794px;background:#fff;z-index:-2147483647;pointer-events:none}
 #print-raster-host{display:none}
 </style>
 </head>
@@ -85,36 +85,58 @@ function gayaCapturePeny(doc,p){
   doc.querySelectorAll('table.ppr-data td.hl').forEach(x=>{x.style.background='#e8f5ed';x.style.color='#1a5c3a'});
   doc.querySelectorAll('.verify-band').forEach(x=>{x.style.background='#eefaf2';x.style.color='#166534';x.style.borderColor='#1a5c3a'});
 }
+function kandidatBreakPeny(clone){
+  const rootRect=clone.getBoundingClientRect();
+  const out=[];
+  const labels=['Pasal 5','Pasal 6','Ijab dan Qabul'];
+  clone.querySelectorAll('div').forEach(el=>{
+    const t=(el.textContent||'').trim().replace(/\s+/g,' ');
+    if(labels.some(x=>t.startsWith(x))){
+      const r=el.getBoundingClientRect();
+      const y=r.top-rootRect.top;
+      if(y>100)out.push(y);
+    }
+  });
+  const sig=clone.querySelector('[data-signature-party="pemodal"]')?.parentElement;
+  if(sig){const r=sig.getBoundingClientRect();const y=r.top-rootRect.top;if(y>100)out.push(y)}
+  return [...new Set(out.map(v=>Math.round(v)))].sort((a,b)=>a-b);
+}
 async function captureDokumen(){
   const src=document.getElementById('paper');
   if(!src||!src.innerHTML.trim())throw new Error('Dokumen belum tersedia');
   if(typeof html2canvas!=='function')throw new Error('Mesin render belum termuat. Periksa koneksi internet lalu muat ulang halaman.');
   await tungguGambarDokumen(src);
 
-  // Penting untuk Android: jangan memakai scrollY negatif. Pada beberapa browser Samsung/Chrome
-  // hal itu membuat canvas berukuran benar tetapi seluruh isinya putih.
-  const rect=src.getBoundingClientRect();
-  const scale=(navigator.deviceMemory&&navigator.deviceMemory<=2)?1.35:1.7;
-  const opts={
-    backgroundColor:'#ffffff',scale,useCORS:true,allowTaint:false,logging:false,imageTimeout:5000,
-    width:Math.ceil(src.scrollWidth||rect.width),height:Math.ceil(src.scrollHeight||rect.height),
-    onclone:doc=>gayaCapturePeny(doc,doc.getElementById('paper'))
-  };
-  let c=await html2canvas(src,opts);
-  if(canvasAdaIsi(c))return c;
-
-  // Fallback khusus mobile: render salinan pada posisi 0,0 agar tidak terpengaruh scroll/overflow halaman.
-  const stage=document.createElement('div');stage.id='capture-stage-peny';
-  stage.style.width=Math.max(600,Math.round(rect.width||650))+'px';
-  const clone=src.cloneNode(true);clone.id='paper-capture-fallback';clone.style.maxWidth='none';clone.style.width='100%';clone.style.margin='0';
+  // Export SELALU memakai lebar A4/desktop yang tetap, bukan lebar layar HP.
+  // Sebelumnya di HP dokumen dirender selebar ±330px lalu diperbesar ke A4,
+  // sehingga font membesar dan dokumen MP-2026-003 pecah menjadi 4 halaman.
+  const exportWidth=794; // ± lebar A4 pada 96 dpi
+  const stage=document.createElement('div');stage.id='capture-stage-peny';stage.style.width=exportWidth+'px';
+  const clone=src.cloneNode(true);clone.id='paper-capture-export';
+  clone.style.maxWidth='none';clone.style.width='100%';clone.style.margin='0';clone.style.padding='22px';clone.style.fontSize='9pt';clone.style.lineHeight='1.45';clone.style.boxShadow='none';
   stage.appendChild(clone);document.body.appendChild(stage);
   try{
     await tungguGambarDokumen(clone);
-    const r2=clone.getBoundingClientRect();
-    c=await html2canvas(clone,{backgroundColor:'#ffffff',scale,useCORS:true,allowTaint:false,logging:false,imageTimeout:5000,width:Math.ceil(clone.scrollWidth||r2.width),height:Math.ceil(clone.scrollHeight||r2.height),scrollX:0,scrollY:0,onclone:doc=>gayaCapturePeny(doc,doc.getElementById('paper-capture-fallback'))});
+    gayaCapturePeny(document,clone);
+    // Sedikit rapatkan elemen dokumen tanpa mengecilkan keterbacaan.
+    clone.querySelectorAll('.ppr-header').forEach(x=>{x.style.padding='11px 14px';x.style.marginBottom='10px'});
+    clone.querySelectorAll('.ppr-sec').forEach(x=>{x.style.marginTop='8px';x.style.padding='4px 8px'});
+    clone.querySelectorAll('table.ppr-data td').forEach(x=>{x.style.padding='4px 6px'});
+    clone.querySelectorAll('[data-signature-party]').forEach(x=>{x.style.breakInside='avoid';x.style.pageBreakInside='avoid'});
+
+    const breaksCss=kandidatBreakPeny(clone);
+    const r=clone.getBoundingClientRect();
+    const scale=(navigator.deviceMemory&&navigator.deviceMemory<=2)?1.35:1.6;
+    const c=await html2canvas(clone,{
+      backgroundColor:'#ffffff',scale,useCORS:true,allowTaint:false,logging:false,imageTimeout:5000,
+      width:Math.ceil(clone.scrollWidth||r.width),height:Math.ceil(clone.scrollHeight||r.height),scrollX:0,scrollY:0,
+      onclone:doc=>gayaCapturePeny(doc,doc.getElementById('paper-capture-export'))
+    });
+    if(!canvasAdaIsi(c))throw new Error('Render dokumen kosong. Muat ulang halaman lalu coba lagi.');
+    const factor=c.width/Math.max(1,(clone.scrollWidth||r.width));
+    c._safeBreaks=breaksCss.map(y=>Math.round(y*factor));
+    return c;
   }finally{stage.remove()}
-  if(!canvasAdaIsi(c))throw new Error('Render dokumen masih kosong. Tutup halaman, buka kembali link, lalu coba lagi.');
-  return c;
 }
 function canvasAdaIsi(c){
   try{
@@ -126,13 +148,29 @@ function canvasAdaIsi(c){
   }catch(e){return true}
 }
 function potongCanvasA4(c){
-  // Rasio area cetak A4 dengan margin 7 mm kiri/kanan dan 8 mm atas/bawah.
   const usableW=196,usableH=281;
   const pagePx=Math.max(1,Math.floor(c.width*(usableH/usableW)));
+  const safe=[...(c._safeBreaks||[])].filter(y=>y>0&&y<c.height).sort((a,b)=>a-b);
+  const cuts=[0];let y=0;
+  while(c.height-y>pagePx){
+    const target=y+pagePx;
+    // Pilih batas logis dekat bagian bawah halaman: Pasal 5/6, Ijab-Qabul, atau blok TTD.
+    const candidates=safe.filter(v=>v>y+pagePx*.72&&v<=target-18);
+    const cut=candidates.length?candidates[candidates.length-1]:target;
+    cuts.push(cut);y=cut;
+  }
+  cuts.push(c.height);
+
   const out=[];
-  for(let y=0;y<c.height;y+=pagePx){
-    const h=Math.min(pagePx,c.height-y),pc=document.createElement('canvas');pc.width=c.width;pc.height=h;
-    const x=pc.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,pc.width,pc.height);x.drawImage(c,0,y,c.width,h,0,0,c.width,h);
+  for(let i=0;i<cuts.length-1;i++){
+    const from=cuts[i],to=cuts[i+1],h=Math.max(1,to-from);
+    // Canvas dibuat setinggi area cetak A4 agar semua halaman konsisten dan rapi.
+    const pc=document.createElement('canvas');pc.width=c.width;pc.height=pagePx;
+    const x=pc.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,pc.width,pc.height);
+    x.drawImage(c,0,from,c.width,h,0,0,c.width,h);
+    // Nomor halaman kecil di bawah; tidak mengganggu naskah.
+    x.fillStyle='#888';x.font=`${Math.max(15,Math.round(c.width*.015))}px Arial`;
+    x.textAlign='center';x.fillText(`Halaman ${i+1} / ${cuts.length-1}`,pc.width/2,pc.height-10);
     out.push(pc);
   }
   return out;
