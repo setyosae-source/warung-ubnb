@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -2014,12 +2015,18 @@ function renderDashboard(){
   const wadAktif=aTabungan.filter(t=>t.status==='aktif');
   document.getElementById('lyr-wad-rek').textContent=wadAktif.length;
   document.getElementById('lyr-wad-saldo').textContent=fmtRb(wadAktif.reduce((s,t)=>s+parseFloat(t.saldo||0),0))+' terhimpun';
-  const penuh=aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh');
+  const penuh=[
+    ...aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh'),
+    ...aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='penuh')
+  ];
   document.getElementById('lyr-pmd-penuh').textContent=penuh.length;
   document.getElementById('lyr-pmd-penuh-val').textContent=fmtRb(penuh.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0))+' dikelola';
-  const spesifik=[...aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='spesifik'),...aPenyertaanEksternal.filter(p=>p.status==='aktif')];
+  const spesifik=[
+    ...aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='spesifik'),
+    ...aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='spesifik')
+  ];
   document.getElementById('lyr-pmd-spesifik').textContent=spesifik.length;
-  document.getElementById('lyr-pmd-spesifik-val').textContent=fmtRb(peTotal)+' dikelola';
+  document.getElementById('lyr-pmd-spesifik-val').textContent=fmtRb(spesifik.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0))+' dikelola';
   const pendingBH=aBHEksternal.filter(b=>!b.sudah_dibayar).length;
   const notif=document.getElementById('lyr-kap-notif');
   if(pendingBH>0){notif.style.display='block';notif.textContent=pendingBH+' pending';}else notif.style.display='none';
@@ -4215,6 +4222,12 @@ function exportLaporan(){const XLSX=window.XLSX;if(!XLSX){toast('XLSX tidak ters
 
 // PEMODAL
 function fillMitraDropdowns(){const opts='<option value="">Pilih mitra...</option>'+aMitra.map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');['pf-mitra-id','ps-mitra-id'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});}
+function nextNoPenyertaan(prefix, rows){
+  const yr=new Date().getFullYear();
+  const re=new RegExp('^'+prefix+'-'+yr+'-(\\d+)$');
+  const maxNo=(rows||[]).reduce((max,row)=>{const m=String(row.no_penyertaan||'').match(re);return m?Math.max(max,parseInt(m[1])||0):max;},0);
+  return `${prefix}-${yr}-${String(maxNo+1).padStart(3,'0')}`;
+}
 // ── PROYEKSI BAGI HASIL PEMODAL ──
 function renderProyeksiBH(){
   renderProyeksiBHSemua();
@@ -4268,22 +4281,28 @@ function renderProyeksiBHSemua(){
     const bhProyeksi=_hitungProyeksiBHInternal(p);
     items.push({nama:p.ubnb_anggota?.nama||'—',jenis:p.jenis,nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi});
   });
-  // Eksternal (spesifik)
+  // Eksternal (penuh + spesifik)
   aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
     const m=aMitra.find(x=>x.id===p.mitra_id);
+    const jenis=p.jenis_penyertaan||'spesifik';
     const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
-    const bhProyeksi=_hitungProyeksiBHEksternal(p);
-    items.push({nama:m?.nama||'—',jenis:'spesifik',nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi});
+    const bhProyeksi=jenis==='penuh'?_hitungProyeksiBHInternal(p):_hitungProyeksiBHEksternal(p);
+    items.push({nama:m?.nama||'—',jenis,nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi});
   });
   _proyeksiBHCard(el, items);
 }
 
 function renderProyeksiBHPenuh(){
   const el=document.getElementById('pmd-proyeksi-penuh');if(!el)return;
-  const items=aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh').map(p=>{
+  const items=[];
+  aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh').forEach(p=>{
     const bhSudah=aBHInternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
-    const bhProyeksi=_hitungProyeksiBHInternal(p);
-    return{nama:p.ubnb_anggota?.nama||'—',jenis:'penuh',nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi};
+    items.push({nama:p.ubnb_anggota?.nama||'—',jenis:'penuh',nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi:_hitungProyeksiBHInternal(p)});
+  });
+  aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='penuh').forEach(p=>{
+    const m=aMitra.find(x=>x.id===p.mitra_id);
+    const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
+    items.push({nama:m?.nama||'—',jenis:'penuh',nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi:_hitungProyeksiBHInternal(p)});
   });
   _proyeksiBHCard(el, items);
 }
@@ -4296,7 +4315,7 @@ function renderProyeksiBHSpesifik(){
     const bhProyeksi=_hitungProyeksiBHEksternal(p); // pakai logika dari akad terkait
     items.push({nama:p.ubnb_anggota?.nama||'—',jenis:'spesifik',nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi});
   });
-  aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
+  aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='spesifik').forEach(p=>{
     const m=aMitra.find(x=>x.id===p.mitra_id);
     const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
     const bhProyeksi=_hitungProyeksiBHEksternal(p);
@@ -4308,7 +4327,9 @@ function renderProyeksiBHSpesifik(){
 // Proyeksi BH Internal Penuh: dari margin belum terealisasi × nisbah pemodal
 // Asumsi: BH ∝ porsi modal terhadap total modal yang dikelola BMT
 function _hitungProyeksiBHInternal(p){
-  const totalModalPenuh=aPenyertaanInternal.filter(x=>x.status==='aktif'&&x.jenis==='penuh').reduce((s,x)=>s+parseFloat(x.jumlah_modal||0),0);
+  const totalModalPenuh=
+    aPenyertaanInternal.filter(x=>x.status==='aktif'&&x.jenis==='penuh').reduce((s,x)=>s+parseFloat(x.jumlah_modal||0),0)+
+    aPenyertaanEksternal.filter(x=>x.status==='aktif'&&(x.jenis_penyertaan||'spesifik')==='penuh').reduce((s,x)=>s+parseFloat(x.jumlah_modal||0),0);
   if(totalModalPenuh<=0)return 0;
   const porsi=parseFloat(p.jumlah_modal||0)/totalModalPenuh;
   // Total margin belum terealisasi dari akad aktif
@@ -4316,7 +4337,8 @@ function _hitungProyeksiBHInternal(p){
     const marginSudah=aAngsuran.filter(x=>x.akad_id===a.id).reduce((ms,x)=>ms+parseFloat(x.margin||0),0);
     return s+Math.max(0,parseFloat(a.total_margin||0)-marginSudah);
   },0);
-  return marginBelum*porsi*(parseFloat(p.nisbah_anggota||40)/100);
+  const nisbah=parseFloat(p.nisbah_anggota??p.nisbah_mitra_pct??40)/100;
+  return marginBelum*porsi*nisbah;
 }
 
 // Proyeksi BH Spesifik/Eksternal: dari sisa margin akad yang terikat
@@ -4351,13 +4373,14 @@ function renderPmdSemua(){
       items.push({type:'internal',jenis:p.jenis,nama:p.ubnb_anggota?.nama||'—',meta:`Anggota UBNB · ${p.no_penyertaan}`,modal:p.jumlah_modal,nisbah:`${p.nisbah_anggota}:${p.nisbah_ubnb}`,extra:fmtTgl(p.tgl_jatuh_tempo),pendingBH:pen});
     }
   });
-  if(_filterPemodal==='semua'||_filterPemodal==='spesifik'){
-    aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
-      const mitra=aMitra.find(m=>m.id===p.mitra_id);
-      const pen=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&!b.sudah_dibayar).length;
-      items.push({type:'eksternal',jenis:'spesifik',nama:mitra?.nama||'—',meta:`${mitra?.jenis||'Mitra'} · ${p.no_penyertaan}`,modal:p.jumlah_modal,nisbah:`${p.nisbah_mitra_pct}:${p.nisbah_ubnb_pct}`,extra:(p.akad_nos||[]).join(', '),pendingBH:pen});
-    });
-  }
+  aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
+    const jenis=p.jenis_penyertaan||'spesifik';
+    if(_filterPemodal!=='semua'&&_filterPemodal!==jenis)return;
+    const mitra=aMitra.find(m=>m.id===p.mitra_id);
+    const pen=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&!b.sudah_dibayar).length;
+    const extra=jenis==='penuh'?fmtTgl(p.tgl_jatuh_tempo):((p.akad_nos||[]).join(', ')||'—');
+    items.push({type:'eksternal',jenis,nama:mitra?.nama||'—',meta:`${mitra?.jenis||'Mitra'} · ${p.no_penyertaan}`,modal:p.jumlah_modal,nisbah:`${p.nisbah_mitra_pct}:${p.nisbah_ubnb_pct}`,extra,pendingBH:pen});
+  });
   const el=document.getElementById('pmd-list-semua');
   if(!items.length){el.innerHTML='<div class="empty"><div class="ei">🤝</div><p>Belum ada pemodal aktif</p></div>';return;}
   renderProyeksiBHSemua();
@@ -4367,19 +4390,29 @@ let _filterPenuh='semua',_filterSpesifik='semua';
 function filterPenuh(f,btn){_filterPenuh=f;document.querySelectorAll('#pmd-penuh .chip').forEach(c=>c.classList.remove('active'));if(btn)btn.classList.add('active');renderPmdPenuh();}
 function filterSpesifik(f,btn){_filterSpesifik=f;document.querySelectorAll('#pmd-spesifik .chip').forEach(c=>c.classList.remove('active'));if(btn)btn.classList.add('active');renderPmdSpesifik();}
 function renderPmdPenuh(){
-  const data=aPenyertaanInternal.filter(p=>p.jenis==='penuh'&&p.status==='aktif');
-  document.getElementById('pmd-penuh-count').textContent=data.length;
-  document.getElementById('pmd-penuh-modal').textContent=fmtRb(data.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0));
-  document.getElementById('pmd-penuh-bh').textContent=fmtRb(aBHInternal.filter(b=>b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0));
+  const internal=aPenyertaanInternal.filter(p=>p.jenis==='penuh'&&p.status==='aktif');
+  const eksternal=aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='penuh');
+  const semua=[...internal,...eksternal];
+  document.getElementById('pmd-penuh-count').textContent=semua.length;
+  document.getElementById('pmd-penuh-modal').textContent=fmtRb(semua.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0));
+  const intIds=new Set(internal.map(p=>p.id));
+  const extIds=new Set(eksternal.map(p=>p.id));
+  const bhInternal=aBHInternal.filter(b=>b.sudah_dibayar&&intIds.has(b.penyertaan_id)).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
+  const bhEksternal=aBHEksternal.filter(b=>b.sudah_dibayar&&extIds.has(b.penyertaan_id)).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
+  document.getElementById('pmd-penuh-bh').textContent=fmtRb(bhInternal+bhEksternal);
   renderProyeksiBHPenuh();
-  document.getElementById('pmd-tbl-penuh').innerHTML=data.length?data.map(p=>`<tr onclick="bukaDetailPenyertaan('internal-penuh',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${p.ubnb_anggota?.nama||'—'}</strong></td><td><span class="badge internal">Internal</span></td><td>${rp(p.jumlah_modal)}</td><td>${p.nisbah_anggota}:${p.nisbah_ubnb}</td><td style="font-size:11px">${fmtTgl(p.tgl_jatuh_tempo)}</td><td><span class="badge ${p.status==='aktif'?'lunas':'red'}">${p.status}</span></td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada data</td></tr>';
+  const rows=[];
+  if(_filterPenuh==='semua'||_filterPenuh==='internal')rows.push(...internal.map(p=>`<tr onclick="bukaDetailPenyertaan('internal-penuh',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${p.ubnb_anggota?.nama||'—'}</strong></td><td><span class="badge internal">Internal</span></td><td>${rp(p.jumlah_modal)}</td><td>${p.nisbah_anggota}:${p.nisbah_ubnb}</td><td style="font-size:11px">${fmtTgl(p.tgl_jatuh_tempo)}</td><td><span class="badge ${p.status==='aktif'?'lunas':'red'}">${p.status}</span></td></tr>`));
+  if(_filterPenuh==='semua'||_filterPenuh==='eksternal')rows.push(...eksternal.map(p=>{const m=aMitra.find(x=>x.id===p.mitra_id);return`<tr onclick="bukaDetailPenyertaan('eksternal-penuh',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${m?.nama||'—'}</strong></td><td><span class="badge eksternal">Eksternal</span></td><td>${rp(p.jumlah_modal)}</td><td>${p.nisbah_mitra_pct}:${p.nisbah_ubnb_pct}</td><td style="font-size:11px">${fmtTgl(p.tgl_jatuh_tempo)}</td><td><span class="badge ${p.status==='aktif'?'lunas':'red'}">${p.status}</span></td></tr>`;}));
+  document.getElementById('pmd-tbl-penuh').innerHTML=rows.length?rows.join(''):'<tr><td colspan="7" class="empty">Belum ada data</td></tr>';
 }
 function renderPmdSpesifik(){
   let rows=[];
   if(_filterSpesifik==='semua'||_filterSpesifik==='internal')rows.push(...aPenyertaanInternal.filter(p=>p.jenis==='spesifik'&&p.status==='aktif').map(p=>`<tr onclick="bukaDetailPenyertaan('internal-spesifik',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${p.ubnb_anggota?.nama||'—'}</strong></td><td><span class="badge internal">Internal</span></td><td>${rp(p.jumlah_modal)}</td><td style="font-size:11px">${p.akad_no||'—'}</td><td><span class="badge ${aBHInternal.filter(b=>b.penyertaan_id===p.id&&!b.sudah_dibayar).length?'red':'lunas'}">${aBHInternal.filter(b=>b.penyertaan_id===p.id&&!b.sudah_dibayar).length||'—'}</span></td></tr>`));
-  if(_filterSpesifik==='semua'||_filterSpesifik==='eksternal')rows.push(...aPenyertaanEksternal.filter(p=>p.status==='aktif').map(p=>{const m=aMitra.find(x=>x.id===p.mitra_id);const pen=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&!b.sudah_dibayar).length;return`<tr onclick="bukaDetailPenyertaan('eksternal',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${m?.nama||'—'}</strong></td><td><span class="badge eksternal">Eksternal</span></td><td>${rp(p.jumlah_modal)}</td><td style="font-size:11px">${(p.akad_nos||[]).join(', ')}</td><td>${pen?`<span class="badge red">${pen} pending</span>`:'<span class="badge lunas">—</span>'}</td></tr>`;}));
+  const extSpesifik=aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='spesifik');
+  if(_filterSpesifik==='semua'||_filterSpesifik==='eksternal')rows.push(...extSpesifik.map(p=>{const m=aMitra.find(x=>x.id===p.mitra_id);const pen=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&!b.sudah_dibayar).length;return`<tr onclick="bukaDetailPenyertaan('eksternal-spesifik',${p.id})" style="cursor:pointer"><td style="font-family:'DM Mono',monospace;font-size:11px">${p.no_penyertaan}</td><td><strong>${m?.nama||'—'}</strong></td><td><span class="badge eksternal">Eksternal</span></td><td>${rp(p.jumlah_modal)}</td><td style="font-size:11px">${(p.akad_nos||[]).join(', ')}</td><td>${pen?`<span class="badge red">${pen} pending</span>`:'<span class="badge lunas">—</span>'}</td></tr>`;}));
   document.getElementById('pmd-tbl-spesifik').innerHTML=rows.length?rows.join(''):'<tr><td colspan="6" class="empty">Belum ada data</td></tr>';
-  const all=[...aPenyertaanInternal.filter(p=>p.jenis==='spesifik'&&p.status==='aktif'),...aPenyertaanEksternal.filter(p=>p.status==='aktif')];
+  const all=[...aPenyertaanInternal.filter(p=>p.jenis==='spesifik'&&p.status==='aktif'),...extSpesifik];
   document.getElementById('pmd-spesifik-count').textContent=all.length;
   document.getElementById('pmd-spesifik-modal').textContent=fmtRb(all.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0));
   renderProyeksiBHSpesifik();
@@ -4433,13 +4466,23 @@ async function simpanPenyertaanPenuh(){
   const tglJT=document.getElementById('pf-tgl-jt').value;
   const catatan=document.getElementById('pf-catatan').value.trim();
   if(!modal||!tglMulai){toast('Modal dan tanggal mulai wajib diisi',true);return;}
+  if(nisbahA<0||nisbahA>100){toast('Nisbah pemodal harus 0–100%',true);return;}
+  if(tglJT&&tglJT<tglMulai){toast('Jatuh tempo tidak boleh sebelum tanggal mulai',true);return;}
   if(jenis==='internal'&&!anggotaId){toast('Pilih anggota dulu',true);return;}
   if(jenis==='eksternal'&&!mitraId){toast('Pilih mitra dulu',true);return;}
-  const noP=`MP-${new Date().getFullYear()}-${String(aPenyertaanInternal.length+1).padStart(3,'0')}`;
-  const{error}=await sb.from('ubnb_modal_penyertaan').insert([{no_penyertaan:noP,anggota_id:anggotaId,jenis:'penuh',jumlah_modal:modal,nisbah_anggota:nisbahA,nisbah_ubnb:100-nisbahA,tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT||null,status:'aktif',total_bagi_hasil:0,catatan,operator:CU.username}]);
+  let error=null;
+  if(jenis==='internal'){
+    const noP=nextNoPenyertaan('MP',aPenyertaanInternal);
+    ({error}=await sb.from('ubnb_modal_penyertaan').insert([{no_penyertaan:noP,anggota_id:anggotaId,jenis:'penuh',jumlah_modal:modal,nisbah_anggota:nisbahA,nisbah_ubnb:100-nisbahA,tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT||null,status:'aktif',total_bagi_hasil:0,catatan,operator:CU.username}]));
+  }else{
+    const noP=nextNoPenyertaan('PE',aPenyertaanEksternal);
+    const msPerMonth=1000*60*60*24*(365.2425/12);
+    const jangka=tglJT?Math.max(1,Math.round((new Date(tglJT+'T00:00:00')-new Date(tglMulai+'T00:00:00'))/msPerMonth)):null;
+    ({error}=await sb.from('bmt_penyertaan_eksternal').insert([{no_penyertaan:noP,mitra_id:mitraId,jenis_penyertaan:'penuh',akad_ids:null,akad_nos:null,jumlah_modal:modal,jenis_akad:null,tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT||null,jangka_bulan:jangka,nisbah_ubnb_pct:100-nisbahA,nisbah_mitra_pct:nisbahA,mekanisme_bayar:'periodik',status:'aktif',catatan,operator:CU.username}]));
+  }
   if(error){toast('Gagal: '+error.message,true);return;}
   toast('✅ Penyertaan Penuh berhasil disimpan!');closeModal('modal-penyertaan-penuh');
-  await loadPemodal();renderPmdStats();renderPmdSemua();renderPmdPenuh();renderDashboard();
+  await loadPemodal();renderPmdStats();renderPmdSemua();renderPmdPenuh();renderPmdSpesifik();renderDashboard();
 }
 
 function onPSJenisChange(){const j=document.getElementById('ps-jenis').value;document.getElementById('ps-wrap-anggota').style.display=j==='internal'?'block':'none';document.getElementById('ps-wrap-mitra').style.display=j==='eksternal'?'block':'none';}
@@ -4475,6 +4518,8 @@ async function simpanPenyertaanSpesifik(){
   const jenisAkad=document.getElementById('ps-jenis-akad').value;
   const catatan=document.getElementById('ps-catatan').value.trim();
   if(!modal||!tglMulai){toast('Modal dan tanggal mulai wajib diisi',true);return;}
+  if(nisbahM<0||nisbahM>100){toast('Nisbah pemodal harus 0–100%',true);return;}
+  if(jangka<=0){toast('Jangka harus lebih dari 0 bulan',true);return;}
   if(jenis==='internal'&&!anggotaId){toast('Pilih anggota dulu',true);return;}
   if(jenis==='eksternal'&&!mitraId){toast('Pilih mitra dulu',true);return;}
   if(!_akadTerpilihPS.length){toast('Pilih minimal 1 akad',true);return;}
@@ -4482,14 +4527,14 @@ async function simpanPenyertaanSpesifik(){
   const akadNos=akadObjs.map(a=>a.no_akad);
   const tglJT=new Date(tglMulai);tglJT.setMonth(tglJT.getMonth()+jangka);
   if(jenis==='internal'){
-    const noP=`MP-${new Date().getFullYear()}-${String(aPenyertaanInternal.length+1).padStart(3,'0')}`;
+    const noP=nextNoPenyertaan('MP',aPenyertaanInternal);
     const{error}=await sb.from('ubnb_modal_penyertaan').insert([{no_penyertaan:noP,anggota_id:anggotaId,jenis:'spesifik',akad_id:_akadTerpilihPS[0],akad_no:akadNos.join(', '),jumlah_modal:modal,nisbah_anggota:nisbahM,nisbah_ubnb:100-nisbahM,tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT.toISOString().slice(0,10),status:'aktif',total_bagi_hasil:0,catatan,operator:CU.username}]);
     if(error){toast('Gagal: '+error.message,true);return;}
   }else{
-    const noP=`PE-${new Date().getFullYear()}-${String(aPenyertaanEksternal.length+1).padStart(3,'0')}`;
+    const noP=nextNoPenyertaan('PE',aPenyertaanEksternal);
     const ujroh=Math.round(modal*(nisbahM/100));
     const bhU=Math.round(modal*((100-nisbahM)/100));
-    const{error}=await sb.from('bmt_penyertaan_eksternal').insert([{no_penyertaan:noP,mitra_id:mitraId,akad_ids:_akadTerpilihPS,akad_nos:akadNos,jumlah_modal:modal,jenis_akad:jenisAkad,tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT.toISOString().slice(0,10),jangka_bulan:jangka,total_ujroh:ujroh,ujroh_per_bulan:Math.round(ujroh/jangka),nisbah_ubnb_pct:100-nisbahM,nisbah_mitra_pct:nisbahM,bh_ubnb_total:bhU,bh_mitra_total:ujroh,bh_ubnb_perbulan:Math.round(bhU/jangka),bh_mitra_perbulan:Math.round(ujroh/jangka),margin_modal_pct:nisbahM,mekanisme_bayar:'per_angsuran',status:'aktif',catatan,operator:CU.username}]);
+    const{error}=await sb.from('bmt_penyertaan_eksternal').insert([{no_penyertaan:noP,mitra_id:mitraId,jenis_penyertaan:'spesifik',akad_ids:_akadTerpilihPS,akad_nos:akadNos,jumlah_modal:modal,jenis_akad:jenisAkad,tgl_mulai:tglMulai,tgl_jatuh_tempo:tglJT.toISOString().slice(0,10),jangka_bulan:jangka,total_ujroh:ujroh,ujroh_per_bulan:Math.round(ujroh/jangka),nisbah_ubnb_pct:100-nisbahM,nisbah_mitra_pct:nisbahM,bh_ubnb_total:bhU,bh_mitra_total:ujroh,bh_ubnb_perbulan:Math.round(bhU/jangka),bh_mitra_perbulan:Math.round(ujroh/jangka),margin_modal_pct:nisbahM,mekanisme_bayar:'per_angsuran',status:'aktif',catatan,operator:CU.username}]);
     if(error){toast('Gagal: '+error.message,true);return;}
   }
   toast('✅ Penyertaan Spesifik berhasil disimpan!');_akadTerpilihPS=[];closeModal('modal-penyertaan-spesifik');
@@ -4567,7 +4612,8 @@ function bukaDetailPenyertaan(tipe, id){
     p=aPenyertaanEksternal.find(x=>x.id===id);if(!p)return;
     mitra=aMitra.find(m=>m.id===p.mitra_id);
     bhList=aBHEksternal.filter(b=>b.penyertaan_id===id);
-    judulBadge='🔗 Spesifik Eksternal';
+    const jenisExt=p.jenis_penyertaan||'spesifik';
+    judulBadge=jenisExt==='penuh'?'🏛️ Penuh Eksternal':'🔗 Spesifik Eksternal';
     warna='var(--BL)';
   }
 
@@ -4615,12 +4661,16 @@ function bukaDetailPenyertaan(tipe, id){
     ['📋 Status',`<span class="badge ${status==='aktif'?'lunas':'red'}">${status}</span>`],
     ['💰 Total BH Diterima',rp(totalBH)],
     ['⏳ BH Pending',rp(totalPending)],
-    ...(tipe.startsWith('eksternal')?[
-      ['🔗 Akad Terkait',(p.akad_nos||[]).join(', ')],
-      ['🏛️ Jenis Akad',p.jenis_akad||'—'],
-      ['🔄 Pokok Kembali',rp(pokokKembali)],
-      ['💼 Total Ujroh',rp(p.total_ujroh)],
-    ]:[
+    ...(tipe.startsWith('eksternal')?(
+      (p.jenis_penyertaan||'spesifik')==='penuh' ? [
+        ['🔖 Jenis','penuh'],
+        ['📝 Catatan',p.catatan||'—'],
+      ] : [
+        ['🔗 Akad Terkait',(p.akad_nos||[]).join(', ')||'—'],
+        ['🏛️ Jenis Akad',p.jenis_akad||'—'],
+        ['🔄 Pokok Kembali',rp(pokokKembali)],
+        ['💼 Total Ujroh',rp(p.total_ujroh)],
+      ]) :[
       ['🔖 Jenis',p.jenis],
       ['📝 Catatan',p.catatan||'—'],
     ])
