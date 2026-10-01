@@ -1417,7 +1417,8 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       </div>
       <div class="fg"><label>Masa berlaku link</label><select id="peny-digital-expiry"><option value="7">7 hari</option><option value="14" selected>14 hari</option><option value="30">30 hari</option></select></div>
       <button id="btn-create-peny-digital" class="btn primary full" onclick="buatLinkPenyertaanDigital()">🔐 Siapkan 3 Link Tanda Tangan</button>
-      <button id="btn-reset-peny-digital" class="btn secondary full" style="display:none;margin-top:7px" onclick="resetLinkPenyertaanDigital()">♻️ Reset Link yang Belum TTD</button>
+      <button id="btn-reset-peny-digital" class="btn secondary full" style="display:none;margin-top:7px" onclick="resetLinkPenyertaanDigital()">♻️ Reset Semua Link yang Belum TTD</button>
+      <button id="btn-notif-peny-digital" class="btn secondary full" style="margin-top:7px" onclick="aktifkanNotifPenyDigital()">🔔 Aktifkan Notifikasi TTD</button>
       <div id="peny-digital-link-note" style="display:none;margin-top:7px;font-size:10px;line-height:1.45;color:var(--M)"></div>
     </div>
     <div id="peny-digital-result" style="display:none;margin-top:12px"></div>
@@ -1678,6 +1679,7 @@ let aAkadDigitalStatus={};
 let _akadDigitalStatusLoading=false;
 let _bmtAdminPasswordHash=null; // hanya di memori tab; dipakai untuk aksi Akad Digital sensitif
 let _penyDigitalStatus=null,_penyDigitalShare={},_penyDigitalRef=null,_penyDigitalCacheLoaded=false;
+let _penyDigitalNotifTimer=null,_penyDigitalNotifSince=null,_penyDigitalNotifBusy=false;
 // Tanda tangan pengelola untuk dokumen penyertaan.
 // Jika ingin satu file HTML saja, variabel ini dapat diganti dengan data:image/png;base64,...
 window.TTD_KETUA_UBNB='';
@@ -4914,6 +4916,7 @@ async function bukaPenyertaanDigital(tipe,id){
   document.getElementById('peny-digital-result').style.display='none';
   document.getElementById('peny-digital-status').className='digital-status pending';document.getElementById('peny-digital-status').textContent='Memuat status...';
   if(!await ensureAkadDigitalAdminHash()){document.getElementById('peny-digital-status').textContent='Verifikasi admin dibatalkan.';return;}
+  startPenyDigitalNotifWatcher();
   await refreshPenyertaanDigitalStatus();
 }
 function makeSharePenyDigital(role,token,pin,phone,name,d,expiry){
@@ -4952,11 +4955,12 @@ function renderPenyDigitalShare(before){
   out+=['pemodal','ketua','bendahara'].map(role=>{
     const old=before?.signers?.[role]?.status||'none',sh=_penyDigitalShare[role];
     if(old==='signed')return `<div class="digital-share-card"><strong>✅ ${roleLabelPenyDigital(role)} — Sudah Signed</strong><div style="font-size:10px;color:var(--M);margin-top:3px">${escDigital(before.signers[role].name||'')}</div></div>`;
-    if(!sh)return `<div class="digital-share-card"><strong>${roleLabelPenyDigital(role)}</strong><div style="font-size:10px;color:var(--M)">Link lama tetap aktif, tetapi Link + PIN tidak tersedia di browser ini.</div></div>`;
-    return `<div class="digital-share-card"><strong>🔐 ${roleLabelPenyDigital(role)} · ${escDigital(sh.name)}</strong><div style="font-size:10px;margin-top:6px">PIN:</div><div class="digital-code">${sh.pin}</div><div style="font-family:'DM Mono',monospace;font-size:9px;background:#f8fafc;border-radius:5px;padding:6px;border:1px solid var(--B);word-break:break-all">${escDigital(sh.link)}</div><div class="btn-row"><button class="btn primary" onclick="kirimWAPenyDigital('${role}')">📲 WhatsApp</button><button class="btn secondary" onclick="salinInfoPenyDigital('${role}')">📋 Salin Link + PIN</button></div></div>`;
+    if(!sh)return `<div class="digital-share-card"><strong>🔐 ${roleLabelPenyDigital(role)}</strong><div style="font-size:10px;color:var(--M);margin-top:3px">Link lama tetap aktif, tetapi Link + PIN tidak tersedia di browser ini.</div><div class="btn-row"><button class="btn secondary" onclick="resetLinkPenyertaanRole('${role}')">♻️ Buat Link Baru Hanya Ini</button></div></div>`;
+    return `<div class="digital-share-card"><strong>🔐 ${roleLabelPenyDigital(role)} · ${escDigital(sh.name)}</strong><div style="font-size:10px;margin-top:6px">PIN:</div><div class="digital-code">${sh.pin}</div><div style="font-family:'DM Mono',monospace;font-size:9px;background:#f8fafc;border-radius:5px;padding:6px;border:1px solid var(--B);word-break:break-all">${escDigital(sh.link)}</div><div class="btn-row"><button class="btn primary" onclick="kirimWAPenyDigital('${role}')">📲 WhatsApp</button><button class="btn secondary" onclick="salinInfoPenyDigital('${role}')">📋 Salin Link + PIN</button><button class="btn secondary" onclick="resetLinkPenyertaanRole('${role}')">♻️ Ganti Link Ini</button></div></div>`;
   }).join('');
   box.innerHTML=out;box.style.display='block';
 }
+
 async function buatLinkPenyertaanDigital(){
   const r=_penyDigitalRef;if(!r)return;const d=r.d;
   const phones={pemodal:document.getElementById('peny-digital-phone-pemodal').value.trim(),ketua:document.getElementById('peny-digital-phone-ketua').value.trim(),bendahara:document.getElementById('peny-digital-phone-bendahara').value.trim()};
@@ -4994,6 +4998,80 @@ async function buatLinkPenyertaanDigital(){
   }catch(e){console.error('[penyertaan digital]',e);toast('Gagal menyiapkan TTD Digital: '+(e.message||e),true);}
   finally{btn.disabled=false;renderPenyDigitalStatus();}
 }
+async function resetLinkPenyertaanRole(role){
+  const r=_penyDigitalRef;if(!r)return;const d=r.d,before=JSON.parse(JSON.stringify(_penyDigitalStatus||{}));
+  if(!['pemodal','ketua','bendahara'].includes(role)){toast('Peran tidak valid',true);return;}
+  if((before?.signers?.[role]?.status||'none')==='signed'){toast(roleLabelPenyDigital(role)+' sudah Signed dan tidak akan direset',true);return;}
+  if(!['pending','partial'].includes(before.status||'')){toast('Tidak ada proses tanda tangan aktif',true);return;}
+  if(!confirm(`Buat link + PIN baru HANYA untuk ${roleLabelPenyDigital(role)}?\n\nLink lama pihak ini akan tidak berlaku. Link dan tanda tangan pihak lain tetap dipertahankan.`))return;
+  if(!await ensureAkadDigitalAdminHash())return;
+  const phoneMap={pemodal:'peny-digital-phone-pemodal',ketua:'peny-digital-phone-ketua',bendahara:'peny-digital-phone-bendahara'};
+  const phone=document.getElementById(phoneMap[role])?.value.trim()||'';
+  if(normWAAkadDigital(phone).length<10){toast('Nomor WhatsApp '+roleLabelPenyDigital(role)+' belum valid',true);return;}
+  const expiry=parseInt(document.getElementById('peny-digital-expiry').value)||14;
+  const names={pemodal:d.nama,ketua:'R Dwi Setyo Nugroho',bendahara:'Sukamto'};
+  const token=randomTokenAkadDigital(),pin=randomPinAkadDigital();
+  const tokenHash=await sha256HexAkadDigital(token),pinHash=await sha256HexAkadDigital(pin);
+  try{
+    const{data,error}=await sb.rpc('bmt_reset_penyertaan_signer_secure',{
+      p_source_type:r.sourceType,p_penyertaan_id:r.id,p_role:role,p_phone:phone,
+      p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,
+      p_token_hash:tokenHash,p_pin_hash:pinHash,p_expiry_days:expiry
+    });
+    if(error)throw error;if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal membuat link baru');}
+    _penyDigitalShare[role]=makeSharePenyDigital(role,token,pin,phone,names[role],d,expiry);
+    await simpanCacheLinkPenyDigital(before.version||data.version);
+    await refreshPenyertaanDigitalStatus();
+    renderPenyDigitalShare(_penyDigitalStatus||before);
+    toast('✅ Link baru hanya untuk '+roleLabelPenyDigital(role)+' siap');
+  }catch(e){toast('Gagal membuat link '+roleLabelPenyDigital(role)+': '+(e.message||e),true);}
+}
+function notifKeyPenyDigital(){return CU?`bmt_peny_ttd_notif_since_${CU.id}`:null;}
+function startPenyDigitalNotifWatcher(){
+  if(!CU||!_bmtAdminPasswordHash||_penyDigitalNotifTimer)return;
+  const k=notifKeyPenyDigital();
+  _penyDigitalNotifSince=(k&&localStorage.getItem(k))||new Date().toISOString();
+  if(k&&!localStorage.getItem(k))localStorage.setItem(k,_penyDigitalNotifSince);
+  _penyDigitalNotifTimer=setInterval(cekNotifPenyDigital,15000);
+}
+async function aktifkanNotifPenyDigital(){
+  if(!await ensureAkadDigitalAdminHash())return;
+  if('Notification' in window){
+    try{
+      const perm=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+      if(perm==='granted')toast('✅ Notifikasi browser TTD aktif');
+      else toast('Notifikasi browser belum diizinkan. Notifikasi di aplikasi tetap aktif.',true);
+    }catch(e){toast('Notifikasi browser tidak tersedia. Notifikasi di aplikasi tetap aktif.',true);}
+  }else toast('Browser ini tidak mendukung notifikasi sistem. Notifikasi di aplikasi tetap aktif.',true);
+  startPenyDigitalNotifWatcher();
+  await cekNotifPenyDigital();
+}
+async function cekNotifPenyDigital(){
+  if(_penyDigitalNotifBusy||!CU||!_bmtAdminPasswordHash)return;
+  _penyDigitalNotifBusy=true;
+  try{
+    const after=_penyDigitalNotifSince||new Date().toISOString();
+    const{data,error}=await sb.rpc('bmt_penyertaan_sign_events_secure',{
+      p_after:after,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash
+    });
+    if(error)throw error;
+    if(data?.ok===false){if(data.code==='UNAUTHORIZED'){_bmtAdminPasswordHash=null;if(_penyDigitalNotifTimer){clearInterval(_penyDigitalNotifTimer);_penyDigitalNotifTimer=null;}}return;}
+    const evs=Array.isArray(data?.events)?data.events:[];
+    let latest=_penyDigitalNotifSince;
+    for(const e of evs){
+      if(e.signed_at&&(!latest||new Date(e.signed_at)>new Date(latest)))latest=e.signed_at;
+      const msg=`${e.signer_name} (${roleLabelPenyDigital(e.role)}) sudah tanda tangan ${e.no_penyertaan}`;
+      toast('✍️ '+msg);
+      if('Notification' in window&&Notification.permission==='granted'){
+        try{new Notification('TTD Digital Penyertaan masuk',{body:msg,tag:`peny-${e.signing_id}-${e.role}`});}catch(_){ }
+      }
+    }
+    if(latest){_penyDigitalNotifSince=latest;const k=notifKeyPenyDigital();if(k)localStorage.setItem(k,latest);}
+    if(evs.length&&_penyDigitalRef)await refreshPenyertaanDigitalStatus();
+  }catch(e){console.warn('[peny notif]',e);}
+  finally{_penyDigitalNotifBusy=false;}
+}
+
 async function resetLinkPenyertaanDigital(){
   const r=_penyDigitalRef;if(!r)return;const d=r.d,before=JSON.parse(JSON.stringify(_penyDigitalStatus||{}));
   if(!['pending','partial'].includes(before.status||'')){toast('Tidak ada link aktif yang perlu direset',true);return;}
