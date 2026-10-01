@@ -1417,6 +1417,8 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       </div>
       <div class="fg"><label>Masa berlaku link</label><select id="peny-digital-expiry"><option value="7">7 hari</option><option value="14" selected>14 hari</option><option value="30">30 hari</option></select></div>
       <button id="btn-create-peny-digital" class="btn primary full" onclick="buatLinkPenyertaanDigital()">🔐 Siapkan 3 Link Tanda Tangan</button>
+      <button id="btn-reset-peny-digital" class="btn secondary full" style="display:none;margin-top:7px" onclick="resetLinkPenyertaanDigital()">♻️ Reset Link yang Belum TTD</button>
+      <div id="peny-digital-link-note" style="display:none;margin-top:7px;font-size:10px;line-height:1.45;color:var(--M)"></div>
     </div>
     <div id="peny-digital-result" style="display:none;margin-top:12px"></div>
     <div id="peny-digital-complete-actions" class="btn-row" style="display:none">
@@ -1675,7 +1677,7 @@ let aPengajuan=[];
 let aAkadDigitalStatus={};
 let _akadDigitalStatusLoading=false;
 let _bmtAdminPasswordHash=null; // hanya di memori tab; dipakai untuk aksi Akad Digital sensitif
-let _penyDigitalStatus=null,_penyDigitalShare={},_penyDigitalRef=null;
+let _penyDigitalStatus=null,_penyDigitalShare={},_penyDigitalRef=null,_penyDigitalCacheLoaded=false;
 // Tanda tangan pengelola untuk dokumen penyertaan.
 // Jika ingin satu file HTML saja, variabel ini dapat diganti dengan data:image/png;base64,...
 window.TTD_KETUA_UBNB='';
@@ -4807,19 +4809,86 @@ function renderPenyDigitalProgress(){
     return `<div class="digital-role ${cls}"><strong>${roleLabelPenyDigital(role)}</strong>${icon} ${st==='signed'?'Signed':st==='pending'?'Menunggu':'Belum disiapkan'}${x?.signed_at?`<div style="font-size:8px;margin-top:2px">${fmtWaktuDigital(x.signed_at)}</div>`:''}</div>`;
   }).join('');
 }
+function penyShareCacheKey(version){
+  const r=_penyDigitalRef;if(!r||!version||!CU)return null;
+  return `bmt_peny_share_v2_${CU.id}_${r.sourceType}_${r.id}_${version}`;
+}
+function b64FromBytesPeny(bytes){let x='';for(let i=0;i<bytes.length;i++)x+=String.fromCharCode(bytes[i]);return btoa(x);}
+function bytesFromB64Peny(v){const x=atob(v),a=new Uint8Array(x.length);for(let i=0;i<x.length;i++)a[i]=x.charCodeAt(i);return a;}
+async function penyShareCryptoKey(){
+  if(!await ensureAkadDigitalAdminHash())return null;
+  const raw=new TextEncoder().encode(`BMT-PENY-SHARE|${CU?.id||''}|${_bmtAdminPasswordHash}`);
+  const digest=await crypto.subtle.digest('SHA-256',raw);
+  return crypto.subtle.importKey('raw',digest,{name:'AES-GCM'},false,['encrypt','decrypt']);
+}
+async function simpanCacheLinkPenyDigital(version){
+  const keyName=penyShareCacheKey(version);if(!keyName||!Object.keys(_penyDigitalShare||{}).length)return;
+  try{
+    const key=await penyShareCryptoKey();if(!key)return;
+    const iv=new Uint8Array(12);crypto.getRandomValues(iv);
+    const body=new TextEncoder().encode(JSON.stringify({share:_penyDigitalShare,saved_at:new Date().toISOString()}));
+    const enc=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,body);
+    localStorage.setItem(keyName,JSON.stringify({iv:b64FromBytesPeny(iv),data:b64FromBytesPeny(new Uint8Array(enc))}));
+    _penyDigitalCacheLoaded=true;
+  }catch(e){console.warn('[peny share cache save]',e);}
+}
+async function muatCacheLinkPenyDigital(){
+  const version=_penyDigitalStatus?.version,keyName=penyShareCacheKey(version);_penyDigitalCacheLoaded=false;
+  if(!keyName)return false;
+  const raw=localStorage.getItem(keyName);if(!raw)return false;
+  try{
+    const pack=JSON.parse(raw),key=await penyShareCryptoKey();if(!key)return false;
+    const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytesFromB64Peny(pack.iv)},key,bytesFromB64Peny(pack.data));
+    const obj=JSON.parse(new TextDecoder().decode(dec));
+    if(!obj?.share)return false;
+    _penyDigitalShare=obj.share;
+    _penyDigitalCacheLoaded=true;
+    return true;
+  }catch(e){console.warn('[peny share cache load]',e);return false;}
+}
+function syncPhoneCachePenyDigital(){
+  const map={pemodal:'peny-digital-phone-pemodal',ketua:'peny-digital-phone-ketua',bendahara:'peny-digital-phone-bendahara'};
+  for(const role of Object.keys(_penyDigitalShare||{})){
+    const el=document.getElementById(map[role]);if(!el)continue;
+    _penyDigitalShare[role].phone=el.value.trim();_penyDigitalShare[role].wa=normWAAkadDigital(el.value);
+  }
+}
+async function tampilkanLinkPenyDigitalLama(){
+  if(!_penyDigitalStatus||!['pending','partial','complete'].includes(_penyDigitalStatus.status))return false;
+  if(!_penyDigitalCacheLoaded)await muatCacheLinkPenyDigital();
+  if(!_penyDigitalCacheLoaded)return false;
+  syncPhoneCachePenyDigital();
+  renderPenyDigitalShare(_penyDigitalStatus);
+  return true;
+}
 function renderPenyDigitalStatus(){
   const st=_penyDigitalStatus?.status||'none',n=parseInt(_penyDigitalStatus?.sign_count||0);
   const box=document.getElementById('peny-digital-status'),btn=document.getElementById('btn-create-peny-digital');
+  const reset=document.getElementById('btn-reset-peny-digital'),note=document.getElementById('peny-digital-link-note');
   const done=document.getElementById('peny-digital-complete-actions');
   renderPenyDigitalProgress();
+  reset.style.display='none';note.style.display='none';note.textContent='';
   if(st==='complete'){
     box.className='digital-status complete';box.textContent='✅ Lengkap — 3/3 pihak sudah menandatangani. Dokumen final siap diunduh oleh semua pihak.';
     btn.style.display='none';done.style.display='flex';
   }else{
     done.style.display='none';btn.style.display='inline-flex';
     box.className='digital-status '+(st==='partial'?'partial':st==='pending'?'pending':'');
-    box.textContent=st==='none'?'Belum ada proses tanda tangan digital.':`${n}/3 pihak sudah menandatangani. ${st==='partial'?'Menunggu pihak lainnya.':'Link tanda tangan sudah disiapkan.'}`;
-    btn.textContent=st==='none'?'🔐 Siapkan 3 Link Tanda Tangan':'🔄 Siapkan / Perbarui Link yang Belum TTD';
+    if(st==='none'){
+      box.textContent='Belum ada proses tanda tangan digital.';btn.textContent='🔐 Siapkan 3 Link Tanda Tangan';
+    }else if(st==='pending'||st==='partial'){
+      box.textContent=`${n}/3 pihak sudah menandatangani. ${st==='partial'?'Menunggu pihak lainnya.':'Link tanda tangan sudah aktif.'}`;
+      btn.textContent='🔗 Tampilkan Link yang Sama';
+      note.style.display='block';
+      note.textContent=_penyDigitalCacheLoaded
+        ?'Link lama tetap dipakai. Menutup form atau membuka kembali halaman ini tidak membuat link baru.'
+        :'Link lama masih aktif di server, tetapi Link + PIN tidak tersedia di cache aman browser ini. Jangan reset kecuali memang perlu mengganti link.';
+      if(!_penyDigitalCacheLoaded)reset.style.display='inline-flex';
+    }else if(st==='expired'){
+      box.textContent='⚠️ Link tanda tangan sudah kedaluwarsa.';btn.textContent='🔄 Buat Link Baru karena Expired';
+    }else{
+      box.textContent='Status link: '+st;btn.textContent='🔐 Siapkan Link Tanda Tangan';
+    }
   }
 }
 async function refreshPenyertaanDigitalStatus(){
@@ -4828,12 +4897,15 @@ async function refreshPenyertaanDigitalStatus(){
   try{
     const{data,error}=await sb.rpc('bmt_penyertaan_sign_status_secure',{p_source_type:r.sourceType,p_penyertaan_id:r.id,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash});
     if(error)throw error;if(data?.ok===false){if(data.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data.message||'Gagal membaca status');}
-    _penyDigitalStatus=data||{status:'none',sign_count:0,signers:{}};renderPenyDigitalStatus();
+    _penyDigitalStatus=data||{status:'none',sign_count:0,signers:{}};
+    if(['pending','partial','complete'].includes(_penyDigitalStatus.status))await muatCacheLinkPenyDigital();
+    renderPenyDigitalStatus();
+    if(_penyDigitalCacheLoaded)renderPenyDigitalShare(_penyDigitalStatus);
   }catch(e){toast('Gagal membaca status TTD Digital: '+(e.message||e),true);}
 }
 async function bukaPenyertaanDigital(tipe,id){
   const d=dataBuktiPenyertaan(tipe,id);if(!d){toast('Data penyertaan tidak ditemukan',true);return;}
-  _penyDigitalRef={tipe,id,d,sourceType:sourcePenyDigital(tipe)};_penyDigitalShare={};_penyDigitalStatus=null;
+  _penyDigitalRef={tipe,id,d,sourceType:sourcePenyDigital(tipe)};_penyDigitalShare={};_penyDigitalStatus=null;_penyDigitalCacheLoaded=false;
   closeModal('modal-detail-penyertaan');openModal('modal-penyertaan-digital');
   document.getElementById('peny-digital-pemodal-name').textContent=d.nama;
   document.getElementById('peny-digital-phone-pemodal').value=phonePemodalPenyDigital(d)||'';
@@ -4880,7 +4952,7 @@ function renderPenyDigitalShare(before){
   out+=['pemodal','ketua','bendahara'].map(role=>{
     const old=before?.signers?.[role]?.status||'none',sh=_penyDigitalShare[role];
     if(old==='signed')return `<div class="digital-share-card"><strong>✅ ${roleLabelPenyDigital(role)} — Sudah Signed</strong><div style="font-size:10px;color:var(--M);margin-top:3px">${escDigital(before.signers[role].name||'')}</div></div>`;
-    if(!sh)return `<div class="digital-share-card"><strong>${roleLabelPenyDigital(role)}</strong><div style="font-size:10px;color:var(--M)">Link tidak dibuat.</div></div>`;
+    if(!sh)return `<div class="digital-share-card"><strong>${roleLabelPenyDigital(role)}</strong><div style="font-size:10px;color:var(--M)">Link lama tetap aktif, tetapi Link + PIN tidak tersedia di browser ini.</div></div>`;
     return `<div class="digital-share-card"><strong>🔐 ${roleLabelPenyDigital(role)} · ${escDigital(sh.name)}</strong><div style="font-size:10px;margin-top:6px">PIN:</div><div class="digital-code">${sh.pin}</div><div style="font-family:'DM Mono',monospace;font-size:9px;background:#f8fafc;border-radius:5px;padding:6px;border:1px solid var(--B);word-break:break-all">${escDigital(sh.link)}</div><div class="btn-row"><button class="btn primary" onclick="kirimWAPenyDigital('${role}')">📲 WhatsApp</button><button class="btn secondary" onclick="salinInfoPenyDigital('${role}')">📋 Salin Link + PIN</button></div></div>`;
   }).join('');
   box.innerHTML=out;box.style.display='block';
@@ -4888,31 +4960,60 @@ function renderPenyDigitalShare(before){
 async function buatLinkPenyertaanDigital(){
   const r=_penyDigitalRef;if(!r)return;const d=r.d;
   const phones={pemodal:document.getElementById('peny-digital-phone-pemodal').value.trim(),ketua:document.getElementById('peny-digital-phone-ketua').value.trim(),bendahara:document.getElementById('peny-digital-phone-bendahara').value.trim()};
-  for(const role of ['pemodal','ketua','bendahara']){if((_penyDigitalStatus?.signers?.[role]?.status||'none')!=='signed'&&normWAAkadDigital(phones[role]).length<10){toast('Nomor WhatsApp '+roleLabelPenyDigital(role)+' belum valid',true);return;}}
   localStorage.setItem('bmt_ttd_ketua_wa',phones.ketua);localStorage.setItem('bmt_ttd_bendahara_wa',phones.bendahara);
   if(!await ensureAkadDigitalAdminHash())return;
-  const btn=document.getElementById('btn-create-peny-digital');btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menyiapkan...';
   const before=JSON.parse(JSON.stringify(_penyDigitalStatus||{}));
+  const doc=snapshotPenyertaanDigital(d),docHash=await sha256HexAkadDigital(doc);
+  const st=before.status||'none',changed=!!(before.document_hash&&before.document_hash!==docHash);
+
+  if(['pending','partial'].includes(st)&&!changed){
+    if(await tampilkanLinkPenyDigitalLama()){
+      await simpanCacheLinkPenyDigital(before.version);
+      renderPenyDigitalStatus();toast('✅ Link yang sama tetap dipakai');return;
+    }
+    renderPenyDigitalStatus();
+    toast('Link lama masih aktif. Untuk keamanan, link tidak dibuat ulang otomatis. Gunakan Reset Link hanya jika link lama memang harus diganti.',true);return;
+  }
+  if(st==='complete'){toast('Dokumen sudah lengkap ditandatangani',true);return;}
+  for(const role of ['pemodal','ketua','bendahara']){if(normWAAkadDigital(phones[role]).length<10){toast('Nomor WhatsApp '+roleLabelPenyDigital(role)+' belum valid',true);return;}}
+  if(changed&&['pending','partial'].includes(st)&&parseInt(before.sign_count||0)>0){
+    if(!confirm('Isi dokumen penyertaan berubah. Versi lama tidak boleh dipakai pada dokumen baru. Buat versi baru dan minta semua pihak tanda tangan ulang?'))return;
+  }
+  const btn=document.getElementById('btn-create-peny-digital');btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Menyiapkan...';
   try{
     const expiry=parseInt(document.getElementById('peny-digital-expiry').value)||14;
     const names={pemodal:d.nama,ketua:'R Dwi Setyo Nugroho',bendahara:'Sukamto'};
     const raw={},hashes={};
     for(const role of ['pemodal','ketua','bendahara']){raw[role]={token:randomTokenAkadDigital(),pin:randomPinAkadDigital()};hashes[role]={token:await sha256HexAkadDigital(raw[role].token),pin:await sha256HexAkadDigital(raw[role].pin)};}
-    const doc=snapshotPenyertaanDigital(d),docHash=await sha256HexAkadDigital(doc);
-    const st=before.status||'none',changed=!!(before.document_hash&&before.document_hash!==docHash);
-    let data,error,makeNew=st==='none'||['complete','cancelled','superseded','expired'].includes(st)||changed;
-    if(changed&&['pending','partial'].includes(st)&&parseInt(before.sign_count||0)>0){if(!confirm('Isi dokumen penyertaan berubah. Tanda tangan versi lama tidak boleh dipakai pada dokumen baru. Buat versi baru dan minta semua pihak tanda tangan ulang?'))return;}
-    if(makeNew){
-      ({data,error}=await sb.rpc('bmt_create_penyertaan_signing_secure',{p_source_type:r.sourceType,p_penyertaan_id:r.id,p_document_html:doc,p_document_hash:docHash,p_phone_pemodal:phones.pemodal,p_phone_ketua:phones.ketua,p_phone_bendahara:phones.bendahara,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,p_token_hash_pemodal:hashes.pemodal.token,p_pin_hash_pemodal:hashes.pemodal.pin,p_token_hash_ketua:hashes.ketua.token,p_pin_hash_ketua:hashes.ketua.pin,p_token_hash_bendahara:hashes.bendahara.token,p_pin_hash_bendahara:hashes.bendahara.pin,p_expiry_days:expiry}));
-    }else{
-      ({data,error}=await sb.rpc('bmt_refresh_penyertaan_signers_secure',{p_source_type:r.sourceType,p_penyertaan_id:r.id,p_phone_pemodal:phones.pemodal,p_phone_ketua:phones.ketua,p_phone_bendahara:phones.bendahara,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,p_token_hash_pemodal:hashes.pemodal.token,p_pin_hash_pemodal:hashes.pemodal.pin,p_token_hash_ketua:hashes.ketua.token,p_pin_hash_ketua:hashes.ketua.pin,p_token_hash_bendahara:hashes.bendahara.token,p_pin_hash_bendahara:hashes.bendahara.pin,p_expiry_days:expiry}));
-    }
+    const{data,error}=await sb.rpc('bmt_create_penyertaan_signing_secure',{p_source_type:r.sourceType,p_penyertaan_id:r.id,p_document_html:doc,p_document_hash:docHash,p_phone_pemodal:phones.pemodal,p_phone_ketua:phones.ketua,p_phone_bendahara:phones.bendahara,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,p_token_hash_pemodal:hashes.pemodal.token,p_pin_hash_pemodal:hashes.pemodal.pin,p_token_hash_ketua:hashes.ketua.token,p_pin_hash_ketua:hashes.ketua.pin,p_token_hash_bendahara:hashes.bendahara.token,p_pin_hash_bendahara:hashes.bendahara.pin,p_expiry_days:expiry});
     if(error)throw error;if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal menyiapkan link');}
     _penyDigitalShare={};
-    for(const role of ['pemodal','ketua','bendahara']){if(makeNew||before?.signers?.[role]?.status!=='signed')_penyDigitalShare[role]=makeSharePenyDigital(role,raw[role].token,raw[role].pin,phones[role],names[role],d,expiry);}
-    renderPenyDigitalShare(makeNew?{signers:{}}:before);await refreshPenyertaanDigitalStatus();toast('✅ Link TTD Digital siap');
+    for(const role of ['pemodal','ketua','bendahara'])_penyDigitalShare[role]=makeSharePenyDigital(role,raw[role].token,raw[role].pin,phones[role],names[role],d,expiry);
+    await simpanCacheLinkPenyDigital(data.version);
+    renderPenyDigitalShare({signers:{}});await refreshPenyertaanDigitalStatus();toast('✅ Link TTD Digital dibuat dan akan tetap dipakai sampai expired/reset');
   }catch(e){console.error('[penyertaan digital]',e);toast('Gagal menyiapkan TTD Digital: '+(e.message||e),true);}
-  finally{btn.disabled=false;if(btn.style.display!=='none')btn.textContent='🔄 Siapkan / Perbarui Link yang Belum TTD';}
+  finally{btn.disabled=false;renderPenyDigitalStatus();}
+}
+async function resetLinkPenyertaanDigital(){
+  const r=_penyDigitalRef;if(!r)return;const d=r.d,before=JSON.parse(JSON.stringify(_penyDigitalStatus||{}));
+  if(!['pending','partial'].includes(before.status||'')){toast('Tidak ada link aktif yang perlu direset',true);return;}
+  if(!confirm('Reset link pihak yang BELUM tanda tangan?\n\nLink lama mereka akan langsung tidak berlaku dan harus dikirim ulang. Tanda tangan pihak yang sudah Signed tetap dipertahankan.'))return;
+  if(!await ensureAkadDigitalAdminHash())return;
+  const phones={pemodal:document.getElementById('peny-digital-phone-pemodal').value.trim(),ketua:document.getElementById('peny-digital-phone-ketua').value.trim(),bendahara:document.getElementById('peny-digital-phone-bendahara').value.trim()};
+  for(const role of ['pemodal','ketua','bendahara']){if((before?.signers?.[role]?.status||'none')!=='signed'&&normWAAkadDigital(phones[role]).length<10){toast('Nomor WhatsApp '+roleLabelPenyDigital(role)+' belum valid',true);return;}}
+  const expiry=parseInt(document.getElementById('peny-digital-expiry').value)||14,names={pemodal:d.nama,ketua:'R Dwi Setyo Nugroho',bendahara:'Sukamto'};
+  const raw={},hashes={};
+  for(const role of ['pemodal','ketua','bendahara']){raw[role]={token:randomTokenAkadDigital(),pin:randomPinAkadDigital()};hashes[role]={token:await sha256HexAkadDigital(raw[role].token),pin:await sha256HexAkadDigital(raw[role].pin)};}
+  const btn=document.getElementById('btn-reset-peny-digital');btn.disabled=true;btn.innerHTML='<div class="spinner"></div> Reset...';
+  try{
+    const{data,error}=await sb.rpc('bmt_refresh_penyertaan_signers_secure',{p_source_type:r.sourceType,p_penyertaan_id:r.id,p_phone_pemodal:phones.pemodal,p_phone_ketua:phones.ketua,p_phone_bendahara:phones.bendahara,p_operator:CU.username,p_admin_user_id:CU.id,p_admin_password_hash:_bmtAdminPasswordHash,p_token_hash_pemodal:hashes.pemodal.token,p_pin_hash_pemodal:hashes.pemodal.pin,p_token_hash_ketua:hashes.ketua.token,p_pin_hash_ketua:hashes.ketua.pin,p_token_hash_bendahara:hashes.bendahara.token,p_pin_hash_bendahara:hashes.bendahara.pin,p_expiry_days:expiry});
+    if(error)throw error;if(!data?.ok){if(data?.code==='UNAUTHORIZED')_bmtAdminPasswordHash=null;throw new Error(data?.message||'Gagal reset link');}
+    _penyDigitalShare={};
+    for(const role of ['pemodal','ketua','bendahara'])if((before?.signers?.[role]?.status||'none')!=='signed')_penyDigitalShare[role]=makeSharePenyDigital(role,raw[role].token,raw[role].pin,phones[role],names[role],d,expiry);
+    await simpanCacheLinkPenyDigital(before.version);
+    renderPenyDigitalShare(before);await refreshPenyertaanDigitalStatus();toast('✅ Link pihak yang belum TTD berhasil direset');
+  }catch(e){toast('Gagal reset link: '+(e.message||e),true);}
+  finally{btn.disabled=false;btn.textContent='♻️ Reset Link yang Belum TTD';renderPenyDigitalStatus();}
 }
 function kirimWAPenyDigital(role){const sh=_penyDigitalShare?.[role];if(!sh)return;if(!sh.wa){toast('Nomor WhatsApp belum valid',true);return;}window.open('https://wa.me/'+sh.wa+'?text='+encodeURIComponent(sh.pesan),'_blank');}
 async function salinInfoPenyDigital(role){const sh=_penyDigitalShare?.[role];if(!sh)return;const t=`TTD Digital Penyertaan BMT UBNB — ${roleLabelPenyDigital(role)}
