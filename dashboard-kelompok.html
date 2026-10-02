@@ -32030,5 +32030,486 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<style id="ubnb-v69-door-menu-style">
+/* =========================================================
+   v69 — Header ringkas: Mode/Keluar masuk ke menu pintu
+   ========================================================= */
+
+/* tombol Mode v66 tidak lagi tampil di header Database */
+#db-mode-switch-66{display:none!important}
+
+/* tombol Pilih Mode lama PPG disembunyikan */
+#ppg-shell .ppg-top-btn{display:none!important}
+
+.topbar-right,
+#ppg-shell .ppg-topbar{
+  position:relative;
+}
+
+.ubnb69-door-wrap{
+  position:relative;
+  flex:0 0 auto;
+}
+
+.ubnb69-door-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:36px;
+  height:34px;
+  min-height:34px;
+  padding:0;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:6px;
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  font:inherit;
+  font-size:18px;
+  line-height:1;
+  cursor:pointer;
+}
+
+.ubnb69-door-btn:active{
+  transform:translateY(1px);
+}
+
+.ubnb69-door-menu{
+  position:absolute;
+  top:calc(100% + 7px);
+  right:0;
+  z-index:50050;
+  display:none;
+  width:170px;
+  padding:5px;
+  border:1px solid #d7e1da;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 10px 32px rgba(22,52,35,.18);
+}
+
+.ubnb69-door-menu.show{display:block}
+
+.ubnb69-door-item{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  width:100%;
+  min-height:40px;
+  padding:8px 10px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:#263b30;
+  font:inherit;
+  font-size:12px;
+  font-weight:700;
+  text-align:left;
+  cursor:pointer;
+}
+
+.ubnb69-door-item:hover,
+.ubnb69-door-item:focus{
+  background:#f0f7f3;
+  outline:none;
+}
+
+.ubnb69-door-item + .ubnb69-door-item{
+  margin-top:2px;
+}
+
+.ubnb69-door-item.danger{
+  color:#9b2f2f;
+}
+
+.ubnb69-door-sep{
+  height:1px;
+  margin:4px 5px;
+  background:#e7ece9;
+}
+
+/* tombol Keluar bawaan Database tetap sebagai anchor posisi,
+   tetapi tampilannya diambil alih menjadi pintu menu */
+.topbar-right > .btn-keluar{
+  width:36px!important;
+  min-width:36px!important;
+  height:34px!important;
+  min-height:34px!important;
+  padding:0!important;
+  font-size:18px!important;
+  color:#fff!important;
+}
+
+/* PPG dibuat sepadat Database: userbox + pintu saja di kanan */
+#ppg-shell .ppg-userbox{
+  margin-left:auto!important;
+}
+#ppg69-door-wrap{
+  margin-left:5px;
+}
+
+@media(max-width:700px){
+  .ubnb69-door-menu{
+    width:166px;
+    right:0;
+  }
+
+  #ppg-shell .ppg-userbox{
+    max-width:145px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+}
+</style>
+
+
+<script id="ubnb-v69-door-menu-script">
+(function(){
+  function canPPG69(){
+    try{
+      return typeof window.ppgCanAccess==='function' && !!window.ppgCanAccess();
+    }catch(_){
+      return false;
+    }
+  }
+
+  function closeMenus69(except){
+    document.querySelectorAll('.ubnb69-door-menu.show').forEach(m=>{
+      if(m!==except)m.classList.remove('show');
+    });
+    document.querySelectorAll('.ubnb69-door-btn[aria-expanded="true"]').forEach(b=>{
+      if(!except || b.nextElementSibling!==except)b.setAttribute('aria-expanded','false');
+    });
+  }
+
+  function toggleMenu69(btn,menu){
+    const opening=!menu.classList.contains('show');
+    closeMenus69(menu);
+    menu.classList.toggle('show',opening);
+    btn.setAttribute('aria-expanded',opening?'true':'false');
+  }
+
+  function switchMode69(){
+    closeMenus69();
+    try{
+      document.getElementById('ppg-shell')?.classList.remove('show');
+      window.ppgShowPortal?.();
+    }catch(e){
+      console.error('[Mode switch]',e);
+    }
+  }
+
+  async function logout69(){
+    closeMenus69();
+    await window.keluar?.();
+  }
+
+  function menuHTML69(idPrefix,showMode){
+    return `
+      ${showMode?`
+      <button type="button" class="ubnb69-door-item" id="${idPrefix}-switch">
+        <span>⇄</span><span>Pindah Mode</span>
+      </button>
+      <div class="ubnb69-door-sep"></div>`:''}
+      <button type="button" class="ubnb69-door-item danger" id="${idPrefix}-logout">
+        <span>🚪</span><span>Keluar</span>
+      </button>
+    `;
+  }
+
+  function wireMenu69(btn,menu,idPrefix){
+    btn.onclick=(e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMenu69(btn,menu);
+    };
+
+    const sw=document.getElementById(`${idPrefix}-switch`);
+    if(sw)sw.onclick=(e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      switchMode69();
+    };
+
+    const lo=document.getElementById(`${idPrefix}-logout`);
+    if(lo)lo.onclick=(e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      logout69();
+    };
+  }
+
+  /* =======================================================
+     DATABASE PERWIRA
+     Gunakan tombol pintu existing agar header tetap hemat.
+     ======================================================= */
+  function setupDatabaseDoor69(){
+    /* mode button v66 kalau muncul lagi dari observer cukup dibuang */
+    document.getElementById('db-mode-switch-66')?.remove();
+
+    const top=document.querySelector('#app .topbar-right');
+    const old=document.querySelector('#app .topbar-right > .btn-keluar');
+    if(!top||!old)return;
+
+    old.textContent='🚪';
+    old.title='Menu';
+    old.setAttribute('aria-label','Menu akun');
+    old.setAttribute('aria-haspopup','menu');
+    old.setAttribute('aria-expanded','false');
+
+    /* wrapper ditambahkan tanpa merusak urutan badge */
+    let wrap=document.getElementById('db69-door-wrap');
+    if(!wrap){
+      wrap=document.createElement('div');
+      wrap.id='db69-door-wrap';
+      wrap.className='ubnb69-door-wrap';
+
+      top.insertBefore(wrap,old);
+      wrap.appendChild(old);
+
+      const menu=document.createElement('div');
+      menu.id='db69-door-menu';
+      menu.className='ubnb69-door-menu';
+      menu.setAttribute('role','menu');
+      menu.innerHTML=menuHTML69('db69',canPPG69());
+      wrap.appendChild(menu);
+
+      wireMenu69(old,menu,'db69');
+    }else{
+      const menu=document.getElementById('db69-door-menu');
+      if(menu){
+        const shouldMode=canPPG69();
+        const hasMode=!!document.getElementById('db69-switch');
+        if(shouldMode!==hasMode){
+          menu.innerHTML=menuHTML69('db69',shouldMode);
+          wireMenu69(old,menu,'db69');
+        }
+      }
+    }
+  }
+
+  /* =======================================================
+     PPG PERWIRA
+     Ganti tombol "Pilih Mode" dengan pintu yang sama.
+     ======================================================= */
+  function setupPPGDoor69(){
+    const bar=document.querySelector('#ppg-shell .ppg-topbar');
+    if(!bar)return;
+
+    /* tombol lama tetap hidden oleh CSS */
+    const oldMode=bar.querySelector('.ppg-top-btn');
+    if(oldMode)oldMode.style.display='none';
+
+    let wrap=document.getElementById('ppg69-door-wrap');
+    if(!wrap){
+      wrap=document.createElement('div');
+      wrap.id='ppg69-door-wrap';
+      wrap.className='ubnb69-door-wrap';
+
+      const btn=document.createElement('button');
+      btn.id='ppg69-door-btn';
+      btn.type='button';
+      btn.className='ubnb69-door-btn';
+      btn.textContent='🚪';
+      btn.title='Menu';
+      btn.setAttribute('aria-label','Menu akun');
+      btn.setAttribute('aria-haspopup','menu');
+      btn.setAttribute('aria-expanded','false');
+
+      const menu=document.createElement('div');
+      menu.id='ppg69-door-menu';
+      menu.className='ubnb69-door-menu';
+      menu.setAttribute('role','menu');
+      menu.innerHTML=menuHTML69('ppg69',true);
+
+      wrap.appendChild(btn);
+      wrap.appendChild(menu);
+      bar.appendChild(wrap);
+
+      wireMenu69(btn,menu,'ppg69');
+    }
+  }
+
+  /* klik di luar / Escape menutup dropdown */
+  document.addEventListener('click',e=>{
+    if(!e.target.closest?.('.ubnb69-door-wrap'))closeMenus69();
+  });
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape')closeMenus69();
+  });
+
+  /* header Database dirender ulang beberapa kali */
+  const app=document.getElementById('app');
+  if(app){
+    let t=0;
+    new MutationObserver(()=>{
+      clearTimeout(t);
+      t=setTimeout(setupDatabaseDoor69,30);
+    }).observe(app,{childList:true,subtree:true});
+  }
+
+  /* PPG shell juga banyak innerHTML/render override */
+  const shell=document.getElementById('ppg-shell');
+  if(shell){
+    let t=0;
+    new MutationObserver(()=>{
+      clearTimeout(t);
+      t=setTimeout(setupPPGDoor69,30);
+    }).observe(shell,{childList:true,subtree:true});
+  }
+
+  /* setelah fungsi pilih mode dipakai, pastikan menu terpasang */
+  const oldChoosePPG69=window.ppgChoosePPG;
+  window.ppgChoosePPG=function(){
+    const r=oldChoosePPG69?.apply(this,arguments);
+    setTimeout(setupPPGDoor69,0);
+    return r;
+  };
+
+  const oldChooseDB69=window.ppgChooseDatabase;
+  window.ppgChooseDatabase=function(){
+    const r=oldChooseDB69?.apply(this,arguments);
+    setTimeout(setupDatabaseDoor69,0);
+    return r;
+  };
+
+  setTimeout(()=>{
+    setupDatabaseDoor69();
+    setupPPGDoor69();
+  },700);
+
+  window.ubnb69Menu={
+    setupDatabase:setupDatabaseDoor69,
+    setupPPG:setupPPGDoor69,
+    close:closeMenus69
+  };
+})();
+</script>
+
+
+
+<script id="ubnb-v70-remember-login-script">
+(function(){
+  const REMEMBER_KEY='ubnb_dashboard_last_login_v70';
+
+  function readRemembered70(){
+    try{
+      const x=JSON.parse(localStorage.getItem(REMEMBER_KEY)||'null');
+      if(!x||!x.type)return null;
+      return x;
+    }catch(_){
+      return null;
+    }
+  }
+
+  function savePengurus70(){
+    if(!CU?.did || CU?._umum_match)return;
+    try{
+      localStorage.setItem(REMEMBER_KEY,JSON.stringify({
+        type:'pengurus',
+        did:String(CU.did),
+        nama:CU.nama||CU.username||'',
+        saved_at:new Date().toISOString()
+      }));
+    }catch(e){
+      console.warn('[Remember login pengurus]',e);
+    }
+  }
+
+  function saveUmum70(){
+    if(!CU?._umum_match)return;
+    try{
+      localStorage.setItem(REMEMBER_KEY,JSON.stringify({
+        type:'umum',
+        cu:CU,
+        saved_at:new Date().toISOString()
+      }));
+    }catch(e){
+      console.warn('[Remember login umum]',e);
+    }
+  }
+
+  function forget70(){
+    try{localStorage.removeItem(REMEMBER_KEY)}catch(_){}
+  }
+
+  /*
+    Seed sessionStorage SEBELUM handler DOMContentLoaded lama berjalan.
+    Jadi mekanisme login/validasi existing tetap dipakai:
+    - Pengurus tetap diverifikasi ulang via dashboard_pengurus_profile.
+    - Token absensi tetap dibuat baru per sesi.
+    - Yang disimpan lokal hanya identitas login terakhir, bukan token/password.
+  */
+  const remembered=readRemembered70();
+
+  if(remembered?.type==='pengurus' && remembered.did){
+    if(!sessionStorage.getItem('dashboard_kelompok_editor_session') &&
+       !sessionStorage.getItem('ubnb_umum_jamaah')){
+      sessionStorage.setItem(
+        'dashboard_kelompok_editor_session',
+        JSON.stringify({did:String(remembered.did)})
+      );
+    }
+  }
+
+  if(remembered?.type==='umum' && remembered.cu){
+    if(!sessionStorage.getItem('ubnb_umum_jamaah') &&
+       !sessionStorage.getItem('dashboard_kelompok_editor_session')){
+      sessionStorage.setItem('ubnb_umum_jamaah',JSON.stringify(remembered.cu));
+    }
+  }
+
+  /* Simpan otomatis setelah login manual sukses */
+  const oldLoginPengurus70=window.doLoginPengurus;
+  if(typeof oldLoginPengurus70==='function'){
+    window.doLoginPengurus=async function(){
+      const r=await oldLoginPengurus70.apply(this,arguments);
+      if(CU?.did && !CU?._umum_match)savePengurus70();
+      return r;
+    };
+  }
+
+  const oldLoginUmum70=window.doLoginUmum;
+  if(typeof oldLoginUmum70==='function'){
+    window.doLoginUmum=async function(){
+      const r=await oldLoginUmum70.apply(this,arguments);
+      if(CU?._umum_match)saveUmum70();
+      return r;
+    };
+  }
+
+  /*
+    Jika app berhasil dipulihkan dari session lama / remembered login,
+    refresh timestamp dan format simpanannya.
+  */
+  window.addEventListener('DOMContentLoaded',()=>{
+    setTimeout(()=>{
+      if(CU?._umum_match)saveUmum70();
+      else if(CU?.did)savePengurus70();
+    },1200);
+  });
+
+  /*
+    Keluar = logout sungguhan + lupakan login tersimpan.
+    Pindah Mode tidak menghapus remember-login.
+  */
+  const oldKeluar70=window.keluar;
+  if(typeof oldKeluar70==='function'){
+    window.keluar=async function(){
+      forget70();
+      return oldKeluar70.apply(this,arguments);
+    };
+  }
+
+  window.ubnbRememberLogin70={
+    read:readRemembered70,
+    forget:forget70,
+    key:REMEMBER_KEY
+  };
+})();
+</script>
+
 </body>
 </html>
