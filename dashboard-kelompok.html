@@ -29405,13 +29405,16 @@ body.ppg54-lock-page{
 </style>
 
 
+
 <script id="ubnb-v60-supabase-persistence-script">
 (function(){
   const PREFIX='ubnb_ppg_';
   const USER_KEYS=new Set(['ubnb_ppg_v38_setup_collapsed']);
   const saveTimers=new Map();
+  const inflight=new Map();
+  const lastSync=new Map();
+
   let hydrating=false;
-  let activeScope='';
   let syncBusy=0;
 
   const nativeSet=Storage.prototype.setItem;
@@ -29420,19 +29423,23 @@ body.ppg54-lock-page{
   function editorDid(){
     return String(CU?.did||CU?.id||'').trim();
   }
+
   function currentScope(){
     try{
       const s=JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null');
       return s?.type==='kelompok'?(s.kelompok||''):(s?.type==='controller'?'DESA':'');
     }catch(_){return ''}
   }
+
   function ownerForKey(k){
     return USER_KEYS.has(k)?editorDid():'';
   }
+
   function parseLocal(v){
     try{return JSON.parse(v)}
     catch(_){return v}
   }
+
   function localKeys(){
     const out=[];
     for(let i=0;i<localStorage.length;i++){
@@ -29441,6 +29448,7 @@ body.ppg54-lock-page{
     }
     return out;
   }
+
   function status(text,cls=''){
     let el=document.getElementById('ppg60-sync-status');
     if(!el){
@@ -29456,25 +29464,24 @@ body.ppg54-lock-page{
       el.textContent=text;
     }
   }
-  function ensureOverlay(){
-    let el=document.getElementById('ppg60-sync-overlay');
-    if(!el){
-      el=document.createElement('div');
-      el.id='ppg60-sync-overlay';
-      el.innerHTML='<div class="ppg60-sync-card">Memuat data PPG dari Supabase…</div>';
-      document.getElementById('ppg-shell')?.appendChild(el);
-    }
-    return el;
+
+  function markSyncStart(){
+    syncBusy++;
+    status('Cloud •','syncing');
   }
-  function showOverlay(v){
-    ensureOverlay()?.classList.toggle('show',!!v);
+
+  function markSyncDone(ok=true){
+    syncBusy=Math.max(0,syncBusy-1);
+    if(!syncBusy){
+      status(ok?'Cloud ✓':'Cloud !',ok?'':'error');
+    }
   }
 
   async function rpcSave(scope,key,payload){
     const did=editorDid();
     if(!did||!scope||scope==='DESA')return;
-    syncBusy++;
-    status('Cloud • menyimpan','syncing');
+
+    markSyncStart();
     try{
       const {data,error}=await sb.rpc('ppg_state_save',{
         p_editor_did:did,
@@ -29485,20 +29492,36 @@ body.ppg54-lock-page{
       });
       if(error)throw error;
       if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan data PPG');
-      status('Cloud ✓');
+      markSyncDone(true);
     }catch(e){
       console.error('[PPG Supabase save]',key,e);
-      status('Cloud !','error');
-    }finally{
-      syncBusy=Math.max(0,syncBusy-1);
-      if(!syncBusy && !document.getElementById('ppg60-sync-status')?.classList.contains('error')){
-        status('Cloud ✓');
-      }
+      markSyncDone(false);
+    }
+  }
+
+  async function rpcSaveBatch(scope,items){
+    const did=editorDid();
+    if(!did||!scope||scope==='DESA'||!items.length)return;
+
+    markSyncStart();
+    try{
+      const {data,error}=await sb.rpc('ppg_state_save_batch',{
+        p_editor_did:did,
+        p_scope:scope,
+        p_items:items
+      });
+      if(error)throw error;
+      if(!data?.ok)throw new Error(data?.error||'Gagal migrasi data PPG');
+      markSyncDone(true);
+    }catch(e){
+      console.error('[PPG Supabase batch save]',e);
+      markSyncDone(false);
     }
   }
 
   function scheduleSave(key,value,scopeAtWrite){
     if(hydrating||!key?.startsWith(PREFIX))return;
+
     const scope=scopeAtWrite||currentScope();
     if(!scope||scope==='DESA')return;
 
@@ -29506,12 +29529,14 @@ body.ppg54-lock-page{
     saveTimers.set(key,setTimeout(()=>{
       saveTimers.delete(key);
       rpcSave(scope,key,parseLocal(value));
-    },180));
+    },350));
   }
 
   async function rpcDelete(scope,key){
     const did=editorDid();
     if(!did||!scope||scope==='DESA')return;
+
+    markSyncStart();
     try{
       const {data,error}=await sb.rpc('ppg_state_delete',{
         p_editor_did:did,
@@ -29521,13 +29546,14 @@ body.ppg54-lock-page{
       });
       if(error)throw error;
       if(!data?.ok)throw new Error(data?.error||'Gagal menghapus state PPG');
+      markSyncDone(true);
     }catch(e){
       console.error('[PPG Supabase delete]',key,e);
-      status('Cloud !','error');
+      markSyncDone(false);
     }
   }
 
-  /* localStorage tetap cache sinkron, Supabase menjadi penyimpanan permanen */
+  /* localStorage hanya cache; save cloud dilakukan debounce di background */
   Storage.prototype.setItem=function(key,value){
     const r=nativeSet.apply(this,arguments);
     try{
@@ -29551,15 +29577,15 @@ body.ppg54-lock-page{
     if(entries.length===1)return entries[0].payload;
 
     const vals=entries.map(x=>x.payload);
+
     if(vals.every(Array.isArray)){
       if(key==='ubnb_ppg_v47_classes'){
         return [...new Set(vals.flat().filter(Boolean))];
       }
 
       const flat=vals.flat();
-      /* dedupe common record arrays by id if possible */
       const seen=new Set();
-      return flat.filter((x,i)=>{
+      return flat.filter(x=>{
         if(!x||typeof x!=='object')return true;
         const id=x.id??x.sessionId??x.token??null;
         if(id==null)return true;
@@ -29574,106 +29600,139 @@ body.ppg54-lock-page{
       return Object.assign({},...vals);
     }
 
-    return entries.slice().sort((a,b)=>String(a.updated_at||'').localeCompare(String(b.updated_at||''))).at(-1)?.payload;
+    return entries
+      .slice()
+      .sort((a,b)=>String(a.updated_at||'').localeCompare(String(b.updated_at||'')))
+      .at(-1)?.payload;
   }
 
-  async function hydrateScope(scope){
-    const did=editorDid();
-    if(!did||!scope)return;
-
-    activeScope=scope;
-    showOverlay(true);
-    status('Cloud • memuat','syncing');
-
+  function rerenderCurrentPage(){
     try{
-      const {data,error}=await sb.rpc('ppg_state_snapshot',{
-        p_editor_did:did,
-        p_scope:scope
-      });
-      if(error)throw error;
-      if(!data?.ok)throw new Error(data?.error||'Gagal memuat data PPG');
-
-      const rows=Array.isArray(data.data)?data.data:[];
-      const grouped=new Map();
-
-      rows.forEach(r=>{
-        if(!r?.state_key)return;
-        if(!grouped.has(r.state_key))grouped.set(r.state_key,[]);
-        grouped.get(r.state_key).push(r);
-      });
-
-      hydrating=true;
-      try{
-        /* Remote menang. Untuk key yang belum ada di Supabase, migrasikan cache lama sekali. */
-        const local=localKeys();
-        const allKeys=new Set([...local,...grouped.keys()]);
-
-        for(const key of allKeys){
-          const remoteEntries=grouped.get(key)||[];
-          const localRaw=localStorage.getItem(key);
-
-          if(remoteEntries.length){
-            const merged=mergePayloads(remoteEntries,key);
-            nativeSet.call(localStorage,key,JSON.stringify(merged));
-          }else if(scope!=='DESA' && localRaw!=null){
-            /* First migration dari browser lama -> Supabase */
-            await rpcSave(scope,key,parseLocal(localRaw));
-          }
-        }
-      }finally{
-        hydrating=false;
-      }
-
-      status(scope==='DESA'?'Cloud ✓ controller':'Cloud ✓');
-    }catch(e){
-      console.error('[PPG Supabase hydrate]',e);
-      status('Cloud !','error');
-      toast('Data PPG Supabase gagal dimuat: '+(e.message||e),true);
-    }finally{
-      showOverlay(false);
-    }
-
-    /* render ulang semua setelah cache diisi dari Supabase */
-    try{
-      window.ppgRenderAll?.();
       const active=document.querySelector('#ppg-shell .ppg-page.active');
       const page=active?.id?.replace('ppg-page-','')||'dashboard';
       const btn=document.querySelector(`#ppg-shell .ppg-tab[data-page="${page}"]`);
       window.ppgOpenPage?.(page,btn);
     }catch(e){
-      console.error('[PPG rerender after hydrate]',e);
+      console.error('[PPG rerender current]',e);
     }
   }
 
-  /* Setelah user memilih scope, fungsi lama tetap menangani UI.
-     Sesudah scope terset, ambil state permanen dari Supabase dan render ulang. */
+  async function hydrateScope(scope,{force=false}={}){
+    const did=editorDid();
+    if(!did||!scope)return;
+
+    const syncKey=`${did}|${scope}`;
+
+    /* Jangan sync ganda saat scope baru dipilih / wrapper lain ikut memanggil */
+    if(inflight.has(syncKey))return inflight.get(syncKey);
+
+    const now=Date.now();
+    if(!force && now-(lastSync.get(syncKey)||0)<15000){
+      status(scope==='DESA'?'Cloud ✓ controller':'Cloud ✓');
+      return;
+    }
+
+    const job=(async()=>{
+      status('Cloud •','syncing');
+
+      try{
+        const {data,error}=await sb.rpc('ppg_state_snapshot',{
+          p_editor_did:did,
+          p_scope:scope
+        });
+        if(error)throw error;
+        if(!data?.ok)throw new Error(data?.error||'Gagal memuat data PPG');
+
+        const rows=Array.isArray(data.data)?data.data:[];
+        const grouped=new Map();
+
+        rows.forEach(r=>{
+          if(!r?.state_key)return;
+          if(!grouped.has(r.state_key))grouped.set(r.state_key,[]);
+          grouped.get(r.state_key).push(r);
+        });
+
+        let remoteChangedLocal=false;
+        const missingRemote=[];
+
+        hydrating=true;
+        try{
+          const local=localKeys();
+          const allKeys=new Set([...local,...grouped.keys()]);
+
+          for(const key of allKeys){
+            const remoteEntries=grouped.get(key)||[];
+            const localRaw=localStorage.getItem(key);
+
+            if(remoteEntries.length){
+              const merged=mergePayloads(remoteEntries,key);
+              const next=JSON.stringify(merged);
+
+              if(localRaw!==next){
+                nativeSet.call(localStorage,key,next);
+                remoteChangedLocal=true;
+              }
+            }else if(scope!=='DESA' && localRaw!=null){
+              /* Browser lama punya data, Supabase belum punya: migrasi batch di background */
+              missingRemote.push({
+                state_key:key,
+                owner_did:ownerForKey(key),
+                payload:parseLocal(localRaw)
+              });
+            }
+          }
+        }finally{
+          hydrating=false;
+        }
+
+        lastSync.set(syncKey,Date.now());
+        status(scope==='DESA'?'Cloud ✓ controller':'Cloud ✓');
+
+        /* Tidak menunggu migrasi; UI tetap langsung usable */
+        if(missingRemote.length){
+          rpcSaveBatch(scope,missingRemote);
+        }
+
+        /* Hanya render halaman aktif bila benar-benar ada perubahan remote */
+        if(remoteChangedLocal){
+          requestAnimationFrame(rerenderCurrentPage);
+        }
+      }catch(e){
+        console.error('[PPG Supabase hydrate]',e);
+        status('Cloud !','error');
+        /* Jangan blok UI dengan popup/toast panjang; cache lokal tetap bisa dipakai */
+      }finally{
+        inflight.delete(syncKey);
+      }
+    })();
+
+    inflight.set(syncKey,job);
+    return job;
+  }
+
+  /* Pilih scope: buka PPG langsung dari cache, cloud sync jalan background */
   const priorSelectScope=window.ppgSelectScope34;
   window.ppgSelectScope34=function(i){
-    showOverlay(true);
     const r=priorSelectScope?.apply(this,arguments);
+
     setTimeout(()=>{
       const sc=currentScope();
-      hydrateScope(sc);
+      if(sc)hydrateScope(sc);
     },0);
+
     return r;
   };
 
-  /* Jika PPG dibuka ulang dan scope masih aktif, sinkronkan lagi */
+  /* Pilih mode PPG hanya membuka scope gate; jangan sync di sini.
+     Sync cukup satu kali setelah scope benar-benar dipilih. */
   const priorChoose=window.ppgChoosePPG;
   window.ppgChoosePPG=function(){
-    const r=priorChoose?.apply(this,arguments);
-    setTimeout(()=>{
-      const sc=currentScope();
-      if(sc && document.getElementById('ppg-shell')?.classList.contains('show')){
-        hydrateScope(sc);
-      }
-    },0);
-    return r;
+    return priorChoose?.apply(this,arguments);
   };
 
   window.ppg60SyncNow=function(){
     const sc=currentScope();
-    return hydrateScope(sc);
+    return hydrateScope(sc,{force:true});
   };
 
   window.ppg60PersistAudit={
@@ -29684,6 +29743,7 @@ body.ppg54-lock-page{
   };
 })();
 </script>
+
 
 
 
@@ -29756,6 +29816,1281 @@ body.ppg54-lock-page{
   };
 
   setTimeout(lock61,500);
+})();
+</script>
+
+
+
+<script id="ubnb-v63-export-name-kk-one-line-script">
+(function(){
+  const DRAFT_KEY='ubnb_ppg_v33_class_drafts';
+  const SYMP_KEY='ubnb_ppg_v38_simpatisan';
+
+  function get63(k,d){
+    try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}
+    catch(_){return d}
+  }
+  function scope63(){
+    try{return JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null')}
+    catch(_){return null}
+  }
+  function today63(){
+    try{
+      return new Intl.DateTimeFormat('en-CA',{
+        timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
+      }).format(new Date())
+    }catch(_){return new Date().toISOString().slice(0,10)}
+  }
+  function safeFile63(s){
+    return String(s||'data').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,'_');
+  }
+  function normGender63(v){
+    const s=String(v||'').trim().toLowerCase();
+    if(['l','lk','laki','laki-laki','pria','male'].includes(s))return 'L';
+    if(['p','pr','perempuan','wanita','female'].includes(s))return 'P';
+    return '';
+  }
+
+  function exportRows63(){
+    const sc=scope63();
+    const drafts=get63(DRAFT_KEY,{});
+
+    let jamaah=(Array.isArray(aJamaah)?aJamaah:[])
+      .filter(j=>j.status_nikah==='Belum Menikah')
+      .filter(j=>j.status_sambung==='Tetap');
+
+    if(sc?.type==='kelompok'){
+      jamaah=jamaah.filter(j=>j.kelompok_nama===sc.kelompok);
+    }
+
+    const jrows=jamaah.map(j=>({
+      did:String(j.did),
+      nama:j.nama||'-',
+      kk:j.nama_kk||'-',
+      umur:(()=>{try{return umurFromTgl(j.tgl_lahir)}catch(_){return null}})(),
+      kelas:drafts[String(j.did)]||j.kelas_kbm||j.kelas_usia||'Belum Ditentukan',
+      kind:'jamaah',
+      gender:normGender63(j.jenis_kelamin)
+    }));
+
+    let simp=get63(SYMP_KEY,[]);
+    if(sc?.type==='kelompok'){
+      simp=simp.filter(x=>x.scope===sc.kelompok);
+    }
+
+    const srows=simp.map(x=>({
+      did:String(x.id),
+      nama:x.nama||'-',
+      kk:x.nama_kk||'-',
+      umur:x.umur??null,
+      kelas:x.kelas||'Belum Ditentukan',
+      kind:'simpatisan',
+      gender:normGender63(x.jenis_kelamin||x.gender)
+    }));
+
+    return [...jrows,...srows];
+  }
+
+  function groups63(){
+    const rows=exportRows63();
+    const remaja=rows.filter(x=>x.kelas==='Remaja');
+
+    return {
+      groups:[
+        {kelas:'Cabe Rawit Tahap A',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap A')},
+        {kelas:'Cabe Rawit Tahap B',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap B')},
+        {kelas:'Cabe Rawit Tahap C',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap C')},
+        {kelas:'Pra Remaja',rows:rows.filter(x=>x.kelas==='Pra Remaja')},
+        {kelas:'Remaja Laki-laki',rows:remaja.filter(x=>x.gender==='L')},
+        {kelas:'Remaja Perempuan',rows:remaja.filter(x=>x.gender==='P')}
+      ].map(g=>({...g,rows:g.rows.sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'))})),
+      unknownRemaja:remaja.filter(x=>!x.gender)
+    };
+  }
+
+  function displayName63(r){
+    const nama=String(r.nama||'-').trim();
+    const kk=String(r.kk||'').trim();
+
+    let s=nama;
+    if(kk && kk!=='-' && kk.toLowerCase()!==nama.toLowerCase()){
+      s+=` (${kk})`;
+    }
+    if(r.kind==='simpatisan')s+=' [S]';
+    return s;
+  }
+
+  function fitText63(doc,text,maxWidth,startSize,minSize){
+    let fs=startSize;
+    doc.setFontSize(fs);
+    while(fs>minSize && doc.getTextWidth(text)>maxWidth){
+      fs-=0.2;
+      doc.setFontSize(fs);
+    }
+    if(doc.getTextWidth(text)<=maxWidth)return {text,fs};
+
+    let s=text;
+    while(s.length>1 && doc.getTextWidth(s+'…')>maxWidth){
+      s=s.slice(0,-1);
+    }
+    return {text:s+'…',fs};
+  }
+
+  function drawPdfBox63(doc,g,x,y,w,h){
+    const rows=g.rows;
+
+    doc.setDrawColor(205,219,210);
+    doc.setFillColor(248,251,249);
+    doc.roundedRect(x,y,w,h,2,2,'FD');
+
+    doc.setFillColor(233,245,237);
+    doc.rect(x,y,w,10,'F');
+
+    doc.setTextColor(20,95,61);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.8);
+    doc.text(g.kelas,x+3,y+6.5);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.6);
+    doc.setTextColor(95,108,101);
+    doc.text(`${rows.length} murid`,x+w-3,y+6.3,{align:'right'});
+
+    const headY=y+10;
+    const rowArea=h-10;
+    const rowH=Math.min(7.0,Math.max(3.45,rowArea/(Math.max(rows.length,1)+1)));
+
+    const noW=8.5;
+    const ageW=11;
+    const nameW=w-noW-ageW;
+
+    doc.setFillColor(23,106,65);
+    doc.rect(x,headY,w,rowH,'F');
+
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(Math.min(7.2,Math.max(5.4,rowH*1.15)));
+    doc.text('No',x+noW/2,headY+rowH*.68,{align:'center'});
+    doc.text('Nama (KK)',x+noW+2,headY+rowH*.68);
+    doc.text('Umur',x+w-ageW/2,headY+rowH*.68,{align:'center'});
+
+    let cy=headY+rowH;
+
+    rows.forEach((r,i)=>{
+      if(i%2===1){
+        doc.setFillColor(253,254,253);
+        doc.rect(x,cy,w,rowH,'F');
+      }
+
+      doc.setDrawColor(230,236,232);
+      doc.line(x,cy+rowH,x+w,cy+rowH);
+
+      doc.setTextColor(35,52,43);
+      doc.setFont('helvetica','normal');
+
+      const baseFs=Math.min(7.3,Math.max(5.3,rowH*1.10));
+
+      doc.setFontSize(baseFs);
+      doc.text(String(i+1),x+noW/2,cy+rowH*.66,{align:'center'});
+
+      const shown=displayName63(r);
+      const fit=fitText63(doc,shown,nameW-4,baseFs,4.8);
+      doc.setFontSize(fit.fs);
+      doc.text(fit.text,x+noW+2,cy+rowH*.66);
+
+      doc.setFontSize(baseFs);
+      doc.text(r.umur==null?'-':String(r.umur),x+w-ageW/2,cy+rowH*.66,{align:'center'});
+
+      cy+=rowH;
+    });
+  }
+
+  window.ppg56ExportSetupPDF=function(){
+    try{
+      const jsPDFCtor=window.jspdf?.jsPDF;
+      if(!jsPDFCtor)throw new Error('Library PDF belum siap.');
+
+      const {groups,unknownRemaja}=groups63();
+      const doc=new jsPDFCtor({orientation:'portrait',unit:'mm',format:'a4'});
+      const scopeName=scope63()?.type==='kelompok'?(scope63()?.kelompok||'Kelompok'):'Desa Perwira';
+
+      doc.setTextColor(20,95,61);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(15);
+      doc.text(`Data Murid KBM - ${scopeName}`,10,11);
+
+      doc.setTextColor(105,118,110);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7.3);
+      doc.text(`PPG Perwira · ${today63()} · [S] = Simpatisan`,10,16);
+
+      const marginX=10,gapX=5,gapY=5,top=21,bottom=14;
+      const boxW=(210-marginX*2-gapX)/2;
+      const boxH=(297-top-bottom-gapY*2)/3;
+
+      groups.forEach((g,i)=>{
+        const col=i%2;
+        const row=Math.floor(i/2);
+        const x=marginX+col*(boxW+gapX);
+        const y=top+row*(boxH+gapY);
+        drawPdfBox63(doc,g,x,y,boxW,boxH);
+      });
+
+      if(unknownRemaja.length){
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(6);
+        doc.setTextColor(135,90,30);
+        const txt='Remaja belum memiliki data L/P: '+unknownRemaja.map(x=>x.nama).join(', ');
+        doc.text(doc.splitTextToSize(txt,190),10,294);
+      }
+
+      doc.save(safeFile63(`Data_Murid_KBM_${scopeName}_${today63()}`)+'.pdf');
+    }catch(e){
+      console.error(e);
+      toast(e?.message||'Gagal membuat PDF.',true);
+    }
+  };
+
+  function fitCanvasText63(ctx,text,maxWidth,startSize,minSize){
+    let fs=startSize;
+    while(fs>minSize){
+      ctx.font=`${fs}px Arial`;
+      if(ctx.measureText(text).width<=maxWidth)break;
+      fs-=0.3;
+    }
+    ctx.font=`${fs}px Arial`;
+
+    if(ctx.measureText(text).width<=maxWidth)return {text,fs};
+
+    let s=text;
+    while(s.length>1 && ctx.measureText(s+'…').width>maxWidth){
+      s=s.slice(0,-1);
+    }
+    return {text:s+'…',fs};
+  }
+
+  function drawCanvasBox63(ctx,g,x,y,w,h){
+    const rows=g.rows;
+
+    ctx.fillStyle='#f8fbf9';
+    ctx.strokeStyle='#cddbd2';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.roundRect(x,y,w,h,6);
+    ctx.fill();
+    ctx.stroke();
+
+    const hh=34;
+    ctx.fillStyle='#e9f5ed';
+    ctx.fillRect(x,y,w,hh);
+
+    ctx.fillStyle='#145f3d';
+    ctx.font='700 13px Arial';
+    ctx.fillText(g.kelas,x+9,y+22);
+
+    ctx.fillStyle='#66766d';
+    ctx.font='9.5px Arial';
+    ctx.textAlign='right';
+    ctx.fillText(`${rows.length} murid`,x+w-9,y+21);
+    ctx.textAlign='left';
+
+    const tableY=y+hh;
+    const rowH=Math.min(27,Math.max(13,(h-hh)/(Math.max(rows.length,1)+1)));
+    const noW=31,ageW=42;
+    const nameW=w-noW-ageW;
+
+    ctx.fillStyle='#176a41';
+    ctx.fillRect(x,tableY,w,rowH);
+
+    ctx.fillStyle='#fff';
+    ctx.font=`700 ${Math.min(11,rowH*.58)}px Arial`;
+    ctx.fillText('No',x+8,tableY+rowH*.68);
+    ctx.fillText('Nama (KK)',x+noW+4,tableY+rowH*.68);
+    ctx.textAlign='center';
+    ctx.fillText('Umur',x+w-ageW/2,tableY+rowH*.68);
+    ctx.textAlign='left';
+
+    let cy=tableY+rowH;
+
+    rows.forEach((r,i)=>{
+      if(i%2===1){
+        ctx.fillStyle='#fff';
+        ctx.fillRect(x,cy,w,rowH);
+      }
+
+      ctx.strokeStyle='#e6ece8';
+      ctx.beginPath();
+      ctx.moveTo(x,cy+rowH);
+      ctx.lineTo(x+w,cy+rowH);
+      ctx.stroke();
+
+      const baseFs=Math.max(7.2,Math.min(11,rowH*.45));
+
+      ctx.fillStyle='#24362c';
+      ctx.font=`${baseFs}px Arial`;
+      ctx.textAlign='center';
+      ctx.fillText(String(i+1),x+noW/2,cy+rowH*.66);
+      ctx.textAlign='left';
+
+      const shown=displayName63(r);
+      const fit=fitCanvasText63(ctx,shown,nameW-8,baseFs,6.2);
+      ctx.font=`${fit.fs}px Arial`;
+      ctx.fillText(fit.text,x+noW+4,cy+rowH*.66);
+
+      ctx.font=`${baseFs}px Arial`;
+      ctx.textAlign='center';
+      ctx.fillText(r.umur==null?'-':String(r.umur),x+w-ageW/2,cy+rowH*.66);
+      ctx.textAlign='left';
+
+      cy+=rowH;
+    });
+  }
+
+  window.ppg56ExportSetupPNG=function(){
+    try{
+      const {groups,unknownRemaja}=groups63();
+      const c=document.createElement('canvas');
+      c.width=794;
+      c.height=1123;
+      const ctx=c.getContext('2d');
+
+      ctx.fillStyle='#fff';
+      ctx.fillRect(0,0,c.width,c.height);
+
+      const scopeName=scope63()?.type==='kelompok'?(scope63()?.kelompok||'Kelompok'):'Desa Perwira';
+
+      ctx.fillStyle='#145f3d';
+      ctx.font='700 23px Arial';
+      ctx.fillText(`Data Murid KBM - ${scopeName}`,38,42);
+
+      ctx.fillStyle='#6b7971';
+      ctx.font='11.5px Arial';
+      ctx.fillText(`PPG Perwira · ${today63()} · [S] = Simpatisan`,38,61);
+
+      const mx=38,gx=16,gy=16,top=76,bottom=44;
+      const bw=(c.width-mx*2-gx)/2;
+      const bh=(c.height-top-bottom-gy*2)/3;
+
+      groups.forEach((g,i)=>{
+        const col=i%2,row=Math.floor(i/2);
+        drawCanvasBox63(ctx,g,mx+col*(bw+gx),top+row*(bh+gy),bw,bh);
+      });
+
+      if(unknownRemaja.length){
+        ctx.fillStyle='#8b6326';
+        ctx.font='10px Arial';
+        const txt='Remaja belum memiliki data L/P: '+unknownRemaja.map(x=>x.nama).join(', ');
+        ctx.fillText(txt.slice(0,115),38,c.height-18);
+      }
+
+      c.toBlob(blob=>{
+        if(!blob)return toast('Gagal membuat gambar.',true);
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=safeFile63(`Data_Murid_KBM_${scopeName}_${today63()}`)+'.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      },'image/png');
+    }catch(e){
+      console.error(e);
+      toast(e?.message||'Gagal membuat gambar.',true);
+    }
+  };
+})();
+</script>
+
+
+
+<script id="ubnb-v64-uniform-row-height-script">
+(function(){
+  const DRAFT_KEY='ubnb_ppg_v33_class_drafts';
+  const SYMP_KEY='ubnb_ppg_v38_simpatisan';
+
+  function get64(k,d){
+    try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}
+    catch(_){return d}
+  }
+
+  function scope64(){
+    try{return JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null')}
+    catch(_){return null}
+  }
+
+  function today64(){
+    try{
+      return new Intl.DateTimeFormat('en-CA',{
+        timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
+      }).format(new Date())
+    }catch(_){return new Date().toISOString().slice(0,10)}
+  }
+
+  function safeFile64(s){
+    return String(s||'data')
+      .replace(/[\\/:*?"<>|]+/g,'_')
+      .replace(/\s+/g,'_');
+  }
+
+  function normGender64(v){
+    const s=String(v||'').trim().toLowerCase();
+    if(['l','lk','laki','laki-laki','pria','male'].includes(s))return 'L';
+    if(['p','pr','perempuan','wanita','female'].includes(s))return 'P';
+    return '';
+  }
+
+  function rows64(){
+    const sc=scope64();
+    const drafts=get64(DRAFT_KEY,{});
+
+    let jamaah=(Array.isArray(aJamaah)?aJamaah:[])
+      .filter(j=>j.status_nikah==='Belum Menikah')
+      .filter(j=>j.status_sambung==='Tetap');
+
+    if(sc?.type==='kelompok'){
+      jamaah=jamaah.filter(j=>j.kelompok_nama===sc.kelompok);
+    }
+
+    const jrows=jamaah.map(j=>({
+      did:String(j.did),
+      nama:j.nama||'-',
+      kk:j.nama_kk||'-',
+      umur:(()=>{try{return umurFromTgl(j.tgl_lahir)}catch(_){return null}})(),
+      kelas:drafts[String(j.did)]||j.kelas_kbm||j.kelas_usia||'Belum Ditentukan',
+      kind:'jamaah',
+      gender:normGender64(j.jenis_kelamin)
+    }));
+
+    let simp=get64(SYMP_KEY,[]);
+    if(sc?.type==='kelompok'){
+      simp=simp.filter(x=>x.scope===sc.kelompok);
+    }
+
+    const srows=simp.map(x=>({
+      did:String(x.id),
+      nama:x.nama||'-',
+      kk:x.nama_kk||'-',
+      umur:x.umur??null,
+      kelas:x.kelas||'Belum Ditentukan',
+      kind:'simpatisan',
+      gender:normGender64(x.jenis_kelamin||x.gender)
+    }));
+
+    return [...jrows,...srows];
+  }
+
+  function groups64(){
+    const rows=rows64();
+    const remaja=rows.filter(x=>x.kelas==='Remaja');
+
+    return {
+      groups:[
+        {kelas:'Cabe Rawit Tahap A',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap A')},
+        {kelas:'Cabe Rawit Tahap B',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap B')},
+        {kelas:'Cabe Rawit Tahap C',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap C')},
+        {kelas:'Pra Remaja',rows:rows.filter(x=>x.kelas==='Pra Remaja')},
+        {kelas:'Remaja Laki-laki',rows:remaja.filter(x=>x.gender==='L')},
+        {kelas:'Remaja Perempuan',rows:remaja.filter(x=>x.gender==='P')}
+      ].map(g=>({
+        ...g,
+        rows:g.rows.sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'))
+      })),
+      unknownRemaja:remaja.filter(x=>!x.gender)
+    };
+  }
+
+  function display64(r){
+    const nama=String(r.nama||'-').trim();
+    const kk=String(r.kk||'').trim();
+    let s=nama;
+
+    if(kk && kk!=='-' && kk.toLowerCase()!==nama.toLowerCase()){
+      s+=` (${kk})`;
+    }
+
+    if(r.kind==='simpatisan')s+=' [S]';
+    return s;
+  }
+
+  function fitPdf64(doc,text,maxWidth,start,min){
+    let fs=start;
+    doc.setFontSize(fs);
+
+    while(fs>min && doc.getTextWidth(text)>maxWidth){
+      fs-=0.15;
+      doc.setFontSize(fs);
+    }
+
+    if(doc.getTextWidth(text)<=maxWidth)return {text,fs};
+
+    let s=text;
+    while(s.length>1 && doc.getTextWidth(s+'…')>maxWidth){
+      s=s.slice(0,-1);
+    }
+    return {text:s+'…',fs};
+  }
+
+  function drawPdfBox64(doc,g,x,y,w,h,rowH){
+    const rows=g.rows;
+
+    doc.setDrawColor(205,219,210);
+    doc.setFillColor(248,251,249);
+    doc.roundedRect(x,y,w,h,2,2,'FD');
+
+    doc.setFillColor(233,245,237);
+    doc.rect(x,y,w,10,'F');
+
+    doc.setTextColor(20,95,61);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.8);
+    doc.text(g.kelas,x+3,y+6.5);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.6);
+    doc.setTextColor(95,108,101);
+    doc.text(`${rows.length} murid`,x+w-3,y+6.3,{align:'right'});
+
+    const headY=y+10;
+    const noW=8.5;
+    const ageW=11;
+    const nameW=w-noW-ageW;
+
+    doc.setFillColor(23,106,65);
+    doc.rect(x,headY,w,rowH,'F');
+
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(5.9);
+    doc.text('No',x+noW/2,headY+rowH*.69,{align:'center'});
+    doc.text('Nama (KK)',x+noW+2,headY+rowH*.69);
+    doc.text('Umur',x+w-ageW/2,headY+rowH*.69,{align:'center'});
+
+    let cy=headY+rowH;
+    rows.forEach((r,i)=>{
+      if(i%2===1){
+        doc.setFillColor(253,254,253);
+        doc.rect(x,cy,w,rowH,'F');
+      }
+
+      doc.setDrawColor(230,236,232);
+      doc.line(x,cy+rowH,x+w,cy+rowH);
+
+      const baseFs=5.8;
+
+      doc.setTextColor(35,52,43);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(baseFs);
+
+      doc.text(String(i+1),x+noW/2,cy+rowH*.68,{align:'center'});
+
+      const shown=display64(r);
+      const fit=fitPdf64(doc,shown,nameW-4,baseFs,4.6);
+      doc.setFontSize(fit.fs);
+      doc.text(fit.text,x+noW+2,cy+rowH*.68);
+
+      doc.setFontSize(baseFs);
+      doc.text(r.umur==null?'-':String(r.umur),x+w-ageW/2,cy+rowH*.68,{align:'center'});
+
+      cy+=rowH;
+    });
+  }
+
+  window.ppg56ExportSetupPDF=function(){
+    try{
+      const jsPDFCtor=window.jspdf?.jsPDF;
+      if(!jsPDFCtor)throw new Error('Library PDF belum siap.');
+
+      const {groups,unknownRemaja}=groups64();
+      const doc=new jsPDFCtor({orientation:'portrait',unit:'mm',format:'a4'});
+      const scopeName=scope64()?.type==='kelompok'?(scope64()?.kelompok||'Kelompok'):'Desa Perwira';
+
+      doc.setTextColor(20,95,61);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(15);
+      doc.text(`Data Murid KBM - ${scopeName}`,10,11);
+
+      doc.setTextColor(105,118,110);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7.3);
+      doc.text(`PPG Perwira · ${today64()} · [S] = Simpatisan`,10,16);
+
+      const marginX=10;
+      const gapX=5;
+      const gapY=5;
+      const top=21;
+      const bottom=14;
+      const boxW=(210-marginX*2-gapX)/2;
+      const boxH=(297-top-bottom-gapY*2)/3;
+
+      /*
+        Semua tabel memakai tinggi row yang SAMA.
+        Acuan diambil dari tabel dengan jumlah murid terbanyak.
+      */
+      const maxRows=Math.max(1,...groups.map(g=>g.rows.length));
+      const rowArea=boxH-10;
+      const commonRowH=Math.min(5.2,Math.max(3.35,rowArea/(maxRows+1)));
+
+      groups.forEach((g,i)=>{
+        const col=i%2;
+        const row=Math.floor(i/2);
+        const x=marginX+col*(boxW+gapX);
+        const y=top+row*(boxH+gapY);
+        drawPdfBox64(doc,g,x,y,boxW,boxH,commonRowH);
+      });
+
+      if(unknownRemaja.length){
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(6);
+        doc.setTextColor(135,90,30);
+        const txt='Remaja belum memiliki data L/P: '+unknownRemaja.map(x=>x.nama).join(', ');
+        doc.text(doc.splitTextToSize(txt,190),10,294);
+      }
+
+      doc.save(safeFile64(`Data_Murid_KBM_${scopeName}_${today64()}`)+'.pdf');
+    }catch(e){
+      console.error(e);
+      toast(e?.message||'Gagal membuat PDF.',true);
+    }
+  };
+
+  function fitCanvas64(ctx,text,maxWidth,start,min){
+    let fs=start;
+    while(fs>min){
+      ctx.font=`${fs}px Arial`;
+      if(ctx.measureText(text).width<=maxWidth)break;
+      fs-=0.2;
+    }
+
+    ctx.font=`${fs}px Arial`;
+    if(ctx.measureText(text).width<=maxWidth)return {text,fs};
+
+    let s=text;
+    while(s.length>1 && ctx.measureText(s+'…').width>maxWidth){
+      s=s.slice(0,-1);
+    }
+    return {text:s+'…',fs};
+  }
+
+  function drawCanvasBox64(ctx,g,x,y,w,h,rowH){
+    const rows=g.rows;
+
+    ctx.fillStyle='#f8fbf9';
+    ctx.strokeStyle='#cddbd2';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.roundRect(x,y,w,h,6);
+    ctx.fill();
+    ctx.stroke();
+
+    const hh=34;
+
+    ctx.fillStyle='#e9f5ed';
+    ctx.fillRect(x,y,w,hh);
+
+    ctx.fillStyle='#145f3d';
+    ctx.font='700 13px Arial';
+    ctx.fillText(g.kelas,x+9,y+22);
+
+    ctx.fillStyle='#66766d';
+    ctx.font='9.5px Arial';
+    ctx.textAlign='right';
+    ctx.fillText(`${rows.length} murid`,x+w-9,y+21);
+    ctx.textAlign='left';
+
+    const tableY=y+hh;
+    const noW=31;
+    const ageW=42;
+    const nameW=w-noW-ageW;
+
+    ctx.fillStyle='#176a41';
+    ctx.fillRect(x,tableY,w,rowH);
+
+    ctx.fillStyle='#fff';
+    ctx.font='700 8.6px Arial';
+    ctx.fillText('No',x+8,tableY+rowH*.69);
+    ctx.fillText('Nama (KK)',x+noW+4,tableY+rowH*.69);
+
+    ctx.textAlign='center';
+    ctx.fillText('Umur',x+w-ageW/2,tableY+rowH*.69);
+    ctx.textAlign='left';
+
+    let cy=tableY+rowH;
+
+    rows.forEach((r,i)=>{
+      if(i%2===1){
+        ctx.fillStyle='#fff';
+        ctx.fillRect(x,cy,w,rowH);
+      }
+
+      ctx.strokeStyle='#e6ece8';
+      ctx.beginPath();
+      ctx.moveTo(x,cy+rowH);
+      ctx.lineTo(x+w,cy+rowH);
+      ctx.stroke();
+
+      const baseFs=8.4;
+
+      ctx.fillStyle='#24362c';
+      ctx.font=`${baseFs}px Arial`;
+
+      ctx.textAlign='center';
+      ctx.fillText(String(i+1),x+noW/2,cy+rowH*.68);
+
+      ctx.textAlign='left';
+      const shown=display64(r);
+      const fit=fitCanvas64(ctx,shown,nameW-8,baseFs,6.2);
+      ctx.font=`${fit.fs}px Arial`;
+      ctx.fillText(fit.text,x+noW+4,cy+rowH*.68);
+
+      ctx.font=`${baseFs}px Arial`;
+      ctx.textAlign='center';
+      ctx.fillText(r.umur==null?'-':String(r.umur),x+w-ageW/2,cy+rowH*.68);
+      ctx.textAlign='left';
+
+      cy+=rowH;
+    });
+  }
+
+  window.ppg56ExportSetupPNG=function(){
+    try{
+      const {groups,unknownRemaja}=groups64();
+
+      const c=document.createElement('canvas');
+      c.width=794;
+      c.height=1123;
+      const ctx=c.getContext('2d');
+
+      ctx.fillStyle='#fff';
+      ctx.fillRect(0,0,c.width,c.height);
+
+      const scopeName=scope64()?.type==='kelompok'?(scope64()?.kelompok||'Kelompok'):'Desa Perwira';
+
+      ctx.fillStyle='#145f3d';
+      ctx.font='700 23px Arial';
+      ctx.fillText(`Data Murid KBM - ${scopeName}`,38,42);
+
+      ctx.fillStyle='#6b7971';
+      ctx.font='11.5px Arial';
+      ctx.fillText(`PPG Perwira · ${today64()} · [S] = Simpatisan`,38,61);
+
+      const mx=38;
+      const gx=16;
+      const gy=16;
+      const top=76;
+      const bottom=44;
+      const bw=(c.width-mx*2-gx)/2;
+      const bh=(c.height-top-bottom-gy*2)/3;
+
+      const maxRows=Math.max(1,...groups.map(g=>g.rows.length));
+      const rowArea=bh-34;
+      const commonRowH=Math.min(20,Math.max(13,rowArea/(maxRows+1)));
+
+      groups.forEach((g,i)=>{
+        const col=i%2;
+        const row=Math.floor(i/2);
+        drawCanvasBox64(
+          ctx,
+          g,
+          mx+col*(bw+gx),
+          top+row*(bh+gy),
+          bw,
+          bh,
+          commonRowH
+        );
+      });
+
+      if(unknownRemaja.length){
+        ctx.fillStyle='#8b6326';
+        ctx.font='10px Arial';
+        const txt='Remaja belum memiliki data L/P: '+unknownRemaja.map(x=>x.nama).join(', ');
+        ctx.fillText(txt.slice(0,115),38,c.height-18);
+      }
+
+      c.toBlob(blob=>{
+        if(!blob)return toast('Gagal membuat gambar.',true);
+
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=safeFile64(`Data_Murid_KBM_${scopeName}_${today64()}`)+'.png';
+
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      },'image/png');
+    }catch(e){
+      console.error(e);
+      toast(e?.message||'Gagal membuat gambar.',true);
+    }
+  };
+})();
+</script>
+
+
+
+<script id="ubnb-v65-adaptive-export-layout-script">
+(function(){
+  const DRAFT_KEY='ubnb_ppg_v33_class_drafts';
+  const SYMP_KEY='ubnb_ppg_v38_simpatisan';
+
+  function get65(k,d){
+    try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}
+    catch(_){return d}
+  }
+
+  function scope65(){
+    try{return JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null')}
+    catch(_){return null}
+  }
+
+  function today65(){
+    try{
+      return new Intl.DateTimeFormat('en-CA',{
+        timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
+      }).format(new Date())
+    }catch(_){return new Date().toISOString().slice(0,10)}
+  }
+
+  function safeFile65(s){
+    return String(s||'data')
+      .replace(/[\\/:*?"<>|]+/g,'_')
+      .replace(/\s+/g,'_');
+  }
+
+  function normGender65(v){
+    const s=String(v||'').trim().toLowerCase();
+    if(['l','lk','laki','laki-laki','pria','male'].includes(s))return 'L';
+    if(['p','pr','perempuan','wanita','female'].includes(s))return 'P';
+    return '';
+  }
+
+  function rows65(){
+    const sc=scope65();
+    const drafts=get65(DRAFT_KEY,{});
+
+    let jamaah=(Array.isArray(aJamaah)?aJamaah:[])
+      .filter(j=>j.status_nikah==='Belum Menikah')
+      .filter(j=>j.status_sambung==='Tetap');
+
+    if(sc?.type==='kelompok'){
+      jamaah=jamaah.filter(j=>j.kelompok_nama===sc.kelompok);
+    }
+
+    const jr=jamaah.map(j=>({
+      did:String(j.did),
+      nama:j.nama||'-',
+      kk:j.nama_kk||'-',
+      umur:(()=>{try{return umurFromTgl(j.tgl_lahir)}catch(_){return null}})(),
+      kelas:drafts[String(j.did)]||j.kelas_kbm||j.kelas_usia||'Belum Ditentukan',
+      kind:'jamaah',
+      gender:normGender65(j.jenis_kelamin)
+    }));
+
+    let simp=get65(SYMP_KEY,[]);
+    if(sc?.type==='kelompok'){
+      simp=simp.filter(x=>x.scope===sc.kelompok);
+    }
+
+    const sr=simp.map(x=>({
+      did:String(x.id),
+      nama:x.nama||'-',
+      kk:x.nama_kk||'-',
+      umur:x.umur??null,
+      kelas:x.kelas||'Belum Ditentukan',
+      kind:'simpatisan',
+      gender:normGender65(x.jenis_kelamin||x.gender)
+    }));
+
+    return [...jr,...sr];
+  }
+
+  function groups65(){
+    const rows=rows65();
+    const remaja=rows.filter(x=>x.kelas==='Remaja');
+
+    const groups=[
+      {kelas:'Cabe Rawit Tahap A',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap A')},
+      {kelas:'Cabe Rawit Tahap B',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap B')},
+      {kelas:'Cabe Rawit Tahap C',rows:rows.filter(x=>x.kelas==='Cabe Rawit Tahap C')},
+      {kelas:'Pra Remaja',rows:rows.filter(x=>x.kelas==='Pra Remaja')},
+      {kelas:'Remaja Laki-laki',rows:remaja.filter(x=>x.gender==='L')},
+      {kelas:'Remaja Perempuan',rows:remaja.filter(x=>x.gender==='P')}
+    ].map(g=>({
+      ...g,
+      rows:g.rows.sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id'))
+    }));
+
+    return {
+      groups,
+      unknownRemaja:remaja.filter(x=>!x.gender)
+    };
+  }
+
+  function display65(r){
+    const nama=String(r.nama||'-').trim();
+    const kk=String(r.kk||'').trim();
+
+    let s=nama;
+    if(kk && kk!=='-' && kk.toLowerCase()!==nama.toLowerCase()){
+      s+=` (${kk})`;
+    }
+    if(r.kind==='simpatisan')s+=' [S]';
+    return s;
+  }
+
+  function fitPdf65(doc,text,maxWidth,start,min){
+    let fs=start;
+    doc.setFontSize(fs);
+
+    while(fs>min && doc.getTextWidth(text)>maxWidth){
+      fs-=0.15;
+      doc.setFontSize(fs);
+    }
+
+    if(doc.getTextWidth(text)<=maxWidth)return {text,fs};
+
+    let s=text;
+    while(s.length>1 && doc.getTextWidth(s+'…')>maxWidth){
+      s=s.slice(0,-1);
+    }
+    return {text:s+'…',fs};
+  }
+
+  function pairMax65(groups){
+    return [
+      Math.max(groups[0].rows.length,groups[1].rows.length,1),
+      Math.max(groups[2].rows.length,groups[3].rows.length,1),
+      Math.max(groups[4].rows.length,groups[5].rows.length,1)
+    ];
+  }
+
+  function calcPdfLayout65(groups){
+    const pageH=297;
+    const top=21,bottom=14,gapY=5;
+    const titleH=10; // header kelas
+    const maxRows=pairMax65(groups);
+
+    const availableForBoxes=pageH-top-bottom-gapY*2;
+    const coefficient=maxRows.reduce((n,c)=>n+(c+1),0); // +1 header tabel tiap pasangan
+    const targetRowH=5.2;
+    const fitRowH=(availableForBoxes-titleH*3)/coefficient;
+    const rowH=Math.max(3.5,Math.min(targetRowH,fitRowH));
+
+    const pairHeights=maxRows.map(n=>titleH+(n+1)*rowH);
+
+    let y=top;
+    const ys=[];
+    pairHeights.forEach((h,i)=>{
+      ys.push(y);
+      y+=h+(i<2?gapY:0);
+    });
+
+    return {rowH,pairHeights,ys};
+  }
+
+  function drawPdfBox65(doc,g,x,y,w,h,rowH){
+    const rows=g.rows;
+
+    doc.setDrawColor(205,219,210);
+    doc.setFillColor(248,251,249);
+    doc.roundedRect(x,y,w,h,2,2,'FD');
+
+    doc.setFillColor(233,245,237);
+    doc.rect(x,y,w,10,'F');
+
+    doc.setTextColor(20,95,61);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9.2);
+    doc.text(g.kelas,x+3,y+6.5);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(95,108,101);
+    doc.text(`${rows.length} murid`,x+w-3,y+6.3,{align:'right'});
+
+    const headY=y+10;
+    const noW=8.5;
+    const ageW=11;
+    const nameW=w-noW-ageW;
+
+    doc.setFillColor(23,106,65);
+    doc.rect(x,headY,w,rowH,'F');
+
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold');
+    const headerFs=Math.min(7.2,Math.max(6.0,rowH*1.16));
+    doc.setFontSize(headerFs);
+    doc.text('No',x+noW/2,headY+rowH*.69,{align:'center'});
+    doc.text('Nama (KK)',x+noW+2,headY+rowH*.69);
+    doc.text('Umur',x+w-ageW/2,headY+rowH*.69,{align:'center'});
+
+    let cy=headY+rowH;
+    rows.forEach((r,i)=>{
+      if(i%2===1){
+        doc.setFillColor(253,254,253);
+        doc.rect(x,cy,w,rowH,'F');
+      }
+
+      doc.setDrawColor(230,236,232);
+      doc.line(x,cy+rowH,x+w,cy+rowH);
+
+      const baseFs=Math.min(7.8,Math.max(6.6,rowH*1.40));
+
+      doc.setTextColor(35,52,43);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(baseFs);
+
+      doc.text(String(i+1),x+noW/2,cy+rowH*.68,{align:'center'});
+
+      const shown=display65(r);
+      const fit=fitPdf65(doc,shown,nameW-4,baseFs,5.3);
+      doc.setFontSize(fit.fs);
+      doc.text(fit.text,x+noW+2,cy+rowH*.68);
+
+      doc.setFontSize(baseFs);
+      doc.text(r.umur==null?'-':String(r.umur),x+w-ageW/2,cy+rowH*.68,{align:'center'});
+
+      cy+=rowH;
+    });
+  }
+
+  window.ppg56ExportSetupPDF=function(){
+    try{
+      const jsPDFCtor=window.jspdf?.jsPDF;
+      if(!jsPDFCtor)throw new Error('Library PDF belum siap.');
+
+      const {groups,unknownRemaja}=groups65();
+      const doc=new jsPDFCtor({orientation:'portrait',unit:'mm',format:'a4'});
+      const scopeName=scope65()?.type==='kelompok'?(scope65()?.kelompok||'Kelompok'):'Desa Perwira';
+
+      doc.setTextColor(20,95,61);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(15);
+      doc.text(`Data Murid KBM - ${scopeName}`,10,11);
+
+      doc.setTextColor(105,118,110);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7.4);
+      doc.text(`PPG Perwira · ${today65()} · [S] = Simpatisan`,10,16);
+
+      const marginX=10;
+      const gapX=5;
+      const boxW=(210-marginX*2-gapX)/2;
+
+      const lay=calcPdfLayout65(groups);
+
+      for(let pair=0;pair<3;pair++){
+        const y=lay.ys[pair];
+        const h=lay.pairHeights[pair];
+
+        drawPdfBox65(doc,groups[pair*2],marginX,y,boxW,h,lay.rowH);
+        drawPdfBox65(doc,groups[pair*2+1],marginX+boxW+gapX,y,boxW,h,lay.rowH);
+      }
+
+      if(unknownRemaja.length){
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(6);
+        doc.setTextColor(135,90,30);
+        const txt='Remaja belum memiliki data L/P: '+unknownRemaja.map(x=>x.nama).join(', ');
+        doc.text(doc.splitTextToSize(txt,190),10,294);
+      }
+
+      doc.save(safeFile65(`Data_Murid_KBM_${scopeName}_${today65()}`)+'.pdf');
+    }catch(e){
+      console.error(e);
+      toast(e?.message||'Gagal membuat PDF.',true);
+    }
+  };
+
+  function fitCanvas65(ctx,text,maxWidth,start,min){
+    let fs=start;
+
+    while(fs>min){
+      ctx.font=`${fs}px Arial`;
+      if(ctx.measureText(text).width<=maxWidth)break;
+      fs-=0.2;
+    }
+
+    ctx.font=`${fs}px Arial`;
+    if(ctx.measureText(text).width<=maxWidth)return {text,fs};
+
+    let s=text;
+    while(s.length>1 && ctx.measureText(s+'…').width>maxWidth){
+      s=s.slice(0,-1);
+    }
+    return {text:s+'…',fs};
+  }
+
+  function calcCanvasLayout65(groups){
+    const pageH=1123;
+    const top=76,bottom=44,gapY=16;
+    const titleH=34;
+    const maxRows=pairMax65(groups);
+
+    const availableForBoxes=pageH-top-bottom-gapY*2;
+    const coefficient=maxRows.reduce((n,c)=>n+(c+1),0);
+    const targetRowH=19.5;
+    const fitRowH=(availableForBoxes-titleH*3)/coefficient;
+    const rowH=Math.max(13,Math.min(targetRowH,fitRowH));
+
+    const pairHeights=maxRows.map(n=>titleH+(n+1)*rowH);
+
+    let y=top;
+    const ys=[];
+    pairHeights.forEach((h,i)=>{
+      ys.push(y);
+      y+=h+(i<2?gapY:0);
+    });
+
+    return {rowH,pairHeights,ys};
+  }
+
+  function drawCanvasBox65(ctx,g,x,y,w,h,rowH){
+    const rows=g.rows;
+
+    ctx.fillStyle='#f8fbf9';
+    ctx.strokeStyle='#cddbd2';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.roundRect(x,y,w,h,6);
+    ctx.fill();
+    ctx.stroke();
+
+    const hh=34;
+
+    ctx.fillStyle='#e9f5ed';
+    ctx.fillRect(x,y,w,hh);
+
+    ctx.fillStyle='#145f3d';
+    ctx.font='700 13.5px Arial';
+    ctx.fillText(g.kelas,x+9,y+22);
+
+    ctx.fillStyle='#66766d';
+    ctx.font='9.8px Arial';
+    ctx.textAlign='right';
+    ctx.fillText(`${rows.length} murid`,x+w-9,y+21);
+    ctx.textAlign='left';
+
+    const tableY=y+hh;
+    const noW=31;
+    const ageW=42;
+    const nameW=w-noW-ageW;
+
+    ctx.fillStyle='#176a41';
+    ctx.fillRect(x,tableY,w,rowH);
+
+    const headerFs=Math.min(10.5,Math.max(9,rowH*.48));
+    ctx.fillStyle='#fff';
+    ctx.font=`700 ${headerFs}px Arial`;
+    ctx.fillText('No',x+8,tableY+rowH*.69);
+    ctx.fillText('Nama (KK)',x+noW+4,tableY+rowH*.69);
+
+    ctx.textAlign='center';
+    ctx.fillText('Umur',x+w-ageW/2,tableY+rowH*.69);
+    ctx.textAlign='left';
+
+    let cy=tableY+rowH;
+
+    rows.forEach((r,i)=>{
+      if(i%2===1){
+        ctx.fillStyle='#fff';
+        ctx.fillRect(x,cy,w,rowH);
+      }
+
+      ctx.strokeStyle='#e6ece8';
+      ctx.beginPath();
+      ctx.moveTo(x,cy+rowH);
+      ctx.lineTo(x+w,cy+rowH);
+      ctx.stroke();
+
+      const baseFs=Math.min(11.5,Math.max(9,rowH*.52));
+
+      ctx.fillStyle='#24362c';
+      ctx.font=`${baseFs}px Arial`;
+
+      ctx.textAlign='center';
+      ctx.fillText(String(i+1),x+noW/2,cy+rowH*.68);
+
+      ctx.textAlign='left';
+      const shown=display65(r);
+      const fit=fitCanvas65(ctx,shown,nameW-8,baseFs,7.2);
+      ctx.font=`${fit.fs}px Arial`;
+      ctx.fillText(fit.text,x+noW+4,cy+rowH*.68);
+
+      ctx.font=`${baseFs}px Arial`;
+      ctx.textAlign='center';
+      ctx.fillText(r.umur==null?'-':String(r.umur),x+w-ageW/2,cy+rowH*.68);
+      ctx.textAlign='left';
+
+      cy+=rowH;
+    });
+  }
+
+  window.ppg56ExportSetupPNG=function(){
+    try{
+      const {groups,unknownRemaja}=groups65();
+
+      const c=document.createElement('canvas');
+      c.width=794;
+      c.height=1123;
+      const ctx=c.getContext('2d');
+
+      ctx.fillStyle='#fff';
+      ctx.fillRect(0,0,c.width,c.height);
+
+      const scopeName=scope65()?.type==='kelompok'?(scope65()?.kelompok||'Kelompok'):'Desa Perwira';
+
+      ctx.fillStyle='#145f3d';
+      ctx.font='700 23px Arial';
+      ctx.fillText(`Data Murid KBM - ${scopeName}`,38,42);
+
+      ctx.fillStyle='#6b7971';
+      ctx.font='11.5px Arial';
+      ctx.fillText(`PPG Perwira · ${today65()} · [S] = Simpatisan`,38,61);
+
+      const mx=38;
+      const gx=16;
+      const bw=(c.width-mx*2-gx)/2;
+
+      const lay=calcCanvasLayout65(groups);
+
+      for(let pair=0;pair<3;pair++){
+        const y=lay.ys[pair];
+        const h=lay.pairHeights[pair];
+
+        drawCanvasBox65(ctx,groups[pair*2],mx,y,bw,h,lay.rowH);
+        drawCanvasBox65(ctx,groups[pair*2+1],mx+bw+gx,y,bw,h,lay.rowH);
+      }
+
+      if(unknownRemaja.length){
+        ctx.fillStyle='#8b6326';
+        ctx.font='10px Arial';
+        const txt='Remaja belum memiliki data L/P: '+unknownRemaja.map(x=>x.nama).join(', ');
+        ctx.fillText(txt.slice(0,115),38,c.height-18);
+      }
+
+      c.toBlob(blob=>{
+        if(!blob)return toast('Gagal membuat gambar.',true);
+
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=safeFile65(`Data_Murid_KBM_${scopeName}_${today65()}`)+'.png';
+
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      },'image/png');
+    }catch(e){
+      console.error(e);
+      toast(e?.message||'Gagal membuat gambar.',true);
+    }
+  };
 })();
 </script>
 
