@@ -31094,5 +31094,477 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<style id="ubnb-v66-ppg-permission-mode-switch-style">
+/* v66 — Permission PPG + tombol pindah mode Database Perwira */
+.btn-mode-switch{
+  min-height:36px;
+  padding:0 9px;
+  border:1px solid rgba(255,255,255,.26);
+  border-radius:6px;
+  background:rgba(255,255,255,.10);
+  color:#fff;
+  font-size:11px;
+  font-weight:750;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.btn-mode-switch:active{transform:translateY(1px)}
+
+#ppg66-access-chip{
+  display:inline-flex;
+  align-items:center;
+  margin-left:6px;
+  padding:3px 6px;
+  border-radius:4px;
+  font-size:9px;
+  font-weight:750;
+  line-height:1.2;
+  vertical-align:middle;
+}
+#ppg66-access-chip.operational{
+  border:1px solid rgba(255,255,255,.24);
+  background:rgba(255,255,255,.12);
+  color:#eafff1;
+}
+#ppg66-access-chip.review{
+  border:1px solid rgba(255,224,151,.35);
+  background:rgba(255,198,77,.14);
+  color:#fff0bd;
+}
+
+#ppg-shell.ppg66-readonly .ppg66-write-only{display:none!important}
+
+.ppg66-review-note{
+  margin:0 0 8px;
+  padding:7px 9px;
+  border:1px solid #d7e5dc;
+  border-radius:5px;
+  background:#f5faf7;
+  color:#456052;
+  font-size:11px;
+  line-height:1.4;
+}
+
+#ppg-shell.ppg66-readonly #ppg-page-setup select,
+#ppg-shell.ppg66-readonly #ppg-page-kelas select{
+  pointer-events:none!important;
+  background:#f3f6f4!important;
+  color:#65756c!important;
+  opacity:.78;
+}
+#ppg-shell.ppg66-readonly #ppg-page-kelas input,
+#ppg-shell.ppg66-readonly #ppg-page-kelas textarea,
+#ppg-shell.ppg66-readonly #ppg-page-kurikulum input:not([type="search"]),
+#ppg-shell.ppg66-readonly #ppg-page-kurikulum textarea{
+  pointer-events:none!important;
+  background:#f3f6f4!important;
+  opacity:.78;
+}
+
+@media(max-width:700px){
+  .btn-mode-switch{
+    min-height:34px;
+    padding:0 7px;
+    font-size:10.5px;
+  }
+}
+</style>
+
+
+<script id="ubnb-v66-ppg-permission-mode-switch-script">
+(function(){
+  const SCOPE_KEY='ubnb_ppg_v34_scope';
+  const PREF_KEYS=new Set(['ubnb_ppg_v38_setup_collapsed']);
+
+  function norm66(s){
+    return String(s||'')
+      .trim()
+      .toLowerCase()
+      .replace(/[._/\\-]+/g,' ')
+      .replace(/\s+/g,' ');
+  }
+
+  function isMaster66(){
+    if(!CU)return false;
+    const role=norm66(CU.role);
+    let p=CU.permissions;
+    try{if(typeof p==='string')p=JSON.parse(p)}catch(_){}
+
+    return CU.is_master===true ||
+      CU.master===true ||
+      CU.ppg_master===true ||
+      ['master','master admin','master_admin','superadmin'].includes(role) ||
+      (p&&typeof p==='object'&&(p.master===true||p.master_admin===true)) ||
+      String(CU.did||CU.id||'')==='4075' ||
+      /(^|\s)setyo(\s|$)/i.test(String(CU.nama||CU.username||''));
+  }
+
+  function isMTMS66(label){
+    const x=' '+norm66(label)+' ';
+    return /(^|\s)mt(\s|$)/.test(x) || /(^|\s)ms(\s|$)/.test(x);
+  }
+
+  function currentScope66(){
+    try{return JSON.parse(sessionStorage.getItem(SCOPE_KEY)||'null')}
+    catch(_){return null}
+  }
+
+  function activeRoles66(){
+    const did=String(CU?.did||CU?.id||'');
+    if(!did)return [];
+    return (Array.isArray(aPengurus)?aPengurus:[])
+      .filter(p=>p && p.aktif!==false && String(p.did)===did);
+  }
+
+  function canActScope66(scopeObj){
+    if(!scopeObj)return false;
+
+    /* Controller Desa selalu review-only.
+       Master melakukan aksi dengan memilih PW1-PW4. */
+    if(scopeObj.type==='controller')return false;
+
+    if(isMaster66())return true;
+
+    const g=scopeObj.kelompok;
+    return activeRoles66().some(p=>
+      isMTMS66(p.dapukan) &&
+      (
+        (p.level==='kelompok' && p.kelompok_nama===g) ||
+        (p.level==='khusus' && p.akses_level==='kelompok' && p.akses_kelompok_nama===g)
+      )
+    );
+  }
+
+  function canAct66(){return canActScope66(currentScope66())}
+
+  window.ppgCanAct66=canAct66;
+  window.ppgIsMaster66=isMaster66;
+
+  /* Safety guard:
+     bila mode review, shared state PPG tidak boleh berubah bahkan bila
+     ada handler lama yang terlewat. Preference tampilan user tetap boleh. */
+  const setBefore66=Storage.prototype.setItem;
+  Storage.prototype.setItem=function(key,value){
+    try{
+      if(
+        this===window.localStorage &&
+        String(key).startsWith('ubnb_ppg_') &&
+        currentScope66() &&
+        !canAct66() &&
+        !PREF_KEYS.has(String(key))
+      ){
+        return;
+      }
+    }catch(_){}
+    return setBefore66.apply(this,arguments);
+  };
+
+  /* ---------- Database Perwira: tombol pindah mode ---------- */
+  function ensureDatabaseModeButton66(){
+    const bar=document.querySelector('#app .topbar-right');
+    if(!bar)return;
+
+    let btn=document.getElementById('db-mode-switch-66');
+
+    let canAccess=false;
+    try{
+      canAccess=typeof window.ppgCanAccess==='function' && window.ppgCanAccess();
+    }catch(_){}
+
+    if(!canAccess){
+      btn?.remove();
+      return;
+    }
+
+    if(!btn){
+      btn=document.createElement('button');
+      btn.id='db-mode-switch-66';
+      btn.className='btn-mode-switch';
+      btn.type='button';
+      btn.textContent='⇄ Mode';
+      btn.title='Pilih Database Perwira / PPG Perwira';
+      btn.onclick=()=>{
+        document.getElementById('ppg-shell')?.classList.remove('show');
+        window.ppgShowPortal?.();
+      };
+
+      const user=document.getElementById('user-badge');
+      if(user)bar.insertBefore(btn,user);
+      else bar.insertBefore(btn,bar.firstChild);
+    }
+  }
+
+  /* ---------- Scope Gate ---------- */
+  function patchScopeGate66(){
+    const gate=document.getElementById('ppg-scope-gate');
+    const box=document.getElementById('ppg-scope-list');
+    if(!gate||!box)return;
+
+    if(isMaster66()){
+      const opts=[
+        {type:'controller',kelompok:null,label:'Controller Desa',meta:'Monitoring & reporting seluruh PPG Desa Perwira'},
+        ...['PW1','PW2','PW3','PW4'].map(g=>({
+          type:'kelompok',
+          kelompok:g,
+          label:`Kelompok ${g}`,
+          meta:`Operasional KBM ${g}`
+        }))
+      ];
+      window.__PPG34_SCOPE_OPTIONS=opts;
+      box.innerHTML=opts.map((s,i)=>`
+        <button class="ppg-scope-option" onclick="ppgSelectScope34(${i})">
+          <div class="title">${s.label}</div>
+          <div class="meta">${s.meta}</div>
+        </button>
+      `).join('');
+      return;
+    }
+
+    const opts=window.__PPG34_SCOPE_OPTIONS||[];
+    [...box.querySelectorAll('.ppg-scope-option')].forEach((b,i)=>{
+      const s=opts[i];
+      const meta=b.querySelector('.meta');
+      if(!s||!meta)return;
+
+      if(s.type==='controller'){
+        meta.textContent='Monitoring & reporting seluruh PPG Desa Perwira';
+      }else{
+        meta.textContent=canActScope66(s)
+          ?`Operasional KBM ${s.kelompok}`
+          :`Review & Reporting KBM ${s.kelompok}`;
+      }
+    });
+  }
+
+  const oldChoosePPG66=window.ppgChoosePPG;
+  window.ppgChoosePPG=function(){
+    const r=oldChoosePPG66?.apply(this,arguments);
+    setTimeout(patchScopeGate66,0);
+    return r;
+  };
+
+  /* ---------- Read-only UI ---------- */
+  const ALLOWED_TEXT=[
+    'download','pdf','png','lihat','review','riwayat',
+    'aktif hari ini','collapse','expand','pilih mode','kembali'
+  ];
+
+  const WRITE_TEXT=[
+    'mulai kelas','mulai kelas baru','+ dewan guru',
+    'atur kelas','kelola kelas','+ simpatisan','tambah simpatisan',
+    'tambah materi','simpan materi','simpan','hapus',
+    'selesaikan kelas','tutup kelas',
+    'generate laporan','generate laporan berikutnya',
+    'tambah kurikulum','hapus materi'
+  ];
+
+  const WRITE_HANDLERS=[
+    'ppg38opensimp',
+    'ppg47openclassmanager',
+    'ppg52openstart',
+    'ppg52openaddguru',
+    'ppg52editguru',
+    'ppg52removeguru',
+    'ppg37genreport',
+    'ppg54confirmfinish',
+    'ppg37finish',
+    'saveguru',
+    'addclass',
+    'deleteclass',
+    'changeclass',
+    'masterysave'
+  ];
+
+  function isWriteButton66(btn){
+    if(!btn)return false;
+
+    const text=norm66(btn.textContent);
+    const oc=norm66(btn.getAttribute('onclick'));
+
+    if(ALLOWED_TEXT.some(x=>text.includes(x)))return false;
+    if(WRITE_HANDLERS.some(x=>oc.includes(x)))return true;
+    return WRITE_TEXT.some(x=>text===x || text.startsWith(x+' ') || text.includes(x));
+  }
+
+  function lockPage66(root){
+    if(!root)return;
+
+    root.querySelectorAll('button').forEach(btn=>{
+      if(isWriteButton66(btn))btn.classList.add('ppg66-write-only');
+    });
+
+    root.querySelectorAll('#ppg-page-setup select').forEach(x=>{
+      x.disabled=true;
+      x.dataset.ppg66Locked='1';
+    });
+
+    root.querySelectorAll('#ppg-page-kelas select,#ppg-page-kelas input,#ppg-page-kelas textarea').forEach(x=>{
+      x.disabled=true;
+      x.dataset.ppg66Locked='1';
+    });
+
+    root.querySelectorAll('#ppg-page-guru button').forEach(btn=>{
+      const t=norm66(btn.textContent);
+      if(t.includes('atur kelas')||t.includes('hapus')||t.includes('dewan guru')){
+        btn.classList.add('ppg66-write-only');
+      }
+    });
+
+    root.querySelectorAll('#ppg-page-kurikulum .ppg35-mastery-status').forEach(x=>{
+      x.disabled=true;
+      x.dataset.ppg66Locked='1';
+    });
+
+    root.querySelectorAll('#ppg-page-kurikulum input:not([type="search"]),#ppg-page-kurikulum textarea').forEach(x=>{
+      x.disabled=true;
+      x.dataset.ppg66Locked='1';
+    });
+
+    root.querySelectorAll('#ppg-page-laporan button').forEach(btn=>{
+      if(norm66(btn.textContent).includes('generate')){
+        btn.classList.add('ppg66-write-only');
+      }
+    });
+  }
+
+  function unlockPage66(root){
+    if(!root)return;
+
+    root.querySelectorAll('.ppg66-write-only').forEach(x=>{
+      x.classList.remove('ppg66-write-only');
+    });
+
+    root.querySelectorAll('[data-ppg66-locked="1"]').forEach(x=>{
+      x.disabled=false;
+      delete x.dataset.ppg66Locked;
+    });
+  }
+
+  function updateAccessUI66(){
+    const shell=document.getElementById('ppg-shell');
+    if(!shell)return;
+
+    const act=canAct66();
+    shell.classList.toggle('ppg66-readonly',!act);
+
+    const brand=document.querySelector('#ppg-shell .ppg-brand-sub');
+    if(brand){
+      let chip=document.getElementById('ppg66-access-chip');
+      if(!chip){
+        chip=document.createElement('span');
+        chip.id='ppg66-access-chip';
+        brand.appendChild(chip);
+      }
+      chip.className=act?'operational':'review';
+      chip.textContent=act?'Operasional':'Review';
+    }
+
+    if(act){
+      unlockPage66(shell);
+      shell.querySelector('.ppg66-review-note')?.remove();
+    }else{
+      lockPage66(shell);
+
+      const page=shell.querySelector('.ppg-page.active');
+      if(page && !page.querySelector('.ppg66-review-note')){
+        const note=document.createElement('div');
+        note.className='ppg66-review-note';
+        note.textContent='Mode Review & Reporting — perubahan data hanya dapat dilakukan oleh MT, MS, atau Master User.';
+        page.prepend(note);
+      }
+    }
+
+    const dashSub=shell.querySelector('#ppg-page-dashboard .ppg-v33-stage-sub');
+    if(dashSub){
+      dashSub.textContent=act
+        ?'Operasional kegiatan KBM'
+        :'Review & Reporting kegiatan KBM';
+    }
+  }
+
+  /* Capture guard untuk handler lama */
+  document.addEventListener('click',e=>{
+    const shell=e.target.closest?.('#ppg-shell');
+    if(!shell||canAct66())return;
+
+    const btn=e.target.closest('button');
+    if(btn&&isWriteButton66(btn)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toast('Mode Review: perubahan data hanya untuk MT, MS, atau Master User.',true);
+    }
+  },true);
+
+  document.addEventListener('change',e=>{
+    const shell=e.target.closest?.('#ppg-shell');
+    if(!shell||canAct66())return;
+
+    if(
+      e.target.matches('#ppg-page-setup select') ||
+      e.target.matches('#ppg-page-kelas select') ||
+      e.target.matches('.ppg35-mastery-status')
+    ){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toast('Mode Review: data tidak dapat diubah.',true);
+    }
+  },true);
+
+  /* Re-apply setelah render innerHTML */
+  const shell=document.getElementById('ppg-shell');
+  if(shell){
+    let timer=0;
+    new MutationObserver(()=>{
+      clearTimeout(timer);
+      timer=setTimeout(updateAccessUI66,30);
+    }).observe(shell,{childList:true,subtree:true});
+  }
+
+  const oldSelectScope66=window.ppgSelectScope34;
+  window.ppgSelectScope34=function(){
+    const r=oldSelectScope66?.apply(this,arguments);
+    setTimeout(updateAccessUI66,0);
+    return r;
+  };
+
+  const oldOpenPage66=window.ppgOpenPage;
+  window.ppgOpenPage=function(){
+    const r=oldOpenPage66?.apply(this,arguments);
+    setTimeout(updateAccessUI66,0);
+    return r;
+  };
+
+  const oldShowPortal66=window.ppgShowPortal;
+  window.ppgShowPortal=function(){
+    const r=oldShowPortal66?.apply(this,arguments);
+    setTimeout(()=>{
+      const note=document.getElementById('ppg-access-note');
+      if(note && typeof window.ppgCanAccess==='function' && window.ppgCanAccess()){
+        note.textContent='Aksi PPG: MT, MS, Master User · Pengurus lain: Review & Reporting.';
+      }
+    },0);
+    return r;
+  };
+
+  /* Header Database dapat dibangun ulang setelah login */
+  const app=document.getElementById('app');
+  if(app){
+    let timer=0;
+    new MutationObserver(()=>{
+      clearTimeout(timer);
+      timer=setTimeout(ensureDatabaseModeButton66,40);
+    }).observe(app,{childList:true,subtree:true});
+  }
+
+  setTimeout(()=>{
+    ensureDatabaseModeButton66();
+    patchScopeGate66();
+    updateAccessUI66();
+  },800);
+})();
+</script>
+
 </body>
 </html>
