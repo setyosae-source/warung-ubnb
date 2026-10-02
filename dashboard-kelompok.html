@@ -29275,5 +29275,91 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<script id="ubnb-v59-invitation-snapshot-source-fix">
+(function(){
+  function invSnapshotParticipants59(e){
+    if(e && e.actual && e.generated && Number(e.id)){
+      const rows=(aHadir||[]).filter(h=>Number(h.kegiatan_id)===Number(e.id));
+      if(rows.length){
+        return rows.map(h=>{
+          const j=findJamaahAny(h.jamaah_did)||{};
+          return {
+            did:h.jamaah_did,
+            nama:h.jamaah_nama||j.nama||'-',
+            nama_kk:h.jamaah_kk||j.nama_kk||null,
+            kelompok_nama:j.kelompok_nama||e.scope_kelompok||null,
+            kelompok:j.kelompok_nama||e.scope_kelompok||null,
+            jenis_kelamin:j.jenis_kelamin||null,
+            status_nikah:j.status_nikah||null
+          };
+        });
+      }
+    }
+    return calendarParticipantsForEntry(e||{});
+  }
+
+  eventParticipantsGrouped=function(e){
+    const out={PW1:[],PW2:[],PW3:[],PW4:[]};
+    invSnapshotParticipants59(e).forEach(p=>{
+      const j=findJamaahAny(p.did)||p;
+      const g=j.kelompok_nama||p.kelompok_nama||p.kelompok||e?.scope_kelompok;
+      if(out[g]) out[g].push({...j,...p});
+    });
+    return out;
+  };
+
+  invitationPayloadRecipients=function(model){
+    const peserta=invSnapshotParticipants59(_invEntry||{});
+    const grouped=eventParticipantsGrouped(_invEntry||{});
+
+    if(model==='massal_kelompok'){
+      return ['PW1','PW2','PW3','PW4'].map(g=>({
+        recipient_type:'kelompok',
+        kelompok:g,
+        peserta:(grouped[g]||[]).map(j=>({
+          did:j.did,
+          nama:j.nama,
+          kelompok:j.kelompok_nama||j.kelompok||g,
+          gender:pgNormGender(j.jenis_kelamin),
+          status_nikah:j.status_nikah||null,
+          nama_kk:j.nama_kk||null
+        })),
+        slots:eventSlotsForGroup(_invEntry,g).map(s=>({
+          nama_slot:s.nama_slot,
+          kuota:s.kuota,
+          allow_over_quota:s.allow_over_quota,
+          gender:s.gender||null
+        }))
+      })).filter(x=>x.peserta.length||x.slots.length);
+    }
+
+    return peserta.map(p=>({
+      recipient_type:'jamaah',
+      jamaah_did:p.did,
+      slots:[]
+    }));
+  };
+
+  invModelChanged=function(){
+    const model=document.getElementById('inv-model')?.value||'massal_kelompok';
+    const peserta=invSnapshotParticipants59(_invEntry||{});
+    const p=eventParticipantsGrouped(_invEntry||{});
+    let text='';
+
+    if(model==='massal_kelompok'){
+      const groups=['PW1','PW2','PW3','PW4'].filter(g=>(p[g]||[]).length||eventSlotsForGroup(_invEntry,g).length);
+      text=`📣 Akan dibuat <b>${groups.length} undangan kelompok</b>: ${groups.join(', ')||'tidak ada penerima'}. Peserta mengikuti snapshot acara yang dipakai untuk absensi.`;
+    }else{
+      text=`✉️ Akan dibuat <b>${peserta.length} undangan personal</b>, mengikuti snapshot peserta acara.`;
+    }
+    document.getElementById('inv-receiver-summary').innerHTML=text;
+  };
+
+  window.invSnapshotParticipants59=invSnapshotParticipants59;
+})();
+</script>
+
 </body>
 </html>
