@@ -29406,16 +29406,24 @@ body.ppg54-lock-page{
 
 
 
+
 <script id="ubnb-v60-supabase-persistence-script">
 (function(){
   const PREFIX='ubnb_ppg_';
   const USER_KEYS=new Set(['ubnb_ppg_v38_setup_collapsed']);
+  const MERGE_KEYS=new Set([
+    'ubnb_ppg_v37_classes',
+    'ubnb_ppg_v37_logger',
+    'ubnb_ppg_v37_reports'
+  ]);
+
   const saveTimers=new Map();
   const inflight=new Map();
   const lastSync=new Map();
 
   let hydrating=false;
   let syncBusy=0;
+  let pollTimer=null;
 
   const nativeSet=Storage.prototype.setItem;
   const nativeRemove=Storage.prototype.removeItem;
@@ -29438,6 +29446,11 @@ body.ppg54-lock-page{
   function parseLocal(v){
     try{return JSON.parse(v)}
     catch(_){return v}
+  }
+
+  function stable(v){
+    try{return JSON.stringify(v)}
+    catch(_){return String(v)}
   }
 
   function localKeys(){
@@ -29477,6 +29490,157 @@ body.ppg54-lock-page{
     }
   }
 
+  function sessionRank(s){
+    const st=String(s?.status||'').toLowerCase();
+    if(st==='finished'||st==='closed')return 4;
+    if(st==='active')return 3;
+    if(st==='pending')return 2;
+    return 1;
+  }
+
+  function sessionRichness(s){
+    if(!s||typeof s!=='object')return 0;
+
+    let score=0;
+    const students=Array.isArray(s.students)?s.students:[];
+    score+=students.filter(x=>x?.status&&x.status!=='Belum Hadir').length*10;
+    score+=students.filter(x=>x?.status==='Hadir').length*4;
+
+    const gm=Array.isArray(s.generalMaterials)?s.generalMaterials:[];
+    score+=gm.length*30;
+
+    const sm=s.studentMaterials&&typeof s.studentMaterials==='object'?s.studentMaterials:{};
+    Object.values(sm).forEach(v=>{
+      score+=(Array.isArray(v)?v.length:0)*25;
+    });
+
+    const sn=s.studentNotes&&typeof s.studentNotes==='object'?s.studentNotes:{};
+    score+=Object.values(sn).filter(v=>String(v||'').trim()).length*20;
+
+    if(String(s.generalNote||'').trim())score+=40;
+    if(s.finishedAt)score+=100;
+    return score;
+  }
+
+  function chooseSession(a,b){
+    if(!a)return b;
+    if(!b)return a;
+
+    const ra=sessionRank(a),rb=sessionRank(b);
+    if(ra!==rb)return rb>ra?b:a;
+
+    const sa=sessionRichness(a),sb=sessionRichness(b);
+    if(sa!==sb)return sb>sa?b:a;
+
+    const ta=String(a.finishedAt||a.updatedAt||a.startedAt||'');
+    const tb=String(b.finishedAt||b.updatedAt||b.startedAt||'');
+    return tb>=ta?b:a;
+  }
+
+  function mergeSessions(a,b){
+    const map=new Map();
+
+    for(const x of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])]){
+      const id=String(x?.id||'');
+      if(!id)continue;
+      map.set(id,chooseSession(map.get(id),x));
+    }
+
+    return [...map.values()].sort((x,y)=>
+      String(x?.startedAt||x?.id||'').localeCompare(String(y?.startedAt||y?.id||''))
+    );
+  }
+
+  function mergeLogs(a,b){
+    const map=new Map();
+    for(const x of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])]){
+      const key=[
+        x?.sessionId||'',
+        x?.type||'',
+        x?.at||'',
+        x?.account||''
+      ].join('|') || stable(x);
+      if(!map.has(key))map.set(key,x);
+    }
+    return [...map.values()].sort((x,y)=>
+      String(x?.at||'').localeCompare(String(y?.at||''))
+    );
+  }
+
+  function mergeReports(a,b){
+    const map=new Map();
+    for(const x of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])]){
+      const id=String(x?.id||stable(x));
+      map.set(id,{...(map.get(id)||{}),...x});
+    }
+    return [...map.values()].sort((x,y)=>
+      String(x?.at||x?.id||'').localeCompare(String(y?.at||y?.id||''))
+    );
+  }
+
+  function mergeSpecial(key,a,b){
+    if(key==='ubnb_ppg_v37_classes')return mergeSessions(a,b);
+    if(key==='ubnb_ppg_v37_logger')return mergeLogs(a,b);
+    if(key==='ubnb_ppg_v37_reports')return mergeReports(a,b);
+    return b;
+  }
+
+  function mergePayloads(entries,key){
+    if(!entries.length)return undefined;
+    if(entries.length===1)return entries[0].payload;
+
+    if(MERGE_KEYS.has(key)){
+      return entries.reduce((acc,e)=>mergeSpecial(key,acc,e.payload),undefined);
+    }
+
+    const vals=entries.map(x=>x.payload);
+
+    if(vals.every(Array.isArray)){
+      if(key==='ubnb_ppg_v47_classes'){
+        return [...new Set(vals.flat().filter(Boolean))];
+      }
+
+      const flat=vals.flat();
+      const seen=new Set();
+      return flat.filter(x=>{
+        if(!x||typeof x!=='object')return true;
+        const id=x.id??x.sessionId??x.did??null;
+        if(id==null)return true;
+        const k=String(id);
+        if(seen.has(k))return false;
+        seen.add(k);
+        return true;
+      });
+    }
+
+    if(vals.every(v=>v && typeof v==='object' && !Array.isArray(v))){
+      return Object.assign({},...vals);
+    }
+
+    return entries
+      .slice()
+      .sort((a,b)=>String(a.updated_at||'').localeCompare(String(b.updated_at||'')))
+      .at(-1)?.payload;
+  }
+
+  function rerenderCurrentPage(){
+    try{
+      const active=document.querySelector('#ppg-shell .ppg-page.active');
+      const page=active?.id?.replace('ppg-page-','')||'dashboard';
+      const btn=document.querySelector(`#ppg-shell .ppg-tab[data-page="${page}"]`);
+      window.ppgOpenPage?.(page,btn);
+    }catch(e){
+      console.error('[PPG rerender current]',e);
+    }
+  }
+
+  function safeToRerender(){
+    const ae=document.activeElement;
+    if(ae && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName))return false;
+    if(document.querySelector('.ppg52-modal.show,.ppg54-finish-modal.show,.ppg55-modal.show,.ppg54-finish-modal.show'))return false;
+    return true;
+  }
+
   async function rpcSave(scope,key,payload){
     const did=editorDid();
     if(!did||!scope||scope==='DESA')return;
@@ -29490,8 +29654,34 @@ body.ppg54-lock-page{
         p_payload:payload,
         p_owner_did:ownerForKey(key)
       });
+
       if(error)throw error;
       if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan data PPG');
+
+      /*
+        Server mengembalikan payload hasil merge.
+        Khusus session/logger/report, cache lokal wajib ikut hasil server,
+        sehingga login lain tidak pernah "menghilangkan" kelas yang sudah ada.
+      */
+      if(MERGE_KEYS.has(key) && data.payload!==undefined){
+        const before=parseLocal(localStorage.getItem(key));
+        const merged=mergeSpecial(key,data.payload,before);
+        const next=stable(merged);
+        const prev=localStorage.getItem(key);
+
+        if(prev!==next){
+          nativeSet.call(localStorage,key,next);
+
+          /* dorong versi lokal yang lebih kaya (mis. closed class dari device guru)
+             kembali ke server secara aman; server juga merge */
+          if(stable(merged)!==stable(data.payload)){
+            setTimeout(()=>rpcSave(scope,key,merged),0);
+          }
+
+          if(safeToRerender())requestAnimationFrame(rerenderCurrentPage);
+        }
+      }
+
       markSyncDone(true);
     }catch(e){
       console.error('[PPG Supabase save]',key,e);
@@ -29529,7 +29719,7 @@ body.ppg54-lock-page{
     saveTimers.set(key,setTimeout(()=>{
       saveTimers.delete(key);
       rpcSave(scope,key,parseLocal(value));
-    },350));
+    },250));
   }
 
   async function rpcDelete(scope,key){
@@ -29544,6 +29734,7 @@ body.ppg54-lock-page{
         p_state_key:key,
         p_owner_did:ownerForKey(key)
       });
+
       if(error)throw error;
       if(!data?.ok)throw new Error(data?.error||'Gagal menghapus state PPG');
       markSyncDone(true);
@@ -29553,7 +29744,6 @@ body.ppg54-lock-page{
     }
   }
 
-  /* localStorage hanya cache; save cloud dilakukan debounce di background */
   Storage.prototype.setItem=function(key,value){
     const r=nativeSet.apply(this,arguments);
     try{
@@ -29572,74 +29762,29 @@ body.ppg54-lock-page{
     return r;
   };
 
-  function mergePayloads(entries,key){
-    if(!entries.length)return undefined;
-    if(entries.length===1)return entries[0].payload;
-
-    const vals=entries.map(x=>x.payload);
-
-    if(vals.every(Array.isArray)){
-      if(key==='ubnb_ppg_v47_classes'){
-        return [...new Set(vals.flat().filter(Boolean))];
-      }
-
-      const flat=vals.flat();
-      const seen=new Set();
-      return flat.filter(x=>{
-        if(!x||typeof x!=='object')return true;
-        const id=x.id??x.sessionId??x.token??null;
-        if(id==null)return true;
-        const k=String(id);
-        if(seen.has(k))return false;
-        seen.add(k);
-        return true;
-      });
-    }
-
-    if(vals.every(v=>v && typeof v==='object' && !Array.isArray(v))){
-      return Object.assign({},...vals);
-    }
-
-    return entries
-      .slice()
-      .sort((a,b)=>String(a.updated_at||'').localeCompare(String(b.updated_at||'')))
-      .at(-1)?.payload;
-  }
-
-  function rerenderCurrentPage(){
-    try{
-      const active=document.querySelector('#ppg-shell .ppg-page.active');
-      const page=active?.id?.replace('ppg-page-','')||'dashboard';
-      const btn=document.querySelector(`#ppg-shell .ppg-tab[data-page="${page}"]`);
-      window.ppgOpenPage?.(page,btn);
-    }catch(e){
-      console.error('[PPG rerender current]',e);
-    }
-  }
-
-  async function hydrateScope(scope,{force=false}={}){
+  async function hydrateScope(scope,{force=false,silent=false}={}){
     const did=editorDid();
     if(!did||!scope)return;
 
     const syncKey=`${did}|${scope}`;
 
-    /* Jangan sync ganda saat scope baru dipilih / wrapper lain ikut memanggil */
     if(inflight.has(syncKey))return inflight.get(syncKey);
 
     const now=Date.now();
-    if(!force && now-(lastSync.get(syncKey)||0)<15000){
+    if(!force && now-(lastSync.get(syncKey)||0)<5000){
       status(scope==='DESA'?'Cloud ✓ controller':'Cloud ✓');
       return;
     }
 
     const job=(async()=>{
-      status('Cloud •','syncing');
+      if(!silent)status('Cloud •','syncing');
 
       try{
         const {data,error}=await sb.rpc('ppg_state_snapshot',{
           p_editor_did:did,
           p_scope:scope
         });
+
         if(error)throw error;
         if(!data?.ok)throw new Error(data?.error||'Gagal memuat data PPG');
 
@@ -29652,8 +29797,8 @@ body.ppg54-lock-page{
           grouped.get(r.state_key).push(r);
         });
 
-        let remoteChangedLocal=false;
-        const missingRemote=[];
+        let changed=false;
+        const recovered=[];
 
         hydrating=true;
         try{
@@ -29663,21 +29808,34 @@ body.ppg54-lock-page{
           for(const key of allKeys){
             const remoteEntries=grouped.get(key)||[];
             const localRaw=localStorage.getItem(key);
+            const localVal=localRaw==null?undefined:parseLocal(localRaw);
 
             if(remoteEntries.length){
-              const merged=mergePayloads(remoteEntries,key);
-              const next=JSON.stringify(merged);
+              const remoteVal=mergePayloads(remoteEntries,key);
+              let finalVal=remoteVal;
 
+              if(MERGE_KEYS.has(key) && localVal!==undefined){
+                finalVal=mergeSpecial(key,remoteVal,localVal);
+
+                if(scope!=='DESA' && stable(finalVal)!==stable(remoteVal)){
+                  recovered.push({
+                    state_key:key,
+                    owner_did:ownerForKey(key),
+                    payload:finalVal
+                  });
+                }
+              }
+
+              const next=stable(finalVal);
               if(localRaw!==next){
                 nativeSet.call(localStorage,key,next);
-                remoteChangedLocal=true;
+                changed=true;
               }
             }else if(scope!=='DESA' && localRaw!=null){
-              /* Browser lama punya data, Supabase belum punya: migrasi batch di background */
-              missingRemote.push({
+              recovered.push({
                 state_key:key,
                 owner_did:ownerForKey(key),
-                payload:parseLocal(localRaw)
+                payload:localVal
               });
             }
           }
@@ -29688,19 +29846,17 @@ body.ppg54-lock-page{
         lastSync.set(syncKey,Date.now());
         status(scope==='DESA'?'Cloud ✓ controller':'Cloud ✓');
 
-        /* Tidak menunggu migrasi; UI tetap langsung usable */
-        if(missingRemote.length){
-          rpcSaveBatch(scope,missingRemote);
+        /* Satu batch untuk salvage data browser yang belum ada / lebih lengkap */
+        if(recovered.length){
+          rpcSaveBatch(scope,recovered);
         }
 
-        /* Hanya render halaman aktif bila benar-benar ada perubahan remote */
-        if(remoteChangedLocal){
+        if(changed && safeToRerender()){
           requestAnimationFrame(rerenderCurrentPage);
         }
       }catch(e){
         console.error('[PPG Supabase hydrate]',e);
         status('Cloud !','error');
-        /* Jangan blok UI dengan popup/toast panjang; cache lokal tetap bisa dipakai */
       }finally{
         inflight.delete(syncKey);
       }
@@ -29710,39 +29866,51 @@ body.ppg54-lock-page{
     return job;
   }
 
-  /* Pilih scope: buka PPG langsung dari cache, cloud sync jalan background */
   const priorSelectScope=window.ppgSelectScope34;
   window.ppgSelectScope34=function(i){
     const r=priorSelectScope?.apply(this,arguments);
-
     setTimeout(()=>{
       const sc=currentScope();
-      if(sc)hydrateScope(sc);
+      if(sc)hydrateScope(sc,{force:true});
     },0);
-
     return r;
   };
 
-  /* Pilih mode PPG hanya membuka scope gate; jangan sync di sini.
-     Sync cukup satu kali setelah scope benar-benar dipilih. */
   const priorChoose=window.ppgChoosePPG;
   window.ppgChoosePPG=function(){
     return priorChoose?.apply(this,arguments);
   };
+
+  function startPolling(){
+    clearInterval(pollTimer);
+    pollTimer=setInterval(()=>{
+      const shell=document.getElementById('ppg-shell');
+      if(!shell?.classList.contains('show'))return;
+      if(document.visibilityState!=='visible')return;
+      if(!safeToRerender())return;
+
+      const sc=currentScope();
+      if(sc)hydrateScope(sc,{force:true,silent:true});
+    },10000);
+  }
+
+  startPolling();
 
   window.ppg60SyncNow=function(){
     const sc=currentScope();
     return hydrateScope(sc,{force:true});
   };
 
-  window.ppg60PersistAudit={
-    prefix:PREFIX,
-    userKeys:[...USER_KEYS],
+  window.ppg67MergeAudit={
+    mergeSessions,
+    mergeLogs,
+    mergeReports,
     currentScope,
     localKeys
   };
 })();
 </script>
+
 
 
 
@@ -31563,6 +31731,302 @@ body.ppg54-lock-page{
     patchScopeGate66();
     updateAccessUI66();
   },800);
+})();
+</script>
+
+
+
+<style id="ubnb-v67-concurrency-style">
+#ppg67-live-badge{
+  display:inline-flex;
+  align-items:center;
+  margin-left:5px;
+  padding:2px 5px;
+  border-radius:4px;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.18);
+  color:#eafff1;
+  font-size:8.5px;
+  font-weight:700;
+}
+</style>
+
+
+<script id="ubnb-v67-concurrency-ui-script">
+(function(){
+  function addBadge(){
+    const host=document.querySelector('#ppg-shell .ppg-brand-sub');
+    if(!host||document.getElementById('ppg67-live-badge'))return;
+    const b=document.createElement('span');
+    b.id='ppg67-live-badge';
+    b.textContent='Multi-user';
+    b.title='Sinkron multi-user aktif';
+    host.appendChild(b);
+  }
+
+  const shell=document.getElementById('ppg-shell');
+  if(shell){
+    new MutationObserver(()=>setTimeout(addBadge,20))
+      .observe(shell,{childList:true,subtree:true});
+  }
+  setTimeout(addBadge,700);
+})();
+</script>
+
+
+
+<style id="ubnb-v68-session-owner-style">
+/* v68 — hanya akun pembuka kelas yang boleh mengubah sesi */
+.ppg68-owner-badge{
+  display:inline-flex;
+  align-items:center;
+  margin-left:5px;
+  padding:2px 5px;
+  border-radius:4px;
+  border:1px solid #d4e1d8;
+  background:#f7faf8;
+  color:#53675a;
+  font-size:9px;
+  font-weight:700;
+}
+.ppg52-active-card.ppg68-foreign-session{
+  border-color:#dfe5e1!important;
+  background:#fafcfb!important;
+}
+.ppg52-active-card.ppg68-foreign-session .ppg52-active-summary{
+  background:#fafcfb!important;
+}
+.ppg68-lock-note{
+  margin:0 0 7px;
+  padding:6px 8px;
+  border:1px solid #dce6df;
+  border-radius:5px;
+  background:#f5f8f6;
+  color:#596b61;
+  font-size:10.5px;
+  line-height:1.35;
+}
+.ppg52-active-card.ppg68-foreign-session .ppg52-detail input,
+.ppg52-active-card.ppg68-foreign-session .ppg52-detail select,
+.ppg52-active-card.ppg68-foreign-session .ppg52-detail textarea,
+.ppg52-active-card.ppg68-foreign-session .ppg52-detail button{
+  pointer-events:none!important;
+  opacity:.62!important;
+}
+</style>
+
+
+<script id="ubnb-v68-session-owner-script">
+(function(){
+  const KEY='ubnb_ppg_v37_classes';
+
+  function norm68(s){
+    return String(s||'')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g,' ');
+  }
+
+  function editorDid68(){
+    return String(CU?.did||CU?.id||'').trim();
+  }
+
+  function editorNames68(){
+    return new Set([
+      norm68(CU?.nama),
+      norm68(CU?.username)
+    ].filter(Boolean));
+  }
+
+  function sessions68(){
+    try{return JSON.parse(localStorage.getItem(KEY)||'[]')}
+    catch(_){return []}
+  }
+
+  function owns68(s){
+    const did=editorDid68();
+    if(!s||!did)return false;
+
+    if(String(s.startedByDid||'').trim()){
+      return String(s.startedByDid)===did;
+    }
+
+    const names=editorNames68();
+    if(names.has(norm68(s.startedBy)))return true;
+
+    /* legacy fallback untuk sesi lama yang belum punya startedByDid */
+    if(!s.startedBy && String(s.teacherDid||'')===did)return true;
+
+    return false;
+  }
+
+  function stampOwner68(next,prev){
+    const prevMap=new Map(
+      (Array.isArray(prev)?prev:[])
+        .filter(x=>x?.id)
+        .map(x=>[String(x.id),x])
+    );
+
+    const did=editorDid68();
+    const nm=CU?.nama||CU?.username||'-';
+    const out=[];
+
+    for(const incoming of (Array.isArray(next)?next:[])){
+      if(!incoming?.id)continue;
+
+      const id=String(incoming.id);
+      const old=prevMap.get(id);
+
+      if(!old){
+        /* session baru: akun login yang menekan Mulai Kelas menjadi owner */
+        out.push({
+          ...incoming,
+          startedByDid: incoming.startedByDid || did,
+          startedBy: incoming.startedBy || nm
+        });
+        continue;
+      }
+
+      if(owns68(old)){
+        out.push({
+          ...incoming,
+          startedByDid: old.startedByDid || did,
+          startedBy: old.startedBy || incoming.startedBy || nm
+        });
+      }else{
+        /* akun lain tidak boleh mengubah / menghapus / menutup sesi ini */
+        out.push(old);
+      }
+
+      prevMap.delete(id);
+    }
+
+    /* session milik akun lain tidak boleh hilang karena payload lokal lama */
+    for(const old of prevMap.values()){
+      out.push(old);
+    }
+
+    return out.sort((a,b)=>
+      String(a.startedAt||a.id||'').localeCompare(String(b.startedAt||b.id||''))
+    );
+  }
+
+  /*
+    Guard cache lokal:
+    sebelum v60 persistence mengirim payload ke Supabase, session array
+    sudah dibersihkan agar hanya owner yang bisa mengubah sesi miliknya.
+  */
+  const setBefore68=Storage.prototype.setItem;
+  Storage.prototype.setItem=function(key,value){
+    if(this===window.localStorage && String(key)===KEY){
+      try{
+        const prev=sessions68();
+        const next=JSON.parse(String(value)||'[]');
+        value=JSON.stringify(stampOwner68(next,prev));
+      }catch(e){
+        console.error('[PPG owner guard local]',e);
+      }
+    }
+    return setBefore68.call(this,key,value);
+  };
+
+  function idFromCard68(card){
+    const btn=card?.querySelector('.ppg52-active-summary');
+    const oc=String(btn?.getAttribute('onclick')||'');
+    const m=oc.match(/ppg52ToggleActive\(['"]([^'"]+)['"]\)/);
+    return m?.[1]||'';
+  }
+
+  function decorate68(){
+    const all=sessions68();
+    const map=new Map(all.map(x=>[String(x.id),x]));
+
+    document.querySelectorAll('#ppg-page-kelas .ppg52-active-card').forEach(card=>{
+      const id=idFromCard68(card);
+      const s=map.get(String(id));
+      if(!s)return;
+
+      const own=owns68(s);
+      card.classList.toggle('ppg68-foreign-session',!own);
+
+      const meta=card.querySelector('.ppg52-active-meta');
+      if(meta && !meta.querySelector('.ppg68-owner-badge')){
+        const b=document.createElement('span');
+        b.className='ppg68-owner-badge';
+        b.textContent=own?'Sesi Saya':'Review';
+        meta.appendChild(b);
+      }
+
+      const detail=card.querySelector('.ppg52-detail');
+      if(detail){
+        detail.querySelector('.ppg68-lock-note')?.remove();
+
+        if(!own && card.classList.contains('expanded')){
+          const note=document.createElement('div');
+          note.className='ppg68-lock-note';
+          note.textContent=`Kelas dibuka oleh ${s.startedBy||s.teacherName||'akun lain'}. Hanya akun pembuka kelas yang dapat mengubah absensi, materi, catatan, atau menutup kelas.`;
+          detail.prepend(note);
+        }
+      }
+    });
+  }
+
+  /* Capture guard untuk seluruh kontrol sesi aktif akun lain */
+  document.addEventListener('click',e=>{
+    const card=e.target.closest?.('#ppg-page-kelas .ppg52-active-card.ppg68-foreign-session');
+    if(!card)return;
+
+    /* summary tetap boleh diklik untuk review */
+    if(e.target.closest('.ppg52-active-summary'))return;
+
+    const interactive=e.target.closest('button,input,select,textarea,label');
+    if(interactive){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toast('Hanya akun yang membuka kelas ini yang dapat melakukan perubahan.',true);
+    }
+  },true);
+
+  document.addEventListener('change',e=>{
+    const card=e.target.closest?.('#ppg-page-kelas .ppg52-active-card.ppg68-foreign-session');
+    if(!card)return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    toast('Hanya akun yang membuka kelas ini yang dapat melakukan perubahan.',true);
+  },true);
+
+  /* render Kelas KBM sering mengganti innerHTML, jadi dekorasi diulang */
+  const page=document.getElementById('ppg-page-kelas');
+  if(page){
+    let t=0;
+    new MutationObserver(()=>{
+      clearTimeout(t);
+      t=setTimeout(decorate68,25);
+    }).observe(page,{childList:true,subtree:true});
+  }
+
+  const oldOpen68=window.ppgOpenPage;
+  window.ppgOpenPage=function(){
+    const r=oldOpen68?.apply(this,arguments);
+    setTimeout(decorate68,0);
+    return r;
+  };
+
+  const oldToggle68=window.ppg52ToggleActive;
+  window.ppg52ToggleActive=function(){
+    const r=oldToggle68?.apply(this,arguments);
+    setTimeout(decorate68,0);
+    return r;
+  };
+
+  window.ppg68SessionOwner={
+    owns:owns68,
+    currentDid:editorDid68,
+    sessions:sessions68
+  };
+
+  setTimeout(decorate68,800);
 })();
 </script>
 
