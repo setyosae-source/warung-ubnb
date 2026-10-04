@@ -33622,5 +33622,126 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<style id="ubnb-v75-filter-option-layer-fix-style">
+/* =========================================================
+   v75 — Perbaikan KHUSUS layer opsi filter
+   Tujuan:
+   - opsi filter di atas Search Bar saat sedang dibuka
+   - tetap di bawah Menu Utama / Topbar
+   - Filter biasa tetap scroll di belakang Search Bar
+   ========================================================= */
+
+/* Default tetap rendah supaya panel filter lewat di belakang Search. */
+#v11-filter-panel.open{
+  z-index:20!important;
+}
+
+/* HANYA saat ada opsi yang sedang terbuka, naikkan stacking context
+   tepat di atas Search (2850) tapi tetap di bawah menu utama (3000+). */
+#v11-filter-panel.open.v75-options-open{
+  z-index:2890!important;
+}
+
+#v11-filter-panel.open.v75-options-open .v11-multi[open]{
+  z-index:2900!important;
+}
+
+#v11-filter-panel.open.v75-options-open .v11-multi-menu{
+  z-index:2910!important;
+  box-shadow:0 10px 28px rgba(15,23,42,.20)!important;
+}
+
+/* Guard tambahan untuk browser modern. */
+#v11-filter-panel.open:has(.v11-multi[open]){
+  z-index:2890!important;
+}
+#v11-filter-panel.open:has(.v11-multi[open]) .v11-multi[open]{
+  z-index:2900!important;
+}
+#v11-filter-panel.open:has(.v11-multi[open]) .v11-multi-menu{
+  z-index:2910!important;
+}
+
+/* Search tetap sticky; menu utama tetap lebih tinggi dari opsi filter. */
+#subview-jamaah-data > .search-box.modern-search{
+  z-index:2850!important;
+}
+#app > .page-tabs{
+  z-index:3000!important;
+}
+#app > .topbar{
+  z-index:3100!important;
+}
+</style>
+
+
+<script id="ubnb-v75-filter-option-layer-fix-script">
+(function(){
+  function panel75(){
+    return document.getElementById('v11-filter-panel');
+  }
+
+  function sync75(){
+    const p=panel75();
+    if(!p)return;
+    p.classList.toggle('v75-options-open',!!p.querySelector('.v11-multi[open]'));
+  }
+
+  /* Native <details> tidak selalu bubble konsisten pada semua versi browser,
+     jadi sinkronkan sesudah klik summary dan sesudah DOM filter dirender ulang. */
+  document.addEventListener('click',e=>{
+    if(e.target.closest?.('#v11-filter-panel .v11-multi summary')){
+      setTimeout(sync75,0);
+    }
+  },true);
+
+  const root=document.getElementById('subview-jamaah-data')||document.documentElement;
+  let moTimer=0;
+  new MutationObserver(()=>{
+    clearTimeout(moTimer);
+    moTimer=setTimeout(sync75,20);
+  }).observe(root,{
+    subtree:true,
+    childList:true,
+    attributes:true,
+    attributeFilter:['open','class']
+  });
+
+  /*
+    Kalau halaman di-scroll, tutup dropdown opsi filter.
+    Ini sengaja supaya panel Filter tetap lewat DI BELAKANG Search/Menu Utama,
+    dan tidak ada dropdown menggantung saat posisi row sudah bergeser.
+    Scroll di DALAM daftar opsi sendiri tidak ditutup.
+  */
+  window.addEventListener('scroll',e=>{
+    if(e.target?.closest?.('.v11-multi-menu'))return;
+
+    const p=panel75();
+    if(!p)return;
+
+    const opens=[...p.querySelectorAll('.v11-multi[open]')];
+    if(!opens.length)return;
+
+    opens.forEach(d=>d.removeAttribute('open'));
+    sync75();
+  },true);
+
+  window.addEventListener('resize',()=>{
+    const p=panel75();
+    if(!p)return;
+    p.querySelectorAll('.v11-multi[open]').forEach(d=>d.removeAttribute('open'));
+    sync75();
+  });
+
+  setTimeout(sync75,300);
+
+  window.ubnb75FilterLayer={
+    sync:sync75
+  };
+})();
+</script>
+
 </body>
 </html>
