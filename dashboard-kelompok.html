@@ -32640,5 +32640,217 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<style id="ubnb-v72-mode-report-note-style">
+/* v72 — Pindah Mode pada menu pintu + Materi/Catatan pada report acara */
+.fr-event-note{
+  margin:8px 0;
+  padding:8px 10px;
+  border:1px solid #bfd5c8;
+  border-left:4px solid #147a59;
+  border-radius:6px;
+  background:#f5faf7;
+  color:#263b30;
+  font-size:10px;
+  line-height:1.45;
+  white-space:normal;
+}
+.fr-event-note b{
+  color:#0f5f46;
+}
+</style>
+
+
+<script id="ubnb-v72-mode-report-note-script">
+(function(){
+  /* =========================================================
+     1. DATABASE PERWIRA — pastikan menu pintu punya Pindah Mode
+     ========================================================= */
+  function norm72(v){
+    return String(v||'')
+      .trim()
+      .toLowerCase()
+      .replace(/[._/\\-]+/g,' ')
+      .replace(/\s+/g,' ');
+  }
+
+  function hasPPGAccess72(){
+    try{
+      if(typeof window.ppgCanAccess==='function' && window.ppgCanAccess())return true;
+    }catch(_){}
+
+    try{
+      if(typeof window.ppgIsMaster66==='function' && window.ppgIsMaster66())return true;
+    }catch(_){}
+
+    if(!window.CU)return false;
+
+    const did=String(CU.did||CU.id||'');
+    const role=norm72(CU.role);
+
+    if(
+      CU.is_master===true ||
+      CU.master===true ||
+      CU.ppg_master===true ||
+      did==='4075' ||
+      role==='master' ||
+      role==='master admin' ||
+      role==='master_admin' ||
+      role==='superadmin'
+    ) return true;
+
+    return (Array.isArray(window.aPengurus)?aPengurus:[]).some(p=>{
+      if(!p || p.aktif===false || String(p.did)!==did)return false;
+      const d=' '+norm72(p.dapukan)+' ';
+      return /(^|\s)mt(\s|$)/.test(d)
+          || /(^|\s)ms(\s|$)/.test(d)
+          || /(^|\s)ki(\s|$)/.test(d)
+          || d.includes(' wakil ki ')
+          || d.includes(' wk ki ')
+          || d.includes(' penerobos ');
+    });
+  }
+
+  function closeDoorMenus72(){
+    document.querySelectorAll('.ubnb69-door-menu.show').forEach(m=>m.classList.remove('show'));
+    document.querySelectorAll('.ubnb69-door-btn[aria-expanded="true"], .btn-keluar[aria-expanded="true"]')
+      .forEach(b=>b.setAttribute('aria-expanded','false'));
+  }
+
+  function goMode72(){
+    closeDoorMenus72();
+    document.getElementById('ppg-shell')?.classList.remove('show');
+    if(typeof window.ppgShowPortal==='function'){
+      window.ppgShowPortal();
+    }
+  }
+
+  function ensureDatabaseMode72(){
+    const menu=document.getElementById('db69-door-menu');
+    if(!menu)return;
+
+    const allow=hasPPGAccess72();
+    let sw=document.getElementById('db69-switch');
+
+    if(!allow){
+      sw?.remove();
+      return;
+    }
+
+    if(!sw){
+      sw=document.createElement('button');
+      sw.type='button';
+      sw.id='db69-switch';
+      sw.className='ubnb69-door-item';
+      sw.innerHTML='<span>⇄</span><span>Pindah Mode</span>';
+
+      let sep=menu.querySelector('.ubnb69-door-sep');
+      const logout=document.getElementById('db69-logout');
+
+      if(sep){
+        menu.insertBefore(sw,sep);
+      }else if(logout){
+        sep=document.createElement('div');
+        sep.className='ubnb69-door-sep';
+        menu.insertBefore(sw,logout);
+        menu.insertBefore(sep,logout);
+      }else{
+        menu.prepend(sw);
+      }
+    }
+
+    if(sw.dataset.v72Bound!=='1'){
+      sw.dataset.v72Bound='1';
+      sw.addEventListener('click',function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        goMode72();
+      });
+    }
+  }
+
+  /* menu/header dapat dirender ulang setelah login */
+  let modeTimer72=0;
+  new MutationObserver(function(){
+    clearTimeout(modeTimer72);
+    modeTimer72=setTimeout(ensureDatabaseMode72,40);
+  }).observe(document.documentElement,{childList:true,subtree:true});
+
+  [300,800,1500,3000].forEach(ms=>setTimeout(ensureDatabaseMode72,ms));
+
+  /* =========================================================
+     2. REPORT ACARA — sertakan Materi / Catatan
+     ========================================================= */
+  function recapEvent72(){
+    const id=Number(window._finalRecapEventId);
+    if(!id)return null;
+    return (Array.isArray(window.aKegiatan)?aKegiatan:[])
+      .find(k=>Number(k.id)===id) || null;
+  }
+
+  function recapNote72(){
+    const k=recapEvent72();
+    const r=window._finalRecapData?.rekap;
+    return String(k?.catatan ?? r?.catatan ?? '').trim();
+  }
+
+  function noteBlock72(){
+    const note=recapNote72();
+    if(!note)return '';
+    return `<div class="fr-event-note"><b>Materi / Catatan Acara</b><br>${escH(note).replace(/\n/g,'<br>')}</div>`;
+  }
+
+  /*
+    renderFinalRecap lama tetap dipakai penuh.
+    Setelah selesai, tambahkan Materi/Catatan tepat di bawah header.
+    printFinalRecap lama mencetak isi #fr-content, jadi otomatis ikut PDF/cetak.
+  */
+  const oldRenderFinalRecap72=window.renderFinalRecap;
+  if(typeof oldRenderFinalRecap72==='function'){
+    window.renderFinalRecap=function(){
+      const result=oldRenderFinalRecap72.apply(this,arguments);
+
+      try{
+        const content=document.getElementById('fr-content');
+        if(!content)return result;
+
+        content.querySelector('.fr-event-note')?.remove();
+
+        const block=noteBlock72();
+        if(block){
+          const head=content.querySelector('.fr-head');
+          if(head)head.insertAdjacentHTML('afterend',block);
+          else content.insertAdjacentHTML('afterbegin',block);
+        }
+      }catch(e){
+        console.error('[v72 report catatan]',e);
+      }
+
+      return result;
+    };
+  }
+
+  /* Ringkasan tanpa nama / copy text juga ikut Materi/Catatan */
+  const oldSummary72=window.finalRecapSummaryText;
+  if(typeof oldSummary72==='function'){
+    window.finalRecapSummaryText=function(){
+      let text=oldSummary72.apply(this,arguments);
+      const note=recapNote72();
+      if(note){
+        text += `\n\nMateri / Catatan Acara:\n${note}`;
+      }
+      return text;
+    };
+  }
+
+  window.ubnb72={
+    ensureDatabaseMode:ensureDatabaseMode72,
+    hasPPGAccess:hasPPGAccess72,
+    recapNote:recapNote72
+  };
+})();
+</script>
+
 </body>
 </html>
