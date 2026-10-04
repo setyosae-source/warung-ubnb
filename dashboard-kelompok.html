@@ -32852,5 +32852,358 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<style id="ubnb-v73-filter-download-style">
+/* =========================================================
+   v73 — Filter dropdown di depan + Quick Download Jamaah
+   ========================================================= */
+
+/* Dropdown opsi filter tidak boleh terpotong / berada di belakang */
+#v11-filter-panel.open{
+  position:relative!important;
+  z-index:12000!important;
+  overflow:visible!important;
+  max-height:none!important;
+}
+.v11-filter-row{
+  position:relative;
+}
+.v11-multi{
+  position:relative!important;
+}
+.v11-multi[open]{
+  z-index:12050!important;
+}
+.v11-multi-menu{
+  z-index:12100!important;
+  box-shadow:0 10px 28px rgba(15,23,42,.20)!important;
+}
+
+/* Quick download di sebelah + Jamaah Baru */
+.search-box.modern-search .quick-download-btn{
+  width:40px!important;
+  min-width:40px!important;
+  height:40px!important;
+  flex:0 0 40px!important;
+  padding:0!important;
+  border:1px solid #bdd5c6!important;
+  border-radius:6px!important;
+  background:#f3faf6!important;
+  color:#176a41!important;
+  font-size:18px!important;
+  font-weight:800!important;
+  line-height:1!important;
+  cursor:pointer!important;
+}
+.search-box.modern-search .quick-download-btn:active{
+  transform:translateY(1px);
+}
+
+#v73-jamaah-download-menu{
+  position:fixed!important;
+  z-index:2147482500!important;
+  display:none;
+  width:155px;
+  padding:5px;
+  border:1px solid #d6e2da;
+  border-radius:7px;
+  background:#fff;
+  box-shadow:0 12px 34px rgba(16,55,33,.20);
+}
+#v73-jamaah-download-menu.show{
+  display:block!important;
+}
+#v73-jamaah-download-menu button{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-height:38px;
+  padding:7px 9px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:#263b30;
+  font:inherit;
+  font-size:11.5px;
+  font-weight:750;
+  text-align:left;
+  cursor:pointer;
+}
+#v73-jamaah-download-menu button:hover,
+#v73-jamaah-download-menu button:focus{
+  background:#f0f7f3;
+  outline:none;
+}
+#v73-jamaah-download-menu .v73-sep{
+  height:1px;
+  margin:3px 4px;
+  background:#e7ece9;
+}
+
+@media(max-width:700px){
+  .search-box.modern-search .quick-add-btn{
+    min-width:106px!important;
+  }
+  .search-box.modern-search .quick-download-btn{
+    width:38px!important;
+    min-width:38px!important;
+    flex-basis:38px!important;
+  }
+}
+</style>
+
+
+<script id="ubnb-v73-filter-download-script">
+(function(){
+  const MENU_ID='v73-jamaah-download-menu';
+
+  function defaultCols73(){
+    return (Array.isArray(window.EXPORT_COLUMNS)?EXPORT_COLUMNS:[])
+      .filter(c=>c && c.tabel);
+  }
+
+  function rows73(){
+    const cols=defaultCols73();
+    if(!cols.length)throw new Error('Konfigurasi kolom export belum siap.');
+    return {cols,rows:buildExportRows(cols)};
+  }
+
+  function filename73(ext){
+    const d=new Date();
+    const ts=[
+      d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'),
+      String(d.getDate()).padStart(2,'0')
+    ].join('-');
+
+    const scope=String(
+      CU?.kelompok_scope ||
+      CU?.scope ||
+      (typeof isViewer==='function' && isViewer()?'umum':'desa')
+    ).replace(/[^a-z0-9_-]+/gi,'_');
+
+    return `Jamaah_${scope}_${ts}.${ext}`;
+  }
+
+  function quickXls73(){
+    try{
+      if(typeof XLSX==='undefined'){
+        toast('Library Excel belum siap. Refresh halaman lalu coba lagi.',true);
+        return;
+      }
+
+      const {cols,rows}=rows73();
+      if(rows.length<=1){
+        toast('Tidak ada data sesuai filter aktif.',true);
+        return;
+      }
+
+      const ws=XLSX.utils.aoa_to_sheet(rows);
+
+      ws['!cols']=cols.map((c,i)=>{
+        let max=String(c.label||'').length;
+        for(let r=1;r<rows.length;r++){
+          max=Math.max(max,String(rows[r][i]??'').length);
+        }
+        return {wch:Math.min(max+2,36)};
+      });
+
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,'Jamaah');
+
+      /* XLS sungguhan (BIFF8), sesuai opsi yang diminta */
+      XLSX.writeFile(wb,filename73('xls'),{bookType:'biff8'});
+      toast(`✅ XLS diunduh (${rows.length-1} jamaah sesuai filter aktif)`);
+    }catch(e){
+      console.error('[quickXls73]',e);
+      toast('Gagal membuat XLS: '+(e.message||e),true);
+    }
+  }
+
+  function quickCsv73(){
+    try{
+      const {rows}=rows73();
+      if(rows.length<=1){
+        toast('Tidak ada data sesuai filter aktif.',true);
+        return;
+      }
+
+      const csv=rows.map(row=>row.map(cell=>{
+        let s=String(cell??'');
+        if(/[",\n]/.test(s)){
+          s='"'+s.replace(/"/g,'""')+'"';
+        }
+        return s;
+      }).join(',')).join('\n');
+
+      const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=filename73('csv');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+
+      toast(`✅ CSV diunduh (${rows.length-1} jamaah sesuai filter aktif)`);
+    }catch(e){
+      console.error('[quickCsv73]',e);
+      toast('Gagal membuat CSV: '+(e.message||e),true);
+    }
+  }
+
+  function quickPdf73(){
+    try{
+      const cols=defaultCols73();
+      if(!cols.length)throw new Error('Konfigurasi kolom export belum siap.');
+      const total=getFilteredJamaah().length;
+      if(!total){
+        toast('Tidak ada data sesuai filter aktif.',true);
+        return;
+      }
+
+      /* Pakai generator PDF Jamaah existing agar format tetap konsisten */
+      exportJamaahPDF(cols);
+    }catch(e){
+      console.error('[quickPdf73]',e);
+      toast('Gagal membuat PDF: '+(e.message||e),true);
+    }
+  }
+
+  function menu73(){
+    let m=document.getElementById(MENU_ID);
+    if(m)return m;
+
+    m=document.createElement('div');
+    m.id=MENU_ID;
+    m.innerHTML=`
+      <button type="button" data-format="xls"><span>📊</span><span>Download XLS</span></button>
+      <button type="button" data-format="csv"><span>📄</span><span>Download CSV</span></button>
+      <div class="v73-sep"></div>
+      <button type="button" data-format="pdf"><span>📕</span><span>Download PDF</span></button>
+    `;
+    document.body.appendChild(m);
+
+    m.addEventListener('click',e=>{
+      const b=e.target.closest('button[data-format]');
+      if(!b)return;
+
+      close73();
+      const f=b.dataset.format;
+      if(f==='xls')quickXls73();
+      else if(f==='csv')quickCsv73();
+      else if(f==='pdf')quickPdf73();
+    });
+
+    return m;
+  }
+
+  function place73(btn,m){
+    const r=btn.getBoundingClientRect();
+    const vw=document.documentElement.clientWidth||window.innerWidth;
+    const vh=document.documentElement.clientHeight||window.innerHeight;
+
+    m.style.display='block';
+    m.style.visibility='hidden';
+
+    const mw=m.offsetWidth||155;
+    const mh=m.offsetHeight||130;
+
+    let left=r.right-mw;
+    if(left<8)left=8;
+    if(left+mw>vw-8)left=Math.max(8,vw-mw-8);
+
+    let top=r.bottom+6;
+    if(top+mh>vh-8){
+      top=Math.max(8,r.top-mh-6);
+    }
+
+    m.style.left=left+'px';
+    m.style.top=top+'px';
+    m.style.right='auto';
+    m.style.visibility='';
+    m.style.display='';
+  }
+
+  function open73(btn){
+    const m=menu73();
+    const open=!m.classList.contains('show');
+
+    close73();
+    if(!open)return;
+
+    place73(btn,m);
+    m.classList.add('show');
+    btn.setAttribute('aria-expanded','true');
+  }
+
+  function close73(){
+    const m=document.getElementById(MENU_ID);
+    if(m)m.classList.remove('show');
+
+    const b=document.querySelector('.quick-download-btn[aria-expanded="true"]');
+    if(b)b.setAttribute('aria-expanded','false');
+  }
+
+  function setup73(){
+    const sb=document.querySelector('#subview-jamaah-data .search-box.modern-search');
+    if(!sb)return;
+
+    const add=sb.querySelector('.quick-add-btn');
+    let btn=sb.querySelector('.quick-download-btn');
+
+    if(!btn){
+      btn=document.createElement('button');
+      btn.type='button';
+      btn.className='quick-download-btn';
+      btn.innerHTML='⬇';
+      btn.title='Download data jamaah';
+      btn.setAttribute('aria-label','Download data jamaah');
+      btn.setAttribute('aria-haspopup','menu');
+      btn.setAttribute('aria-expanded','false');
+
+      if(add) add.insertAdjacentElement('afterend',btn);
+      else sb.appendChild(btn);
+
+      btn.addEventListener('click',e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        open73(btn);
+      });
+    }
+  }
+
+  document.addEventListener('click',e=>{
+    if(!e.target.closest?.('.quick-download-btn') &&
+       !e.target.closest?.('#'+MENU_ID)){
+      close73();
+    }
+  });
+
+  window.addEventListener('scroll',close73,true);
+  window.addEventListener('resize',close73);
+
+  /* Search toolbar dirender ulang oleh beberapa override lama */
+  let timer=0;
+  new MutationObserver(()=>{
+    clearTimeout(timer);
+    timer=setTimeout(setup73,40);
+  }).observe(document.documentElement,{childList:true,subtree:true});
+
+  setTimeout(setup73,500);
+  setTimeout(setup73,1200);
+
+  window.ubnb73={
+    setup:setup73,
+    downloadXls:quickXls73,
+    downloadCsv:quickCsv73,
+    downloadPdf:quickPdf73
+  };
+})();
+</script>
+
 </body>
 </html>
