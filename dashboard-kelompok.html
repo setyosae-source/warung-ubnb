@@ -33205,5 +33205,422 @@ body.ppg54-lock-page{
 })();
 </script>
 
+
+
+<style id="ubnb-v74-export-sticky-fix-style">
+/* =========================================================
+   v74 — Quick export fix + sticky search/list hierarchy
+   ========================================================= */
+
+:root{
+  --v74-main-stack:96px;
+}
+
+/* Layer hierarchy:
+   topbar > menu utama > search > filter dropdown > table/list */
+#app > .topbar{
+  z-index:3100!important;
+}
+#app > .page-tabs{
+  z-index:3000!important;
+}
+
+/* v73 terlalu tinggi, sehingga filter menutup menu utama.
+   Sekarang panel filter ikut scroll biasa dan lewat DI BELAKANG header. */
+#v11-filter-panel.open{
+  position:relative!important;
+  z-index:20!important;
+  overflow:visible!important;
+  max-height:none!important;
+}
+.v11-filter-row{
+  position:relative!important;
+}
+.v11-multi{
+  position:relative!important;
+  z-index:21!important;
+}
+.v11-multi[open]{
+  z-index:2750!important;
+}
+.v11-multi-menu{
+  z-index:2760!important;
+}
+
+/* Search selalu stay di bawah menu utama ketika filter sudah lewat. */
+#subview-jamaah-data > .search-box.modern-search{
+  position:sticky!important;
+  top:var(--v74-main-stack)!important;
+  z-index:2850!important;
+  padding:6px 0!important;
+  margin-top:-1px!important;
+  margin-bottom:6px!important;
+  background:var(--bg,#f7f7f4)!important;
+  box-shadow:0 5px 8px rgba(33,52,40,.06);
+}
+
+/* List berada di bawah search. Kelompok + table header tetap sticky
+   memakai mekanisme v30 yang sudah ada. */
+#jamaah-list-wrap{
+  position:relative!important;
+  z-index:10!important;
+}
+#jamaah-list-wrap .v29-kelompok-head{
+  z-index:45!important;
+}
+#jamaah-list-wrap .tbl-jamaah thead th{
+  z-index:40!important;
+}
+
+/* Download popup baru selalu di layer depan */
+#v74-jamaah-download-menu{
+  position:fixed!important;
+  z-index:2147482600!important;
+  display:none;
+  width:158px;
+  padding:5px;
+  border:1px solid #d6e2da;
+  border-radius:7px;
+  background:#fff;
+  box-shadow:0 12px 34px rgba(16,55,33,.22);
+}
+#v74-jamaah-download-menu.show{
+  display:block!important;
+}
+#v74-jamaah-download-menu button{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-height:39px;
+  padding:7px 9px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:#263b30;
+  font:inherit;
+  font-size:11.5px;
+  font-weight:750;
+  text-align:left;
+  cursor:pointer;
+}
+#v74-jamaah-download-menu button:hover,
+#v74-jamaah-download-menu button:focus{
+  background:#f0f7f3;
+  outline:none;
+}
+#v74-jamaah-download-menu .v74-sep{
+  height:1px;
+  margin:3px 4px;
+  background:#e7ece9;
+}
+</style>
+
+
+<script id="ubnb-v74-export-sticky-fix-script">
+(function(){
+  const MENU_ID='v74-jamaah-download-menu';
+
+  /* =======================================================
+     STICKY STACK
+     Hitung tinggi topbar + menu utama secara aktual.
+     ======================================================= */
+  function measureSticky74(){
+    const top=document.querySelector('#app > .topbar');
+    const tabs=document.querySelector('#app > .page-tabs');
+    if(!top||!tabs)return;
+
+    const topH=Math.ceil(top.getBoundingClientRect().height||0);
+    if(topH>0){
+      tabs.style.top=topH+'px';
+    }
+
+    const tabH=Math.ceil(tabs.getBoundingClientRect().height||0);
+    const stack=Math.max(0,topH+tabH);
+    document.documentElement.style.setProperty('--v74-main-stack',stack+'px');
+  }
+
+  window.addEventListener('resize',measureSticky74);
+  window.addEventListener('orientationchange',()=>setTimeout(measureSticky74,180));
+  setTimeout(measureSticky74,100);
+  setTimeout(measureSticky74,600);
+  setTimeout(measureSticky74,1500);
+
+  /* =======================================================
+     QUICK EXPORT
+     v73 memakai window.EXPORT_COLUMNS, sedangkan konfigurasi asli
+     dideklarasikan dengan const dan tidak menjadi property window.
+     v74 memakai definisi kolom sendiri sehingga tidak bergantung
+     pada modal Export.
+     ======================================================= */
+  const QUICK_COLS_74=[
+    {key:'no',label:'No',picker:()=>null},
+    {key:'nama',label:'Nama',picker:j=>j.nama||''},
+    {key:'nama_kk',label:'Nama KK',picker:j=>j.nama_kk||''},
+    {key:'jenis_kelamin',label:'L/P',picker:j=>j.jenis_kelamin||''},
+    {key:'umur',label:'Umur',picker:j=>{
+      const u=umurFromTgl(j.tgl_lahir);
+      return u===null?'':u;
+    }},
+    {key:'kelas_kbm',label:'Kelas KBM',picker:j=>kelasKbmAktual(j)||''},
+    {key:'status_nikah',label:'Status Nikah',picker:j=>j.status_nikah||''},
+    {key:'status_sambung',label:'Status Sambung',picker:j=>j.status_sambung||''}
+  ];
+
+  function list74(){
+    try{
+      if(typeof getExportJamaahSorted==='function'){
+        return getExportJamaahSorted();
+      }
+    }catch(_){}
+    return typeof getFilteredJamaah==='function'
+      ? getFilteredJamaah().slice()
+      : [];
+  }
+
+  function rows74(){
+    const list=list74();
+    const rows=[QUICK_COLS_74.map(c=>c.label)];
+    list.forEach((j,i)=>{
+      rows.push(QUICK_COLS_74.map(c=>c.key==='no'?i+1:c.picker(j)));
+    });
+    return {list,rows};
+  }
+
+  function scope74(){
+    return String(
+      CU?.kelompok_scope ||
+      (typeof isViewer==='function'&&isViewer()?'umum':'Desa')
+    ).replace(/[^a-z0-9_-]+/gi,'_');
+  }
+
+  function filename74(ext){
+    const d=new Date();
+    const date=[
+      d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'),
+      String(d.getDate()).padStart(2,'0')
+    ].join('-');
+    return `Jamaah_${scope74()}_${date}.${ext}`;
+  }
+
+  function downloadBlob74(blob,name){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1200);
+  }
+
+  function xls74(){
+    try{
+      if(typeof XLSX==='undefined'){
+        throw new Error('Library Excel belum siap. Refresh halaman lalu coba lagi.');
+      }
+
+      const {rows}=rows74();
+      if(rows.length<=1)throw new Error('Tidak ada data sesuai filter aktif.');
+
+      const ws=XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols']=QUICK_COLS_74.map((c,i)=>{
+        let max=String(c.label).length;
+        for(let r=1;r<rows.length;r++){
+          max=Math.max(max,String(rows[r][i]??'').length);
+        }
+        return {wch:Math.min(max+2,40)};
+      });
+
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,'Jamaah');
+
+      /* BIFF8 = XLS, bukan XLSX */
+      XLSX.writeFile(wb,filename74('xls'),{bookType:'biff8'});
+      toast(`✅ XLS diunduh (${rows.length-1} jamaah sesuai filter/search aktif)`);
+    }catch(e){
+      console.error('[v74 XLS]',e);
+      toast('Gagal membuat XLS: '+(e.message||e),true);
+    }
+  }
+
+  function csv74(){
+    try{
+      const {rows}=rows74();
+      if(rows.length<=1)throw new Error('Tidak ada data sesuai filter aktif.');
+
+      const csv=rows.map(row=>row.map(cell=>{
+        let s=String(cell??'');
+        if(/[",\n]/.test(s))s='"'+s.replace(/"/g,'""')+'"';
+        return s;
+      }).join(',')).join('\n');
+
+      downloadBlob74(
+        new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),
+        filename74('csv')
+      );
+
+      toast(`✅ CSV diunduh (${rows.length-1} jamaah sesuai filter/search aktif)`);
+    }catch(e){
+      console.error('[v74 CSV]',e);
+      toast('Gagal membuat CSV: '+(e.message||e),true);
+    }
+  }
+
+  function pdf74(){
+    try{
+      const list=list74();
+      if(!list.length)throw new Error('Tidak ada data sesuai filter aktif.');
+
+      if(typeof exportJamaahPDF!=='function'){
+        throw new Error('Generator PDF belum siap. Refresh halaman lalu coba lagi.');
+      }
+
+      /* Generator lama menerima array definisi kolom seperti ini. */
+      exportJamaahPDF(QUICK_COLS_74);
+    }catch(e){
+      console.error('[v74 PDF]',e);
+      toast('Gagal membuat PDF: '+(e.message||e),true);
+    }
+  }
+
+  function closeMenu74(){
+    document.getElementById(MENU_ID)?.classList.remove('show');
+    document.querySelector('.quick-download-btn[aria-expanded="true"]')
+      ?.setAttribute('aria-expanded','false');
+  }
+
+  function buildMenu74(){
+    let m=document.getElementById(MENU_ID);
+    if(m)return m;
+
+    /* Hapus menu rusak versi v73 supaya tidak ada dua dropdown. */
+    document.getElementById('v73-jamaah-download-menu')?.remove();
+
+    m=document.createElement('div');
+    m.id=MENU_ID;
+    m.innerHTML=`
+      <button type="button" data-format="xls"><span>📊</span><span>Download XLS</span></button>
+      <button type="button" data-format="csv"><span>📄</span><span>Download CSV</span></button>
+      <div class="v74-sep"></div>
+      <button type="button" data-format="pdf"><span>📕</span><span>Download PDF</span></button>
+    `;
+    document.body.appendChild(m);
+
+    m.addEventListener('click',e=>{
+      const b=e.target.closest('button[data-format]');
+      if(!b)return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      closeMenu74();
+      if(b.dataset.format==='xls')xls74();
+      else if(b.dataset.format==='csv')csv74();
+      else if(b.dataset.format==='pdf')pdf74();
+    });
+
+    return m;
+  }
+
+  function placeMenu74(btn,m){
+    const r=btn.getBoundingClientRect();
+    const vw=document.documentElement.clientWidth||window.innerWidth;
+    const vh=document.documentElement.clientHeight||window.innerHeight;
+
+    m.style.display='block';
+    m.style.visibility='hidden';
+
+    const mw=m.offsetWidth||158;
+    const mh=m.offsetHeight||132;
+
+    let left=r.right-mw;
+    if(left<8)left=8;
+    if(left+mw>vw-8)left=Math.max(8,vw-mw-8);
+
+    let top=r.bottom+6;
+    if(top+mh>vh-8)top=Math.max(8,r.top-mh-6);
+
+    m.style.left=left+'px';
+    m.style.top=top+'px';
+    m.style.right='auto';
+    m.style.visibility='';
+    m.style.display='';
+  }
+
+  function openMenu74(btn){
+    const m=buildMenu74();
+    const opening=!m.classList.contains('show');
+    closeMenu74();
+    if(!opening)return;
+    placeMenu74(btn,m);
+    m.classList.add('show');
+    btn.setAttribute('aria-expanded','true');
+  }
+
+  function setupDownload74(){
+    const sb=document.querySelector('#subview-jamaah-data .search-box.modern-search');
+    if(!sb)return;
+
+    let old=sb.querySelector('.quick-download-btn');
+    if(!old)return;
+
+    /*
+      v73 sudah memasang event listener yang memanggil fungsi error.
+      Clone tombol untuk membuang seluruh listener lama.
+    */
+    if(old.dataset.v74Ready!=='1'){
+      const btn=old.cloneNode(true);
+      btn.dataset.v74Ready='1';
+      btn.setAttribute('aria-haspopup','menu');
+      btn.setAttribute('aria-expanded','false');
+      btn.title='Download data jamaah';
+      old.replaceWith(btn);
+
+      btn.addEventListener('click',e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        openMenu74(btn);
+      });
+    }
+  }
+
+  document.addEventListener('click',e=>{
+    if(!e.target.closest?.('.quick-download-btn') &&
+       !e.target.closest?.('#'+MENU_ID)){
+      closeMenu74();
+    }
+  });
+
+  window.addEventListener('scroll',e=>{
+    /* Jangan tutup saat scroll horizontal list Jamaah. */
+    if(e.target?.closest?.('#jamaah-list-wrap'))return;
+    closeMenu74();
+  },true);
+
+  window.addEventListener('resize',closeMenu74);
+
+  let timer74=0;
+  new MutationObserver(()=>{
+    clearTimeout(timer74);
+    timer74=setTimeout(()=>{
+      setupDownload74();
+      measureSticky74();
+    },45);
+  }).observe(document.documentElement,{childList:true,subtree:true});
+
+  setTimeout(setupDownload74,250);
+  setTimeout(setupDownload74,900);
+  setTimeout(setupDownload74,1800);
+
+  window.ubnb74={
+    xls:xls74,
+    csv:csv74,
+    pdf:pdf74,
+    measureSticky:measureSticky74
+  };
+})();
+</script>
+
 </body>
 </html>
