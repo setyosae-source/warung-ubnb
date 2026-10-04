@@ -10332,8 +10332,6 @@ function finalRecapStatsHtml(r){
     <div class="fr-stat warn"><b>${Number(r.sakit||0)}</b><span>Sakit</span></div>
     <div class="fr-stat danger"><b>${Number(r.tidak_hadir||0)}</b><span>Tidak Hadir</span></div>
     <div class="fr-stat main"><b>${pct}%</b><span>Kehadiran Wajib</span></div>
-    <div class="fr-stat"><b>${Number(r.jumlah_kk||0)}</b><span>Jumlah KK</span></div>
-    <div class="fr-stat"><b>${Number(r.kk_lengkap_hadir||0)}</b><span>KK Seluruh Peserta Hadir</span></div>
     <div class="fr-stat"><b>${Number(r.ditambahkan_saat_absen||0)}</b><span>Masuk Daftar Saat Absen</span></div>
     <div class="fr-stat"><b>${Number(r.tamu_kunjungan||0)}</b><span>Tamu / Kunjungan</span></div>
   </div>`;
@@ -10448,8 +10446,6 @@ function finalRecapSummaryText(){
     `Sakit: ${r.sakit||0}`,
     `Tidak Hadir: ${r.tidak_hadir||0}`,
     `Kehadiran: ${pct}%`,
-    `Jumlah KK: ${r.jumlah_kk||0}`,
-    `KK seluruh peserta hadir: ${r.kk_lengkap_hadir||0}`,
     `Masuk daftar saat absen: ${r.ditambahkan_saat_absen||0}`,
     `Tamu/Kunjungan: ${r.tamu_kunjungan||0}`,
   ];
@@ -10846,8 +10842,6 @@ function ubnbPrintSummaryCards(r){
     ['Sakit',r.sakit||0,'warn'],
     ['Tidak Hadir',r.tidak_hadir||0,'bad'],
     ['Kehadiran',ubnbPrintFmtPct(r.kehadiran_pct),'good'],
-    ['Jumlah KK',r.jumlah_kk||0,''],
-    ['KK Hadir Lengkap',r.kk_lengkap_hadir||0,''],
     ['Masuk Saat Absen',r.ditambahkan_saat_absen||0,''],
     ['Tamu / Kunjungan',r.tamu_kunjungan||0,'']
   ];
@@ -35469,6 +35463,164 @@ ${body}
       }
     }catch(_){}
   },500);
+})();
+</script>
+
+
+
+<script id="ubnb-v81-report-parent-generus-language">
+(function(){
+  /* =========================================================
+     v81 — Bahasa khusus REPORT/EXPORT saja.
+     Database/status asli TIDAK diubah:
+       Menikah + Single Parent -> Orang Tua
+       Belum Menikah           -> Generus
+     ========================================================= */
+
+  function reportCategory81(v){
+    const s=String(v||'').trim();
+    if(s==='Menikah' || s==='Single Parent' || s==='Janda / Duda') return 'Orang Tua';
+    if(s==='Belum Menikah') return 'Generus';
+    return s || 'Tidak Diketahui';
+  }
+
+  function mergedCategory81(obj){
+    const out={};
+    Object.entries(obj||{}).forEach(([k,v])=>{
+      const nk=reportCategory81(k);
+      if(!out[nk]) out[nk]={hadir:0,total:0};
+      out[nk].hadir += Number(v?.hadir||0);
+      out[nk].total += Number(v?.total||0);
+    });
+    return out;
+  }
+
+  function reportData81(d){
+    if(!d?.rekap)return d;
+    return {
+      ...d,
+      rekap:{
+        ...d.rekap,
+        status_menikah:mergedCategory81(d.rekap.status_menikah)
+      },
+      peserta:Array.isArray(d.peserta)
+        ? d.peserta.map(x=>({...x,status_menikah:reportCategory81(x.status_menikah)}))
+        : d.peserta
+    };
+  }
+
+  function postProcessPreview81(){
+    const root=document.getElementById('fr-content');
+    if(!root)return;
+
+    root.querySelectorAll('.fr-break h4').forEach(h=>{
+      const t=String(h.textContent||'').trim();
+      if(t==='Status Menikah') h.textContent='Kategori Peserta';
+      if(t==='Kelas KBM — Belum Menikah' || t==='Kelas KBM - Belum Menikah'){
+        h.textContent='Kelas KBM — Generus';
+      }
+    });
+
+    root.querySelectorAll('.fr-table th').forEach(th=>{
+      const t=String(th.textContent||'').trim();
+      if(t==='Menikah' || t==='Status Menikah') th.textContent='Kategori';
+    });
+  }
+
+  /* Preview report di dashboard:
+     gunakan clone transform hanya selama render, lalu kembalikan data asli. */
+  const oldRender81=window.renderFinalRecap;
+  if(typeof oldRender81==='function'){
+    window.renderFinalRecap=function(){
+      let original=null;
+      let replaced=false;
+      try{
+        if(typeof _finalRecapData!=='undefined' && _finalRecapData?.rekap){
+          original=_finalRecapData;
+          _finalRecapData=reportData81(original);
+          replaced=true;
+        }
+        const r=oldRender81.apply(this,arguments);
+        postProcessPreview81();
+        return r;
+      }finally{
+        if(replaced)_finalRecapData=original;
+      }
+    };
+  }
+
+  /* Cetak/PDF: ubah judul breakdown + merge angkanya. */
+  const oldPrintBreak81=window.ubnbPrintBreak;
+  if(typeof oldPrintBreak81==='function'){
+    window.ubnbPrintBreak=function(title,obj){
+      let t=String(title||'');
+      let o=obj;
+
+      if(t==='Status Menikah'){
+        t='Kategori Peserta';
+        o=mergedCategory81(obj);
+      }else if(t==='Kelas KBM - Belum Menikah' || t==='Kelas KBM — Belum Menikah'){
+        t='Kelas KBM - Generus';
+      }
+
+      return oldPrintBreak81(t,o);
+    };
+  }
+
+  /* Cetak/PDF daftar peserta:
+     nilai kolom status dibuat Orang Tua / Generus, tanpa mengubah sumber data. */
+  const oldPrintDetails81=window.ubnbPrintDetails;
+  if(typeof oldPrintDetails81==='function'){
+    window.ubnbPrintDetails=function(r,p,orientation){
+      const rows=Array.isArray(p)
+        ? p.map(x=>({...x,status_menikah:reportCategory81(x.status_menikah)}))
+        : p;
+
+      let out=oldPrintDetails81(r,rows,orientation);
+      out=String(out||'')
+        .replace(/Status Menikah/g,'Kategori')
+        .replace(/Kelas KBM - Belum Menikah/g,'Kelas KBM - Generus')
+        .replace(/Kelas KBM — Belum Menikah/g,'Kelas KBM — Generus');
+      return out;
+    };
+  }
+
+  /* Salin Ringkasan: sama, hanya bahasa laporan. */
+  const oldSummary81=window.finalRecapSummaryText;
+  if(typeof oldSummary81==='function'){
+    window.finalRecapSummaryText=function(){
+      let original=null;
+      let replaced=false;
+      try{
+        if(typeof _finalRecapData!=='undefined' && _finalRecapData?.rekap){
+          original=_finalRecapData;
+          _finalRecapData=reportData81(original);
+          replaced=true;
+        }
+        return String(oldSummary81.apply(this,arguments)||'')
+          .replace(/Status Menikah:/g,'Kategori Peserta:')
+          .replace(/Kelas KBM:/g,'Kelas KBM Generus:');
+      }finally{
+        if(replaced)_finalRecapData=original;
+      }
+    };
+  }
+
+  window.ubnb81ReportLanguage={
+    category:reportCategory81,
+    merge:mergedCategory81
+  };
+})();
+</script>
+
+
+
+<script id="ubnb-v82-report-jamaah-only-stats">
+(function(){
+  window.ubnb82ReportStats = {
+    kkSummaryHidden: true,
+    note: 'Report/export only: statistik KK disembunyikan; statistik jamaah tetap.'
+  };
 })();
 </script>
 
