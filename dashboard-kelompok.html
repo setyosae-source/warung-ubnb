@@ -1,6 +1,40 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+
+<script id="ubnb-v84-wib-time-helpers">
+/* Global display/write helpers for UBNB logs.
+   WIB has fixed UTC+07:00 and no DST. */
+function ubnbWibIso84(value){
+  const d=value instanceof Date?value:new Date(value==null?Date.now():value);
+  if(isNaN(d.getTime()))return '';
+  return new Date(d.getTime()+7*60*60*1000).toISOString().replace(/Z$/,'+07:00');
+}
+function ubnbFmtWib84(value,withSeconds){
+  const d=value instanceof Date?value:new Date(value);
+  if(isNaN(d.getTime()))return String(value??'');
+  try{
+    return new Intl.DateTimeFormat('id-ID',{
+      timeZone:'Asia/Jakarta',
+      day:'2-digit',month:'short',year:'numeric',
+      hour:'2-digit',minute:'2-digit',
+      ...(withSeconds?{second:'2-digit'}:{}),
+      hourCycle:'h23'
+    }).format(d)+' WIB';
+  }catch(_){return String(value??'')}
+}
+function ubnbFmtWibDate84(value){
+  const d=value instanceof Date?value:new Date(value);
+  if(isNaN(d.getTime()))return String(value??'');
+  try{
+    return new Intl.DateTimeFormat('id-ID',{
+      timeZone:'Asia/Jakarta',
+      day:'2-digit',month:'short',year:'numeric'
+    }).format(d);
+  }catch(_){return String(value??'')}
+}
+</script>
+
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>Dashboard Kelompok - Powered by UBNB</title>
@@ -488,6 +522,15 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         <div id="login-pengurus-results" class="login-search-results"></div>
       </div>
       <div id="login-pengurus-access" class="login-access"></div>
+
+      <div class="field" id="login-master-code-wrap" style="display:none;margin-top:10px;">
+        <label>Kode Admin Master</label>
+        <input type="password" id="login-master-code" placeholder="Masukkan kode Admin Master..." autocomplete="current-password"/>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:5px;line-height:1.4;">
+          Kode hanya diminta untuk akun Admin Master.
+        </div>
+      </div>
+
       <button class="btn-login" id="btn-login-pengurus" onclick="doLoginPengurus()" style="display:none;">Masuk →</button>
       <div class="login-info">
         Pilih nama pengurus aktif yang tercantum di sub-tab <b>Jamaah → Pengurus</b>.<br>
@@ -758,6 +801,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div id="isrun-lock-err" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;background:var(--red-light);padding:7px;border-radius:5px;"></div>
       <input type="password" id="isrun-kode" placeholder="Masukkan kode keuangan..." style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;outline:none;text-align:center;letter-spacing:1px;margin-bottom:12px;" onkeydown="if(event.key==='Enter')unlockIsrun()"/>
       <button onclick="unlockIsrun()" style="width:100%;padding:11px;background:var(--green);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">🔓 Buka Akses</button>
+      <button id="isrun-admin-code-btn" onclick="openIsrunCodeAdmin()" style="display:none;width:100%;margin-top:8px;padding:9px;background:#f8fafc;color:#334155;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚙️ Admin: Ganti Kode Akses</button>
       <div style="margin-top:16px;font-size:11px;color:var(--text-muted);">
         💡 Belum punya kode? <a href="https://wa.me/6285718264782?text=Assalamu'alaikum%20admin%20UBNB%2C%20saya%20butuh%20kode%20akses%20keuangan%20IR%2FISRUN%20🙏" target="_blank" style="color:var(--green);font-weight:700;">Hubungi Admin</a>
       </div>
@@ -776,6 +820,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
           <a href="https://wa.me/6285718264782?text=Assalamu'alaikum%20admin%20UBNB%2C%20kelompok%20kami%20ingin%20menerapkan%20fitur%20IR%2FISRUN%20secara%20penuh.%20Mohon%20diskusi%20pengaturan%20sesuai%20kebutuhan%20kami%20🙏" target="_blank" style="background:#25d366;color:white;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">📱 Hubungi Admin</a>
+          <button id="isrun-admin-code-btn-open" onclick="openIsrunCodeAdmin()" style="display:none;background:none;border:none;color:#475569;font-size:11px;font-weight:700;cursor:pointer;padding:4px;">⚙️ Ganti kode akses</button>
           <button onclick="lockIsrun()" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:4px;">🔒 Kunci kembali</button>
         </div>
       </div>
@@ -833,6 +878,56 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div id="isrun-kategori-list"><div class="loading">Memuat...</div></div>
     </div>
     </div><!-- end isrun-content -->
+  </div>
+</div>
+
+
+<!-- MODAL ADMIN KODE IR/ISRUN v83 -->
+<div class="modal-overlay" id="modal-isrun-code-admin">
+  <div class="modal" style="max-width:430px;">
+    <div class="modal-head">
+      <div>
+        <strong style="font-size:14px;">⚙️ Admin Kode Akses IR/ISRUN</strong>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Reset kode tanpa perlu mengetahui kode lama.</div>
+      </div>
+      <button onclick="closeMod('modal-isrun-code-admin')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:14px 16px;">
+      <div id="isrun-admin-status" class="msg info" style="margin-bottom:12px;">Memuat akses admin...</div>
+
+      <div class="modal-row">
+        <label>Scope Kode</label>
+        <select id="isrun-admin-scope" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;">
+          <option value="DESA">DESA</option>
+          <option value="PW1">PW1</option>
+          <option value="PW2">PW2</option>
+          <option value="PW3">PW3</option>
+          <option value="PW4">PW4</option>
+        </select>
+      </div>
+
+      <div class="modal-row">
+        <label>Kode Baru</label>
+        <input type="password" id="isrun-admin-code1" autocomplete="new-password" placeholder="Minimal 4 karakter, tanpa spasi" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;">
+      </div>
+
+      <div class="modal-row">
+        <label>Ulangi Kode Baru</label>
+        <input type="password" id="isrun-admin-code2" autocomplete="new-password" placeholder="Ketik ulang kode baru" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;">
+      </div>
+
+      <div style="font-size:10px;color:var(--text-muted);line-height:1.5;margin-top:4px;">
+        Kode disimpan sebagai hash di server dan tidak dapat ditampilkan kembali.
+        Jika lupa, Admin cukup membuat kode baru lagi.
+      </div>
+
+      <div id="isrun-admin-last" style="font-size:10px;color:var(--text-muted);margin-top:9px;"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button class="btn-cancel" onclick="closeMod('modal-isrun-code-admin')">Batal</button>
+        <button class="btn-save" id="btn-isrun-admin-save" onclick="saveIsrunAdminCode()">💾 Simpan Kode Baru</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1835,7 +1930,7 @@ async function doLoginUmum(){
         score_kelompok:best.score_kelompok,
         input_nama:namaInput,
         input_kelompok:kelInput,
-        login_at:new Date().toISOString(),
+        login_at:ubnbWibIso84(),
       }
     };
     // Save ke session (TIDAK ke localStorage SSO supaya tidak bocor antar tab)
@@ -2566,7 +2661,7 @@ function exportPengurusExcel(){
     ws['!cols']=[{wch:6},{wch:28},{wch:32},{wch:14},{wch:28},{wch:50},{wch:16}];
     XLSX.utils.book_append_sheet(wb,ws,pgSafeSheetName(g.region==='desa'?'Desa':g.region));
   });
-  const ts=new Date().toISOString().slice(0,10);
+  const ts=ubnbWibIso84().slice(0,10);
   const scope=CU.kelompok_scope||'Desa';
   XLSX.writeFile(wb,`Pengurus_Desa_Perwira_${scope}_${ts}.xlsx`);
   closeMod('modal-export-pengurus');
@@ -2807,7 +2902,7 @@ function exportPengurusPDF(){
         }
       });
     });
-    const ts=new Date().toISOString().slice(0,10);
+    const ts=ubnbWibIso84().slice(0,10);
     const scope=CU.kelompok_scope||'Desa';
     doc.save(`Pengurus_Desa_Perwira_${scope}_${ts}.pdf`);
     closeMod('modal-export-pengurus');
@@ -4259,7 +4354,7 @@ function renderSensus(){
     return;
   }
   el.innerHTML=aSensus.map(l=>{
-    const tgl=new Date(l.tanggal_generate||l.created_at).toLocaleString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const tgl=new Date(l.tanggal_generate||l.created_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const scopeLabel=l.kelompok_filter?
       (KELOMPOK_LIST.find(k=>k.singkat===l.kelompok_filter)?.lengkap||l.kelompok_filter):
       'Gabungan 4 Kelompok';
@@ -5281,7 +5376,7 @@ function buildExportJamaahPDF(cols){
 function exportJamaahPDF(cols){
   try{
     const built=buildExportJamaahPDF(cols);
-    const ts=new Date().toISOString().slice(0,10);
+    const ts=ubnbWibIso84().slice(0,10);
     const scope=CU?.kelompok_scope||'Desa';
     built.doc.save(`Jamaah_${scope}_${ts}.pdf`);
     toast(`✅ PDF Jamaah diunduh (${built.total} jiwa · ${exportGroupDescription()} · ${built.layout.paper.toUpperCase()} ${built.layout.orientation==='portrait'?'Portrait':'Landscape'})`);
@@ -5320,7 +5415,7 @@ function doExport(format){
   if(!cols.length){toast('Pilih minimal 1 kolom',true);return;}
   const rows=buildExportRows(cols);
   if(rows.length<=1){toast('Tidak ada data untuk di-export',true);return;}
-  const ts=new Date().toISOString().split('T')[0];
+  const ts=ubnbWibIso84().split('T')[0];
   const scope=CU.kelompok_scope||(isViewer()?'umum':'desa');
   const filename='Jamaah_'+scope+'_'+ts;
   
@@ -5487,7 +5582,7 @@ function editKegiatan(id){
   const tpl=_kgTemplateId?aAcaraMaster.find(a=>Number(a.id)===Number(_kgTemplateId)):null;
   document.getElementById('modal-kegiatan-title').textContent=k?'✏️ Edit Kegiatan':'＋ Buat Kegiatan';
   curKegiatanId=id;
-  const today=new Date().toISOString().split('T')[0];
+  const today=ubnbWibIso84().split('T')[0];
   // Build pilihan acara
   const acaraOpts=aAcaraMaster.map(a=>
     `<option value="${a.id}" ${k&&k.acara_id===a.id?'selected':''}>${a.nama}</option>`
@@ -6273,7 +6368,7 @@ async function simpanKegiatan(){
     status:wasEdit?(document.getElementById('kg-status').value||'aktif'):'aktif',
     catatan:document.getElementById('kg-catatan').value.trim()||null,
     created_by:CU.username,
-    updated_at:new Date().toISOString(),
+    updated_at:ubnbWibIso84(),
   };
 
   const {data,error}=await sb.rpc('dk_attendance_save_kegiatan',{
@@ -7887,7 +7982,7 @@ async function simpanInputISrun(){
     if(n<=0) return;
     rows.push({
       pembayar_id:pembayarId,kategori_id:k.id,periode,nominal:n,
-      tgl_bayar:new Date().toISOString().split('T')[0],
+      tgl_bayar:ubnbWibIso84().split('T')[0],
       input_by:CU.username,
     });
   });
@@ -7956,7 +8051,7 @@ function renderListPilihPembayar(){
 async function tandaiPembayar(did,nama,kelompok){
   const{error}=await sb.from('ubnb_isrun_pembayar').insert([{
     jamaah_did:did,nama,kelompok:kelompok||CU.kelompok_scope||null,
-    tgl_mulai:new Date().toISOString().split('T')[0],
+    tgl_mulai:ubnbWibIso84().split('T')[0],
     created_by:CU.username,
   }]);
   if(error){toast('Gagal: '+error.message,true);return;}
@@ -8043,7 +8138,7 @@ async function simpanKategori(){
     nominal_default:unfmtRibuan(document.getElementById('kat-nominal').value)||0,
     level_organisasi:document.getElementById('kat-level').value||null,
     aktif:document.getElementById('kat-aktif').value==='true',
-    updated_at:new Date().toISOString(),
+    updated_at:ubnbWibIso84(),
   };
   if(!payload.kode||!payload.nama){toast('Kode & nama wajib',true);return;}
   let res;
@@ -8261,7 +8356,7 @@ async function renderLogbook() {
     let html = '';
     Object.keys(groups).sort().reverse().forEach(tgl => {
       const rows = groups[tgl];
-      const todayStr = new Date().toISOString().slice(0,10);
+      const todayStr = ubnbWibIso84().slice(0,10);
       const label = tgl === todayStr ? 'Hari ini' : tgl;
       html += '<div style="font-size:11px;font-weight:700;color:var(--text-muted,#888);padding:8px 0 4px;border-bottom:1px solid #e5e7eb;margin-bottom:4px">'
             + label + ' <span style="font-weight:400">(' + rows.length + ' aktivitas)</span></div>';
@@ -8744,7 +8839,7 @@ function exportPengurusExcel(){
     ws['!margins']={left:0.35,right:0.35,top:0.5,bottom:0.5,header:0.2,footer:0.2};
     XLSX.utils.book_append_sheet(wb,ws,pgExportSheetName(g));
   });
-  const ts=new Date().toISOString().slice(0,10);
+  const ts=ubnbWibIso84().slice(0,10);
   const scope=CU.kelompok_scope||'Desa';
   XLSX.writeFile(wb,`Pengurus_Desa_Perwira_${scope}_${ts}.xlsx`);
   closeMod('modal-export-pengurus');
@@ -8974,7 +9069,7 @@ function exportPengurusPDF(){
         }
       });
     });
-    const ts=new Date().toISOString().slice(0,10);
+    const ts=ubnbWibIso84().slice(0,10);
     const scope=CU.kelompok_scope||'Desa';
     doc.save(`Pengurus_Desa_Perwira_${scope}_${ts}.pdf`);
     closeMod('modal-export-pengurus');
@@ -9444,7 +9539,7 @@ function renderCalendarDetail(){
   const rec=e.routine?(e.kind==='virtual'?calendarRecurrenceText(e.rule):(()=>{const j=(aJadwal||[]).find(x=>Number(x.id)===Number(e.jadwal_id));return j?calendarRecurrenceText(j.recurrence_rule):'Rutin';})()):'Insidentil';
   let participantInfo='';
   if(e.cancelled||e.status==='dibatalkan')participantInfo='<b style="color:#b91c1c;">Acara dimansuh / dibatalkan</b>';
-  else if(e.generated)participantInfo=`<b>${e.participant_count||0} peserta</b> sudah disnapshot${e.raw?.participants_generated_at?' · '+new Date(e.raw.participants_generated_at).toLocaleString('id-ID'):''}`;
+  else if(e.generated)participantInfo=`<b>${e.participant_count||0} peserta</b> sudah disnapshot${e.raw?.participants_generated_at?' · '+ubnbFmtWib84(e.raw.participants_generated_at,false):''}`;
   else if(ready)participantInfo='<b style="color:#047857;">Sudah masuk H-7 — peserta dapat digenerate sekarang</b>';
   else participantInfo=`Peserta belum digenerate · dapat digenerate mulai <b>${calFmtDate(calendarH7Date(e),false)}</b>`;
   let actions='';
@@ -9679,7 +9774,7 @@ async function simpanKegiatan(){
     const {data,error}=await sb.rpc('dk_calendar_save_schedule',{p_token:DK_ATT_TOKEN,p_id:_editingScheduleId||null,p_payload:payload});if(error||!data||data.ok!==true){toast('Gagal simpan jadwal: '+(error?.message||data?.error||'Unknown'),true);return;}
     toast(_editingScheduleId?'✅ Jadwal rutin diperbarui':'✅ Jadwal rutin dibuat. Peserta belum dibekukan sampai H-7');dkLog(_editingScheduleId?'edit_jadwal_rutin':'buat_jadwal_rutin',{acara:name,scope:sc});
   }else{
-    const tgl=document.getElementById('kg-tgl')?.value;if(!tgl){toast('Tanggal wajib diisi',true);return;}const payload={...common,tanggal:tgl,status:curKegiatanId?(document.getElementById('kg-status')?.value||'aktif'):'aktif',created_by:CU.username,updated_at:new Date().toISOString()};
+    const tgl=document.getElementById('kg-tgl')?.value;if(!tgl){toast('Tanggal wajib diisi',true);return;}const payload={...common,tanggal:tgl,status:curKegiatanId?(document.getElementById('kg-status')?.value||'aktif'):'aktif',created_by:CU.username,updated_at:ubnbWibIso84()};
     const {data,error}=await sb.rpc('dk_attendance_save_kegiatan',{p_token:DK_ATT_TOKEN,p_id:curKegiatanId||null,p_payload:payload,p_peserta:[]});if(error||!data||data.ok!==true){toast('Gagal simpan acara: '+(error?.message||data?.error||'Unknown'),true);return;}
     toast(curKegiatanId?'✅ Acara diperbarui':'✅ Acara insidentil dibuat. Generate peserta tersedia mulai H-7');dkLog(curKegiatanId?'edit_kegiatan':'buat_kegiatan',{acara:name,scope:sc});
   }
@@ -9921,7 +10016,7 @@ simpanKegiatan=async function(){
         jid=Number(data.data?.id);await persistEventTargetsAndSlots(null,jid);toast('✅ Jadwal rutin dibuat');
       }
     }else{
-      const tgl=document.getElementById('kg-tgl')?.value;if(!tgl){toast('Tanggal wajib diisi',true);return;}const payload={...common,tanggal:tgl,status:curKegiatanId?(document.getElementById('kg-status')?.value||'aktif'):'aktif',created_by:CU.username,updated_at:new Date().toISOString()};const {data,error}=await sb.rpc('dk_attendance_save_kegiatan',{p_token:DK_ATT_TOKEN,p_id:curKegiatanId||null,p_payload:payload,p_peserta:[]});if(error||!data||data.ok!==true)throw new Error(error?.message||data?.error||'Gagal simpan acara');const kid=Number(data.data?.id||curKegiatanId);await persistEventTargetsAndSlots(kid,null);toast(curKegiatanId?'✅ Acara diperbarui':'✅ Acara insidentil dibuat');
+      const tgl=document.getElementById('kg-tgl')?.value;if(!tgl){toast('Tanggal wajib diisi',true);return;}const payload={...common,tanggal:tgl,status:curKegiatanId?(document.getElementById('kg-status')?.value||'aktif'):'aktif',created_by:CU.username,updated_at:ubnbWibIso84()};const {data,error}=await sb.rpc('dk_attendance_save_kegiatan',{p_token:DK_ATT_TOKEN,p_id:curKegiatanId||null,p_payload:payload,p_peserta:[]});if(error||!data||data.ok!==true)throw new Error(error?.message||data?.error||'Gagal simpan acara');const kid=Number(data.data?.id||curKegiatanId);await persistEventTargetsAndSlots(kid,null);toast(curKegiatanId?'✅ Acara diperbarui':'✅ Acara insidentil dibuat');
     }
   }catch(e){toast('Gagal simpan: '+(e.message||e),true);return;}
   closeMod('modal-kegiatan');_editingScheduleId=null;curKegiatanId=null;await reloadAttendanceSecure(false);renderKegiatanList();
@@ -17310,7 +17405,7 @@ ${table.outerHTML}
 
   function ppgToday(){
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
-    catch(_e){return new Date().toISOString().slice(0,10)}
+    catch(_e){return ubnbWibIso84().slice(0,10)}
   }
 
   function ppgRenderAbsen(){
@@ -17905,7 +18000,7 @@ ${table.outerHTML}
 
   function todayJakarta(){
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
-    catch(_e){return new Date().toISOString().slice(0,10)}
+    catch(_e){return ubnbWibIso84().slice(0,10)}
   }
 
   function renderAbsen(){
@@ -18420,7 +18515,7 @@ body.ppg-controller-mode .ppg-operational-only{display:none!important}
   }
   function today34(){
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
-    catch(_e){return new Date().toISOString().slice(0,10)}
+    catch(_e){return ubnbWibIso84().slice(0,10)}
   }
   function statusSelect34(cls,id){
     return `<select class="${cls}" data-id="${e34(id)}">
@@ -18539,7 +18634,7 @@ body.ppg-controller-mode .ppg-operational-only{display:none!important}
 
     const all=attendance34();
     const key=[scopeId34(),date,kelas,title].join('|');
-    const rec={key,scope:scopeId34(),date,kelas,title,students,teachers,saved_at:new Date().toISOString()};
+    const rec={key,scope:scopeId34(),date,kelas,title,students,teachers,saved_at:ubnbWibIso84()};
     const ix=all.findIndex(x=>x.key===key);
     if(ix>=0)all[ix]=rec;else all.push(rec);
     saveAttendance34(all);
@@ -19003,7 +19098,7 @@ body.ppg-controller-mode .ppg-operational-only{display:none!important}
     const materi=document.getElementById('ppg35-kur-materi')?.value.trim()||'';
     if(!kelas||!bidang||!materi){toast('Kelas, bidang, dan materi wajib diisi.',true);return}
     const all=curricula35();
-    all.push({id:'M'+Date.now(),kelas,bidang,kompetensi,materi,aktif:true,created_at:new Date().toISOString()});
+    all.push({id:'M'+Date.now(),kelas,bidang,kompetensi,materi,aktif:true,created_at:ubnbWibIso84()});
     saveCurricula35(all);
     toast('Materi kurikulum ditambahkan.');
     renderKurikulum35();
@@ -19348,7 +19443,7 @@ body.ppg-controller-mode .ppg-operational-only{display:none!important}
   function scopeId36(){return isController36()?'DESA':(scope36()?.kelompok||'')}
   function today36(){
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
-    catch(_e){return new Date().toISOString().slice(0,10)}
+    catch(_e){return ubnbWibIso84().slice(0,10)}
   }
 
   function attendance36(){
@@ -19659,7 +19754,7 @@ body.ppg-controller-mode .ppg-operational-only{display:none!important}
       students:s.studentAttendance,
       teachers:s.teacherAttendance,
       teacher_attendance_completed_first:true,
-      saved_at:new Date().toISOString()
+      saved_at:ubnbWibIso84()
     };
     const ix=all.findIndex(x=>x.key===key);
     if(ix>=0)all[ix]=rec;else all.push(rec);
@@ -19708,10 +19803,10 @@ let tab='active',hist='daily',startOpen=false,finishMode=false;
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const J=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(_){return d}}, W=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 function sc(){try{return JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null')}catch(_){return null}} function ctl(){return sc()?.type==='controller'} function sid(){return ctl()?'DESA':(sc()?.kelompok||'')}
-function today(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}catch(_){return new Date().toISOString().slice(0,10)}}
+function today(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}catch(_){return ubnbWibIso84().slice(0,10)}}
 function superU(){const r=String(CU?.role||'').toLowerCase();return !!(CU?.is_master||CU?.master||/master|super/.test(r)||/setyo/i.test(CU?.nama||''))}
 function gps(){return new Promise(res=>{if(!navigator.geolocation)return res(null);navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy}),()=>res(null),{enableHighAccuracy:false,timeout:3500,maximumAge:60000})})}
-function log(type,data,g){const a=J(L,[]);a.push({at:new Date().toISOString(),type,account:CU?.nama||CU?.username||'-',scope:sid(),...data,gps:g});W(L,a)}
+function log(type,data,g){const a=J(L,[]);a.push({at:ubnbWibIso84(),type,account:CU?.nama||CU?.username||'-',scope:sid(),...data,gps:g});W(L,a)}
 function drafts(){return J(CD,{})} function gen(){let a=(aJamaah||[]).filter(j=>j.status_nikah==='Belum Menikah'&&j.status_sambung==='Tetap');if(sc()?.type==='kelompok')a=a.filter(j=>j.kelompok_nama===sc().kelompok);const d=drafts();return a.map(j=>({...j,__kelas:d[j.did]||j.kelas_kbm||j.kelas_usia||'Belum Ditentukan',__umur:umurFromTgl(j.tgl_lahir)}))}
 function isTR(x){x=' '+String(x||'').toLowerCase().replace(/[._/-]+/g,' ').replace(/\s+/g,' ')+' ';return /(^|\s)mt(\s|$)/.test(x)||/(^|\s)ms(\s|$)/.test(x)}
 function teachers(){const m=new Map(),s=sc();(aPengurus||[]).filter(p=>p&&p.aktif!==false&&isTR(p.dapukan)).forEach(p=>{if(s?.type==='kelompok'&&(p.level!=='kelompok'||p.kelompok_nama!==s.kelompok))return;const j=findJamaahAny(p.did);if(!j)return;const k=String(p.did);if(!m.has(k))m.set(k,{did:k,nama:j.nama,roles:[]});if(p.dapukan&&!m.get(k).roles.includes(p.dapukan))m.get(k).roles.push(p.dapukan)});J(TG,[]).forEach(c=>{if(s?.type==='kelompok'&&c.kelompok_nama!==s.kelompok)return;const j=(aJamaah||[]).find(x=>String(x.did)===String(c.did));if(!j)return;const k=String(c.did);if(!m.has(k))m.set(k,{did:k,nama:j.nama,roles:[c.role||'Guru']})});const as=J(TA,{});return [...m.values()].map(t=>({...t,kelas:as[t.did]||'Semua Kelas'})).sort((a,b)=>a.nama.localeCompare(b.nama,'id'))}
@@ -19726,26 +19821,26 @@ function week(d){const x=new Date(d+'T00:00:00'),n=(x.getDay()+6)%7;x.setDate(x.
 function history(){const a=vis().filter(x=>x.status==='finished').sort((a,b)=>b.date.localeCompare(a.date));if(!a.length)return '<div class="ppg-empty">Belum ada kelas selesai.</div>';const g=new Map();a.forEach(s=>{let k=hist==='daily'?s.date:hist==='weekly'?week(s.date):s.date.slice(0,7);if(!g.has(k))g.set(k,[]);g.get(k).push(s)});return `<div class="ppg37-subtabs" style="margin-bottom:8px">${[['daily','Harian'],['weekly','Mingguan'],['monthly','Bulanan']].map(x=>`<button class="ppg37-subtab ${hist===x[0]?'active':''}" onclick="ppg37Hist('${x[0]}')">${x[1]}</button>`).join('')}</div>${[...g.entries()].map(([k,v])=>`<div class="ppg37-history-group"><div class="ppg37-history-head">${esc(k)} · ${v.length} kelas</div>${v.map(s=>{const p=pct(s);return `<div class="ppg37-history-item"><b>${esc(s.date)}</b><span><b>${esc(s.className)}</b><br><span class="ppg-mini-note">${esc(s.scope)} · ${esc(s.teacherName)}</span></span><span>${p.h}/${p.n} hadir</span><span class="optional">${p.p}%</span></div>`}).join('')}</div>`).join('')}`}
 window.ppg37Hist=x=>{hist=x;kelas()}; window.ppg37Tab=x=>{tab=x;kelas()};window.ppg37Toggle=()=>{startOpen=!startOpen;kelas()};
 function kelas(){const e=document.getElementById('ppg-page-kelas');if(!e)return;if(ctl()){e.innerHTML=`<div class="ppg-v33-stage"><div><div class="ppg-v33-stage-title">Kelas KBM · Controller Desa</div><div class="ppg-v33-stage-sub">Monitoring kelas aktif dan riwayat.</div></div></div>${activeCards()}<div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Riwayat</div></div><div class="ppg-panel-body">${history()}</div></div>`;return}e.innerHTML=`<div class="ppg37-topline"><div class="ppg37-subtabs"><button class="ppg37-subtab ${tab==='active'?'active':''}" onclick="ppg37Tab('active')">Aktif Hari Ini</button><button class="ppg37-subtab ${tab==='history'?'active':''}" onclick="ppg37Tab('history')">Riwayat</button></div><button class="ppg-btn" onclick="ppg37Toggle()">+ Mulai Kelas Baru</button></div><div class="ppg37-start-panel ${startOpen?'show':''}"><div class="ppg-panel" style="margin-top:0"><div class="ppg-panel-body"><div class="ppg37-start-grid"><div class="ppg37-field"><label>Tanggal</label><input id="p37date" type="date" value="${today()}" readonly></div><div class="ppg37-field"><label>Guru</label><select id="p37guru"><option value="">Pilih guru...</option>${teachers().map(t=>`<option value="${esc(t.did)}">${esc(t.nama)}</option>`).join('')}</select></div><div class="ppg37-field"><label>Kelas</label><select id="p37kelas"><option value="">Pilih kelas...</option>${C.map(k=>`<option>${esc(k)}</option>`).join('')}</select></div><button class="ppg-btn" onclick="ppg37Start()">Mulai Kelas</button></div></div></div></div><div id="p37content">${tab==='active'?activeCards():history()}</div><div id="p37detail"></div>`}
-window.ppg37Start=async()=>{const date=document.getElementById('p37date')?.value||today(),did=document.getElementById('p37guru')?.value,k=document.getElementById('p37kelas')?.value;if(!did||!k)return toast('Pilih guru dan kelas terlebih dahulu.',true);const t=teachers().find(x=>x.did===did);if(!tfc(k).some(x=>x.did===did))return toast('Guru belum ditetapkan untuk kelas ini.',true);const s={id:'K'+Date.now(),scope:sid(),date,className:k,teacherDid:did,teacherName:t.nama,startedAt:new Date().toISOString(),startedBy:CU?.nama||CU?.username,status:'pending',teacherAttendance:[],students:sfc(k).map(j=>({did:String(j.did),nama:j.nama,status:'Belum Hadir'})),generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}};const a=ss();a.push(s);saveSS(a);const g=await gps();log('MULAI_KELAS',{sessionId:s.id,className:k,teacherName:t.nama,date},g);teacherStep(s)};
+window.ppg37Start=async()=>{const date=document.getElementById('p37date')?.value||today(),did=document.getElementById('p37guru')?.value,k=document.getElementById('p37kelas')?.value;if(!did||!k)return toast('Pilih guru dan kelas terlebih dahulu.',true);const t=teachers().find(x=>x.did===did);if(!tfc(k).some(x=>x.did===did))return toast('Guru belum ditetapkan untuk kelas ini.',true);const s={id:'K'+Date.now(),scope:sid(),date,className:k,teacherDid:did,teacherName:t.nama,startedAt:ubnbWibIso84(),startedBy:CU?.nama||CU?.username,status:'pending',teacherAttendance:[],students:sfc(k).map(j=>({did:String(j.did),nama:j.nama,status:'Belum Hadir'})),generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}};const a=ss();a.push(s);saveSS(a);const g=await gps();log('MULAI_KELAS',{sessionId:s.id,className:k,teacherName:t.nama,date},g);teacherStep(s)};
 function teacherStep(s){const e=document.getElementById('p37detail');if(!e)return;const ts=tfc(s.className);e.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">Absensi Dewan Guru</div><div class="ppg-panel-sub">Wajib sebelum kelas aktif.</div></div></div><div class="ppg-table-wrap"><table class="ppg-table"><thead><tr><th>No</th><th>Nama</th><th>Status</th></tr></thead><tbody>${ts.map((t,i)=>`<tr><td>${i+1}</td><td><b>${esc(t.nama)}</b></td><td><select class="p37ta" data-id="${esc(t.did)}"><option value="">— Pilih —</option><option ${t.did===s.teacherDid?'selected':''}>Hadir</option><option>Izin</option><option>Sakit</option><option>Tidak Hadir</option><option>Terlambat</option></select></td></tr>`).join('')}</tbody></table></div><div class="ppg36-actions"><button class="ppg-btn" onclick="ppg37TeacherDone('${esc(s.id)}')">Selesai Absensi Guru & Aktifkan Kelas</button></div></div>`;e.scrollIntoView({behavior:'smooth'})}
 window.ppg37TeacherDone=id=>{const a=ss(),s=a.find(x=>x.id===id),els=[...document.querySelectorAll('.p37ta')];if(els.some(x=>!x.value))return toast('Status semua dewan guru harus diisi.',true);const tm=new Map(teachers().map(t=>[t.did,t]));s.teacherAttendance=els.map(x=>({did:x.dataset.id,nama:tm.get(x.dataset.id)?.nama||'',status:x.value}));if(!s.teacherAttendance.some(x=>['Hadir','Terlambat'].includes(x.status)))return toast('Belum ada dewan guru yang hadir.',true);s.status='active';saveSS(a);startOpen=false;tab='active';kelas();setTimeout(()=>detail(id),0)};
 window.ppg37Open=id=>detail(id);
 function detail(id){const s=ss().find(x=>x.id===id),e=document.getElementById('p37detail');if(!s||!e)return;const sec=st=>s.students.filter(x=>x.status===st);e.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">${esc(s.className)} · ${esc(s.date)}</div><div class="ppg-panel-sub">Guru: ${esc(s.teacherName)}</div></div><button class="ppg-btn gold" onclick="ppg37Finish('${esc(id)}')">Kelas Selesai</button></div><div class="ppg-panel-body"><div class="ppg37-material-box"><b style="font-size:10.5px">Materi Umum Hari Ini</b><div class="ppg37-material-row" style="margin-top:6px"><input id="p37gm" placeholder="Materi untuk semua murid hadir"><button class="ppg-btn" onclick="ppg37AddGeneral('${esc(id)}')">+ Tambah</button></div><div>${s.generalMaterials.map(m=>`<span class="ppg37-chip">${esc(m.text)}</span>`).join('')}</div></div>${[['Hadir',true],['Izin',false],['Belum Hadir',false]].map(([st,p])=>`<div class="ppg37-status-section"><div class="ppg37-status-title"><span>${st}</span><span>${sec(st).length}</span></div>${sec(st).map(x=>studentRow(s,x,p)).join('')||'<div class="ppg-mini-note">Tidak ada.</div>'}</div>`).join('')}${finishMode?finishPanel(s):''}</div></div>`;e.scrollIntoView({behavior:'smooth'})}
 function studentRow(s,x,p){const j=(aJamaah||[]).find(y=>String(y.did)===x.did);return `<div class="ppg37-student-row ${p?'present':''}"><div ${p?`onclick="ppg37Student('${esc(s.id)}','${esc(x.did)}')"`:''}><div class="ppg37-student-name">${esc(x.nama)}</div><div class="ppg37-student-kk">KK: ${esc(j?.nama_kk||'-')}</div></div><select class="ppg37-status-select" onchange="ppg37Status('${esc(s.id)}','${esc(x.did)}',this.value)">${['Hadir','Izin','Belum Hadir'].map(v=>`<option ${x.status===v?'selected':''}>${v}</option>`).join('')}</select>${p?`<button class="ppg37-mini-btn" onclick="ppg37Student('${esc(s.id)}','${esc(x.did)}')">Materi / Catatan</button>`:'<span></span>'}</div>`}
 window.ppg37Status=(id,did,v)=>{const a=ss(),s=a.find(x=>x.id===id),x=s?.students.find(y=>y.did===did);if(x)x.status=v;saveSS(a);kelas();setTimeout(()=>detail(id),0)};
-window.ppg37AddGeneral=id=>{const t=document.getElementById('p37gm')?.value.trim();if(!t)return;const a=ss(),s=a.find(x=>x.id===id);s.generalMaterials.push({text:t,at:new Date().toISOString()});saveSS(a);detail(id)};
+window.ppg37AddGeneral=id=>{const t=document.getElementById('p37gm')?.value.trim();if(!t)return;const a=ss(),s=a.find(x=>x.id===id);s.generalMaterials.push({text:t,at:ubnbWibIso84()});saveSS(a);detail(id)};
 function modal(){if(document.getElementById('p37modal'))return;document.body.insertAdjacentHTML('beforeend','<div id="p37modal" class="ppg37-modal"><div class="ppg37-modal-card"><div class="ppg37-modal-head"><b id="p37mt">Murid</b><button class="ppg37-close" onclick="ppg37CloseM()">✕</button></div><div id="p37mb" class="ppg37-modal-body"></div></div></div>')}
 window.ppg37CloseM=()=>document.getElementById('p37modal')?.classList.remove('show');window.ppg37Student=(id,did)=>{modal();const s=ss().find(x=>x.id===id),x=s?.students.find(y=>y.did===did),m=s?.studentMaterials?.[did]||[],n=s?.studentNotes?.[did]||'';document.getElementById('p37mt').textContent=x?.nama||'';document.getElementById('p37mb').innerHTML=`<div class="ppg37-material-box"><b>Materi Khusus</b><div class="ppg37-material-row" style="margin-top:6px"><input id="p37sm" placeholder="Materi khusus untuk murid ini"><button class="ppg-btn" onclick="ppg37AddStudent('${esc(id)}','${esc(did)}')">+ Tambah</button></div><div>${m.map(z=>`<span class="ppg37-chip">${esc(z.text)}</span>`).join('')}</div></div><div class="ppg37-field"><label>Catatan Khusus</label><input value="${esc(n)}" onblur="ppg37StudentNote('${esc(id)}','${esc(did)}',this.value)" placeholder="Catatan khusus"></div>`;document.getElementById('p37modal').classList.add('show')};
-window.ppg37AddStudent=(id,did)=>{const t=document.getElementById('p37sm')?.value.trim();if(!t)return;const a=ss(),s=a.find(x=>x.id===id);s.studentMaterials[did]=s.studentMaterials[did]||[];s.studentMaterials[did].push({text:t,at:new Date().toISOString()});saveSS(a);ppg37Student(id,did)};window.ppg37StudentNote=(id,did,v)=>{const a=ss(),s=a.find(x=>x.id===id);s.studentNotes[did]=v||'';saveSS(a)};
+window.ppg37AddStudent=(id,did)=>{const t=document.getElementById('p37sm')?.value.trim();if(!t)return;const a=ss(),s=a.find(x=>x.id===id);s.studentMaterials[did]=s.studentMaterials[did]||[];s.studentMaterials[did].push({text:t,at:ubnbWibIso84()});saveSS(a);ppg37Student(id,did)};window.ppg37StudentNote=(id,did,v)=>{const a=ss(),s=a.find(x=>x.id===id);s.studentNotes[did]=v||'';saveSS(a)};
 window.ppg37Finish=id=>{finishMode=true;detail(id)};function finishPanel(s){return `<div class="ppg37-finish-panel"><b>Selesaikan Kelas</b><div class="ppg-mini-note" style="margin:4px 0 7px">Tambahkan catatan umum atau khusus.</div><textarea id="p37gn" placeholder="Catatan umum">${esc(s.generalNote||'')}</textarea><div class="ppg37-note-grid">${s.students.map(x=>`<div class="ppg37-note-row"><b>${esc(x.nama)}</b><input class="p37fn" data-id="${esc(x.did)}" value="${esc(s.studentNotes[x.did]||'')}" placeholder="Catatan khusus (opsional)"></div>`).join('')}</div><div class="ppg36-actions"><button class="ppg-btn secondary" onclick="finishMode=false;ppg37Open('${esc(s.id)}')">Batal</button><button class="ppg-btn gold" onclick="ppg37Close('${esc(s.id)}')">Tutup Kelas</button></div></div>`}
-window.ppg37Close=id=>{const a=ss(),s=a.find(x=>x.id===id);s.generalNote=document.getElementById('p37gn')?.value||'';document.querySelectorAll('.p37fn').forEach(x=>s.studentNotes[x.dataset.id]=x.value||'');s.status='finished';s.finishedAt=new Date().toISOString();s.finishedBy=CU?.nama||CU?.username||'-';saveSS(a);log('TUTUP_KELAS',{sessionId:id,className:s.className,teacherName:s.teacherName,date:s.date},null);finishMode=false;tab='history';kelas()};
+window.ppg37Close=id=>{const a=ss(),s=a.find(x=>x.id===id);s.generalNote=document.getElementById('p37gn')?.value||'';document.querySelectorAll('.p37fn').forEach(x=>s.studentNotes[x.dataset.id]=x.value||'');s.status='finished';s.finishedAt=ubnbWibIso84();s.finishedBy=CU?.nama||CU?.username||'-';saveSS(a);log('TUTUP_KELAS',{sessionId:id,className:s.className,teacherName:s.teacherName,date:s.date},null);finishMode=false;tab='history';kelas()};
 function dAfter(d){const x=new Date(d+'T00:00:00');x.setDate(x.getDate()+1);return x.toISOString().slice(0,10)} function d30(d){const x=new Date(d+'T00:00:00');x.setDate(x.getDate()+30);return x.toISOString().slice(0,10)}
 function fin(){return vis().filter(s=>s.status==='finished').sort((a,b)=>a.date.localeCompare(b.date))}function nextP(){const a=fin();if(!a.length)return null;const rr=J(R,[]).filter(r=>ctl()||r.scope===sid()).sort((a,b)=>a.end.localeCompare(b.end));const st=rr.length?dAfter(rr.at(-1).end):a[0].date,la=a.at(-1).date;if(st>la)return null;const cp=d30(st);return {start:st,end:la<cp?la:cp}}
-window.ppg37GenReport=()=>{const p=nextP();if(!p)return toast('Belum ada kegiatan baru untuk laporan.',true);const ids=fin().filter(s=>s.date>=p.start&&s.date<=p.end).map(s=>s.id),a=J(R,[]);a.push({id:'R'+Date.now(),scope:sid(),start:p.start,end:p.end,ids,by:CU?.nama||CU?.username,at:new Date().toISOString()});W(R,a);report()};
+window.ppg37GenReport=()=>{const p=nextP();if(!p)return toast('Belum ada kegiatan baru untuk laporan.',true);const ids=fin().filter(s=>s.date>=p.start&&s.date<=p.end).map(s=>s.id),a=J(R,[]);a.push({id:'R'+Date.now(),scope:sid(),start:p.start,end:p.end,ids,by:CU?.nama||CU?.username,at:ubnbWibIso84()});W(R,a);report()};
 function pivot(k,a){const s=a.filter(x=>x.className===k);if(!s.length)return'';const ds=[...new Set(s.map(x=>x.date))].sort(),m=new Map();s.forEach(z=>z.students.forEach(x=>{if(!m.has(x.did))m.set(x.did,{nama:x.nama,st:{}});m.get(x.did).st[z.date]=x.status}));return `<div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">${esc(k)}</div></div><div class="ppg37-pivot-wrap"><table class="ppg37-pivot"><thead><tr><th>Nama Murid</th>${ds.map(d=>`<th>${esc(d.slice(5))}</th>`).join('')}<th>Total Hadir</th><th>%</th></tr></thead><tbody>${[...m.values()].sort((a,b)=>a.nama.localeCompare(b.nama,'id')).map(r=>{const v=ds.map(d=>r.st[d]||'—'),hh=v.filter(x=>x==='Hadir').length,p=Math.round(hh/ds.length*100);return `<tr><td class="name">${esc(r.nama)}</td>${v.map(x=>`<td>${x==='Hadir'?'H':x==='Izin'?'I':x==='Belum Hadir'?'B':'—'}</td>`).join('')}<td>${hh}</td><td>${p}%</td></tr>`}).join('')}</tbody></table></div></div>`}
 function mats(a){const m=new Map();a.forEach(s=>{s.generalMaterials.forEach(x=>{const k='Umum|'+x.text.toLowerCase();if(!m.has(k))m.set(k,{t:'Umum',x:x.text,n:0,c:new Set()});m.get(k).n++;m.get(k).c.add(s.className)});Object.values(s.studentMaterials||{}).flat().forEach(x=>{const k='Khusus|'+x.text.toLowerCase();if(!m.has(k))m.set(k,{t:'Khusus',x:x.text,n:0,c:new Set()});m.get(k).n++;m.get(k).c.add(s.className)})});return [...m.values()]}
 function report(){const e=document.getElementById('ppg-page-laporan');if(!e)return;const rr=J(R,[]).filter(r=>ctl()||r.scope===sid()).sort((a,b)=>b.end.localeCompare(a.end)),n=nextP(),r=rr[0];let c='<div class="ppg-empty">Belum ada laporan yang digenerate.</div>';if(r){const a=ss().filter(s=>r.ids.includes(s.id)),mm=mats(a);c=`<div class="ppg37-report-toolbar"><div><b>Periode ${esc(r.start)} s.d ${esc(r.end)}</b><br><span class="ppg-mini-note">Dibuat oleh ${esc(r.by)}</span></div></div><div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Performa Kehadiran Generus</div></div></div>${C.map(k=>pivot(k,a)).join('')}<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">Pencapaian Materi</div><div class="ppg-panel-sub">Tanpa menyebut nama murid.</div></div></div><div class="ppg-panel-body">${mm.length?`<div class="ppg37-mat-report">${mm.map(x=>`<div class="ppg37-mat-item"><b>${x.t}</b><span>${esc(x.x)}<br><span class="ppg-mini-note">${esc([...x.c].join(', '))}</span></span><span>${x.n}×</span></div>`).join('')}</div>`:'<div class="ppg-empty">Belum ada materi.</div>'}</div></div>`}e.innerHTML=`<div class="ppg-v33-stage"><div><div class="ppg-v33-stage-title">Laporan PPG</div><div class="ppg-v33-stage-sub">Periode berlanjut dari laporan terakhir, maksimum ±1 bulan.</div></div></div><div class="ppg37-report-toolbar"><div>${n?`Periode berikutnya: <b>${esc(n.start)} s.d ${esc(n.end)}</b>`:'Tidak ada kegiatan baru.'}</div><button class="ppg-btn" onclick="ppg37GenReport()" ${n?'':'disabled'}>Generate Laporan Berikutnya</button></div>${c}`}
-function loggerPage(){const e=document.getElementById('ppg-page-logger');if(!e)return;if(!superU()){e.innerHTML='<div class="ppg-empty">Tidak ada akses.</div>';return}const a=J(L,[]).slice().reverse();e.innerHTML=`<div style="overflow:auto"><table class="ppg37-logger-table"><thead><tr><th>Waktu</th><th>Aktivitas</th><th>Akun</th><th>Scope</th><th>Kelas</th><th>Guru</th><th>Lokasi</th></tr></thead><tbody>${a.map(x=>`<tr><td>${esc(x.at)}</td><td>${esc(x.type)}</td><td>${esc(x.account)}</td><td>${esc(x.scope)}</td><td>${esc(x.className||'-')}</td><td>${esc(x.teacherName||'-')}</td><td>${x.gps?`${x.gps.lat.toFixed(6)}, ${x.gps.lng.toFixed(6)}<br><span class="ppg-mini-note">±${Math.round(x.gps.accuracy||0)} m</span>`:'—'}</td></tr>`).join('')}</tbody></table></div>`}
+function loggerPage(){const e=document.getElementById('ppg-page-logger');if(!e)return;if(!superU()){e.innerHTML='<div class="ppg-empty">Tidak ada akses.</div>';return}const a=J(L,[]).slice().reverse();e.innerHTML=`<div style="overflow:auto"><table class="ppg37-logger-table"><thead><tr><th>Waktu</th><th>Aktivitas</th><th>Akun</th><th>Scope</th><th>Kelas</th><th>Guru</th><th>Lokasi</th></tr></thead><tbody>${a.map(x=>`<tr><td>${esc(ubnbFmtWib84(x.at,true))}</td><td>${esc(x.type)}</td><td>${esc(x.account)}</td><td>${esc(x.scope)}</td><td>${esc(x.className||'-')}</td><td>${esc(x.teacherName||'-')}</td><td>${x.gps?`${x.gps.lat.toFixed(6)}, ${x.gps.lng.toFixed(6)}<br><span class="ppg-mini-note">±${Math.round(x.gps.accuracy||0)} m</span>`:'—'}</td></tr>`).join('')}</tbody></table></div>`}
 function dash(){const e=document.getElementById('ppg-page-dashboard');if(!e)return;const a=vis(),ac=a.filter(s=>s.status==='active'&&s.date===today()).length,done=a.filter(s=>s.status==='finished'&&s.date===today()).length,st=a.filter(s=>s.status==='finished').flatMap(s=>s.students||[]),th=a.filter(s=>s.status==='finished').flatMap(s=>s.teacherAttendance||[]),hp=st.filter(x=>x.status==='Hadir').length,tp=th.filter(x=>['Hadir','Terlambat'].includes(x.status)).length;e.innerHTML=`<div class="ppg-v33-stage"><div><div class="ppg-v33-stage-title">${ctl()?'Controller Desa':esc(sc()?.label||'PPG')}</div><div class="ppg-v33-stage-sub">${ctl()?'Monitoring aktivitas KBM':'Operasional kegiatan KBM'}</div></div></div><div class="ppg-grid-4"><div class="ppg-stat"><div class="ppg-stat-label">Generus</div><div class="ppg-stat-value">${gen().length}</div></div><div class="ppg-stat"><div class="ppg-stat-label">Dewan Guru</div><div class="ppg-stat-value">${teachers().length}</div></div><div class="ppg-stat"><div class="ppg-stat-label">Kelas Hari Ini</div><div class="ppg-stat-value">${ac}</div><div class="ppg-stat-sub">${done} selesai</div></div><div class="ppg-stat"><div class="ppg-stat-label">Kehadiran Generus</div><div class="ppg-stat-value">${st.length?Math.round(hp/st.length*100):0}%</div></div></div><div class="ppg-grid-3"><div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Kelas Aktif Hari Ini</div></div><div class="ppg-panel-body">${activeCards()}</div></div><div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Kehadiran Dewan Guru</div></div><div class="ppg-panel-body"><div class="ppg-stat-value">${th.length?Math.round(tp/th.length*100):0}%</div></div></div><div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Laporan</div></div><div class="ppg-panel-body"><div class="ppg-stat-value">${J(R,[]).filter(r=>ctl()||r.scope===sid()).length}</div></div></div></div>`}
 window.ppgOpenPage=function(p,b){if(p==='absen')p='kelas';if(p==='generus')p='setup';document.querySelectorAll('.ppg-page').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.ppg-tab').forEach(x=>x.classList.remove('active'));document.getElementById('ppg-page-'+p)?.classList.add('active');b?.classList.add('active');setTabs();if(p==='dashboard')dash();else if(p==='setup')setup();else if(p==='kelas')kelas();else if(p==='guru')window.ppgRenderGuru35?.();else if(p==='kurikulum')window.ppgRenderKurikulum35?.();else if(p==='laporan')report();else if(p==='logger')loggerPage()};
 window.ppgRenderAll=function(){setTabs();dash();if(!ctl())setup();kelas();window.ppgRenderGuru35?.();window.ppgRenderKurikulum35?.();report();if(superU())loggerPage()};
@@ -20170,7 +20265,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
   function today(){
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
-    catch(_){return new Date().toISOString().slice(0,10)}
+    catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   function sessions(){return getJson(SESSION_KEY,[])}
@@ -20343,7 +20438,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       umur:Number.isFinite(umur)?umur:null,
       kelas,
       scope:scopeId(),
-      created_at:new Date().toISOString(),
+      created_at:ubnbWibIso84(),
       created_by:CU?.nama||CU?.username||'-'
     });
     saveSimpatisan(rows);
@@ -20492,7 +20587,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   function logStart(s,gps){
     const rows=getJson(LOGGER_KEY,[]);
     rows.push({
-      at:new Date().toISOString(),
+      at:ubnbWibIso84(),
       type:'MULAI_KELAS',
       account:CU?.nama||CU?.username||'-',
       scope:scopeId(),
@@ -20551,7 +20646,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       className:kelas,
       teacherDid:String(did),
       teacherName:t.nama,
-      startedAt:new Date().toISOString(),
+      startedAt:ubnbWibIso84(),
       startedBy:CU?.nama||CU?.username||'-',
       status:'pending',
       teacherAttendance:[],
@@ -20643,7 +20738,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       end:p.end,
       ids,
       by:CU?.nama||CU?.username||'-',
-      at:new Date().toISOString()
+      at:ubnbWibIso84()
     });
     setJson(REPORT_KEY,rr);
     renderReport();
@@ -21170,7 +21265,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
   function today(){
     try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
-    catch(_){return new Date().toISOString().slice(0,10)}
+    catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   async function gpsSilent(){
@@ -21190,7 +21285,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   function loggerStart(s,gps){
     const rows=read(LOGGER_KEY,[]);
     rows.push({
-      at:new Date().toISOString(),
+      at:ubnbWibIso84(),
       type:'MULAI_KELAS',
       account:CU?.nama||CU?.username||'-',
       scope:scopeId(),
@@ -21243,7 +21338,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       className,
       teacherDid:String(teacher.did),
       teacherName:teacher.nama,
-      startedAt:new Date().toISOString(),
+      startedAt:ubnbWibIso84(),
       startedBy:CU?.nama||CU?.username||'-',
       status:'active',
 
@@ -22948,7 +23043,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     try{return new Intl.DateTimeFormat('en-CA',{
       timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
     }).format(new Date())}
-    catch(_){return new Date().toISOString().slice(0,10)}
+    catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   async function gpsSilent46(){
@@ -22968,7 +23063,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   function logStart46(s,gps){
     const rows=get46(LOGGER_KEY,[]);
     rows.push({
-      at:new Date().toISOString(),type:'MULAI_KELAS',
+      at:ubnbWibIso84(),type:'MULAI_KELAS',
       account:CU?.nama||CU?.username||'-',scope:scopeId46(),
       sessionId:s.id,className:s.className,teacherName:s.teacherName,gps
     });
@@ -23088,7 +23183,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       className,
       teacherDid:String(teacher.did),
       teacherName:teacher.nama,
-      startedAt:new Date().toISOString(),
+      startedAt:ubnbWibIso84(),
       startedBy:CU?.nama||CU?.username||'-',
       status:'active',
       teacherAttendance:[{
@@ -23357,7 +23452,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       if(!rows.some(x=>String(x.did)===String(did))){
         rows.push({
           did:String(did),kelompok_nama:j.kelompok_nama||scopeId46(),
-          role,created_at:new Date().toISOString()
+          role,created_at:ubnbWibIso84()
         });
         set46(CUSTOM_GURU_KEY,rows);
       }
@@ -23987,7 +24082,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
   window.ppg46StartClass=async function(){
     const teacherDid=document.getElementById('ppg46-start-teacher')?.value||'';
-    const date=document.getElementById('ppg46-start-date')?.value||new Date().toISOString().slice(0,10);
+    const date=document.getElementById('ppg46-start-date')?.value||ubnbWibIso84().slice(0,10);
     const className=window.__ppg47StartSelected||'';
 
     if(!teacherDid){toast('Pilih guru terlebih dahulu.',true);return}
@@ -24008,7 +24103,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const s={
       id:'K'+Date.now(),scope:scopeId(),date,className,
       teacherDid:String(t.did),teacherName:t.nama,
-      startedAt:new Date().toISOString(),startedBy:CU?.nama||CU?.username||'-',
+      startedAt:ubnbWibIso84(),startedBy:CU?.nama||CU?.username||'-',
       status:'active',
       teacherAttendance:[{did:String(t.did),nama:t.nama,status:'Hadir',source:'selected_teacher'}],
       students,generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}
@@ -24020,7 +24115,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       if(navigator.geolocation){
         navigator.geolocation.getCurrentPosition(p=>{
           const logs=get('ubnb_ppg_v37_logger',[]);
-          logs.push({at:new Date().toISOString(),type:'MULAI_KELAS',account:CU?.nama||CU?.username||'-',
+          logs.push({at:ubnbWibIso84(),type:'MULAI_KELAS',account:CU?.nama||CU?.username||'-',
             scope:scopeId(),sessionId:s.id,className,teacherName:t.nama,
             gps:{lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy}});
           set('ubnb_ppg_v37_logger',logs);
@@ -24257,7 +24352,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       umur:Number.isFinite(umur)?umur:null,
       kelas,
       scope:scopeValue,
-      created_at:new Date().toISOString(),
+      created_at:ubnbWibIso84(),
       created_by:CU?.nama||CU?.username||'-'
     });
 
@@ -24869,7 +24964,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date())
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   function visibleSessions(){
@@ -24901,7 +24996,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   function logStart(s,gps){
     const logs=get(LOGGER_KEY,[]);
     logs.push({
-      at:new Date().toISOString(),
+      at:ubnbWibIso84(),
       type:'MULAI_KELAS',
       account:CU?.nama||CU?.username||'-',
       scope:scopeId(),
@@ -25059,7 +25154,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       teacherDid:String(t.did),
       teacherName:t.nama,
       substituteTeacher:isSubstitute,
-      startedAt:new Date().toISOString(),
+      startedAt:ubnbWibIso84(),
       startedBy:CU?.nama||CU?.username||'-',
       status:'active',
       teacherAttendance:[{
@@ -25320,7 +25415,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           did:String(did),
           kelompok_nama:j.kelompok_nama||scopeId(),
           role,
-          created_at:new Date().toISOString()
+          created_at:ubnbWibIso84()
         });
         set(CUSTOM_GURU_KEY,rows);
       }
@@ -25801,7 +25896,7 @@ body.ppg54-lock-page{
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date());
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
   function safeFile(s){
     return String(s||'data')
@@ -26194,13 +26289,13 @@ body.ppg54-lock-page{
     });
 
     s.status='finished';
-    s.finishedAt=new Date().toISOString();
+    s.finishedAt=ubnbWibIso84();
     s.finishedBy=CU?.nama||CU?.username||'-';
     set(SESSION_KEY,all);
 
     const logs=get('ubnb_ppg_v37_logger',[]);
     logs.push({
-      at:new Date().toISOString(),
+      at:ubnbWibIso84(),
       type:'TUTUP_KELAS',
       account:CU?.nama||CU?.username||'-',
       scope:s.scope||scopeId(),
@@ -26981,7 +27076,7 @@ body.ppg54-lock-page{
       end:p.end,
       ids,
       by:CU?.nama||CU?.username||'-',
-      at:new Date().toISOString()
+      at:ubnbWibIso84()
     };
     all.push(rec);
     saveReports(all);
@@ -27577,7 +27672,7 @@ body.ppg54-lock-page{
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date())
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   /* =======================================================
@@ -28030,7 +28125,7 @@ body.ppg54-lock-page{
       end:p.end,
       ids,
       by:CU?.nama||CU?.username||'-',
-      at:new Date().toISOString()
+      at:ubnbWibIso84()
     };
     all.push(rec);saveReports(all);
     selectedReport56=rec.id;
@@ -28069,7 +28164,7 @@ body.ppg54-lock-page{
         <div class="ppg56-generate-row">
           <div>
             <b style="color:#175a3a">Periode ${esc(r.start)} s.d ${esc(r.end)}</b><br>
-            <span class="ppg56-report-note">Dibuat ${new Date(r.at||Date.now()).toLocaleString('id-ID')} oleh ${esc(r.by||'-')}</span>
+            <span class="ppg56-report-note">Dibuat ${ubnbFmtWib84(r.at||Date.now(),false)} oleh ${esc(r.by||'-')}</span>
           </div>
           <div class="ppg56-report-buttons">
             <button id="ppg56-download-report" class="ppg56-report-btn primary" type="button">Download PDF Presentasi</button>
@@ -28340,7 +28435,7 @@ body.ppg54-lock-page{
     });
 
     doc.setTextColor(130,142,135);doc.setFont('helvetica','normal');doc.setFontSize(6);
-    doc.text(`Dibuat oleh ${r.by||'-'} · ${new Date(r.at||Date.now()).toLocaleDateString('id-ID')}`,margin,pageH-5);
+    doc.text(`Dibuat oleh ${r.by||'-'} · ${ubnbFmtWibDate84(r.at||Date.now())}`,margin,pageH-5);
     doc.text(`${pageNo}/${totalPages}`,pageW-margin,pageH-5,{align:'right'});
   }
 
@@ -28459,7 +28554,7 @@ body.ppg54-lock-page{
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date())
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
   function safeFile(s){
     return String(s||'data')
@@ -29080,7 +29175,7 @@ body.ppg54-lock-page{
     doc.setTextColor(125,137,130);
     doc.setFont('helvetica','normal');
     doc.setFontSize(7);
-    doc.text(`Dibuat oleh ${r.by||'-'} · ${new Date(r.at||Date.now()).toLocaleDateString('id-ID')}`,margin,pageH-5);
+    doc.text(`Dibuat oleh ${r.by||'-'} · ${ubnbFmtWibDate84(r.at||Date.now())}`,margin,pageH-5);
     doc.text(`${pageNo}/${totalPages}`,pageW-margin,pageH-5,{align:'right'});
   }
 
@@ -29218,7 +29313,7 @@ body.ppg54-lock-page{
 
       if(e.generated){
         const ts=e.raw?.participants_generated_at
-          ?' · '+new Date(e.raw.participants_generated_at).toLocaleString('id-ID')
+          ?' · '+ubnbFmtWib84(e.raw.participants_generated_at,false)
           :'';
         info.innerHTML=`👥 <b>${e.participant_count||0} peserta</b>${ts}`;
       }else if(calendarH7Ready(e)){
@@ -30001,7 +30096,7 @@ body.ppg54-lock-page{
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date())
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
   function safeFile63(s){
     return String(s||'data').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,'_');
@@ -30386,7 +30481,7 @@ body.ppg54-lock-page{
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date())
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   function safeFile64(s){
@@ -30813,7 +30908,7 @@ body.ppg54-lock-page{
       return new Intl.DateTimeFormat('en-CA',{
         timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date())
-    }catch(_){return new Date().toISOString().slice(0,10)}
+    }catch(_){return ubnbWibIso84().slice(0,10)}
   }
 
   function safeFile65(s){
@@ -32405,7 +32500,7 @@ body.ppg54-lock-page{
         type:'pengurus',
         did:String(CU.did),
         nama:CU.nama||CU.username||'',
-        saved_at:new Date().toISOString()
+        saved_at:ubnbWibIso84()
       }));
     }catch(e){
       console.warn('[Remember login pengurus]',e);
@@ -32418,7 +32513,7 @@ body.ppg54-lock-page{
       localStorage.setItem(REMEMBER_KEY,JSON.stringify({
         type:'umum',
         cu:CU,
-        saved_at:new Date().toISOString()
+        saved_at:ubnbWibIso84()
       }));
     }catch(e){
       console.warn('[Remember login umum]',e);
@@ -35620,6 +35715,450 @@ ${body}
   window.ubnb82ReportStats = {
     kkSummaryHidden: true,
     note: 'Report/export only: statistik KK disembunyikan; statistik jamaah tetap.'
+  };
+})();
+</script>
+
+
+
+<style id="ubnb-v83-isrun-code-admin-style">
+#modal-isrun-code-admin{z-index:5700!important}
+#modal-isrun-code-admin .modal-row{margin-bottom:10px}
+#modal-isrun-code-admin .modal-row label{display:block;font-size:10px;font-weight:800;color:var(--text-muted);margin-bottom:5px}
+@media(max-width:620px){
+  #modal-isrun-code-admin{padding:10px!important}
+  #modal-isrun-code-admin .modal{width:calc(100vw - 20px)!important;max-width:none!important}
+}
+</style>
+
+
+<script id="ubnb-v83-isrun-code-admin-script">
+(function(){
+  let isrunAdminRows83=[];
+
+  async function ensureIsrunToken83(){
+    if(DK_ATT_TOKEN)return DK_ATT_TOKEN;
+    await dkAttendanceAuthenticate();
+    return DK_ATT_TOKEN;
+  }
+
+  function setIsrunLockError83(msg){
+    const e=document.getElementById('isrun-lock-err');
+    if(!e)return;
+    e.textContent=msg||'';
+    e.style.display=msg?'block':'none';
+  }
+
+  async function loadIsrunAdmin83(silent=true){
+    const b1=document.getElementById('isrun-admin-code-btn');
+    const b2=document.getElementById('isrun-admin-code-btn-open');
+    try{
+      const token=await ensureIsrunToken83();
+      const {data,error}=await sb.rpc('dashboard_isrun_code_admin_status',{p_token:token});
+      if(error)throw error;
+
+      const can=!!data?.can_admin;
+      if(b1)b1.style.display=can?'block':'none';
+      if(b2)b2.style.display=can?'block':'none';
+
+      isrunAdminRows83=Array.isArray(data?.rows)?data.rows:[];
+      return can;
+    }catch(e){
+      if(b1)b1.style.display='none';
+      if(b2)b2.style.display='none';
+      if(!silent)toast('Gagal cek akses admin kode: '+(e.message||e),true);
+      return false;
+    }
+  }
+
+  function fmtAdminDate83(v){
+    if(!v)return '-';
+    try{
+      return new Intl.DateTimeFormat('id-ID',{
+        day:'2-digit',month:'short',year:'numeric',
+        hour:'2-digit',minute:'2-digit',
+        timeZone:'Asia/Jakarta'
+      }).format(new Date(v))+' WIB';
+    }catch(_){return String(v)}
+  }
+
+  function updateAdminScopeInfo83(){
+    const scope=document.getElementById('isrun-admin-scope')?.value||'DESA';
+    const row=isrunAdminRows83.find(x=>x.scope_key===scope);
+    const el=document.getElementById('isrun-admin-last');
+    if(el){
+      el.textContent=row?.updated_at
+        ?`Terakhir diubah: ${fmtAdminDate83(row.updated_at)}`
+        :'Belum ada riwayat perubahan.';
+    }
+  }
+
+  window.openIsrunCodeAdmin=async function(){
+    const ok=await loadIsrunAdmin83(false);
+    if(!ok){
+      toast('Akses Admin kode IR/ISRUN tidak tersedia untuk akun ini.',true);
+      return;
+    }
+
+    const scopeEl=document.getElementById('isrun-admin-scope');
+    if(scopeEl){
+      scopeEl.value=CU?.kelompok_scope||'DESA';
+      scopeEl.onchange=updateAdminScopeInfo83;
+    }
+
+    document.getElementById('isrun-admin-code1').value='';
+    document.getElementById('isrun-admin-code2').value='';
+
+    const st=document.getElementById('isrun-admin-status');
+    if(st){
+      st.className='msg info';
+      st.textContent='Pilih scope, lalu buat kode akses baru.';
+    }
+
+    updateAdminScopeInfo83();
+    openMod('modal-isrun-code-admin');
+    setTimeout(()=>document.getElementById('isrun-admin-code1')?.focus(),80);
+  };
+
+  window.saveIsrunAdminCode=async function(){
+    const scope=document.getElementById('isrun-admin-scope')?.value||'';
+    const c1=(document.getElementById('isrun-admin-code1')?.value||'').trim();
+    const c2=(document.getElementById('isrun-admin-code2')?.value||'').trim();
+    const st=document.getElementById('isrun-admin-status');
+    const btn=document.getElementById('btn-isrun-admin-save');
+
+    const fail=(m)=>{
+      if(st){
+        st.className='msg err';
+        st.textContent=m;
+      }
+    };
+
+    if(c1.length<4){fail('Kode minimal 4 karakter.');return}
+    if(/\s/.test(c1)){fail('Kode tidak boleh mengandung spasi.');return}
+    if(c1!==c2){fail('Pengulangan kode tidak sama.');return}
+
+    const old=btn?.textContent;
+    if(btn){btn.disabled=true;btn.textContent='⏳ Menyimpan...';}
+
+    try{
+      const token=await ensureIsrunToken83();
+      const {data,error}=await sb.rpc('dashboard_isrun_code_admin_set',{
+        p_token:token,
+        p_scope_key:scope,
+        p_new_code:c1
+      });
+      if(error)throw error;
+      if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan kode');
+
+      sessionStorage.removeItem(ISRUN_KODE_KEY);
+
+      if(st){
+        st.className='msg ok';
+        st.textContent=`✅ Kode ${scope} berhasil diganti.`;
+      }
+
+      document.getElementById('isrun-admin-code1').value='';
+      document.getElementById('isrun-admin-code2').value='';
+      await loadIsrunAdmin83(true);
+      updateAdminScopeInfo83();
+
+      try{
+        await dkLog('ISRUN_GANTI_KODE',{scope});
+      }catch(_){}
+
+      toast(`✅ Kode akses ${scope} berhasil diganti`);
+    }catch(e){
+      fail(e.message||'Gagal menyimpan kode');
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent=old||'💾 Simpan Kode Baru';}
+    }
+  };
+
+  /* Replace hardcoded client-side password check with server-side verification. */
+  window.unlockIsrun=async function(){
+    const inp=document.getElementById('isrun-kode');
+    const kode=(inp?.value||'').trim();
+    if(!kode){
+      setIsrunLockError83('Masukkan kode dulu');
+      return;
+    }
+
+    setIsrunLockError83('');
+
+    try{
+      const token=await ensureIsrunToken83();
+      const {data,error}=await sb.rpc('dashboard_isrun_code_verify',{
+        p_token:token,
+        p_code:kode
+      });
+      if(error)throw error;
+      if(!data?.ok)throw new Error(data?.error||'Kode salah');
+
+      sessionStorage.setItem(ISRUN_KODE_KEY,'1');
+      document.getElementById('isrun-lock').style.display='none';
+      document.getElementById('isrun-content').style.display='block';
+      if(inp)inp.value='';
+
+      toast('🔓 Akses IR/ISRUN dibuka');
+      renderIsrunAll();
+      loadIsrunAdmin83(true);
+    }catch(e){
+      setIsrunLockError83(e.message||'Kode salah atau akses ditolak');
+      if(inp)inp.value='';
+      setTimeout(()=>inp?.focus(),50);
+    }
+  };
+
+  /* Keep the existing session-unlock behavior, while refreshing Admin visibility. */
+  const oldCheck83=window.checkIsrunUnlock;
+  window.checkIsrunUnlock=function(){
+    const r=typeof oldCheck83==='function'?oldCheck83.apply(this,arguments):undefined;
+    loadIsrunAdmin83(true);
+    return r;
+  };
+
+  /* On initial logged-in dashboard load. */
+  setTimeout(()=>loadIsrunAdmin83(true),800);
+
+  window.ubnb83IsrunCodeAdmin={
+    refresh:loadIsrunAdmin83,
+    scopeInfo:updateAdminScopeInfo83
+  };
+})();
+</script>
+
+
+
+<script id="ubnb-v84-wib-marker">
+window.ubnb84WIB={
+  timezone:'Asia/Jakarta',
+  offset:'+07:00',
+  note:'Semua timestamp log baru dari dashboard/PPG memakai offset WIB. Timestamp lama ditampilkan dalam WIB.'
+};
+</script>
+
+
+
+<style id="ubnb-v85-master-login-code-style">
+#login-master-code-wrap input{
+  width:100%;
+  padding:10px 12px;
+  border:1.5px solid var(--border);
+  border-radius:7px;
+  font-size:14px;
+  font-family:inherit;
+  outline:none;
+}
+#login-master-code-wrap input:focus{
+  border-color:var(--green);
+  box-shadow:0 0 0 3px rgba(20,107,67,.10);
+}
+#login-master-code-wrap .master-code-note{
+  font-size:10px;
+  color:var(--text-muted);
+}
+</style>
+
+
+<script id="ubnb-v85-master-login-code-script">
+(function(){
+  const MASTER_DID_85='4075';
+  const MASTER_CODE_HASH_85='6f3cd49bf6e3ffb677d7bb0da2a4c2dc388c23baef3f5a2bb9d160fcc10142c6';
+  const MASTER_SESSION_KEY_85='ubnb_master_verified_v85';
+  const MASTER_FAIL_KEY_85='ubnb_master_fail_v85';
+  const REMEMBER_KEY_85='ubnb_dashboard_last_login_v70';
+
+  function isMasterPick85(){
+    try{return String(loginPengurusPick?.did||'')===MASTER_DID_85}catch(_){return false}
+  }
+
+  async function sha256Hex85(value){
+    const enc=new TextEncoder().encode(String(value||''));
+    const dig=await crypto.subtle.digest('SHA-256',enc);
+    return [...new Uint8Array(dig)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  function setMasterCodeVisible85(show){
+    const wrap=document.getElementById('login-master-code-wrap');
+    const inp=document.getElementById('login-master-code');
+    const btn=document.getElementById('btn-login-pengurus');
+
+    if(wrap)wrap.style.display=show?'block':'none';
+    if(!show && inp)inp.value='';
+
+    if(btn && show)btn.textContent='Masuk Admin Master →';
+
+    if(show){
+      setTimeout(()=>inp?.focus(),60);
+    }
+  }
+
+  function failState85(){
+    try{return JSON.parse(sessionStorage.getItem(MASTER_FAIL_KEY_85)||'null')||{n:0,until:0}}
+    catch(_){return {n:0,until:0}}
+  }
+
+  function saveFailState85(x){
+    try{sessionStorage.setItem(MASTER_FAIL_KEY_85,JSON.stringify(x))}catch(_){}
+  }
+
+  function registerFail85(){
+    const now=Date.now();
+    let x=failState85();
+    if(x.until && now>x.until)x={n:0,until:0};
+    x.n=Number(x.n||0)+1;
+    if(x.n>=8)x.until=now+5*60*1000;
+    saveFailState85(x);
+    return x;
+  }
+
+  function clearFail85(){
+    try{sessionStorage.removeItem(MASTER_FAIL_KEY_85)}catch(_){}
+  }
+
+  async function verifyMasterCode85(){
+    const inp=document.getElementById('login-master-code');
+    const code=(inp?.value||'').trim();
+
+    if(!code){
+      setLE('Masukkan kode Admin Master');
+      inp?.focus();
+      return false;
+    }
+
+    const state=failState85();
+    if(state.until && Date.now()<state.until){
+      const sec=Math.ceil((state.until-Date.now())/1000);
+      setLE(`Terlalu banyak percobaan. Coba lagi sekitar ${Math.ceil(sec/60)} menit.`);
+      return false;
+    }
+
+    const hash=await sha256Hex85(code);
+    if(hash!==MASTER_CODE_HASH_85){
+      const x=registerFail85();
+      if(inp)inp.value='';
+      setLE(x.until
+        ?'Kode salah. Login Admin Master dikunci sementara 5 menit.'
+        :'Kode Admin Master salah');
+      inp?.focus();
+      return false;
+    }
+
+    clearFail85();
+    try{
+      sessionStorage.setItem(MASTER_SESSION_KEY_85,JSON.stringify({
+        did:MASTER_DID_85,
+        verified_at:ubnbWibIso84()
+      }));
+    }catch(_){}
+    if(inp)inp.value='';
+    return true;
+  }
+
+  function masterVerified85(){
+    try{
+      const x=JSON.parse(sessionStorage.getItem(MASTER_SESSION_KEY_85)||'null');
+      return String(x?.did||'')===MASTER_DID_85;
+    }catch(_){return false}
+  }
+
+  /*
+    v70 remember-login tidak boleh membuat Admin Master masuk hanya dari nama.
+    Untuk tab/sesi browser baru, remembered DID master dibatalkan sebelum DOMContentLoaded.
+    Refresh pada tab yang sudah terverifikasi tetap boleh lanjut tanpa mengetik ulang.
+  */
+  try{
+    const rem=JSON.parse(localStorage.getItem(REMEMBER_KEY_85)||'null');
+    const editor=JSON.parse(sessionStorage.getItem('dashboard_kelompok_editor_session')||'null');
+
+    if(String(rem?.did||'')===MASTER_DID_85 && !masterVerified85()){
+      sessionStorage.removeItem('dashboard_kelompok_editor_session');
+      sessionStorage.removeItem('dashboard_kelompok_attendance_token');
+    }
+    if(String(editor?.did||'')===MASTER_DID_85 && !masterVerified85()){
+      sessionStorage.removeItem('dashboard_kelompok_editor_session');
+      sessionStorage.removeItem('dashboard_kelompok_attendance_token');
+    }
+  }catch(_){}
+
+  const oldPick85=window.pickPengurusLogin;
+  if(typeof oldPick85==='function'){
+    window.pickPengurusLogin=function(){
+      const r=oldPick85.apply(this,arguments);
+      const master=isMasterPick85();
+      setMasterCodeVisible85(master);
+
+      const acc=document.getElementById('login-pengurus-access');
+      if(master && acc){
+        acc.innerHTML += '<br><span style="color:#9a6700;">🔐 Admin Master wajib memasukkan kode akses.</span>';
+      }
+
+      const btn=document.getElementById('btn-login-pengurus');
+      if(btn && !master)btn.textContent='Masuk →';
+      return r;
+    };
+  }
+
+  const oldSearch85=window.renderPengurusLoginSearch;
+  if(typeof oldSearch85==='function'){
+    window.renderPengurusLoginSearch=function(){
+      setMasterCodeVisible85(false);
+      return oldSearch85.apply(this,arguments);
+    };
+  }
+
+  const oldLogin85=window.doLoginPengurus;
+  if(typeof oldLogin85==='function'){
+    window.doLoginPengurus=async function(){
+      if(isMasterPick85()){
+        const ok=await verifyMasterCode85();
+        if(!ok)return;
+      }
+      return await oldLogin85.apply(this,arguments);
+    };
+  }
+
+  const oldKeluar85=window.keluar;
+  if(typeof oldKeluar85==='function'){
+    window.keluar=async function(){
+      try{
+        sessionStorage.removeItem(MASTER_SESSION_KEY_85);
+        sessionStorage.removeItem(MASTER_FAIL_KEY_85);
+      }catch(_){}
+      return await oldKeluar85.apply(this,arguments);
+    };
+  }
+
+  window.addEventListener('DOMContentLoaded',()=>{
+    const codeInp=document.getElementById('login-master-code');
+    codeInp?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        doLoginPengurus();
+      }
+    });
+
+    /*
+      Jika yang tersimpan adalah master tapi sesi ini belum terverifikasi,
+      pastikan halaman login tetap tampil.
+    */
+    setTimeout(()=>{
+      if(!masterVerified85()){
+        try{
+          const rem=JSON.parse(localStorage.getItem(REMEMBER_KEY_85)||'null');
+          if(String(rem?.did||'')===MASTER_DID_85 && !CU){
+            document.getElementById('login-wrap').style.display='';
+            document.getElementById('app').style.display='none';
+          }
+        }catch(_){}
+      }
+    },150);
+  });
+
+  window.ubnb85MasterLogin={
+    did:MASTER_DID_85,
+    verified:masterVerified85
   };
 })();
 </script>
