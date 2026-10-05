@@ -2551,3 +2551,874 @@ window.ubnb84WIB={
   };
 })();
 
+/* ============================================================
+   v88 — Dashboard PPG: tombol cepat + Buka Kelas
+   - hanya tampil pada scope operasional (MT/MS/Master pada PW1-PW4)
+   - tidak tampil pada Controller Desa / Review Mode
+   - membuka modal Mulai Kelas existing, tanpa membuat flow baru
+   ============================================================ */
+(function(){
+  function canOpenClass88(){
+    try{
+      if(typeof window.ppgCanAct66==='function'){
+        return !!window.ppgCanAct66();
+      }
+    }catch(_){}
+    return false;
+  }
+
+  function dashboardActive88(){
+    const page=document.getElementById('ppg-page-dashboard');
+    return !!page && page.classList.contains('active');
+  }
+
+  function openClass88(){
+    if(!canOpenClass88()){
+      try{toast('Buka Kelas hanya tersedia pada scope operasional PW1-PW4.',true)}catch(_){}
+      return;
+    }
+
+    if(typeof window.ppg52OpenStart==='function'){
+      window.ppg52OpenStart();
+      return;
+    }
+
+    /* fallback aman: masuk tab Kelas lalu panggil modal existing */
+    const tab=document.querySelector('.ppg-tab[data-page="kelas"]');
+    if(typeof window.ppgOpenPage==='function'){
+      window.ppgOpenPage('kelas',tab);
+      setTimeout(()=>{
+        if(typeof window.ppg52OpenStart==='function')window.ppg52OpenStart();
+      },80);
+    }
+  }
+
+  function ensureDashboardButton88(){
+    const page=document.getElementById('ppg-page-dashboard');
+    if(!page)return;
+
+    let btn=document.getElementById('ppg88-open-class');
+    const allow=canOpenClass88();
+
+    if(!allow){
+      btn?.remove();
+      return;
+    }
+
+    const stage=page.querySelector('.ppg-v33-stage');
+    if(!stage)return;
+
+    if(!btn){
+      btn=document.createElement('button');
+      btn.id='ppg88-open-class';
+      btn.type='button';
+      btn.className='ppg52-primary';
+      btn.textContent='+ Buka Kelas';
+      btn.setAttribute('aria-label','Buka kelas baru');
+      btn.onclick=function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        openClass88();
+      };
+    }
+
+    if(btn.parentElement!==stage){
+      btn.remove();
+      const live=stage.querySelector('.ppg-v33-live');
+      if(live)stage.insertBefore(btn,live);
+      else stage.appendChild(btn);
+    }
+  }
+
+  const page=document.getElementById('ppg-page-dashboard');
+  if(page){
+    let timer=0;
+    new MutationObserver(()=>{
+      clearTimeout(timer);
+      timer=setTimeout(ensureDashboardButton88,25);
+    }).observe(page,{childList:true,subtree:true});
+  }
+
+  const oldOpenPage88=window.ppgOpenPage;
+  if(typeof oldOpenPage88==='function'){
+    window.ppgOpenPage=function(){
+      const r=oldOpenPage88.apply(this,arguments);
+      setTimeout(ensureDashboardButton88,0);
+      setTimeout(ensureDashboardButton88,100);
+      return r;
+    };
+  }
+
+  const oldChoosePPG88=window.ppgChoosePPG;
+  if(typeof oldChoosePPG88==='function'){
+    window.ppgChoosePPG=function(){
+      const r=oldChoosePPG88.apply(this,arguments);
+      setTimeout(ensureDashboardButton88,80);
+      setTimeout(ensureDashboardButton88,300);
+      return r;
+    };
+  }
+
+  [0,150,500,1000,2000].forEach(ms=>setTimeout(ensureDashboardButton88,ms));
+
+  window.ppg88DashboardOpenClass={
+    ensure:ensureDashboardButton88,
+    open:openClass88
+  };
+})();
+
+/* ============================================================
+   v89 — Kunci Login per akun
+   PIN 6 digit / WebAuthn platform biometric
+   Gate berada SEBELUM portal pilihan Database / PPG.
+   ============================================================ */
+(function(){
+  const GRANT_KEY='ubnb_login_lock_grant_v89';
+  const LATER_KEY='ubnb_login_lock_later_v89';
+  const EDGE_URL=SURL+'/functions/v1/ubnb-login-lock-webauthn';
+
+  let gatePromise89=null;
+  let setupMethod89='pin';
+  let setupResolve89=null;
+  let authResolve89=null;
+
+  function isPengurus89(){
+    return !!(CU?.did && !CU?._umum_match && CU?.role!=='viewer');
+  }
+
+  function esc89(v){
+    return String(v??'').replace(/[&<>"']/g,c=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function open89(id){
+    document.getElementById(id)?.classList.add('show');
+  }
+  function close89(id){
+    document.getElementById(id)?.classList.remove('show');
+  }
+  function msg89(id,text,type='err'){
+    const e=document.getElementById(id);
+    if(!e)return;
+    e.textContent=text||'';
+    e.className='ubnb89-lock-msg show '+type;
+  }
+  function clearMsg89(id){
+    const e=document.getElementById(id);
+    if(!e)return;
+    e.textContent='';
+    e.className='ubnb89-lock-msg';
+  }
+
+  function injectUI89(){
+    if(document.getElementById('ubnb89-lock-onboard'))return;
+
+    document.body.insertAdjacentHTML('beforeend',`
+      <div class="modal-overlay" id="ubnb89-lock-onboard">
+        <div class="modal ubnb89-lock-card">
+          <div class="modal-head">
+            <strong>🔐 Kunci Login</strong>
+          </div>
+          <div style="padding:15px 16px;">
+            <div class="ubnb89-lock-hero">
+              <div class="ubnb89-lock-icon">🔐</div>
+              <div>
+                <div class="ubnb89-lock-title">Akun Anda belum mengaktifkan Kunci Login</div>
+                <p class="ubnb89-lock-sub">
+                  Aktifkan supaya orang lain tidak bisa masuk hanya dengan memilih nama Anda.
+                  Kunci Login akan diperiksa sebelum pilihan mode Database Perwira / PPG dibuka.
+                </p>
+              </div>
+            </div>
+            <div class="ubnb89-lock-box">
+              <b style="font-size:11px;color:#173c2f;">Pilihan pengamanan</b>
+              <div style="font-size:10px;color:var(--text-muted);line-height:1.45;margin-top:4px;">
+                Gunakan PIN 6 angka sendiri, atau biometrik perangkat melalui sidik jari / Face ID /
+                kunci layar yang tersedia di HP.
+              </div>
+            </div>
+            <div id="ubnb89-onboard-msg" class="ubnb89-lock-msg"></div>
+            <div class="ubnb89-lock-actions">
+              <button class="ubnb89-lock-primary" id="ubnb89-onboard-now">Aktifkan sekarang</button>
+              <button class="ubnb89-lock-secondary" id="ubnb89-onboard-later">Aktifkan nanti</button>
+              <button class="ubnb89-lock-ghost" id="ubnb89-onboard-never">Tidak usah ditanyakan lagi</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="ubnb89-lock-setup">
+        <div class="modal ubnb89-lock-card">
+          <div class="modal-head">
+            <div>
+              <strong>🔐 Aktifkan Kunci Login</strong>
+              <div style="font-size:9.5px;color:var(--text-muted);margin-top:2px;">
+                Pilih satu metode untuk akun ini
+              </div>
+            </div>
+            <button id="ubnb89-setup-back" style="background:#e5e7eb;border:0;border-radius:6px;padding:6px 9px;font-weight:800;cursor:pointer;">←</button>
+          </div>
+          <div style="padding:14px 16px;">
+            <div class="ubnb89-methods">
+              <button class="ubnb89-method active" id="ubnb89-method-pin" type="button">
+                <b>🔢 PIN 6 angka</b>
+                <small>Dibuat sendiri dan berlaku di semua perangkat.</small>
+              </button>
+              <button class="ubnb89-method" id="ubnb89-method-bio" type="button">
+                <b>☝️ Biometrik HP</b>
+                <small>Sidik jari / Face ID / kunci layar melalui WebAuthn.</small>
+              </button>
+            </div>
+
+            <div id="ubnb89-setup-pin">
+              <div class="ubnb89-pin-grid">
+                <input id="ubnb89-pin1" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••••">
+                <input id="ubnb89-pin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="Ulangi PIN">
+              </div>
+              <div class="ubnb89-bio-note" style="margin-top:9px;">
+                PIN harus tepat 6 angka. PIN disimpan sebagai hash di server dan tidak dapat ditampilkan kembali.
+              </div>
+            </div>
+
+            <div id="ubnb89-setup-bio" style="display:none;">
+              <div class="ubnb89-bio-note">
+                HP/browser akan meminta verifikasi biometrik perangkat. Pada perangkat yang mendukung,
+                biasanya berupa sidik jari atau Face ID. Browser dapat memakai PIN/pola layar sebagai fallback perangkat.
+              </div>
+            </div>
+
+            <div id="ubnb89-setup-msg" class="ubnb89-lock-msg"></div>
+
+            <div class="ubnb89-lock-actions two">
+              <button class="ubnb89-lock-ghost" id="ubnb89-setup-cancel">Batal</button>
+              <button class="ubnb89-lock-primary" id="ubnb89-setup-save">Aktifkan PIN</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="ubnb89-lock-auth">
+        <div class="modal ubnb89-lock-card">
+          <div class="modal-head">
+            <strong>🔒 Verifikasi Kunci Login</strong>
+          </div>
+          <div style="padding:15px 16px;">
+            <div class="ubnb89-lock-hero">
+              <div class="ubnb89-lock-icon">👤</div>
+              <div>
+                <div class="ubnb89-lock-title" id="ubnb89-auth-name">Verifikasi akun</div>
+                <p class="ubnb89-lock-sub">
+                  Kunci Login akun ini aktif. Verifikasi dulu sebelum masuk ke Database Perwira / PPG.
+                </p>
+              </div>
+            </div>
+
+            <div id="ubnb89-auth-pin-wrap" style="display:none;">
+              <input id="ubnb89-auth-pin" type="password" inputmode="numeric" maxlength="6"
+                     autocomplete="current-password" placeholder="PIN 6 angka">
+            </div>
+
+            <div id="ubnb89-auth-bio-wrap" style="display:none;">
+              <div class="ubnb89-bio-note">
+                Tekan tombol di bawah, lalu ikuti permintaan sidik jari / biometrik dari HP.
+              </div>
+            </div>
+
+            <div id="ubnb89-auth-msg" class="ubnb89-lock-msg"></div>
+
+            <div class="ubnb89-lock-actions two">
+              <button class="ubnb89-lock-ghost" id="ubnb89-auth-other">Ganti akun</button>
+              <button class="ubnb89-lock-primary" id="ubnb89-auth-go">Verifikasi</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="ubnb89-lock-status">
+        <div class="modal ubnb89-lock-card">
+          <div class="modal-head">
+            <strong>🔐 Kunci Login</strong>
+            <button onclick="document.getElementById('ubnb89-lock-status').classList.remove('show')" style="background:#e5e7eb;border:0;border-radius:6px;padding:6px 9px;font-weight:800;cursor:pointer;">✕</button>
+          </div>
+          <div style="padding:15px 16px;">
+            <div id="ubnb89-status-body"></div>
+            <div class="ubnb89-lock-actions">
+              <button class="ubnb89-lock-primary" id="ubnb89-status-enable" style="display:none;">Aktifkan Kunci Login</button>
+              <button class="ubnb89-lock-ghost" onclick="document.getElementById('ubnb89-lock-status').classList.remove('show')">Tutup</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    const onlyDigits=(el)=>{
+      el?.addEventListener('input',()=>{
+        el.value=el.value.replace(/\D/g,'').slice(0,6);
+      });
+    };
+    onlyDigits(document.getElementById('ubnb89-pin1'));
+    onlyDigits(document.getElementById('ubnb89-pin2'));
+    onlyDigits(document.getElementById('ubnb89-auth-pin'));
+
+    document.getElementById('ubnb89-method-pin').onclick=()=>selectMethod89('pin');
+    document.getElementById('ubnb89-method-bio').onclick=()=>selectMethod89('webauthn');
+
+    document.getElementById('ubnb89-onboard-now').onclick=()=>{
+      clearMsg89('ubnb89-onboard-msg');
+      close89('ubnb89-lock-onboard');
+      openSetup89(true);
+    };
+
+    document.getElementById('ubnb89-onboard-later').onclick=()=>{
+      try{sessionStorage.setItem(LATER_KEY,String(CU?.did||''))}catch(_){}
+      close89('ubnb89-lock-onboard');
+      resolveSetup89(true);
+    };
+
+    document.getElementById('ubnb89-onboard-never').onclick=async()=>{
+      const b=document.getElementById('ubnb89-onboard-never');
+      const old=b.textContent;b.disabled=true;b.textContent='Menyimpan...';
+      try{
+        const {data,error}=await sb.rpc('dashboard_login_lock_prompt_dismiss',{p_did:String(CU.did)});
+        if(error)throw error;
+        if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan pilihan');
+        close89('ubnb89-lock-onboard');
+        resolveSetup89(true);
+      }catch(e){
+        msg89('ubnb89-onboard-msg',e.message||String(e),'err');
+      }finally{
+        b.disabled=false;b.textContent=old;
+      }
+    };
+
+    document.getElementById('ubnb89-setup-back').onclick=()=>{
+      close89('ubnb89-lock-setup');
+      if(setupResolve89){
+        open89('ubnb89-lock-onboard');
+      }
+    };
+    document.getElementById('ubnb89-setup-cancel').onclick=()=>{
+      close89('ubnb89-lock-setup');
+      if(setupResolve89)open89('ubnb89-lock-onboard');
+    };
+    document.getElementById('ubnb89-setup-save').onclick=saveSetup89;
+
+    document.getElementById('ubnb89-auth-go').onclick=verifyAuth89;
+    document.getElementById('ubnb89-auth-other').onclick=async()=>{
+      close89('ubnb89-lock-auth');
+      try{sessionStorage.removeItem(GRANT_KEY)}catch(_){}
+      try{sessionStorage.removeItem('dashboard_kelompok_editor_session')}catch(_){}
+      try{sessionStorage.removeItem('dashboard_kelompok_attendance_token')}catch(_){}
+      location.reload();
+    };
+    document.getElementById('ubnb89-auth-pin').addEventListener('keydown',e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        verifyAuth89();
+      }
+    });
+    document.getElementById('ubnb89-status-enable').onclick=()=>{
+      close89('ubnb89-lock-status');
+      openSetup89(false);
+    };
+  }
+
+  async function status89(did){
+    const {data,error}=await sb.rpc('dashboard_login_lock_status',{p_did:String(did)});
+    if(error)throw error;
+    if(!data?.ok)throw new Error(data?.error||'Gagal membaca Kunci Login');
+    return data;
+  }
+
+  function getGrant89(){
+    try{
+      const g=JSON.parse(sessionStorage.getItem(GRANT_KEY)||'null');
+      if(!g || String(g.did)!==String(CU?.did||''))return null;
+      if(g.expires_at && Date.now()>Number(g.expires_at)){
+        sessionStorage.removeItem(GRANT_KEY);
+        return null;
+      }
+      return g;
+    }catch(_){return null}
+  }
+
+  function storeGrant89(token,method,expiresSec=28800){
+    const g={
+      did:String(CU.did),
+      token:String(token||''),
+      method:String(method||''),
+      expires_at:Date.now()+Math.max(60,Number(expiresSec||28800))*1000
+    };
+    sessionStorage.setItem(GRANT_KEY,JSON.stringify(g));
+    return g;
+  }
+
+  async function validStoredGrant89(){
+    const g=getGrant89();
+    if(!g?.token)return false;
+    try{
+      const {data,error}=await sb.rpc('dashboard_login_lock_grant_check',{
+        p_did:String(CU.did),
+        p_grant_token:g.token
+      });
+      if(error||!data?.ok){
+        sessionStorage.removeItem(GRANT_KEY);
+        return false;
+      }
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  function clearAttendance89(){
+    try{
+      DK_ATT_TOKEN=null;
+      sessionStorage.removeItem(DK_ATT_TOKEN_KEY);
+      sessionStorage.removeItem('dashboard_kelompok_attendance_token');
+    }catch(_){}
+  }
+
+  async function edge89(action,response=null){
+    const r=await fetch(EDGE_URL,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'apikey':SKEY,
+        'Authorization':'Bearer '+SKEY
+      },
+      body:JSON.stringify({
+        action,
+        did:String(CU.did),
+        ...(response?{response}:{})
+      })
+    });
+    const data=await r.json().catch(()=>({ok:false,error:'Response server tidak valid'}));
+    if(!r.ok || !data?.ok)throw new Error(data?.error||('HTTP '+r.status));
+    return data;
+  }
+
+  function b64urlToBuf89(v){
+    let s=String(v||'').replace(/-/g,'+').replace(/_/g,'/');
+    while(s.length%4)s+='=';
+    const bin=atob(s);
+    const u=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+    return u.buffer;
+  }
+
+  function bufToB64url89(buf){
+    const u=new Uint8Array(buf);
+    let s='';
+    const step=0x8000;
+    for(let i=0;i<u.length;i+=step){
+      s+=String.fromCharCode(...u.subarray(i,i+step));
+    }
+    return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+
+  function createOpts89(o){
+    return {
+      ...o,
+      challenge:b64urlToBuf89(o.challenge),
+      user:{...o.user,id:b64urlToBuf89(o.user.id)},
+      excludeCredentials:Array.isArray(o.excludeCredentials)
+        ?o.excludeCredentials.map(x=>({...x,id:b64urlToBuf89(x.id)}))
+        :undefined
+    };
+  }
+
+  function authOpts89(o){
+    return {
+      ...o,
+      challenge:b64urlToBuf89(o.challenge),
+      allowCredentials:Array.isArray(o.allowCredentials)
+        ?o.allowCredentials.map(x=>({...x,id:b64urlToBuf89(x.id)}))
+        :undefined
+    };
+  }
+
+  function registrationJSON89(c){
+    return {
+      id:c.id,
+      rawId:bufToB64url89(c.rawId),
+      type:c.type,
+      response:{
+        clientDataJSON:bufToB64url89(c.response.clientDataJSON),
+        attestationObject:bufToB64url89(c.response.attestationObject),
+        transports:typeof c.response.getTransports==='function'?c.response.getTransports():[]
+      },
+      clientExtensionResults:c.getClientExtensionResults?.()||{},
+      authenticatorAttachment:c.authenticatorAttachment||undefined
+    };
+  }
+
+  function authenticationJSON89(c){
+    return {
+      id:c.id,
+      rawId:bufToB64url89(c.rawId),
+      type:c.type,
+      response:{
+        clientDataJSON:bufToB64url89(c.response.clientDataJSON),
+        authenticatorData:bufToB64url89(c.response.authenticatorData),
+        signature:bufToB64url89(c.response.signature),
+        userHandle:c.response.userHandle?bufToB64url89(c.response.userHandle):null
+      },
+      clientExtensionResults:c.getClientExtensionResults?.()||{},
+      authenticatorAttachment:c.authenticatorAttachment||undefined
+    };
+  }
+
+  async function platformBioAvailable89(){
+    if(!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials)return false;
+    try{
+      if(typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable==='function'){
+        return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      }
+      return true;
+    }catch(_){return false}
+  }
+
+  function humanBioError89(e){
+    if(e?.name==='NotAllowedError')return 'Verifikasi biometrik dibatalkan, ditolak, atau waktunya habis.';
+    if(e?.name==='InvalidStateError')return 'Biometrik perangkat ini sudah terdaftar.';
+    if(e?.name==='NotSupportedError')return 'Perangkat/browser ini belum mendukung biometrik WebAuthn.';
+    return e?.message||String(e);
+  }
+
+  async function registerBio89(){
+    if(!await platformBioAvailable89()){
+      throw new Error('Biometrik perangkat tidak tersedia. Buka dari HP/browser yang mendukung sidik jari atau biometrik.');
+    }
+    const start=await edge89('register_options');
+    const cred=await navigator.credentials.create({publicKey:createOpts89(start.options)});
+    if(!cred)throw new Error('Pendaftaran biometrik tidak selesai');
+    return await edge89('register_verify',registrationJSON89(cred));
+  }
+
+  async function authenticateBio89(){
+    if(!await platformBioAvailable89()){
+      throw new Error('Biometrik perangkat tidak tersedia pada browser/perangkat ini.');
+    }
+    const start=await edge89('auth_options');
+    const cred=await navigator.credentials.get({publicKey:authOpts89(start.options)});
+    if(!cred)throw new Error('Verifikasi biometrik tidak selesai');
+    return await edge89('auth_verify',authenticationJSON89(cred));
+  }
+
+  function selectMethod89(method){
+    setupMethod89=method;
+    const pin=method==='pin';
+    document.getElementById('ubnb89-method-pin')?.classList.toggle('active',pin);
+    document.getElementById('ubnb89-method-bio')?.classList.toggle('active',!pin);
+    document.getElementById('ubnb89-setup-pin').style.display=pin?'block':'none';
+    document.getElementById('ubnb89-setup-bio').style.display=pin?'none':'block';
+    document.getElementById('ubnb89-setup-save').textContent=pin?'Aktifkan PIN':'Aktifkan Biometrik';
+    clearMsg89('ubnb89-setup-msg');
+  }
+
+  function openSetup89(asGate){
+    injectUI89();
+    setupResolve89=asGate ? setupResolve89 : null;
+    selectMethod89('pin');
+    const p1=document.getElementById('ubnb89-pin1');
+    const p2=document.getElementById('ubnb89-pin2');
+    if(p1)p1.value='';
+    if(p2)p2.value='';
+    clearMsg89('ubnb89-setup-msg');
+    open89('ubnb89-lock-setup');
+    setTimeout(()=>p1?.focus(),80);
+  }
+
+  function resolveSetup89(ok){
+    const r=setupResolve89;
+    setupResolve89=null;
+    if(r)r(!!ok);
+  }
+
+  async function saveSetup89(){
+    const b=document.getElementById('ubnb89-setup-save');
+    const old=b.textContent;
+    b.disabled=true;
+    clearMsg89('ubnb89-setup-msg');
+
+    try{
+      let out;
+      if(setupMethod89==='pin'){
+        const p1=(document.getElementById('ubnb89-pin1')?.value||'').trim();
+        const p2=(document.getElementById('ubnb89-pin2')?.value||'').trim();
+        if(!/^\d{6}$/.test(p1))throw new Error('PIN harus tepat 6 angka.');
+        if(p1!==p2)throw new Error('Ulangi PIN belum sama.');
+
+        b.textContent='Menyimpan PIN...';
+        const {data,error}=await sb.rpc('dashboard_login_lock_set_pin',{
+          p_did:String(CU.did),
+          p_pin:p1
+        });
+        if(error)throw error;
+        if(!data?.ok)throw new Error(data?.error||'Gagal mengaktifkan PIN');
+        out=data;
+      }else{
+        b.textContent='Menunggu biometrik...';
+        out=await registerBio89();
+      }
+
+      storeGrant89(out.grant_token,out.method,out.expires_in);
+      clearAttendance89();
+      try{sessionStorage.removeItem(LATER_KEY)}catch(_){}
+      close89('ubnb89-lock-setup');
+      toast('✅ Kunci Login berhasil diaktifkan');
+      resolveSetup89(true);
+    }catch(e){
+      msg89('ubnb89-setup-msg',humanBioError89(e),'err');
+    }finally{
+      b.disabled=false;
+      b.textContent=setupMethod89==='pin'?'Aktifkan PIN':'Aktifkan Biometrik';
+    }
+  }
+
+  function onboard89(){
+    injectUI89();
+    return new Promise(resolve=>{
+      setupResolve89=resolve;
+      document.getElementById('ubnb89-onboard-msg').className='ubnb89-lock-msg';
+      open89('ubnb89-lock-onboard');
+    });
+  }
+
+  function authModal89(method){
+    injectUI89();
+    return new Promise(resolve=>{
+      authResolve89=resolve;
+      document.getElementById('ubnb89-auth-name').textContent='Verifikasi '+(CU?.nama||CU?.username||'akun');
+      const pin=method==='pin';
+      document.getElementById('ubnb89-auth-pin-wrap').style.display=pin?'block':'none';
+      document.getElementById('ubnb89-auth-bio-wrap').style.display=pin?'none':'block';
+      document.getElementById('ubnb89-auth-go').textContent=pin?'Verifikasi PIN':'Gunakan Biometrik HP';
+      document.getElementById('ubnb89-auth-pin').value='';
+      clearMsg89('ubnb89-auth-msg');
+      open89('ubnb89-lock-auth');
+      if(pin)setTimeout(()=>document.getElementById('ubnb89-auth-pin')?.focus(),80);
+    });
+  }
+
+  async function verifyAuth89(){
+    const b=document.getElementById('ubnb89-auth-go');
+    const old=b.textContent;
+    b.disabled=true;
+    clearMsg89('ubnb89-auth-msg');
+
+    try{
+      const st=await status89(CU.did);
+      let out;
+
+      if(st.method==='pin'){
+        const pin=(document.getElementById('ubnb89-auth-pin')?.value||'').trim();
+        if(!/^\d{6}$/.test(pin))throw new Error('Masukkan PIN 6 angka.');
+
+        b.textContent='Memeriksa PIN...';
+        const {data,error}=await sb.rpc('dashboard_login_lock_verify_pin',{
+          p_did:String(CU.did),
+          p_pin:pin
+        });
+        if(error)throw error;
+        if(!data?.ok)throw new Error(data?.error||'PIN salah');
+        out=data;
+      }else if(st.method==='webauthn'){
+        b.textContent='Menunggu biometrik...';
+        out=await authenticateBio89();
+      }else{
+        throw new Error('Metode Kunci Login tidak ditemukan');
+      }
+
+      storeGrant89(out.grant_token,out.method,out.expires_in);
+      clearAttendance89();
+      close89('ubnb89-lock-auth');
+      const r=authResolve89;authResolve89=null;
+      if(r)r(true);
+    }catch(e){
+      msg89('ubnb89-auth-msg',humanBioError89(e),'err');
+      document.getElementById('ubnb89-auth-pin').value='';
+    }finally{
+      b.disabled=false;
+      try{
+        const st=await status89(CU.did);
+        b.textContent=st.method==='pin'?'Verifikasi PIN':'Gunakan Biometrik HP';
+      }catch(_){b.textContent=old}
+    }
+  }
+
+  async function ensureGate89(){
+    if(!isPengurus89())return true;
+    injectUI89();
+
+    if(gatePromise89)return gatePromise89;
+
+    gatePromise89=(async()=>{
+      const st=await status89(CU.did);
+
+      if(st.enabled){
+        if(await validStoredGrant89())return true;
+        const ok=await authModal89(st.method);
+        return !!ok;
+      }
+
+      const later=sessionStorage.getItem(LATER_KEY);
+      if(st.prompt_disabled || String(later||'')===String(CU.did))return true;
+
+      return await onboard89();
+    })();
+
+    try{
+      return await gatePromise89;
+    }finally{
+      gatePromise89=null;
+    }
+  }
+
+  /* Attendance session sekarang ikut membawa grant Kunci Login. */
+  const authFn89=async function(){
+    if(!CU||!CU.did)throw new Error('Session pengurus tidak tersedia');
+
+    const g=getGrant89();
+    const args={p_did:CU.did};
+    if(g?.token)args.p_unlock_token=g.token;
+
+    const {data,error}=await sb.rpc('dk_attendance_login_pengurus',args);
+    if(error)throw new Error(error.message||'Gagal autentikasi modul Absen');
+    if(!data||data.ok!==true)throw new Error((data&&data.error)||'Autentikasi modul Absen ditolak');
+
+    DK_ATT_TOKEN=data.token;
+    sessionStorage.setItem(DK_ATT_TOKEN_KEY,DK_ATT_TOKEN);
+    return data;
+  };
+  try{
+    window.dkAttendanceAuthenticate=authFn89;
+    dkAttendanceAuthenticate=authFn89;
+  }catch(_){
+    window.dkAttendanceAuthenticate=authFn89;
+  }
+
+  /* Final gate: jangan panggil init existing sampai Kunci Login selesai. */
+  const baseInit89=window.init;
+  if(typeof baseInit89==='function'){
+    window.init=async function(){
+      if(isPengurus89()){
+        let ok=false;
+        try{
+          ok=await ensureGate89();
+        }catch(e){
+          setLE?.('Kunci Login: '+(e.message||e));
+          return;
+        }
+        if(!ok)return;
+
+        try{
+          const st=await status89(CU.did);
+          if(st.enabled){
+            clearAttendance89();
+            try{await authFn89()}catch(e){console.warn('[Kunci Login] Absen auth:',e.message||e)}
+          }
+        }catch(e){
+          console.warn('[Kunci Login] status:',e);
+        }
+      }
+      return await baseInit89.apply(this,arguments);
+    };
+  }
+
+  /* Logout = hapus grant dan pilihan "nanti" sesi ini. */
+  const oldKeluar89=window.keluar;
+  if(typeof oldKeluar89==='function'){
+    window.keluar=async function(){
+      try{
+        sessionStorage.removeItem(GRANT_KEY);
+        sessionStorage.removeItem(LATER_KEY);
+      }catch(_){}
+      return await oldKeluar89.apply(this,arguments);
+    };
+  }
+
+  async function openLockSettings89(){
+    injectUI89();
+    try{
+      const st=await status89(CU.did);
+      if(st.enabled){
+        const method=st.method==='pin'?'PIN 6 angka':'Biometrik HP';
+        document.getElementById('ubnb89-status-body').innerHTML=`
+          <div class="ubnb89-lock-hero">
+            <div class="ubnb89-lock-icon">✅</div>
+            <div>
+              <div class="ubnb89-lock-title">Kunci Login aktif</div>
+              <p class="ubnb89-lock-sub">
+                Akun <b>${esc89(CU?.nama||CU?.username||'')}</b> dilindungi dengan
+                <b>${esc89(method)}</b>.
+              </p>
+            </div>
+          </div>
+          <div class="ubnb89-bio-note">
+            Saat login berikutnya, verifikasi ini wajib selesai sebelum pilihan Database Perwira / PPG dibuka.
+          </div>`;
+        document.getElementById('ubnb89-status-enable').style.display='none';
+      }else{
+        document.getElementById('ubnb89-status-body').innerHTML=`
+          <div class="ubnb89-lock-hero">
+            <div class="ubnb89-lock-icon">🔓</div>
+            <div>
+              <div class="ubnb89-lock-title">Kunci Login belum aktif</div>
+              <p class="ubnb89-lock-sub">
+                Anda masih bisa mengaktifkannya kapan saja dari menu ini.
+              </p>
+            </div>
+          </div>`;
+        document.getElementById('ubnb89-status-enable').style.display='block';
+      }
+      open89('ubnb89-lock-status');
+    }catch(e){
+      toast('Gagal membuka Kunci Login: '+(e.message||e),true);
+    }
+  }
+
+  function ensureDoorLock89(){
+    if(!isPengurus89())return;
+    const menu=document.getElementById('db69-door-menu');
+    if(!menu)return;
+    let b=document.getElementById('db89-login-lock');
+    if(!b){
+      b=document.createElement('button');
+      b.type='button';
+      b.id='db89-login-lock';
+      b.className='ubnb69-door-item';
+      b.innerHTML='<span>🔐</span><span>Kunci Login</span>';
+      b.onclick=(e)=>{
+        e.preventDefault();e.stopPropagation();
+        document.querySelectorAll('.ubnb69-door-menu.show').forEach(x=>x.classList.remove('show'));
+        openLockSettings89();
+      };
+      const sep=menu.querySelector('.ubnb69-door-sep');
+      if(sep)menu.insertBefore(b,sep);
+      else menu.prepend(b);
+    }
+  }
+
+  const app=document.getElementById('app');
+  if(app){
+    let t=0;
+    new MutationObserver(()=>{
+      clearTimeout(t);
+      t=setTimeout(ensureDoorLock89,35);
+    }).observe(app,{childList:true,subtree:true});
+  }
+
+  injectUI89();
+  [0,250,700,1500].forEach(ms=>setTimeout(ensureDoorLock89,ms));
+
+  window.ubnb89LoginLock={
+    status:()=>status89(CU?.did),
+    gate:ensureGate89,
+    settings:openLockSettings89,
+    biometricAvailable:platformBioAvailable89
+  };
+})();
+
