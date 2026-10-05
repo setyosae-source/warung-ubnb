@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+
+<script src="assets/js/boot.js?v=86"></script>
+
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Dashboard Kelompok - Powered by UBNB</title>
+<link rel="stylesheet" href="assets/css/base.css?v=86">
+<link rel="stylesheet" href="assets/css/dashboard.css?v=86">
+<link rel="stylesheet" href="assets/css/ppg.css?v=86">
+<link rel="stylesheet" href="assets/css/current.css?v=86">
+
+
+
+
+
+
+
+
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="icon">🏛️</div>
+      <h1>Dashboard Kelompok</h1>
+      <p>UBNB Desa Perwira - Bekasi Timur</p>
+    </div>
+
+    <!-- Tab Mode -->
+    <div style="display:flex;background:var(--bg);border-radius:8px;padding:3px;margin-bottom:18px;">
+      <button id="login-tab-pengurus" onclick="switchLoginMode('pengurus')" style="flex:1;padding:8px;border:none;background:white;color:var(--green);font-weight:700;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;box-shadow:0 1px 4px rgba(0,0,0,0.08);">👤 Pengurus</button>
+      <button id="login-tab-umum" onclick="switchLoginMode('umum')" style="flex:1;padding:8px;border:none;background:transparent;color:var(--text-muted);font-weight:700;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;">👁️ Umum</button>
+    </div>
+
+    <!-- FORM PENGURUS: sama seperti login Edit Jamaah -->
+    <div id="login-form-pengurus">
+      <div class="login-err" id="login-err"></div>
+      <div class="field">
+        <label>Nama Anda</label>
+        <input type="text" id="login-pengurus-search" placeholder="Ketik nama pengurus..." autocomplete="off" oninput="renderPengurusLoginSearch()"/>
+        <div id="login-pengurus-results" class="login-search-results"></div>
+      </div>
+      <div id="login-pengurus-access" class="login-access"></div>
+
+      <div class="field" id="login-master-code-wrap" style="display:none;margin-top:10px;">
+        <label>Kode Admin Master</label>
+        <input type="password" id="login-master-code" placeholder="Masukkan kode Admin Master..." autocomplete="current-password"/>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:5px;line-height:1.4;">
+          Kode hanya diminta untuk akun Admin Master.
+        </div>
+      </div>
+
+      <button class="btn-login" id="btn-login-pengurus" onclick="doLoginPengurus()" style="display:none;">Masuk →</button>
+      <div class="login-info">
+        Pilih nama pengurus aktif yang tercantum di sub-tab <b>Jamaah → Pengurus</b>.<br>
+        Akses mengikuti tingkat Desa atau kelompok masing-masing.
+      </div>
+    </div>
+
+    <!-- FORM UMUM -->
+    <div id="login-form-umum" style="display:none;">
+      <div style="background:var(--blue-light);border-left:3px solid var(--blue);padding:9px 12px;border-radius:5px;margin-bottom:14px;font-size:11px;color:#1e40af;line-height:1.5;">
+        ℹ️ <b>Masuk sebagai Umum</b> — Data Anda akan disesuaikan dengan database. <b>Masukkan nama jamaah dan kelompok dengan benar.</b>
+      </div>
+      <div class="login-err" id="login-err-umum"></div>
+      <div class="field">
+        <label>Nama Lengkap Jamaah</label>
+        <input type="text" id="inp-umum-nama" placeholder="Contoh: Ahmad Suparman" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>Kelompok</label>
+        <input type="text" id="inp-umum-kelompok" placeholder="Kelompok Anda..." autocomplete="off"/>
+      </div>
+      <button class="btn-login" onclick="doLoginUmum()" id="btn-login-umum">Masuk sebagai Umum →</button>
+      <div class="login-info">
+        Akses View Only — bisa lihat data tapi tidak bisa edit.<br>
+        Hanya untuk jamaah aktif di database.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-title">🏛️ Dashboard Kelompok</div>
+    <div class="topbar-right">
+      <span id="scope-badge"></span>
+      <span id="user-badge"></span>
+      <button class="btn-keluar" onclick="keluar()">Keluar</button>
+    </div>
+  </div>
+
+  <div class="page-tabs">
+    <button class="page-tab active" onclick="showTab('jamaah',this)">👥 Jamaah</button>
+    <button class="page-tab" onclick="showTab('sensus',this)">📋 Sensus</button>
+    <button class="page-tab" onclick="showTab('absen',this)">📅 Acara</button>
+    <button class="page-tab" onclick="showTab('isrun',this)">💰 IR/ISRUN</button>
+    <button class="page-tab" id="tab-btn-logbook" onclick="showTab('logbook',this)" style="display:none;">📋 Log</button>
+  </div>
+
+  <!-- PAGE JAMAAH -->
+  <div class="page active" id="page-jamaah">
+    <div id="scope-notice"></div>
+
+    <!-- SUB-TAB JAMAAH -->
+    <div class="subtab-bar">
+      <button class="subtab active" id="subtab-btn-data" onclick="showJamaahSub('data',this)">👥 Data Jamaah</button>
+      <button class="subtab" id="subtab-btn-pengurus" onclick="showJamaahSub('pengurus',this)">🛡️ Pengurus</button>
+      <button class="subtab" id="subtab-btn-marriage" onclick="showJamaahSub('marriage',this)">💍 Pernikahan</button>
+    </div>
+
+    <div id="subview-jamaah-data">
+    <div class="stats-pill" id="jamaah-stats"></div>
+
+    <!-- MULTI-FILTER PANEL -->
+    <div id="filter-panel-wrap" style="margin-bottom:10px;">
+      
+      <div id="filter-panel" style="display:none;background:white;border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-top:6px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;font-size:12px;">
+          <!-- GENDER -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">GENDER</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="gender_l" onchange="onFilterChange()"/> ♂ Laki-laki</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="gender_p" onchange="onFilterChange()"/> ♀ Perempuan</label>
+          </div>
+          <!-- STATUS NIKAH -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">STATUS NIKAH</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="nikah_menikah" onchange="onFilterChange()"/> Menikah</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="nikah_belum" onchange="onFilterChange()"/> Belum</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="nikah_janda" onchange="onFilterChange()"/> Janda/Duda</label>
+          </div>
+          <!-- STATUS SAMBUNG -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">STATUS SAMBUNG</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_tetap" onchange="onFilterChange()" checked id="ff-sb-tetap"/> Tetap</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_pindahsambung" onchange="onFilterChange()"/> Pindah Sambung</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_pindahsementara" onchange="onFilterChange()"/> Pindah Sementara</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_meninggal" onchange="onFilterChange()"/> Meninggal</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sb_belum" onchange="onFilterChange()"/> Belum Diset</label>
+          </div>
+          <!-- KELAS KBM + CUSTOM USIA -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">KELAS KBM</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px 8px;line-height:1.7;">
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_balita" onchange="onFilterChange()"/> Balita</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_a" onchange="onFilterChange()"/> Kelas A</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_b" onchange="onFilterChange()"/> Kelas B</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_c" onchange="onFilterChange()"/> Kelas C</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_pra" onchange="onFilterChange()"/> Pra Remaja</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_remaja" onchange="onFilterChange()"/> Remaja</label>
+              <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kbm_dewasa" onchange="onFilterChange()"/> Dewasa</label>
+            </div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin:8px 0 5px;">CUSTOM USIA (TAHUN)</div>
+            <div style="display:flex;align-items:center;gap:5px;">
+              <input type="number" id="ff-usia-min" min="0" placeholder="Min" oninput="onFilterChange()" style="width:80px;padding:5px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;"/>
+              <span style="color:var(--text-muted);">–</span>
+              <input type="number" id="ff-usia-max" min="0" placeholder="Max" oninput="onFilterChange()" style="width:80px;padding:5px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;"/>
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);margin-top:4px;">Kelas KBM dapat dipilih lebih dari satu. Rentang usia bisa dipakai bersamaan untuk mempersempit hasil.</div>
+          </div>
+          <!-- POSISI KELUARGA -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">POSISI KELUARGA</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kk_yes" onchange="onFilterChange()"/> 👑 Hanya KK</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kk_no" onchange="onFilterChange()"/> Bukan KK</label>
+          </div>
+          <!-- ATRIBUT -->
+          <div>
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">ATRIBUT (CHECKLIST = YA)</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="aghnia" onchange="onFilterChange()"/> 💎 Aghnia</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="haji" onchange="onFilterChange()"/> 🕋 Haji</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="sarjana" onchange="onFilterChange()"/> 🎓 Sarjana</label>
+          </div>
+          <!-- KELOMPOK (hanya untuk pengurus_desa) -->
+          <div id="filter-kelompok-section" style="display:none;">
+            <div style="font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:10px;margin-bottom:5px;">KELOMPOK</div>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw1" onchange="onFilterChange()"/> 🟢 PW1</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw2" onchange="onFilterChange()"/> 🔵 PW2</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw3" onchange="onFilterChange()"/> 🟠 PW3</label>
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="ff" data-f="kel_pw4" onchange="onFilterChange()"/> 🟣 PW4</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="search-box">
+      <input type="text" id="search-jamaah" placeholder="Cari nama, KK, alamat..." oninput="renderStats();renderJamaah()"/>
+    </div>
+
+    <div id="jamaah-list-wrap" class="tbl-wrap"><div class="loading">Memuat data...</div></div>
+    <div class="tbl-toolbar"><span id="tbl-info">—</span><span style="font-size:10px;">💡 Default: KK → pasangan → anak (umur tertua ke termuda) · klik baris untuk edit</span></div>
+    </div><!-- /subview-jamaah-data -->
+
+    <!-- SUBVIEW PENGURUS -->
+    <div id="subview-pengurus" style="display:none;">
+      <div id="pengurus-wrap"><div class="loading">Memuat data pengurus...</div></div>
+    </div>
+
+    <!-- SUBVIEW PERNIKAHAN -->
+    <div id="subview-marriage" style="display:none;">
+      <div class="marriage-inner-tabs">
+        <button id="marriage-inner-history" class="active" onclick="showMarriageInnerTab('history')">💍 Riwayat & Proses</button>
+        <button id="marriage-inner-youth" onclick="showMarriageInnerTab('youth')">💚 Daftar Remaja Usia Nikah</button>
+      </div>
+
+      <div id="marriage-panel-history">
+        <div class="marriage-toolbar">
+          <button class="btn-save" onclick="bukaModalMarriage()" style="padding:8px 14px;border-radius:6px;font-size:12px;background:#be185d;">＋ Proses Pernikahan</button>
+          <label style="font-size:11px;font-weight:700;color:var(--text-muted);">Tahun:</label>
+          <select id="marriage-year" onchange="loadMarriageData()"></select>
+        </div>
+        <div class="stats-pill" id="marriage-stats"></div>
+        <div id="marriage-list-wrap" class="tbl-wrap"><div class="loading">Memuat riwayat pernikahan...</div></div>
+      </div>
+
+      <div id="marriage-panel-youth" style="display:none;">
+        <div class="stats-pill" id="yn-stats"></div>
+        <div class="yn-toolbar">
+          <input id="yn-search" type="text" placeholder="🔍 Cari nama, kelompok, pekerjaan..." oninput="renderYouthList()"/>
+          <select id="yn-gender" onchange="renderYouthList()"><option value="">Semua JK</option><option value="L">Pemuda</option><option value="P">Pemudi</option></select>
+          <select id="yn-group" onchange="renderYouthList()"><option value="">Semua Kelompok</option></select>
+          <select id="yn-status" onchange="renderYouthList()"><option value="">Semua Status Profil</option><option value="Belum dibuat">Belum dibuat</option><option value="Draft">Draft</option><option value="Siap dibagikan">Siap dibagikan</option></select>
+          <button class="yn-btn-refresh" onclick="loadYouthMarriageData(true)">↻ Refresh</button>
+          <button class="yn-btn-jpg" onclick="exportYouthListJPG()">🖼️ JPG 2 Kolom</button>
+          <button class="yn-btn-pdf" onclick="exportYouthListPDF()">📄 PDF</button>
+        </div>
+        <div id="yn-list-wrap" class="tbl-wrap"><div class="loading">Memuat daftar usia nikah...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE LAPORAN SENSUS -->
+  <div class="page" id="page-sensus">
+    <div id="sensus-scope-notice"></div>
+
+    <!-- Selector kelompok khusus pengurus_desa -->
+    <div id="sensus-kelompok-selector" style="display:none;margin-bottom:14px;background:white;border-radius:var(--radius-sm);padding:12px;border:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">📊 Generate laporan untuk:</div>
+      <select id="sensus-kelompok-pick" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;" onchange="renderSensusPreview()">
+        <option value="">Gabungan 4 kelompok (laporan desa)</option>
+        <option value="PW1">PW1 - Perwirasari</option>
+        <option value="PW2">PW2 - Alinda</option>
+        <option value="PW3">PW3 - Bulak Perwira</option>
+        <option value="PW4">PW4 - Vila Indah Permai</option>
+      </select>
+    </div>
+
+    <!-- Generate Card -->
+    <div id="sensus-generate-card" style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;">
+      <div style="font-size:12px;opacity:0.9;margin-bottom:4px;">📋 LAPORAN SENSUS CACAH JIWA</div>
+      <div id="sensus-period-label" style="font-size:20px;font-weight:800;margin-bottom:6px;">Periode: —</div>
+      <div id="sensus-scope-label" style="font-size:11px;opacity:0.9;margin-bottom:8px;"></div>
+      <div id="sensus-preview-stats" style="font-size:11px;opacity:0.9;margin-bottom:12px;">Memuat data...</div>
+      <button onclick="generateLaporanSensus()" id="btn-generate-sensus" style="background:white;color:#1e40af;border:none;padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;width:100%;">
+        ⚡ Generate Laporan Bulan Ini
+      </button>
+    </div>
+
+    <div style="font-weight:700;margin-bottom:8px;font-size:13px;">📚 Riwayat Laporan</div>
+    <div id="sensus-list"><div class="loading">Memuat data...</div></div>
+  </div>
+
+  <!-- PAGE KALENDER ACARA / ABSEN -->
+  <div class="page" id="page-absen">
+    <div class="cal-toolbar">
+      <div class="cal-toolbar-main">
+        <button id="btn-acara-create" class="btn-save" onclick="bukaModalKegiatan()" style="padding:8px 13px;border-radius:7px;font-size:12px;">＋ Buat Acara</button>
+      </div>
+      <div class="cal-view-toggle">
+        <button id="cal-view-list-btn" class="active" onclick="setCalendarView('list')">☷ List</button>
+        <button id="cal-view-calendar-btn" onclick="setCalendarView('calendar')">📅 Kalender</button>
+      </div>
+    </div>
+    <div class="stats-pill" id="absen-stats"></div>
+    <div class="cal-search-row">
+      <input id="calendar-search" type="text" placeholder="🔍 Cari nama acara, lokasi, catatan..." oninput="onCalendarSearch()"/>
+      <button onclick="calendarGoToday()" title="Hari ini">Hari Ini</button>
+    </div>
+    <div id="calendar-scope-chips" class="cal-scope-chips"></div>
+    <div id="calendar-list-view">
+      <div class="cal-list-tabs" id="calendar-list-tabs">
+        <button id="cal-list-tab-berlangsung" class="cal-list-tab active" onclick="setCalendarListTab('berlangsung')">🟢 Hari Ini <span class="count" id="cal-count-berlangsung">0</span></button>
+        <button id="cal-list-tab-akan" class="cal-list-tab" onclick="setCalendarListTab('akan')">🗓️ Akan Datang <span class="count" id="cal-count-akan">0</span></button>
+        <button id="cal-list-tab-selesai" class="cal-list-tab" onclick="setCalendarListTab('selesai')">✅ Selesai <span class="count" id="cal-count-selesai">0</span></button>
+        <button id="cal-list-tab-rutin" class="cal-list-tab" onclick="setCalendarListTab('rutin')">🔁 Jadwal Rutin <span class="count" id="cal-count-rutin">0</span></button>
+      </div>
+      <div id="calendar-list-controls" class="cal-list-controls"></div>
+      <div id="kegiatan-list"><div class="loading">Memuat kalender acara...</div></div>
+    </div>
+    <div id="calendar-month-view" style="display:none;">
+      <div class="cal-month-nav">
+        <button onclick="calendarNav(-1)">‹</button>
+        <strong id="calendar-month-label">—</strong>
+        <button onclick="calendarNav(1)">›</button>
+      </div>
+      <div class="ubnb-cal-grid ubnb-cal-dow">
+        <div>Min</div><div>Sen</div><div>Sel</div><div>Rab</div><div>Kam</div><div>Jum</div><div>Sab</div>
+      </div>
+      <div id="calendar-grid" class="ubnb-cal-grid"></div>
+      <div id="calendar-day-agenda" class="cal-day-agenda"></div>
+    </div>
+  </div>
+
+  <!-- PAGE LOGBOOK -->
+  <div class="page" id="page-logbook">
+    <div id="logbook-content"><div class="msg info">Memuat log...</div></div>
+  </div>
+
+  <!-- PAGE IR/ISRUN -->
+  <div class="page" id="page-isrun">
+    <!-- LOCK SCREEN -->
+    <div id="isrun-lock" style="background:white;border-radius:12px;padding:40px 24px;text-align:center;border:2px solid var(--border);margin-top:20px;max-width:420px;margin-left:auto;margin-right:auto;">
+      <div style="font-size:48px;margin-bottom:12px;">🔒</div>
+      <h2 style="font-size:18px;color:var(--text);margin-bottom:6px;">Akses Terbatas</h2>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.5;">
+        Fitur IR/ISRUN hanya bisa diakses oleh <b>Pengurus Keuangan</b>.<br>
+        Mohon masukkan kode akses keuangan.
+      </p>
+      <div id="isrun-lock-err" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;background:var(--red-light);padding:7px;border-radius:5px;"></div>
+      <input type="password" id="isrun-kode" placeholder="Masukkan kode keuangan..." style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;outline:none;text-align:center;letter-spacing:1px;margin-bottom:12px;" onkeydown="if(event.key==='Enter')unlockIsrun()"/>
+      <button onclick="unlockIsrun()" style="width:100%;padding:11px;background:var(--green);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">🔓 Buka Akses</button>
+      <button id="isrun-admin-code-btn" onclick="openIsrunCodeAdmin()" style="display:none;width:100%;margin-top:8px;padding:9px;background:#f8fafc;color:#334155;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⚙️ Admin: Ganti Kode Akses</button>
+      <div style="margin-top:16px;font-size:11px;color:var(--text-muted);">
+        💡 Belum punya kode? <a href="https://wa.me/6285718264782?text=Assalamu'alaikum%20admin%20UBNB%2C%20saya%20butuh%20kode%20akses%20keuangan%20IR%2FISRUN%20🙏" target="_blank" style="color:var(--green);font-weight:700;">Hubungi Admin</a>
+      </div>
+    </div>
+
+    <!-- CONTENT (sembunyi sampai unlock) -->
+    <div id="isrun-content" style="display:none;">
+    <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px dashed var(--amber);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <strong style="color:var(--amber);font-size:14px;">⚠️ Fitur Preview / Gambaran</strong>
+          <div style="font-size:12px;color:#78350f;margin-top:6px;line-height:1.5;">
+            Fitur IR/ISRUN ini hanya <b>gambaran</b>. Data & kategori bisa diatur per kelompok sesuai kebutuhan.<br>
+            Untuk <b>implementasi penuh</b> sesuai kebutuhan kelompok Anda (kategori final, nominal, alur input, format laporan, dll), <b>hubungi admin</b>.
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+          <a href="https://wa.me/6285718264782?text=Assalamu'alaikum%20admin%20UBNB%2C%20kelompok%20kami%20ingin%20menerapkan%20fitur%20IR%2FISRUN%20secara%20penuh.%20Mohon%20diskusi%20pengaturan%20sesuai%20kebutuhan%20kami%20🙏" target="_blank" style="background:#25d366;color:white;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;">📱 Hubungi Admin</a>
+          <button id="isrun-admin-code-btn-open" onclick="openIsrunCodeAdmin()" style="display:none;background:none;border:none;color:#475569;font-size:11px;font-weight:700;cursor:pointer;padding:4px;">⚙️ Ganti kode akses</button>
+          <button onclick="lockIsrun()" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:4px;">🔒 Kunci kembali</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tabs untuk Demo IR -->
+    <div class="page-tabs" style="position:static;top:auto;border:none;background:white;border-radius:8px;margin-bottom:10px;padding:2px;border:1px solid var(--border);">
+      <button class="page-tab active" onclick="showIsrunTab('rekap',this)" style="padding:8px 6px;font-size:11px;">📊 Rekap</button>
+      <button class="page-tab" onclick="showIsrunTab('input',this)" style="padding:8px 6px;font-size:11px;">✏️ Input</button>
+      <button class="page-tab" onclick="showIsrunTab('pembayar',this)" style="padding:8px 6px;font-size:11px;">👥 Pembayar</button>
+      <button class="page-tab" onclick="showIsrunTab('kategori',this)" style="padding:8px 6px;font-size:11px;">📂 Kategori</button>
+    </div>
+
+    <!-- Sub-tab REKAP -->
+    <div id="isrun-tab-rekap" class="isrun-subtab" style="display:block;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);">Periode:</label>
+        <select id="isrun-periode" onchange="renderIsrunRekap()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;"></select>
+        <button class="btn-cancel" onclick="exportIsrunExcel()" style="padding:6px 12px;border-radius:6px;font-size:11px;">⬇️ Export Excel</button>
+      </div>
+      <div class="stats-pill" id="isrun-stats"></div>
+      <div id="isrun-rekap-wrap" class="tbl-wrap"><div class="loading">Memuat...</div></div>
+    </div>
+
+    <!-- Sub-tab INPUT -->
+    <div id="isrun-tab-input" class="isrun-subtab" style="display:none;">
+      <div style="background:white;border-radius:8px;padding:12px;border:1px solid var(--border);">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Input pembayaran per pembayar per bulan. Pilih pembayar & periode, lalu isi nominal per kategori.</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <select id="isrun-input-pembayar" onchange="loadInputForm()" style="flex:1;min-width:160px;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;">
+            <option value="">-- Pilih Pembayar --</option>
+          </select>
+          <select id="isrun-input-periode" onchange="loadInputForm()" style="padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;"></select>
+          <button class="btn-cancel" onclick="loadDefaultIntoInput()" style="padding:7px 12px;border-radius:6px;font-size:11px;" title="Isi semua nominal default">📋 Pakai Default</button>
+        </div>
+        <div id="isrun-input-form"><div class="empty"><div class="ei">📝</div>Pilih pembayar & periode terlebih dahulu</div></div>
+      </div>
+    </div>
+
+    <!-- Sub-tab PEMBAYAR -->
+    <div id="isrun-tab-pembayar" class="isrun-subtab" style="display:none;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <button class="btn-save" onclick="bukaModalTandaiPembayar()" style="padding:7px 14px;border-radius:6px;font-size:12px;">＋ Tandai Pembayar</button>
+      </div>
+      <div id="isrun-pembayar-list"><div class="loading">Memuat...</div></div>
+    </div>
+
+    <!-- Sub-tab KATEGORI -->
+    <div id="isrun-tab-kategori" class="isrun-subtab" style="display:none;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <button class="btn-save" onclick="bukaModalKategori(null)" style="padding:7px 14px;border-radius:6px;font-size:12px;">＋ Tambah Kategori</button>
+        <button class="btn-cancel" onclick="resetKategoriDefault()" style="padding:7px 14px;border-radius:6px;font-size:12px;background:#fef3c7;color:#78350f;">↻ Reset ke 24 Default</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">💡 Tip: Drag-and-drop tidak tersedia, gunakan tombol ▲▼ untuk ubah urutan. Kategori non-aktif tetap muncul di histori.</div>
+      <div id="isrun-kategori-list"><div class="loading">Memuat...</div></div>
+    </div>
+    </div><!-- end isrun-content -->
+  </div>
+</div>
+
+
+<!-- MODAL ADMIN KODE IR/ISRUN v83 -->
+<div class="modal-overlay" id="modal-isrun-code-admin">
+  <div class="modal" style="max-width:430px;">
+    <div class="modal-head">
+      <div>
+        <strong style="font-size:14px;">⚙️ Admin Kode Akses IR/ISRUN</strong>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Reset kode tanpa perlu mengetahui kode lama.</div>
+      </div>
+      <button onclick="closeMod('modal-isrun-code-admin')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:14px 16px;">
+      <div id="isrun-admin-status" class="msg info" style="margin-bottom:12px;">Memuat akses admin...</div>
+
+      <div class="modal-row">
+        <label>Scope Kode</label>
+        <select id="isrun-admin-scope" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;">
+          <option value="DESA">DESA</option>
+          <option value="PW1">PW1</option>
+          <option value="PW2">PW2</option>
+          <option value="PW3">PW3</option>
+          <option value="PW4">PW4</option>
+        </select>
+      </div>
+
+      <div class="modal-row">
+        <label>Kode Baru</label>
+        <input type="password" id="isrun-admin-code1" autocomplete="new-password" placeholder="Minimal 4 karakter, tanpa spasi" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;">
+      </div>
+
+      <div class="modal-row">
+        <label>Ulangi Kode Baru</label>
+        <input type="password" id="isrun-admin-code2" autocomplete="new-password" placeholder="Ketik ulang kode baru" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;">
+      </div>
+
+      <div style="font-size:10px;color:var(--text-muted);line-height:1.5;margin-top:4px;">
+        Kode disimpan sebagai hash di server dan tidak dapat ditampilkan kembali.
+        Jika lupa, Admin cukup membuat kode baru lagi.
+      </div>
+
+      <div id="isrun-admin-last" style="font-size:10px;color:var(--text-muted);margin-top:9px;"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button class="btn-cancel" onclick="closeMod('modal-isrun-code-admin')">Batal</button>
+        <button class="btn-save" id="btn-isrun-admin-save" onclick="saveIsrunAdminCode()">💾 Simpan Kode Baru</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDIT JAMAAH -->
+<div class="modal-overlay" id="modal-jamaah">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="modal-jamaah-title" style="font-size:14px;">Edit Jamaah</strong>
+    </div>
+    <div id="modal-jamaah-body"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-jamaah')">Batal</button>
+      <button class="btn-save" onclick="simpanJamaah()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TAMBAH JAMAAH -->
+<div class="modal-overlay" id="modal-tambah">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">＋ Tambah Jamaah Baru</strong>
+    </div>
+    <div id="modal-tambah-body"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-tambah')">Batal</button>
+      <button class="btn-save" onclick="simpanJamaahBaru()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PENGURUS (DAPUKAN) -->
+<div class="modal-overlay" id="modal-pengurus">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="modal-pengurus-title" style="font-size:14px;">＋ Tambah Dapukan</strong>
+    </div>
+    <div id="modal-pengurus-body"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-pengurus')">Batal</button>
+      <button class="btn-save" onclick="simpanPengurus()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LIHAT LAPORAN SENSUS -->
+<div class="modal-overlay" id="modal-sensus">
+  <div class="modal" style="max-width:96vw;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);background:#f8fafc;">
+      <strong id="modal-sensus-title" style="font-size:13px;">Laporan Sensus</strong>
+      <div style="display:flex;gap:6px;">
+        <button onclick="cetakModalSensus()" style="background:#10b981;color:white;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖨️ Cetak</button>
+        <button onclick="closeMod('modal-sensus')" style="background:#e5e7eb;border:none;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕ Tutup</button>
+      </div>
+    </div>
+    <div id="modal-sensus-content" style="overflow:auto;max-height:calc(92vh - 50px);padding:0;background:white;"></div>
+  </div>
+</div>
+
+<!-- MODAL BUAT KEGIATAN -->
+<div class="modal-overlay" id="modal-kegiatan">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="modal-kegiatan-title" style="font-size:14px;">＋ Buat Kegiatan</strong>
+    </div>
+    <div id="modal-kegiatan-body"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-kegiatan')">Batal</button>
+      <button class="btn-save" onclick="simpanKegiatan()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETAIL KALENDER ACARA -->
+<div class="modal-overlay" id="modal-calendar-detail">
+  <div class="modal" style="max-width:760px;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">📅 Detail Acara</strong>
+      <button onclick="closeMod('modal-calendar-detail')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
+    </div>
+    <div id="calendar-detail-content" class="cal-detail-box"></div>
+  </div>
+</div>
+
+<!-- MODAL PERUBAHAN SATU OCCURRENCE -->
+<div class="modal-overlay" id="modal-calendar-exception">
+  <div class="modal" style="max-width:560px;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="calendar-exception-title" style="font-size:14px;">Ubah Jadwal Tanggal Ini</strong>
+      <div id="calendar-exception-sub" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div>
+    </div>
+    <div style="padding:10px 14px;">
+      <input type="hidden" id="ce-jadwal-id"/>
+      <input type="hidden" id="ce-tanggal-asli"/>
+      <div class="modal-row"><label>Aksi</label>
+        <select id="ce-aksi" onchange="calendarExceptionActionChanged()">
+          <option value="ubah">✏️ Ubah waktu/lokasi tanggal ini</option>
+          <option value="pindah">↔️ Pindah tanggal</option>
+          <option value="mansuh">❌ Mansuh / batalkan tanggal ini</option>
+        </select>
+      </div>
+      <div class="modal-row" id="ce-tanggal-row" style="display:none;"><label>Tanggal Baru</label><input type="date" id="ce-tanggal-baru"/></div>
+      <div class="modal-row" id="ce-waktu-row"><label>Waktu Mulai</label><input type="time" id="ce-waktu"/></div>
+      <div class="modal-row" id="ce-waktu-selesai-row"><label>Waktu Selesai</label><input type="time" id="ce-waktu-selesai"/></div>
+      <div class="modal-row" id="ce-lokasi-row"><label>Lokasi</label><input type="text" id="ce-lokasi"/></div>
+      <div class="modal-row"><label>Catatan</label><input type="text" id="ce-catatan" placeholder="Alasan/perubahan (opsional)"/></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-calendar-exception')">Batal</button>
+      <button class="btn-save" onclick="saveCalendarException()">💾 Simpan Perubahan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PESERTA KEGIATAN ACTUAL -->
+<div class="modal-overlay" id="modal-kegiatan-peserta">
+  <div class="modal" style="max-width:900px;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="kp-title" style="font-size:14px;">👥 Peserta Acara</strong>
+      <div id="kp-sub" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div>
+    </div>
+    <div style="padding:10px 14px;max-height:72vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;">
+        <strong style="font-size:11px;color:#047857;">✅ Peserta Terpilih</strong>
+        <span id="kp-selected-count" style="font-size:10px;color:var(--text-muted);"></span>
+      </div>
+      <div id="kp-selected-list" style="border:1px solid var(--border);border-radius:7px;background:#fff;max-height:200px;overflow:auto;margin-bottom:10px;"></div>
+      <div style="border:1px solid var(--border);border-radius:8px;background:#fff;overflow:hidden;">
+        <div style="padding:8px 10px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-size:11px;font-weight:800;color:#1d4ed8;">🔎 Cari / Filter Jamaah</div>
+        <div style="padding:9px 10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;">
+          <select id="kp-filter-kelompok" onchange="renderKegiatanParticipantCandidates()"></select>
+          <select id="kp-filter-gender" onchange="renderKegiatanParticipantCandidates()"><option value="">Semua Gender</option><option value="L">Laki-laki</option><option value="P">Perempuan</option></select>
+          <select id="kp-filter-nikah" onchange="renderKegiatanParticipantCandidates()"><option value="">Semua Status Nikah</option><option value="Menikah">Menikah</option><option value="Belum Menikah">Belum Menikah</option><option value="Janda / Duda">Janda/Duda</option></select>
+          <select id="kp-filter-kelas" onchange="renderKegiatanParticipantCandidates()"><option value="">Semua Kelas KBM</option><option>Balita</option><option>Kelas A</option><option>Kelas B</option><option>Kelas C</option><option>Pra Remaja</option><option>Remaja</option><option>Dewasa</option></select>
+        </div>
+        <div style="padding:0 10px 9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
+          <input id="kp-filter-text" type="text" placeholder="Ketik nama / KK..." oninput="renderKegiatanParticipantCandidates()" style="flex:1;min-width:200px;padding:7px 9px;border:1px solid var(--border);border-radius:5px;font-size:11px;"/>
+          <button type="button" class="btn-save" onclick="kpAddAllFiltered()" style="padding:6px 9px;font-size:10px;">＋ Semua Hasil</button>
+          <button type="button" class="btn-save" onclick="kpAddChecked()" id="kp-add-checked" style="padding:6px 9px;font-size:10px;">＋ Tercentang (0)</button>
+        </div>
+        <div id="kp-candidate-list" style="max-height:270px;overflow:auto;border-top:1px solid var(--border);"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-kegiatan-peserta')">Batal</button>
+      <button class="btn-save" onclick="saveKegiatanParticipantSelection()">💾 Simpan Peserta</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL UNDANGAN ACARA -->
+<div class="modal-overlay" id="modal-invitation">
+  <div class="modal" style="max-width:900px;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);">
+      <div><strong id="inv-title-head" style="font-size:14px;">✉️ Undangan Acara</strong><div id="inv-sub" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div></div>
+      <button onclick="closeMod('modal-invitation')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:10px 14px;max-height:74vh;overflow:auto;">
+      <div class="modal-row"><label>Model Undangan</label><select id="inv-model" onchange="invModelChanged()"><option value="massal_kelompok">📣 Massal · 1 undangan per kelompok</option><option value="perorangan">✉️ Khusus · 1 undangan per orang</option></select></div>
+      <div class="modal-row"><label>Template Naskah</label><select id="inv-template" onchange="invApplyTemplate()"></select></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:2px 16px 8px;">
+        <button type="button" class="btn-cancel" onclick="updateInvitationTemplateFromModal()" style="font-size:10px;">💾 Update Template</button>
+        <button type="button" class="btn-cancel" onclick="saveInvitationTemplateFromModal()" style="font-size:10px;">＋ Simpan Template Baru</button>
+        <button type="button" class="btn-cancel" onclick="deleteInvitationTemplateFromModal()" style="font-size:10px;color:#b91c1c;">🗑 Hapus Template</button>
+      </div>
+      <div class="modal-row"><label>Judul</label><input id="inv-judul" type="text" value="UNDANGAN"></div>
+      <div style="padding:7px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel naskah: <b>{{nama_penerima}}</b>, <b>{{nama_acara}}</b>, <b>{{tanggal}}</b>, <b>{{waktu}}</b>, <b>{{lokasi}}</b>, <b>{{kelompok}}</b>.<br>Format: <b>*tebal*</b> · <i>_miring_</i> · <s>~coret~</s> · <u>\\garis bawah/</u> · <b><i>*_tebal miring_*</i></b>.</div>
+      <div class="modal-row" style="align-items:flex-start;"><label>Naskah</label><textarea id="inv-naskah" rows="11" style="flex:1;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;"></textarea></div>
+      <div style="padding:8px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;border-bottom:1px solid #bbf7d0;font-size:11px;font-weight:800;color:#166534;">📱 NASKAH WHATSAPP</div>
+      <div style="padding:6px 16px 2px;font-size:10px;color:var(--text-muted);">Variabel WA tambahan: <b>{{sapaan_penerima}}</b>, <b>{{judul_undangan}}</b>, dan <b>{{link_undangan}}</b>. Naskah ini ikut tersimpan di template. Format WhatsApp dapat langsung dipakai: <b>*tebal*</b>, <i>_miring_</i>, <s>~coret~</s>.</div>
+      <div class="modal-row" style="align-items:flex-start;"><label>Pesan WA</label><textarea id="inv-wa-text" rows="6" style="flex:1;resize:vertical;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;"></textarea></div>
+      <div style="padding:8px 16px;background:#f8fafc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:11px;font-weight:800;color:var(--green);">✍️ PENANDATANGAN</div>
+      <div class="modal-row"><label>Nama</label><select id="inv-signer-name" onchange="invSignerChanged()"><option value="">— Pilih Pengurus —</option></select></div>
+      <div class="modal-row"><label>Dapukan</label><select id="inv-signer-title"><option value="">— Pilih Dapukan —</option></select></div>
+      <div class="modal-row" style="align-items:flex-start;"><label>Tanda Tangan</label><div style="flex:1;"><input id="inv-signature-file" type="file" accept="image/png,image/jpeg,image/webp" onchange="invSignaturePicked(event)" style="width:100%;"><div id="inv-signature-status" style="font-size:9px;color:var(--text-muted);margin-top:3px;">Opsional. Gambar akan diperkecil otomatis lalu disimpan pada undangan dan ikut tampil di PDF/link digital.</div><img id="inv-signature-preview" style="display:none;max-width:180px;max-height:80px;margin-top:6px;object-fit:contain;"><div style="margin-top:5px;"><button type="button" onclick="invClearSignature()" style="font-size:9px;padding:4px 7px;">Hapus TTD</button></div></div></div>
+      <div id="inv-receiver-summary" style="margin:8px 0;padding:10px 12px;background:var(--gold-light);border:1px solid #fde68a;border-radius:7px;font-size:11px;color:var(--gold-dark);"></div>
+      <div id="inv-result"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-invitation')">Tutup</button>
+      <button class="btn-save" onclick="generateInvitation()">✉️ Generate / Update Undangan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DAFTAR HADIR -->
+<div class="modal-overlay" id="modal-hadir">
+  <div class="modal" style="max-width:96vw;width:96vw;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);">
+      <div>
+        <strong id="modal-hadir-title" style="font-size:13px;">Daftar Hadir</strong>
+        <div id="modal-hadir-meta" style="font-size:10px;color:var(--text-muted);"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="cetakDaftarHadir()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Preview ID Absen</button>
+        <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
+        <button onclick="bukaKontrolAbsen()" style="background:#7c3aed;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Kontrol Absen</button>
+        <button id="btn-hadir-report" onclick="closeMod('modal-hadir');bukaRekapFinal(curKegiatanId,'nama')" style="background:#0f766e;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Report / Rekap</button>
+        <button id="btn-hadir-close" onclick="closeMod('modal-hadir');tutupKegiatanFinal(curKegiatanId)" style="display:none;background:#b45309;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🔒 Tutup Acara</button>
+        <button onclick="closeMod('modal-hadir')" style="background:#e5e7eb;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✕</button>
+      </div>
+    </div>
+    <div class="stats-pill" id="hadir-stats" style="padding:8px 14px 0;margin:0;"></div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--border);">
+      <input type="text" id="hadir-search" placeholder="🔍 Cari nama / KK..." oninput="renderDaftarHadir()" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;"/>
+    </div>
+    <div id="modal-hadir-content" style="padding:8px 14px;overflow:auto;max-height:55vh;"></div>
+  </div>
+</div>
+
+<!-- MODAL TANDAI PEMBAYAR -->
+<div class="modal-overlay" id="modal-pembayar">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">＋ Tandai Pembayar IR/ISRUN</strong>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Pilih jamaah yang wajib bayar IR/ISRUN bulanan</div>
+    </div>
+    <div style="padding:10px 14px;">
+      <input type="text" id="pembayar-search" placeholder="Cari nama jamaah..." oninput="renderListPilihPembayar()" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:10px;font-family:inherit;"/>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">💡 Yang sudah jadi pembayar tidak ditampilkan. Hanya jamaah dewasa (≥21 thn) yg ditampilkan.</div>
+      <div id="pilih-pembayar-list" style="max-height:50vh;overflow:auto;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-pembayar')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL KATEGORI ISRUN -->
+<div class="modal-overlay" id="modal-kategori-isrun">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong id="modal-kategori-title" style="font-size:14px;">＋ Tambah Kategori</strong>
+    </div>
+    <input type="hidden" id="kat-id"/>
+    <div class="modal-row"><label>Kode</label><input type="text" id="kat-kode" placeholder="e.g., CKM_PST" style="text-transform:uppercase"/></div>
+    <div class="modal-row"><label>Nama</label><input type="text" id="kat-nama" placeholder="e.g., CKM Pusat"/></div>
+    <div class="modal-row"><label>Urutan</label><input type="number" id="kat-urutan" value="0"/></div>
+    <div class="modal-row"><label>Nominal Default</label><input type="text" id="kat-nominal" value="0" inputmode="numeric"/></div>
+    <div class="modal-row"><label>Level</label>
+      <select id="kat-level">
+        <option value="">—</option>
+        <option value="pusat">Pusat</option>
+        <option value="daerah">Daerah</option>
+        <option value="desa">Desa</option>
+        <option value="kelompok">Kelompok</option>
+      </select>
+    </div>
+    <div class="modal-row"><label>Aktif</label>
+      <select id="kat-aktif">
+        <option value="true">✓ Aktif</option>
+        <option value="false">✗ Non-aktif</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-kategori-isrun')">Batal</button>
+      <button class="btn-save" onclick="simpanKategori()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PROSES PERNIKAHAN -->
+<div class="modal-overlay" id="modal-marriage">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">💍 Proses Pernikahan</strong>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Perubahan pasangan, kelompok, KK dan status sambung diproses sekaligus.</div>
+    </div>
+    <div id="modal-marriage-body"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-marriage')">Batal</button>
+      <button class="btn-save" id="btn-save-marriage" onclick="simpanMarriage()" style="background:#be185d;">💍 Proses & Simpan</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL PROFIL USIA NIKAH -->
+<div class="modal-overlay" id="modal-youth-profile">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div><strong style="font-size:14px;">💚 Profil Remaja Usia Nikah</strong><div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Form profil langsung dapat diedit · foto bisa dari kamera/galeri · JPG/PDF memakai template sesuai JK.</div></div>
+      <button class="btn-cancel" onclick="closeMod('modal-youth-profile')" style="padding:5px 9px;border-radius:6px;cursor:pointer;">✕</button>
+    </div>
+    <div id="yn-profile-content"><div class="loading">Memuat profil...</div></div>
+  </div>
+</div>
+
+<!-- MODAL EXPORT JAMAAH -->
+<div class="modal-overlay" id="modal-export">
+  <div class="modal" style="max-width:780px;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 9px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">⬇️ Export Data Jamaah</strong>
+      <div id="export-info" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+    </div>
+
+    <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+
+      <!-- 1. PEMILIHAN KOLOM -->
+      <details id="export-sec-columns" class="export-config-section" style="border:1px solid var(--border);border-radius:8px;background:#fff;overflow:hidden;">
+        <summary style="list-style:none;cursor:pointer;padding:11px 12px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8fafc;">
+          <span>📋 Pemilihan Kolom</span>
+          <span id="export-columns-summary" style="font-size:10px;color:#166534;background:#dcfce7;padding:3px 7px;border-radius:999px;">Default siap pakai</span>
+        </summary>
+        <div style="padding:11px 12px;border-top:1px solid var(--border-light);">
+          <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+            <button onclick="exportPilihSemua()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✓ Pilih Semua</button>
+            <button onclick="exportPilihRingkas()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;background:#dbeafe;color:#1e40af;">↺ Default</button>
+            <button onclick="exportPilihIdAbsen()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;background:#ede9fe;color:#6d28d9;">🪪 Lembar ID Absen</button>
+            <button onclick="exportPilihNone()" class="btn-cancel" style="padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✗ Kosongkan</button>
+          </div>
+          <div id="export-columns" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;font-size:12px;max-height:34vh;overflow-y:auto;background:#f9fafb;padding:10px;border-radius:6px;"></div>
+        </div>
+      </details>
+
+      <!-- 2. GROUP & SORT -->
+      <details id="export-sec-group" class="export-config-section" style="border:1px solid var(--border);border-radius:8px;background:#fff;overflow:hidden;">
+        <summary style="list-style:none;cursor:pointer;padding:11px 12px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8fafc;">
+          <span>↕️ Group & Sort</span>
+          <span id="export-group-summary" style="font-size:10px;color:#166534;background:#dcfce7;padding:3px 7px;border-radius:999px;">Default: KK · A–Z</span>
+        </summary>
+        <div style="padding:11px 12px;border-top:1px solid var(--border-light);">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;">
+            <label style="font-size:10px;font-weight:700;color:var(--text-muted);">
+              GROUP BERDASARKAN
+              <select id="export-group-by" onchange="updateExportGroupSummary()" style="width:100%;margin-top:5px;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+                <option value="kk" selected>Kepala Keluarga (KK)</option>
+                <option value="kelompok">Kelompok</option>
+                <option value="none">Tanpa Group</option>
+              </select>
+            </label>
+            <label style="font-size:10px;font-weight:700;color:var(--text-muted);">
+              URUTAN GROUP
+              <select id="export-group-order" onchange="updateExportGroupSummary()" style="width:100%;margin-top:5px;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+                <option value="asc" selected>A → Z</option>
+                <option value="desc">Z → A</option>
+              </select>
+            </label>
+            <label style="font-size:10px;font-weight:700;color:var(--text-muted);">
+              URUTAN ISI GROUP
+              <select id="export-member-sort" onchange="updateExportGroupSummary()" style="width:100%;margin-top:5px;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+                <option value="kk_age_desc" selected>KK paling atas → usia tertua</option>
+                <option value="name_asc">Nama A → Z</option>
+                <option value="age_desc">Usia tertua → termuda</option>
+                <option value="age_asc">Usia termuda → tertua</option>
+              </select>
+            </label>
+          </div>
+          <div style="margin-top:9px;">
+            <button type="button" onclick="resetExportGroupSort()" class="btn-cancel" style="padding:5px 10px;border-radius:5px;font-size:10px;font-weight:700;">↺ Default Group & Sort</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- 3. PENGATURAN PDF -->
+      <details id="export-sec-pdf" class="export-config-section" style="border:1px solid var(--border);border-radius:8px;background:#fff;overflow:hidden;">
+        <summary style="list-style:none;cursor:pointer;padding:11px 12px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f8fafc;">
+          <span>🖨️ Pengaturan PDF</span>
+          <span id="export-pdf-summary" style="font-size:10px;color:#166534;background:#dcfce7;padding:3px 7px;border-radius:999px;">Default: Landscape · Auto · 12.5 pt</span>
+        </summary>
+        <div style="padding:11px 12px;border-top:1px solid var(--border-light);">
+          <div style="display:grid;grid-template-columns:minmax(170px,230px) 1fr;gap:10px;align-items:start;background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;">LAYOUT HALAMAN</label>
+              <select id="export-pdf-orientation" onchange="updateExportPdfWidthStatus()" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+                <option value="portrait">Portrait</option>
+                <option value="landscape" selected>Landscape</option>
+              </select>
+
+              <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin:9px 0 5px;">UKURAN KERTAS</label>
+              <select id="export-pdf-paper" onchange="updateExportPdfWidthStatus()" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;">
+                <option value="auto" selected>Otomatis (A4 → A1)</option>
+                <option value="a4">Kunci A4</option>
+                <option value="a3">Kunci A3</option>
+                <option value="a2">Kunci A2</option>
+                <option value="a1">Kunci A1</option>
+              </select>
+
+              <label style="font-size:10px;font-weight:700;color:var(--text-muted);display:block;margin:10px 0 5px;">FONT TABEL</label>
+              <div style="display:flex;align-items:center;gap:7px;">
+                <input id="export-pdf-font-size" type="number" min="8" max="20" step="0.5" value="12.5"
+                  oninput="updateExportPdfWidthStatus()"
+                  style="width:82px;padding:7px;border:1.5px solid var(--border);border-radius:5px;font-size:12px;font-family:inherit;text-align:center;"/>
+                <span style="font-size:11px;color:var(--text-muted);">pt</span>
+              </div>
+
+              <div style="margin-top:10px;">
+                <button type="button" onclick="resetExportPdfSettings()" class="btn-cancel" style="padding:5px 10px;border-radius:5px;font-size:10px;font-weight:700;">↺ Default PDF</button>
+              </div>
+            </div>
+
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
+                <label style="font-size:10px;font-weight:700;color:var(--text-muted);">LEBAR KOLOM PDF (mm)</label>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+                  <button type="button" onclick="autoFitExportPdfWidths()" class="btn-cancel" style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;">↔ Auto 1 Baris</button>
+                  <button type="button" onclick="resetExportPdfWidths()" class="btn-cancel" style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;">Reset Lebar</button>
+                </div>
+              </div>
+              <div id="export-width-controls" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;"></div>
+              <div id="export-pdf-width-summary" style="margin-top:7px;padding:7px 9px;border-radius:6px;background:#eef2ff;color:#3730a3;font-size:10px;line-height:1.45;font-weight:700;">Menghitung total lebar kolom...</div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ACTIONS SELALU TERLIHAT -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;">
+        <button onclick="doExport('xlsx')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
+        <button onclick="doExport('csv')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#3b82f6;">📄 CSV</button>
+        <button onclick="previewExportJamaahPDF()" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#7c3aed;">👁️ Preview PDF</button>
+        <button onclick="doExport('pdf')" class="btn-save" style="flex:1;min-width:130px;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#dc2626;">📕 Download PDF</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMod('modal-export')" style="width:100%;">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW PDF JAMAAH -->
+<div class="modal-overlay" id="modal-export-pdf-preview">
+  <div class="modal" style="max-width:1100px;width:min(96vw,1100px);height:min(92vh,900px);display:flex;flex-direction:column;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div><strong style="font-size:14px;">👁️ Preview PDF Data Jamaah</strong><div id="export-pdf-preview-info" style="font-size:10px;color:var(--text-muted);margin-top:2px;"></div></div>
+      <button class="btn-cancel" onclick="closeExportPdfPreview()" style="padding:5px 9px;border-radius:6px;cursor:pointer;">✕</button>
+    </div>
+    <iframe id="export-pdf-preview-frame" title="Preview PDF Jamaah" style="flex:1;width:100%;border:0;background:#e5e7eb;min-height:520px;"></iframe>
+    <div class="modal-actions" style="display:flex;gap:8px;">
+      <button class="btn-cancel" onclick="closeExportPdfPreview()" style="flex:1;">Kembali Atur</button>
+      <button class="btn-save" onclick="doExport('pdf')" style="flex:1;background:#dc2626;">📕 Download PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EXPORT PENGURUS -->
+<div class="modal-overlay" id="modal-export-pengurus">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-handle"></div>
+    <div style="padding:8px 16px 6px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:14px;">⬇️ Export Data Pengurus</strong>
+      <div id="pg-export-info" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+    </div>
+    <div style="padding:14px 16px;">
+      <div class="form-row"><label>WILAYAH</label><select id="pg-export-wilayah" onchange="updatePgExportInfo()"></select></div>
+      <div class="form-row"><label>KATEGORI</label><select id="pg-export-kategori" onchange="updatePgExportInfo()">
+        <option value="all">Semua Pengurus + Istri Pengurus</option>
+        <option value="appointed">Pengurus yang Didapuk</option>
+        <option value="spouse">Hanya Istri/Pendamping Pengurus</option>
+      </select></div>
+      <div class="form-row"><label>JENIS KELAMIN</label><select id="pg-export-gender" onchange="updatePgExportInfo()">
+        <option value="all">Semua</option>
+        <option value="L">Laki-laki</option>
+        <option value="P">Perempuan</option>
+      </select></div>
+      <div class="form-row"><label>STATUS</label><select id="pg-export-status" onchange="updatePgExportInfo()">
+        <option value="all">Semua</option>
+        <option value="aktif">Aktif</option>
+        <option value="nonaktif">Nonaktif</option>
+      </select></div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:7px;padding:10px;margin-top:10px;font-size:11px;color:var(--text-muted);">
+        PDF dan Excel mengikuti filter di atas. Hasil export dipisahkan per <b>wilayah/group</b> dan per <b>jenis kelamin</b>. Excel memakai sheet terpisah; PDF memakai lembar/halaman terpisah dengan layout Portrait.
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button onclick="exportPengurusExcel()" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#10b981;">📊 Excel (.xlsx)</button>
+        <button onclick="exportPengurusPDF()" class="btn-save" style="flex:1;padding:11px;border-radius:6px;font-size:13px;font-weight:700;background:#dc2626;">📄 PDF (.pdf)</button>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="closeMod('modal-export-pengurus')" style="width:100%;">Tutup</button></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="ubnb-auth.js"></script>
+<script src="assets/js/dashboard-core.js?v=86"></script>
+<script src="assets/js/ppg.js?v=86"></script>
+<script src="assets/js/dashboard-current.js?v=86"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
