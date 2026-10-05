@@ -2393,3 +2393,161 @@ window.ubnb84WIB={
     verified:masterVerified85
   };
 })();
+
+/* ============================================================
+   v87 — Database Perwira door: robust Pindah Mode
+   Fix modular regression:
+   - do not depend on window.CU; CU is a global lexical binding
+   - restore/rebuild switch whenever door menu is re-rendered
+   ============================================================ */
+(function(){
+  function norm87(v){
+    return String(v||'')
+      .trim()
+      .toLowerCase()
+      .replace(/[._/\\-]+/g,' ')
+      .replace(/\s+/g,' ');
+  }
+
+  function currentUser87(){
+    try{
+      return (typeof CU!=='undefined' && CU) ? CU : null;
+    }catch(_){
+      return null;
+    }
+  }
+
+  function hasPpgAccess87(){
+    try{
+      if(typeof window.ppgCanAccess==='function' && window.ppgCanAccess()) return true;
+    }catch(_){}
+
+    try{
+      if(typeof window.ppgIsMaster66==='function' && window.ppgIsMaster66()) return true;
+    }catch(_){}
+
+    const u=currentUser87();
+    if(!u)return false;
+
+    const did=String(u.did||u.id||'');
+    const role=norm87(u.role);
+
+    if(
+      u.is_master===true ||
+      u.master===true ||
+      u.ppg_master===true ||
+      did==='4075' ||
+      ['master','master admin','master_admin','superadmin'].includes(role)
+    ) return true;
+
+    try{
+      return (Array.isArray(aPengurus)?aPengurus:[]).some(p=>{
+        if(!p || p.aktif===false || String(p.did)!==did)return false;
+        const d=' '+norm87(p.dapukan)+' ';
+        return /(^|\s)mt(\s|$)/.test(d)
+          || /(^|\s)ms(\s|$)/.test(d)
+          || /(^|\s)ki(\s|$)/.test(d)
+          || d.includes(' wakil ki ')
+          || d.includes(' wk ki ')
+          || d.includes(' penerobos ');
+      });
+    }catch(_){
+      return false;
+    }
+  }
+
+  function closeMenus87(){
+    document.querySelectorAll('.ubnb69-door-menu.show')
+      .forEach(m=>m.classList.remove('show'));
+    document.querySelectorAll(
+      '.ubnb69-door-btn[aria-expanded="true"], .btn-keluar[aria-expanded="true"]'
+    ).forEach(b=>b.setAttribute('aria-expanded','false'));
+  }
+
+  function goMode87(){
+    closeMenus87();
+    document.getElementById('ppg-shell')?.classList.remove('show');
+
+    if(typeof window.ppgShowPortal==='function'){
+      window.ppgShowPortal();
+      return;
+    }
+
+    /* fallback: use legacy mode button if portal function is unavailable */
+    document.getElementById('db-mode-switch-66')?.click();
+  }
+
+  function ensureDoorMode87(){
+    const menu=document.getElementById('db69-door-menu');
+    if(!menu)return;
+
+    const allow=hasPpgAccess87();
+    let sw=document.getElementById('db69-switch');
+
+    if(!allow){
+      sw?.remove();
+      return;
+    }
+
+    if(!sw){
+      sw=document.createElement('button');
+      sw.type='button';
+      sw.id='db69-switch';
+      sw.className='ubnb69-door-item';
+      sw.innerHTML='<span>⇄</span><span>Pindah Mode</span>';
+
+      let sep=menu.querySelector('.ubnb69-door-sep');
+      const logout=document.getElementById('db69-logout');
+
+      if(sep){
+        menu.insertBefore(sw,sep);
+      }else if(logout){
+        sep=document.createElement('div');
+        sep.className='ubnb69-door-sep';
+        menu.insertBefore(sw,logout);
+        menu.insertBefore(sep,logout);
+      }else{
+        menu.prepend(sw);
+      }
+    }
+
+    if(sw.dataset.v87Bound!=='1'){
+      sw.dataset.v87Bound='1';
+      sw.onclick=function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        goMode87();
+      };
+    }
+  }
+
+  let t87=0;
+  const obs87=new MutationObserver(()=>{
+    clearTimeout(t87);
+    t87=setTimeout(ensureDoorMode87,30);
+  });
+  obs87.observe(document.documentElement,{childList:true,subtree:true});
+
+  [0,200,500,900,1500,3000].forEach(ms=>setTimeout(ensureDoorMode87,ms));
+
+  /* after relevant mode/login functions run, re-check the door */
+  ['ppgChooseDatabase','ppgChoosePPG'].forEach(name=>{
+    const old=window[name];
+    if(typeof old==='function' && old.__v87Wrapped!==true){
+      const wrapped=function(){
+        const r=old.apply(this,arguments);
+        setTimeout(ensureDoorMode87,0);
+        setTimeout(ensureDoorMode87,150);
+        return r;
+      };
+      wrapped.__v87Wrapped=true;
+      window[name]=wrapped;
+    }
+  });
+
+  window.ubnb87DoorModeFix={
+    ensure:ensureDoorMode87,
+    canAccess:hasPpgAccess87
+  };
+})();
+
