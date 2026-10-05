@@ -29520,14 +29520,24 @@ body.ppg54-lock-page{
     if(!a)return b;
     if(!b)return a;
 
-    /* v83: status active hasil reopen tidak boleh ditimpa snapshot finished lama. */
-    const reopened=x=>{
-      const r=Date.parse(x?.reopenedAt||'');
-      const f=Date.parse(x?.finishedAt||x?.endedAt||'');
-      return Number.isFinite(r) && (!Number.isFinite(f) || r>f);
+    /* v84:
+       Owner-finalized record is authoritative over stale active/reopen cache.
+       This fixes a class disappearing from Riwayat after another device pushes
+       an older active snapshot. */
+    const finalOwner=x=>Date.parse(x?.ownerFinalizedAt||'');
+    const af=finalOwner(a), bf=finalOwner(b);
+    const ah=Number.isFinite(af), bh=Number.isFinite(bf);
+    if(ah!==bh)return ah?a:b;
+    if(ah&&bh&&af!==bf)return bf>af?b:a;
+
+    const updated=x=>{
+      const vals=[
+        x?._updatedAt,x?.ownerEditedAt,x?.finishedAt,x?.reopenedAt,x?.startedAt
+      ].map(v=>Date.parse(v||'')).filter(Number.isFinite);
+      return vals.length?Math.max(...vals):0;
     };
-    const ar=reopened(a), br=reopened(b);
-    if(ar!==br)return ar?a:b;
+    const au=updated(a),bu=updated(b);
+    if(au!==bu)return bu>au?b:a;
 
     const ra=sessionRank(a),rb=sessionRank(b);
     if(ra!==rb)return rb>ra?b:a;
@@ -29535,21 +29545,36 @@ body.ppg54-lock-page{
     const sa=sessionRichness(a),sb=sessionRichness(b);
     if(sa!==sb)return sb>sa?b:a;
 
-    const ta=String(a.finishedAt||a.updatedAt||a.startedAt||'');
-    const tb=String(b.finishedAt||b.updatedAt||b.startedAt||'');
-    return tb>=ta?b:a;
+    return b;
   }
 
   function mergeSessions(a,b){
-    const map=new Map();
-
+    /* Pass 1: merge same session id. */
+    const byId=new Map();
     for(const x of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])]){
       const id=String(x?.id||'');
       if(!id)continue;
-      map.set(id,chooseSession(map.get(id),x));
+      byId.set(id,chooseSession(byId.get(id),x));
     }
 
-    return [...map.values()].sort((x,y)=>
+    /* Pass 2: only one canonical session per scope + date + class.
+       Old duplicate IDs from localStorage are discarded locally and therefore
+       no longer create double rows in Riwayat. */
+    const byClassDay=new Map();
+    for(const x of byId.values()){
+      const key=[
+        String(x?.scope||''),
+        String(x?.date||''),
+        String(x?.className||'').trim().toLowerCase()
+      ].join('|');
+      if(!x?.date || !x?.className){
+        byClassDay.set('id:'+String(x?.id||Math.random()),x);
+        continue;
+      }
+      byClassDay.set(key,chooseSession(byClassDay.get(key),x));
+    }
+
+    return [...byClassDay.values()].sort((x,y)=>
       String(x?.startedAt||x?.id||'').localeCompare(String(y?.startedAt||y?.id||''))
     );
   }
@@ -35841,7 +35866,7 @@ ${body}
       const {data,error}=await sb.rpc('ppg_class_reopen',{p_editor_did:did83(),p_scope:scope83(s),p_session_id:String(s.id),p_reason:'Buka ulang oleh owner dari Dashboard PPG'});
       if(error)throw error;if(!data?.ok)throw new Error(data?.error||'Gagal membuka ulang kelas');
       const i=all.findIndex(x=>String(x.id)===String(s.id));
-      if(i>=0){const n={...s,status:'active',reopenedAt:data.reopenedAt,_updatedAt:data.reopenedAt,_updatedBy:did83()};delete n.finishedAt;delete n.finishedBy;delete n.endedAt;delete n.endedBy;all[i]=n;write83(all)}
+      if(i>=0){const n={...s,status:'active',reopenedAt:data.reopenedAt,_updatedAt:data.reopenedAt,_updatedBy:did83()};delete n.finishedAt;delete n.finishedBy;delete n.endedAt;delete n.endedBy;delete n.ownerFinalizedAt;all[i]=n;write83(all)}
       document.getElementById('ppg55-review-modal')?.classList.remove('show');
       const btn=document.querySelector('.ppg-tab[data-page="kelas"]');window.ppgOpenPage?.('kelas',btn);toast('Kelas dibuka ulang.');
     }catch(e){toast(e?.message||'Gagal membuka ulang kelas',true)}
@@ -35942,6 +35967,85 @@ ${body}
   if(page83)new MutationObserver(()=>setTimeout(activeOwnerButtons83,20)).observe(page83,{childList:true,subtree:true});
   setTimeout(activeOwnerButtons83,700);
   window.ppg83={isOwner:owner83,renderPivot:renderPivot83};
+})();
+</script>
+
+
+
+<script id="ubnb-v84-history-cloud-canonical-fix">
+(function(){
+  let syncing84=false;
+
+  function cleanLocal84(){
+    const key='ubnb_ppg_v37_classes';
+    let rows=[];
+    try{rows=JSON.parse(localStorage.getItem(key)||'[]')}catch(_){return}
+    if(!Array.isArray(rows))return;
+
+    const rank=x=>{
+      if(x?.ownerFinalizedAt)return 100000000000000 + (Date.parse(x.ownerFinalizedAt)||0);
+      const t=Math.max(
+        Date.parse(x?._updatedAt||'')||0,
+        Date.parse(x?.ownerEditedAt||'')||0,
+        Date.parse(x?.finishedAt||'')||0,
+        Date.parse(x?.reopenedAt||'')||0,
+        Date.parse(x?.startedAt||'')||0
+      );
+      const sr=String(x?.status||'').toLowerCase()==='finished'?4:
+               String(x?.status||'').toLowerCase()==='active'?3:
+               String(x?.status||'').toLowerCase()==='pending'?2:1;
+      const rich=(Array.isArray(x?.students)?x.students.filter(s=>s?.status&&s.status!=='Belum Hadir').length:0)*10
+        +(Array.isArray(x?.generalMaterials)?x.generalMaterials.length:0)*20;
+      return t*100 + sr*10 + rich;
+    };
+
+    const idMap=new Map();
+    rows.forEach(x=>{
+      const id=String(x?.id||''); if(!id)return;
+      const o=idMap.get(id);
+      if(!o || rank(x)>=rank(o))idMap.set(id,x);
+    });
+
+    const dayMap=new Map();
+    idMap.forEach(x=>{
+      const k=`${x?.scope||''}|${x?.date||''}|${String(x?.className||'').trim().toLowerCase()}`;
+      const o=dayMap.get(k);
+      if(!o || rank(x)>=rank(o))dayMap.set(k,x);
+    });
+
+    const clean=[...dayMap.values()].sort((a,b)=>String(a?.startedAt||a?.id||'').localeCompare(String(b?.startedAt||b?.id||'')));
+    if(JSON.stringify(clean)!==JSON.stringify(rows)){
+      localStorage.setItem(key,JSON.stringify(clean));
+    }
+  }
+
+  const oldMode84=window.ppg52KelasMode;
+  window.ppg52KelasMode=function(m){
+    if(m==='history' && !syncing84 && typeof window.ppg60SyncNow==='function'){
+      syncing84=true;
+      Promise.resolve(window.ppg60SyncNow())
+        .catch(()=>{})
+        .finally(()=>{
+          cleanLocal84();
+          syncing84=false;
+          oldMode84?.call(window,'history');
+        });
+      return;
+    }
+    const r=oldMode84?.apply(this,arguments);
+    setTimeout(cleanLocal84,0);
+    return r;
+  };
+
+  const oldH84=window.ppg55HistoryMode;
+  window.ppg55HistoryMode=function(m){
+    cleanLocal84();
+    return oldH84?.apply(this,arguments);
+  };
+
+  setTimeout(cleanLocal84,500);
+  setTimeout(()=>window.ppg60SyncNow?.().then?.(()=>cleanLocal84()),900);
+  window.ubnb84CleanPPGHistory=cleanLocal84;
 })();
 </script>
 
