@@ -29606,6 +29606,34 @@ body.ppg54-lock-page{
     );
   }
 
+  const deletedCache60=new Map();
+
+  async function deletedSet60(scope,did,force=false){
+    if(!scope||scope==='DESA')return new Set();
+    const k=`${did}|${scope}`;
+    const now=Date.now();
+    const hit=deletedCache60.get(k);
+    if(!force && hit && now-hit.at<3000)return hit.ids;
+    try{
+      const {data,error}=await sb.rpc('ppg_deleted_session_ids',{
+        p_editor_did:did,
+        p_scope:scope
+      });
+      if(error)throw error;
+      const ids=new Set(Array.isArray(data?.data)?data.data.map(String):[]);
+      deletedCache60.set(k,{at:now,ids});
+      return ids;
+    }catch(e){
+      console.error('[PPG tombstone load]',e);
+      return hit?.ids||new Set();
+    }
+  }
+
+  function filterDeleted60(value,ids){
+    if(!ids?.size || !Array.isArray(value))return value;
+    return value.filter(x=>!ids.has(String(x?.id||'')));
+  }
+
   function mergeSpecial(key,a,b){
     if(key==='ubnb_ppg_v37_classes')return mergeSessions(a,b);
     if(key==='ubnb_ppg_v37_logger')return mergeLogs(a,b);
@@ -29692,17 +29720,28 @@ body.ppg54-lock-page{
         sehingga login lain tidak pernah "menghilangkan" kelas yang sudah ada.
       */
       if(MERGE_KEYS.has(key) && data.payload!==undefined){
-        const before=parseLocal(localStorage.getItem(key));
-        const merged=mergeSpecial(key,data.payload,before);
+        let before=parseLocal(localStorage.getItem(key));
+        let serverPayload=data.payload;
+
+        /* v86: deletion is authoritative.
+           Tombstone IDs are removed from both cloud payload and stale browser cache
+           before merge, so a deleted class cannot reappear after sync/polling. */
+        if(key==='ubnb_ppg_v37_classes'){
+          const tombs=await deletedSet60(scope,did,true);
+          serverPayload=filterDeleted60(serverPayload,tombs);
+          before=filterDeleted60(before,tombs);
+        }
+
+        const merged=mergeSpecial(key,serverPayload,before);
         const next=stable(merged);
         const prev=localStorage.getItem(key);
 
         if(prev!==next){
           nativeSet.call(localStorage,key,next);
 
-          /* dorong versi lokal yang lebih kaya (mis. closed class dari device guru)
-             kembali ke server secara aman; server juga merge */
-          if(stable(merged)!==stable(data.payload)){
+          /* dorong versi lokal yang lebih kaya kembali ke server.
+             Tombstone sudah difilter sehingga sesi terhapus tidak ikut terselamatkan. */
+          if(stable(merged)!==stable(serverPayload)){
             setTimeout(()=>rpcSave(scope,key,merged),0);
           }
 
@@ -29825,6 +29864,10 @@ body.ppg54-lock-page{
           grouped.get(r.state_key).push(r);
         });
 
+        /* v86: load deletion tombstones together with snapshot.
+           This is what makes delete survive localStorage on every device. */
+        const deletedIds=await deletedSet60(scope,did,true);
+
         let changed=false;
         const recovered=[];
 
@@ -29836,10 +29879,17 @@ body.ppg54-lock-page{
           for(const key of allKeys){
             const remoteEntries=grouped.get(key)||[];
             const localRaw=localStorage.getItem(key);
-            const localVal=localRaw==null?undefined:parseLocal(localRaw);
+            let localVal=localRaw==null?undefined:parseLocal(localRaw);
+
+            if(key==='ubnb_ppg_v37_classes'){
+              localVal=filterDeleted60(localVal,deletedIds);
+            }
 
             if(remoteEntries.length){
-              const remoteVal=mergePayloads(remoteEntries,key);
+              let remoteVal=mergePayloads(remoteEntries,key);
+              if(key==='ubnb_ppg_v37_classes'){
+                remoteVal=filterDeleted60(remoteVal,deletedIds);
+              }
               let finalVal=remoteVal;
 
               if(MERGE_KEYS.has(key) && localVal!==undefined){
@@ -29860,11 +29910,27 @@ body.ppg54-lock-page{
                 changed=true;
               }
             }else if(scope!=='DESA' && localRaw!=null){
-              recovered.push({
-                state_key:key,
-                owner_did:ownerForKey(key),
-                payload:localVal
-              });
+              if(key==='ubnb_ppg_v37_classes'){
+                const cleaned=filterDeleted60(localVal,deletedIds);
+                const next=stable(cleaned);
+                if(localRaw!==next){
+                  nativeSet.call(localStorage,key,next);
+                  changed=true;
+                }
+                if(Array.isArray(cleaned) && cleaned.length){
+                  recovered.push({
+                    state_key:key,
+                    owner_did:ownerForKey(key),
+                    payload:cleaned
+                  });
+                }
+              }else{
+                recovered.push({
+                  state_key:key,
+                  owner_did:ownerForKey(key),
+                  payload:localVal
+                });
+              }
             }
           }
         }finally{
@@ -35711,15 +35777,109 @@ ${body}
 .ppg83-class-pivot{margin-bottom:9px;border:1px solid #dde6e0;border-radius:6px;background:#fff;overflow:hidden}
 .ppg83-class-head{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;background:#eef6f1;color:#175a3a;font-size:11.5px;font-weight:800}
 .ppg83-class-head small{font-size:9.5px;font-weight:550;color:#6e7e75}
-.ppg83-pivot-wrap{overflow:auto;max-width:100%}
-.ppg83-pivot{width:100%;border-collapse:collapse;table-layout:auto;font-size:10.5px;min-width:420px}
-.ppg83-pivot th{position:sticky;top:0;z-index:1;padding:6px 7px;border:1px solid #dbe5df;background:#176a41;color:#fff;text-align:center;white-space:nowrap;font-weight:700}
-.ppg83-pivot th:first-child{left:0;z-index:3;text-align:left;min-width:190px}
-.ppg83-pivot td{padding:5px 7px;border:1px solid #e1e8e4;text-align:center;white-space:nowrap}
-.ppg83-pivot td:first-child{position:sticky;left:0;z-index:2;text-align:left;background:#fff;min-width:190px;max-width:260px;white-space:normal;font-weight:650}
-.ppg83-pivot tr:nth-child(even) td:first-child,.ppg83-pivot tr:nth-child(even) td{background:#fbfdfc}
-.ppg83-pivot td:first-child small{display:block;margin-top:1px;color:#8a958f;font-size:8.5px;font-weight:500}
-.ppg83-st{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:23px;padding:0 4px;border-radius:4px;font-size:9px;font-weight:800}
+.ppg83-pivot-wrap{
+  overflow-x:auto;
+  overflow-y:visible;
+  max-width:100%;
+  -webkit-overflow-scrolling:touch;
+  border-top:1px solid #dde6e0;
+}
+.ppg83-pivot{
+  width:max-content;
+  min-width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;
+  font-size:10.5px;
+}
+.ppg83-pivot th{
+  position:sticky;
+  top:0;
+  z-index:1;
+  height:34px;
+  padding:5px 6px;
+  border-right:1px solid #dbe5df;
+  border-bottom:1px solid #dbe5df;
+  background:#176a41;
+  color:#fff;
+  text-align:center;
+  white-space:nowrap;
+  font-weight:700;
+}
+.ppg83-pivot th.ppg83-name-col,
+.ppg83-pivot td.ppg83-name-col{
+  position:sticky;
+  left:0;
+  width:156px;
+  min-width:156px;
+  max-width:156px;
+}
+.ppg83-pivot th.ppg83-name-col{
+  z-index:4;
+  text-align:left;
+  padding-left:8px;
+}
+.ppg83-pivot th.ppg83-date-col,
+.ppg83-pivot td.ppg83-date-col{
+  width:54px;
+  min-width:54px;
+  max-width:54px;
+}
+.ppg83-pivot th.ppg83-pct-col,
+.ppg83-pivot td.ppg83-pct-col{
+  width:54px;
+  min-width:54px;
+  max-width:54px;
+  font-weight:800;
+}
+.ppg83-pivot td{
+  height:39px;
+  padding:5px 6px;
+  border-right:1px solid #e1e8e4;
+  border-bottom:1px solid #e1e8e4;
+  text-align:center;
+  white-space:nowrap;
+  background:#fff;
+}
+.ppg83-pivot td.ppg83-name-col{
+  z-index:3;
+  text-align:left;
+  padding:5px 8px;
+  background:#fff;
+  font-weight:650;
+  white-space:normal;
+}
+.ppg83-pivot tr:nth-child(even) td{background:#fbfdfc}
+.ppg83-pivot tr:nth-child(even) td.ppg83-name-col{background:#fbfdfc}
+.ppg83-name-text{
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+  line-height:1.22;
+  max-height:2.44em;
+  word-break:normal;
+  overflow-wrap:anywhere;
+}
+.ppg83-pivot td.ppg83-name-col small{
+  display:block;
+  margin-top:1px;
+  color:#8a958f;
+  font-size:8.5px;
+  font-weight:500;
+  line-height:1.1;
+}
+.ppg83-st{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:28px;
+  height:23px;
+  padding:0 4px;
+  border-radius:4px;
+  font-size:9px;
+  font-weight:800
+}
 .ppg83-st.h{background:#e8f7ee;color:#176a41}.ppg83-st.i{background:#edf4ff;color:#315f9b}.ppg83-st.s{background:#f5efff;color:#6e45a7}.ppg83-st.th{background:#fff0f0;color:#a13d3d}.ppg83-st.bh{background:#f2f4f3;color:#69766f}.ppg83-st.t{background:#fff7e3;color:#8d650e}.ppg83-st.none{background:transparent;color:#adb6b0}
 .ppg83-legend{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 8px;font-size:9px;color:#718078}.ppg83-legend span{display:inline-flex;align-items:center;gap:3px}
 
@@ -35727,7 +35887,10 @@ ${body}
   .ppg83-grid{grid-template-columns:1fr}.ppg83-span2{grid-column:auto}
   .ppg83-student{grid-template-columns:minmax(0,1fr) 120px}
   .ppg83-period-title{font-size:12px}
-  .ppg83-pivot{font-size:10px}.ppg83-pivot th:first-child,.ppg83-pivot td:first-child{min-width:155px}
+  .ppg83-pivot{font-size:10px}
+  .ppg83-pivot th.ppg83-name-col,.ppg83-pivot td.ppg83-name-col{width:148px;min-width:148px;max-width:148px}
+  .ppg83-pivot th.ppg83-date-col,.ppg83-pivot td.ppg83-date-col{width:50px;min-width:50px;max-width:50px}
+  .ppg83-pivot th.ppg83-pct-col,.ppg83-pivot td.ppg83-pct-col{width:50px;min-width:50px;max-width:50px}
 }
 </style>
 
@@ -35882,6 +36045,7 @@ ${body}
       if(error)throw error;if(!data?.ok)throw new Error(data?.error||'Gagal menghapus kelas');
       write83(all.filter(x=>String(x.id)!==String(id)));
       document.getElementById('ppg55-review-modal')?.classList.remove('show');
+      try{await window.ppg60SyncNow?.()}catch(_){}
       renderCurrent83();toast('Kelas dihapus.');
     }catch(e){toast(e?.message||'Gagal menghapus kelas',true)}
   };
@@ -35938,16 +36102,65 @@ ${body}
     return {dates,people:[...people.values()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id')),sessions:ss.length};
   }
   function pivotHtml83(mode){
-    const periods=periodGroups83(mode);if(!periods.length)return '<div class="ppg-empty">Belum ada riwayat kelas selesai.</div>';
+    const periods=periodGroups83(mode);
+    if(!periods.length)return '<div class="ppg-empty">Belum ada riwayat kelas selesai.</div>';
     const order=classes83();
+
+    const pct83=(r,dates)=>{
+      const vals=dates.map(d=>String(r.st[d]||''));
+      const recorded=vals.filter(v=>v && v!=='—').length;
+      if(!recorded)return 0;
+      const attended=vals.filter(v=>v==='Hadir'||v==='Terlambat').length;
+      return Math.round(attended/recorded*100);
+    };
+
     return `<div class="ppg52-tabs" style="margin-bottom:8px">${[['daily','Harian'],['weekly','Mingguan'],['monthly','Bulanan']].map(x=>`<button class="ppg52-tab ${mode83===x[0]?'active':''}" onclick="ppg55HistoryMode('${x[0]}')">${x[1]}</button>`).join('')}</div>
-      <div class="ppg83-legend"><span>H = Hadir</span><span>I = Izin</span><span>S = Sakit</span><span>TH = Tidak Hadir</span><span>BH = Belum Hadir</span><span>T = Terlambat</span></div>
+      <div class="ppg83-legend">
+        <span>H = Hadir</span><span>I = Izin</span><span>S = Sakit</span>
+        <span>TH = Tidak Hadir</span><span>BH = Belum Hadir</span><span>T = Terlambat</span>
+        <span>% = (H + T) ÷ pertemuan tercatat</span>
+      </div>
       ${periods.map(p=>{
-        const used=[...new Set(p.rows.map(s=>s.className))].sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)||String(a).localeCompare(String(b),'id')});
-        return `<section class="ppg83-period"><div class="ppg83-period-title">${esc83(p.title)}</div>${used.map(k=>{
-          const z=pivotClass83(p.rows,k);
-          return `<div class="ppg83-class-pivot"><div class="ppg83-class-head"><span>${esc83(k)}</span><small>${z.sessions} kegiatan · ${z.people.length} siswa</small></div><div class="ppg83-pivot-wrap"><table class="ppg83-pivot"><thead><tr><th>Nama Siswa</th>${z.dates.map(d=>`<th>${esc83(fmtShort83(d))}</th>`).join('')}</tr></thead><tbody>${z.people.map(r=>`<tr><td>${esc83(r.nama)}${r.kind==='simpatisan'?'<small>Simpatisan</small>':''}</td>${z.dates.map(d=>{const q=st83(r.st[d]);return `<td><span class="ppg83-st ${q[1]}">${q[0]}</span></td>`}).join('')}</tr>`).join('')}</tbody></table></div></div>`;
-        }).join('')}</section>`;
+        const used=[...new Set(p.rows.map(s=>s.className))].sort((a,b)=>{
+          const ia=order.indexOf(a),ib=order.indexOf(b);
+          return (ia<0?999:ia)-(ib<0?999:ib)||String(a).localeCompare(String(b),'id')
+        });
+        return `<section class="ppg83-period">
+          <div class="ppg83-period-title">${esc83(p.title)}</div>
+          ${used.map(k=>{
+            const z=pivotClass83(p.rows,k);
+            return `<div class="ppg83-class-pivot">
+              <div class="ppg83-class-head">
+                <span>${esc83(k)}</span>
+                <small>${z.sessions} kegiatan · ${z.people.length} siswa</small>
+              </div>
+              <div class="ppg83-pivot-wrap">
+                <table class="ppg83-pivot">
+                  <thead>
+                    <tr>
+                      <th class="ppg83-name-col">Nama Siswa</th>
+                      ${z.dates.map(d=>`<th class="ppg83-date-col">${esc83(fmtShort83(d))}</th>`).join('')}
+                      <th class="ppg83-pct-col">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${z.people.map(r=>`<tr>
+                      <td class="ppg83-name-col">
+                        <span class="ppg83-name-text">${esc83(r.nama)}</span>
+                        ${r.kind==='simpatisan'?'<small>Simpatisan</small>':''}
+                      </td>
+                      ${z.dates.map(d=>{
+                        const q=st83(r.st[d]);
+                        return `<td class="ppg83-date-col"><span class="ppg83-st ${q[1]}">${q[0]}</span></td>`
+                      }).join('')}
+                      <td class="ppg83-pct-col">${pct83(r,z.dates)}%</td>
+                    </tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>`;
+          }).join('')}
+        </section>`;
       }).join('')}`;
   }
   function renderPivot83(mode){
@@ -36046,6 +36259,33 @@ ${body}
   setTimeout(cleanLocal84,500);
   setTimeout(()=>window.ppg60SyncNow?.().then?.(()=>cleanLocal84()),900);
   window.ubnb84CleanPPGHistory=cleanLocal84;
+})();
+</script>
+
+
+
+<script id="ubnb-v85-pivot-fixed-name-percent">
+(function(){
+  window.ubnb85Pivot={
+    fixedNameColumn:true,
+    maxNameLines:2,
+    percentageColumn:true,
+    weekly:true,
+    monthly:true,
+    percentageRule:'(Hadir + Terlambat) / pertemuan tercatat'
+  };
+})();
+</script>
+
+
+
+<script id="ubnb-v86-delete-tombstone-sync-fix">
+(function(){
+  window.ubnb86DeleteFix={
+    tombstoneAware:true,
+    immediateSyncAfterDelete:true,
+    purpose:'Deleted PPG classes are removed from local cache before merge/recovery.'
+  };
 })();
 </script>
 
