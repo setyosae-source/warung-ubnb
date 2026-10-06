@@ -461,6 +461,35 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
 }
 </style>
 
+
+<style id="ubnb-v87-login-lock-absen-style">
+.dk-lock-modal{
+  position:fixed; inset:0; z-index:9000;
+  display:none; align-items:center; justify-content:center;
+  padding:18px; background:rgba(15,23,42,.52);
+}
+.dk-lock-modal.show{display:flex}
+.dk-lock-card{
+  width:min(390px,100%);
+  background:#fff; border:1px solid #d9e4de; border-radius:14px;
+  padding:20px; box-shadow:0 18px 50px rgba(15,23,42,.25);
+}
+.dk-lock-icon{font-size:27px;margin-bottom:5px}
+.dk-lock-title{font-size:18px;font-weight:800;color:#173a2e;margin-bottom:5px}
+.dk-lock-desc{font-size:12.5px;line-height:1.45;color:#65736c;margin-bottom:14px}
+.dk-lock-input{
+  width:100%; min-height:48px; padding:10px 12px;
+  border:1px solid #bfcfc7; border-radius:8px;
+  font-size:18px; letter-spacing:3px; outline:none; background:#fff;
+}
+.dk-lock-input:focus{border-color:#147a59;box-shadow:0 0 0 3px rgba(20,122,89,.10)}
+.dk-lock-msg{min-height:20px;padding-top:6px;font-size:11.5px;color:#dc2626}
+.dk-lock-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.dk-lock-actions button{min-height:44px;border-radius:8px;font-size:13px;font-weight:750}
+.dk-lock-cancel{background:#fff;border:1px solid #cfd8d3;color:#52615a}
+.dk-lock-ok{background:#147a59;border:1px solid #147a59;color:#fff}
+</style>
+
 </head>
 <body>
 
@@ -1323,6 +1352,22 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
   </div>
 </div>
 
+
+<!-- LOGIN LOCK RE-VERIFY FOR ABSEN -->
+<div class="dk-lock-modal" id="dk-login-lock-modal" aria-hidden="true">
+  <div class="dk-lock-card">
+    <div class="dk-lock-icon">🔐</div>
+    <div class="dk-lock-title">Verifikasi Kunci Login</div>
+    <div class="dk-lock-desc">Sesi verifikasi sudah berakhir. Masukkan PIN untuk melanjutkan ke modul Absen.</div>
+    <input id="dk-login-lock-pin" class="dk-lock-input" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN Kunci Login">
+    <div id="dk-login-lock-msg" class="dk-lock-msg"></div>
+    <div class="dk-lock-actions">
+      <button type="button" id="dk-login-lock-cancel" class="dk-lock-cancel">Batal</button>
+      <button type="button" id="dk-login-lock-ok" class="dk-lock-ok">Verifikasi</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -1358,11 +1403,111 @@ function isDesaAttendanceManager(){
   return !!CU && !isViewer() && !CU.kelompok_scope;
 }
 
+function dkAttendanceUnlockKey(){
+  return 'dk_attendance_unlock_grant_'+String(CU?.did||'');
+}
+
+function dkCloseLockModal(){
+  const el=document.getElementById('dk-login-lock-modal');
+  if(el) el.classList.remove('show');
+}
+
+function dkPromptLoginLockPin(){
+  return new Promise(resolve=>{
+    const modal=document.getElementById('dk-login-lock-modal');
+    const input=document.getElementById('dk-login-lock-pin');
+    const msg=document.getElementById('dk-login-lock-msg');
+    const ok=document.getElementById('dk-login-lock-ok');
+    const cancel=document.getElementById('dk-login-lock-cancel');
+    if(!modal||!input||!ok||!cancel){
+      resolve(null);
+      return;
+    }
+
+    msg.textContent='';
+    input.value='';
+    modal.classList.add('show');
+    setTimeout(()=>input.focus(),80);
+
+    let done=false;
+    const finish=v=>{
+      if(done)return;
+      done=true;
+      ok.onclick=null;
+      cancel.onclick=null;
+      input.onkeydown=null;
+      dkCloseLockModal();
+      resolve(v);
+    };
+
+    ok.onclick=()=>finish(input.value);
+    cancel.onclick=()=>finish(null);
+    input.onkeydown=e=>{
+      if(e.key==='Enter') finish(input.value);
+      if(e.key==='Escape') finish(null);
+    };
+  });
+}
+
+async function dkVerifyLoginLockPin(){
+  while(true){
+    const pin=await dkPromptLoginLockPin();
+    if(pin===null) throw new Error('Verifikasi Kunci Login dibatalkan');
+    if(!String(pin).trim()){
+      const msg=document.getElementById('dk-login-lock-msg');
+      if(msg) msg.textContent='Masukkan PIN Kunci Login.';
+      continue;
+    }
+
+    const {data,error}=await sb.rpc('dashboard_login_lock_verify_pin',{
+      p_did:CU.did,
+      p_pin:String(pin)
+    });
+
+    if(error) throw new Error(error.message||'Gagal memverifikasi Kunci Login');
+    if(data?.ok===true && data?.grant_token){
+      sessionStorage.setItem(dkAttendanceUnlockKey(),data.grant_token);
+      return data.grant_token;
+    }
+
+    const msg=document.getElementById('dk-login-lock-msg');
+    if(msg) msg.textContent=data?.error||'PIN Kunci Login salah';
+    /* buka ulang modal pada percobaan berikutnya */
+  }
+}
+
+async function dkAttendanceLoginWithGrant(grantToken){
+  const args=grantToken
+    ? {p_did:CU.did,p_unlock_token:grantToken}
+    : {p_did:CU.did};
+  const {data,error}=await sb.rpc('dk_attendance_login_pengurus',args);
+  if(error) throw new Error(error.message||'Gagal autentikasi modul Absen');
+  return data;
+}
+
 async function dkAttendanceAuthenticate(){
   if(!CU||!CU.did) throw new Error('Session pengurus tidak tersedia');
-  const {data,error}=await sb.rpc('dk_attendance_login_pengurus',{p_did:CU.did});
-  if(error) throw new Error(error.message||'Gagal autentikasi modul Absen');
-  if(!data||data.ok!==true) throw new Error((data&&data.error)||'Autentikasi modul Absen ditolak');
+
+  let grant=sessionStorage.getItem(dkAttendanceUnlockKey())||null;
+  let data=await dkAttendanceLoginWithGrant(grant);
+
+  if(data?.ok!==true && data?.code==='LOGIN_LOCK_REQUIRED'){
+    /* Grant lama sudah habis / belum ada.
+       Jangan tampilkan error merah; minta verifikasi PIN dan ulangi login Absen. */
+    sessionStorage.removeItem(dkAttendanceUnlockKey());
+
+    if(data?.method!=='pin'){
+      throw new Error('Kunci Login perlu diverifikasi kembali');
+    }
+
+    grant=await dkVerifyLoginLockPin();
+    data=await dkAttendanceLoginWithGrant(grant);
+  }
+
+  if(!data||data.ok!==true){
+    throw new Error((data&&data.error)||'Autentikasi modul Absen ditolak');
+  }
+
   DK_ATT_TOKEN=data.token;
   sessionStorage.setItem(DK_ATT_TOKEN_KEY,DK_ATT_TOKEN);
   return data;
@@ -36287,6 +36432,15 @@ ${body}
     purpose:'Deleted PPG classes are removed from local cache before merge/recovery.'
   };
 })();
+</script>
+
+
+
+<script id="ubnb-v87-login-lock-absen-fix">
+window.ubnb87LoginLockAbsenFix={
+  enabled:true,
+  behavior:'Jika grant Kunci Login kedaluwarsa, modul Absen meminta PIN lalu meneruskan grant_token ke RPC attendance.'
+};
 </script>
 
 </body>
