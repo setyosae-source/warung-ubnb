@@ -44,6 +44,31 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px;borde
   </div>
 
   <div class="card">
+    <h2>Pendapat biaya Rp200.000/orang</h2>
+    <div id="cost200Bars"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kepemilikan kendaraan pribadi</h2>
+    <div id="vehicleOwnBars"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kesediaan kendaraan pribadi digunakan</h2>
+    <div id="vehicleWillingBars"></div>
+  </div>
+
+  <div class="card">
+    <h2>Saran transportasi</h2>
+    <div id="transportBars"></div>
+  </div>
+
+  <div class="card">
+    <h2>Saran makan / konsumsi</h2>
+    <div id="foodBars"></div>
+  </div>
+
+  <div class="card">
     <h2>Detail jawaban terbaru</h2>
     <div class="wrap"><table>
       <thead><tr><th>Status</th><th>Jawaban utama</th><th>Harga</th><th>Masukan / pendalaman</th><th>Waktu</th></tr></thead>
@@ -58,7 +83,8 @@ const EVENT_CODE="PW4_TUR_2026_11";const $=s=>document.querySelector(s);let late
 const rp=n=>n?new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n):'—';
 const dt=s=>new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Jakarta'}).format(new Date(s));
 const reasonLabels={time:'Tanggal / waktu',cost:'Biaya',family:'Kepastian keluarga',transport:'Transportasi',food:'Makan / konsumsi',info:'Butuh informasi',activity:'Tujuan / kegiatan',work:'Pekerjaan / sekolah',other:'Lainnya'};
-const choiceLabels={yes:'Ya',no:'Tidak',maybe:'Mungkin',bus:'Bus besar',hiace:'Elf / Hiace',private:'Kendaraan pribadi',flexible:'Fleksibel',efficient:'Paling efisien',full:'Makan + snack',simple:'Konsumsi sederhana',partial:'Sebagian bawa sendiri',self:'Bawa sendiri',other:'Lainnya'};
+const choiceLabels={yes:'Ya',no:'Tidak',maybe:'Mungkin',private:'Kendaraan pribadi',rental:'Sewa kendaraan',full:'Makan + snack disediakan',simple:'Konsumsi sederhana',partial:'Sebagian disediakan / sebagian bawa sendiri',self:'Bawa sendiri',other:'Lainnya'};
+const fieldLabels={cost_200_reasonable:'Rp200.000 wajar?',suggested_price_200:'Saran biaya/orang',has_private_vehicle:'Punya kendaraan pribadi?',private_vehicle_willing:'Bersedia kendaraan digunakan?',common_transport:'Saran transportasi',common_food:'Saran makan/konsumsi',interest_time_if_changed:'Jika waktu diubah mau daftar?',interest_time_preference:'Waktu yang lebih memungkinkan',affordable_price:'Kemampuan biaya/orang',register_if_affordable:'Jika biaya sesuai mau daftar?',no_cost_if_lower:'Jika biaya lebih ringan mau ikut?',no_time_if_changed:'Jika waktu diubah mau ikut?',preferred_activity:'Kegiatan/tujuan yang diharapkan',family_waiting:'Kepastian keluarga yang ditunggu',needed_info:'Informasi yang masih dibutuhkan',register_trigger:'Yang perlu diubah/dipastikan'};
 
 function dedupe(rows){const m=new Map();rows.forEach(r=>{if(!m.has(r.device_key))m.set(r.device_key,r)});return [...m.values()]}
 function avg(a){return a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):0}
@@ -77,11 +103,11 @@ function render(){
  const no=unreg.filter(r=>r.jawaban?.interested==='no');
  $('#sTotal').textContent=latest.length;$('#sReg').textContent=reg.length;$('#sInterested').textContent=interested.length;$('#sNo').textContent=no.length;
 
- const ideal=reg.map(r=>Number(r.jawaban?.ideal_price||0)).filter(Boolean);
+ const suggested=latest.map(r=>Number(r.jawaban?.suggested_price_200||0)).filter(Boolean);
  const affordable=latest.map(r=>Number(r.jawaban?.affordable_price||0)).filter(Boolean);
  $('#priceSummary').innerHTML=`
-   <div class="bar"><span>Ideal · sudah daftar</span><div><strong>${rp(med(ideal))}</strong><div style="font-size:11px;color:#6a7d89">median · rata-rata ${rp(avg(ideal))}</div></div><span>${ideal.length}</span></div>
-   <div class="bar"><span>Kemampuan · kendala biaya</span><div><strong>${rp(med(affordable))}</strong><div style="font-size:11px;color:#6a7d89">median · rata-rata ${rp(avg(affordable))}</div></div><span>${affordable.length}</span></div>`;
+   <div class="bar"><span>Saran biaya jika Rp200 rb kurang sesuai</span><div><strong>${rp(med(suggested))}</strong><div style="font-size:11px;color:#6a7d89">median · rata-rata ${rp(avg(suggested))}</div></div><span>${suggested.length}</span></div>
+   <div class="bar"><span>Kemampuan · yang terkendala biaya</span><div><strong>${rp(med(affordable))}</strong><div style="font-size:11px;color:#6a7d89">median · rata-rata ${rp(avg(affordable))}</div></div><span>${affordable.length}</span></div>`;
 
  const counts={};
  latest.forEach(r=>{
@@ -90,6 +116,17 @@ function render(){
  });
  const arr=Object.entries(counts).sort((a,b)=>b[1]-a[1]);const mx=Math.max(1,...arr.map(x=>x[1]));
  $('#reasonBars').innerHTML=arr.length?arr.map(([k,n])=>`<div class="bar"><span>${esc(reasonLabels[k]||k)}</span><div class="track"><div class="fill" style="width:${Math.round(n/mx*100)}%"></div></div><strong>${n}</strong></div>`).join(''):'Belum ada data.';
+
+ const renderChoiceBars=(el,values,labelFn)=>{
+   const c={}; values.filter(Boolean).forEach(v=>c[v]=(c[v]||0)+1);
+   const a=Object.entries(c).sort((x,y)=>y[1]-x[1]), m=Math.max(1,...a.map(x=>x[1]));
+   $(el).innerHTML=a.length?a.map(([k,n])=>`<div class="bar"><span>${esc(labelFn(k))}</span><div class="track"><div class="fill" style="width:${Math.round(n/m*100)}%"></div></div><strong>${n}</strong></div>`).join(''):'Belum ada data.';
+ };
+ renderChoiceBars('#cost200Bars',latest.map(r=>r.jawaban?.cost_200_reasonable),k=>k==='yes'?'Wajar':k==='no'?'Tidak wajar / terlalu tinggi':'Perlu disesuaikan');
+ renderChoiceBars('#vehicleOwnBars',latest.map(r=>r.jawaban?.has_private_vehicle),k=>k==='yes'?'Punya kendaraan':'Tidak punya kendaraan');
+ renderChoiceBars('#vehicleWillingBars',latest.map(r=>r.jawaban?.private_vehicle_willing),k=>k==='yes'?'Bersedia':k==='maybe'?'Perlu dibicarakan':'Tidak bersedia');
+ renderChoiceBars('#transportBars',latest.map(r=>r.jawaban?.common_transport?.choice),k=>choiceLabels[k]||k);
+ renderChoiceBars('#foodBars',latest.map(r=>r.jawaban?.common_food?.choice),k=>choiceLabels[k]||k);
 
  $('#rows').innerHTML=latest.map(r=>{
    const j=r.jawaban||{};
@@ -101,15 +138,17 @@ function render(){
    const details=Object.entries(j).filter(([k,v])=>!skip.has(k)&&v!==''&&v!=null).map(([k,v])=>{
      let val=v;
      if(typeof v==='object'&&v){val=(choiceLabels[v.choice]||v.choice||'')+(v.note?' — '+v.note:'')}
+     else if(['suggested_price_200','affordable_price','ideal_price'].includes(k)) val=rp(Number(v));
      else if(choiceLabels[v]) val=choiceLabels[v];
-     return `<div><b>${esc(k.replaceAll('_',' '))}:</b> ${esc(val)}</div>`
+     const label=fieldLabels[k]||k.replaceAll('_',' ');
+     return `<div><b>${esc(label)}:</b> ${esc(val)}</div>`
    }).join('');
-   return `<tr><td>${status}</td><td>${main}</td><td>${rp(j.ideal_price||j.affordable_price)}</td><td>${details||'—'}</td><td>${dt(r.created_at)}</td></tr>`;
+   return `<tr><td>${status}</td><td>${main}</td><td>${rp(j.suggested_price_200||j.affordable_price||j.ideal_price)}</td><td>${details||'—'}</td><td>${dt(r.created_at)}</td></tr>`;
  }).join('');
 }
 function csv(){
- const data=[['Status','Tertarik','Alasan belum daftar','Alasan tidak tertarik','Harga ideal','Harga sanggup','Jawaban JSON','Waktu']];
- latest.forEach(r=>{const j=r.jawaban||{};data.push([j.registered?'Sudah daftar':'Belum daftar',j.interested||'',j.not_registered_reason||'',j.not_interested_reason||'',j.ideal_price||'',j.affordable_price||'',JSON.stringify(j),dt(r.created_at)])});
+ const data=[['Status','Tertarik','Alasan belum daftar','Alasan tidak tertarik','Rp200rb Wajar','Saran Harga','Harga Sanggup','Punya Kendaraan','Bersedia Kendaraan Digunakan','Saran Transportasi','Catatan Transportasi','Saran Makan','Catatan Makan','Jawaban JSON','Waktu']];
+ latest.forEach(r=>{const j=r.jawaban||{};data.push([j.registered?'Sudah daftar':'Belum daftar',j.interested||'',j.not_registered_reason||'',j.not_interested_reason||'',j.cost_200_reasonable||'',j.suggested_price_200||'',j.affordable_price||'',j.has_private_vehicle||'',j.private_vehicle_willing||'',j.common_transport?.choice||'',j.common_transport?.note||'',j.common_food?.choice||'',j.common_food?.note||'',JSON.stringify(j),dt(r.created_at)])});
  const s=data.map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+s],{type:'text/csv'}));a.download='survei-tur-kelompok4.csv';a.click()
 }
