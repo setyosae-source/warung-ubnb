@@ -490,6 +490,16 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
 .dk-lock-ok{background:#147a59;border:1px solid #147a59;color:#fff}
 </style>
 
+
+<style id="ubnb-v88-ppg-summary-online-style">
+.ppg83-class-head small b{color:#155e42;font-weight:850}
+@media(max-width:520px){
+  .ppg83-class-head{align-items:flex-start!important}
+  .ppg83-class-head small{text-align:right;line-height:1.35}
+}
+.ubnb-online-btn{background:#059669!important;color:#fff!important}
+</style>
+
 </head>
 <body>
 
@@ -1069,6 +1079,7 @@ body{font-family:'Plus Jakarta Sans','Inter',sans-serif;background:var(--bg);col
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button onclick="cetakDaftarHadir()" style="background:#10b981;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🪪 Preview ID Absen</button>
         <button onclick="bukaAbsenTerminal()" style="background:#2563eb;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🖥️ Absen Terminal</button>
+        <button id="btn-hadir-online" onclick="bukaAbsenOnline()" style="background:#059669;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🌐 Absen Online</button>
         <button onclick="bukaKontrolAbsen()" style="background:#7c3aed;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Kontrol Absen</button>
         <button id="btn-hadir-report" onclick="closeMod('modal-hadir');bukaRekapFinal(curKegiatanId,'nama')" style="background:#0f766e;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">📊 Report / Rekap</button>
         <button id="btn-hadir-close" onclick="closeMod('modal-hadir');tutupKegiatanFinal(curKegiatanId)" style="display:none;background:#b45309;color:white;border:none;padding:5px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🔒 Tutup Acara</button>
@@ -6611,6 +6622,62 @@ async function bulkHadir(status){
 
 
 
+
+async function bukaAbsenOnline(){
+  if(!curKegiatanId){toast('Pilih acara terlebih dahulu',true);return;}
+  return bukaAbsenOnlineFor(curKegiatanId);
+}
+async function bukaAbsenOnlineFor(kegiatanId){
+  if(!canManageCalendar()){
+    toast('Pengelolaan absen online hanya untuk dapukan KI, Wakil KI, Penerobos, atau MT.',true);
+    return;
+  }
+  const k=aKegiatan.find(x=>Number(x.id)===Number(kegiatanId));
+  if(!k){toast('Acara tidak ditemukan',true);return;}
+  if(k.status!=='aktif'){
+    toast('Absen online hanya dapat dibuka untuk acara aktif',true);
+    return;
+  }
+
+  const snap=await getAttendanceSnapshot(true);
+  if(!snap)return;
+
+  const {data,error}=await sb.rpc('dk_attendance_enable_online',{
+    p_token:DK_ATT_TOKEN,
+    p_kegiatan_id:k.id
+  });
+  if(error||!data||data.ok!==true){
+    toast('Gagal membuka absen online: '+(error?.message||data?.error||'Unknown error'),true);
+    return;
+  }
+
+  const updated=data.data||{};
+  const idx=aKegiatan.findIndex(x=>Number(x.id)===Number(k.id));
+  if(idx>=0)aKegiatan[idx]={...aKegiatan[idx],...updated};
+
+  const token=updated.public_token||k.public_token;
+  if(!token){toast('Token absen online tidak tersedia',true);return;}
+
+  const url=window.location.origin+'/absen-kegiatan.html?token='+encodeURIComponent(token);
+  const w=window.open(url,'_blank');
+  if(!w) prompt('Popup diblokir. Buka link absen online ini:',url);
+  else toast('✅ Absen online aktif dan dibuka di tab baru');
+
+  renderKegiatanList();
+  renderAbsenStats();
+}
+function salinLinkAbsenOnline(kegiatanId){
+  const k=aKegiatan.find(x=>Number(x.id)===Number(kegiatanId));
+  if(!k?.public_token){
+    toast('Aktifkan Absen Online terlebih dahulu',true);
+    return;
+  }
+  const url=window.location.origin+'/absen-kegiatan.html?token='+encodeURIComponent(k.public_token);
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(url).then(()=>toast('✅ Link absen online disalin')).catch(()=>prompt('Salin link absen online:',url));
+  }else prompt('Salin link absen online:',url);
+}
+
 function bukaKontrolAbsen(kegiatanId){
   const id=Number(kegiatanId||curKegiatanId||0);
   if(!id){toast('Pilih acara terlebih dahulu',true);return;}
@@ -10824,7 +10891,8 @@ kegiatanCard=function(k,phase){
         <button class="btn-sensus" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
       `:`
         <button class="btn-sensus primary" onclick="bukaDaftarHadir(${k.id})">👁️ Daftar Hadir</button>
-        ${canManageCalendar()&&k.status==='aktif'?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Absen</button>`:''}
+        ${canManageCalendar()&&k.status==='aktif'?`<button class="btn-sensus" style="background:#2563eb;color:white;" onclick="bukaAbsenTerminalFor(${k.id})">🖥️ Terminal</button>`:''}
+        ${canManageCalendar()&&k.status==='aktif'?`<button class="btn-sensus ubnb-online-btn" onclick="bukaAbsenOnlineFor(${k.id})">🌐 Online</button>`:''}
         <button class="btn-sensus" style="background:#7c3aed;color:white;" onclick="bukaRekapFinal(${k.id},'nama')">📊 Report / Rekap</button>
         ${canClose?`<button class="btn-sensus" style="background:#b45309;color:white;" onclick="tutupKegiatanFinal(${k.id})">🔒 Tutup Acara</button>`:''}
         ${canManageCalendar()?`<button class="btn-sensus" style="background:#6b7280;color:white;" onclick="editKegiatan(${k.id})">✏️</button>`:''}
@@ -10938,7 +11006,11 @@ const _ubnbRenderDaftarHadirV3=renderDaftarHadir;
 renderDaftarHadir=function(){
   _ubnbRenderDaftarHadirV3();const k=(aKegiatan||[]).find(x=>Number(x.id)===Number(curKegiatanId));if(!k)return;const locked=k.status==='selesai'&&!!k.final_rekap;
   const report=document.getElementById('btn-hadir-report'),closeBtn=document.getElementById('btn-hadir-close');if(report)report.textContent=locked?'📊 Report Final':'📊 Report / Rekap';if(closeBtn)closeBtn.style.display=(!locked&&k.status==='aktif'&&canManageCalendar())?'inline-block':'none';
-  const modal=document.getElementById('modal-hadir');if(modal){const terminal=modal.querySelector('button[onclick="bukaAbsenTerminal()"]');if(terminal)terminal.style.display=locked?'none':'inline-block';const kontrol=modal.querySelector('button[onclick="bukaKontrolAbsen()"]');if(kontrol)kontrol.style.display=locked?'none':'inline-block';}
+  const modal=document.getElementById('modal-hadir');if(modal){
+    const terminal=modal.querySelector('button[onclick="bukaAbsenTerminal()"]');if(terminal)terminal.style.display=locked?'none':'inline-block';
+    const online=modal.querySelector('#btn-hadir-online');if(online)online.style.display=(!locked&&k.status==='aktif')?'inline-block':'none';
+    const kontrol=modal.querySelector('button[onclick="bukaKontrolAbsen()"]');if(kontrol)kontrol.style.display=locked?'none':'inline-block';
+  }
 };
 document.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>{try{const pending=(aKegiatan||[]).map(calendarEntryFromActual).filter(ubnbEventNeedsManualClose);if(pending.length&&calListTab==='selesai')calListTab='berlangsung';renderKegiatanList();}catch(_e){}},700);});
 /* ===== END INTEGRASI UI KALENDER + REPORT + TUTUP MANUAL v3 ===== */
@@ -36240,11 +36312,24 @@ ${body}
   function pivotClass83(rows,className){
     const ss=rows.filter(s=>s.className===className).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     const dates=[...new Set(ss.map(s=>s.date))].sort();const people=new Map();
+    let recorded=0,attended=0;
     ss.forEach(s=>(s.students||[]).forEach(x=>{
       const id=String(x.did||x.nama||'');if(!people.has(id))people.set(id,{nama:x.nama||'-',kind:(x.kind==='simpatisan'||id.startsWith('SYM-'))?'simpatisan':'jamaah',st:{}});
-      people.get(id).st[s.date]=x.status||'—';
+      const st=String(x.status||'—');
+      people.get(id).st[s.date]=st;
+      if(st && st!=='—'){
+        recorded++;
+        if(st==='Hadir'||st==='Terlambat')attended++;
+      }
     }));
-    return {dates,people:[...people.values()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id')),sessions:ss.length};
+    return {
+      dates,
+      people:[...people.values()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id')),
+      sessions:ss.length,
+      recorded,
+      attended,
+      attendancePct:recorded?Math.round(attended/recorded*100):0
+    };
   }
   function pivotHtml83(mode){
     const periods=periodGroups83(mode);
@@ -36277,7 +36362,7 @@ ${body}
             return `<div class="ppg83-class-pivot">
               <div class="ppg83-class-head">
                 <span>${esc83(k)}</span>
-                <small>${z.sessions} kegiatan · ${z.people.length} siswa</small>
+                <small><b>Frekuensi ${z.sessions}x</b> · <b>Hadir ${z.attendancePct}%</b> · ${z.people.length} siswa</small>
               </div>
               <div class="ppg83-pivot-wrap">
                 <table class="ppg83-pivot">
@@ -36440,6 +36525,23 @@ ${body}
 window.ubnb87LoginLockAbsenFix={
   enabled:true,
   behavior:'Jika grant Kunci Login kedaluwarsa, modul Absen meminta PIN lalu meneruskan grant_token ke RPC attendance.'
+};
+</script>
+
+
+
+<script id="ubnb-v88-ppg-summary-online-absen">
+window.ubnb88={
+  ppgHistorySummary:{
+    weekly:true,
+    monthly:true,
+    metrics:['frequency','attendance_percent']
+  },
+  onlineAttendance:{
+    enabled:true,
+    publicPage:'/absen-kegiatan.html',
+    gpsRequired:true
+  }
 };
 </script>
 
