@@ -4020,13 +4020,20 @@ function bukaModalEdit(did){
       </select>
     </div>
     <div class="modal-row"><label>Status Sambung</label>
-      <select id="ej-sambung">
+      <select id="ej-sambung" onchange="onDashboardSambungChange()">
         <option value="">— Pilih —</option>
         <option value="Tetap" ${j.status_sambung==='Tetap'?'selected':''}>Tetap</option>
         <option value="Pindah Sambung" ${j.status_sambung==='Pindah Sambung'?'selected':''}>Pindah Sambung</option>
         <option value="Pindah Sementara" ${j.status_sambung==='Pindah Sementara'?'selected':''}>Pindah Sementara</option>
         <option value="Meninggal Dunia" ${j.status_sambung==='Meninggal Dunia'?'selected':''}>Meninggal Dunia</option>
       </select>
+    </div>
+    <div class="modal-row" id="ej-tgl-meninggal-row" style="${j.status_sambung==='Meninggal Dunia'?'':'display:none;'}">
+      <label>Tgl Meninggal</label>
+      <div style="flex:1;min-width:0;">
+        <input type="date" id="ej-tgl-meninggal" value="${j.tgl_meninggal||''}">
+        <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">Opsional jika tanggal belum diketahui.</div>
+      </div>
     </div>
     <div class="modal-row"><label>No. WA</label><input type="text" id="ej-wa" value="${(j.nomor_wa||'').replace(/"/g,'&quot;')}"></div>
     <div style="padding:10px 16px;background:var(--green-light);font-size:11px;color:var(--green);font-weight:600;">📌 ATRIBUT SENSUS</div>
@@ -4147,6 +4154,136 @@ function syncDashboardKelasKbmUI(){
   if(!eligible)sel.value='';
 }
 
+function onDashboardSambungChange(){
+  const st=document.getElementById('ej-sambung')?.value||'';
+  const row=document.getElementById('ej-tgl-meninggal-row');
+  if(row) row.style.display=st==='Meninggal Dunia'?'':'none';
+}
+
+function _deceasedRoleLabel(r){
+  const sc=r.level==='desa'?'Desa':(r.kelompok_nama||r.level||'-');
+  return `${r.dapukan||'Pengurus'} (${sc})`;
+}
+
+async function prosesJamaahMeninggal(j,payload){
+  if(!CU?.did){toast('Session pengurus tidak tersedia',true);return false;}
+
+  const {data:pv,error:pe}=await sb.rpc('dashboard_jamaah_deceased_preview',{
+    p_editor_did:CU.did,
+    p_target_did:j.did
+  });
+  if(pe||!pv?.ok){toast('Gagal memeriksa prosedur meninggal: '+(pe?.message||pv?.error||'Unknown error'),true);return false;}
+
+  const family=Array.isArray(pv.active_family)?pv.active_family:[];
+  const roles=Array.isArray(pv.active_roles)?pv.active_roles:[];
+  let newHead=null;
+
+  if(pv.is_head && family.length){
+    const suggestedDid=String(pv.suggested_new_head_did||'');
+    let defaultNo=Math.max(0,family.findIndex(x=>String(x.did)===suggestedDid))+1;
+    if(defaultNo<1)defaultNo=1;
+
+    const list=family.map((x,i)=>{
+      const tag=String(x.did)===suggestedDid?'  ← disarankan':'';
+      return `${i+1}. ${x.nama}${x.status_nikah?` · ${x.status_nikah}`:''}${tag}`;
+    }).join('\n');
+
+    const pick=prompt(
+      `${j.nama} adalah Kepala Keluarga dan masih memiliki ${family.length} anggota keluarga aktif.\n\n`+
+      `Pilih Kepala Keluarga pengganti dengan mengetik nomor:\n${list}\n\n`+
+      `Pilihan default: ${defaultNo}`,
+      String(defaultNo)
+    );
+    if(pick===null)return false;
+    const idx=parseInt(String(pick).trim(),10)-1;
+    if(!Number.isInteger(idx)||idx<0||idx>=family.length){
+      toast('Pilihan Kepala Keluarga pengganti tidak valid',true);
+      return false;
+    }
+    newHead=family[idx];
+  }
+
+  const willWidow=!!(
+    newHead &&
+    newHead.status_nikah==='Menikah' &&
+    j.status_nikah==='Menikah' &&
+    newHead.jenis_kelamin &&
+    j.jenis_kelamin &&
+    newHead.jenis_kelamin!==j.jenis_kelamin
+  );
+
+  const lines=[
+    `Tetapkan ${j.nama} sebagai Meninggal Dunia?`,
+    '',
+    'Prosedur yang akan dijalankan:',
+    '• Data jamaah tetap disimpan sebagai histori.',
+    '• ID Absen dinonaktifkan/retired.'
+  ];
+  if(newHead){
+    lines.push(`• Kepala Keluarga tetap pada keluarga ID ${j.keluarga_id||'-'}, diganti menjadi ${newHead.nama}.`);
+    lines.push(`• Nama KK anggota keluarga akan disesuaikan menjadi ${newHead.nama}.`);
+    if(willWidow)lines.push(`• Status ${newHead.nama} diubah dari Menikah menjadi Janda / Duda.`);
+  }
+  if(roles.length){
+    lines.push('• Dapukan aktif berikut akan dinonaktifkan:');
+    roles.forEach(r=>lines.push(`  - ${_deceasedRoleLabel(r)}`));
+    lines.push('• Pengganti dapukan ditetapkan kemudian melalui tab Pengurus.');
+  }
+  const deathDate=payload.tgl_meninggal||'';
+  if(deathDate)lines.push(`• Tanggal meninggal: ${deathDate}.`);
+  else lines.push('• Tanggal meninggal belum diisi dan tidak akan dibuat-buat oleh sistem.');
+  lines.push('');
+  lines.push('Lanjutkan prosedur?');
+
+  if(!confirm(lines.join('\n')))return false;
+
+  const {data,error}=await sb.rpc('dashboard_jamaah_mark_deceased',{
+    p_editor_did:CU.did,
+    p_target_did:j.did,
+    p_new_head_did:newHead?.did||null,
+    p_death_date:deathDate||null,
+    p_set_new_head_janda_duda:willWidow
+  });
+  if(error||!data?.ok){
+    toast('Gagal menjalankan prosedur meninggal: '+(error?.message||data?.error||'Unknown error'),true);
+    return false;
+  }
+
+  // Simpan perubahan umum lain yang aman tanpa mengganggu struktur keluarga/prosedur.
+  const generalPayload={
+    nama:payload.nama,
+    alamat:payload.alamat,
+    jenis_kelamin:payload.jenis_kelamin,
+    tgl_lahir:payload.tgl_lahir,
+    kelas_kbm:null,
+    nomor_wa:payload.nomor_wa,
+    is_sarjana:payload.is_sarjana,
+    is_haji:payload.is_haji,
+    is_aghnia:payload.is_aghnia
+  };
+  const {error:ge}=await sb.from('jamaah_desa').update(generalPayload).eq('did',j.did);
+  if(ge)console.warn('Perubahan umum sesudah prosedur meninggal:',ge.message||ge);
+
+  await dkLog('jamaah_meninggal',{
+    target_did:j.did,
+    target_name:j.nama,
+    log_id:data.log_id||null,
+    keluarga_id:data.keluarga_id||null,
+    new_head_did:data.new_head_did||null,
+    new_head_name:data.new_head_name||null,
+    closed_roles:data.closed_roles||[],
+    death_date:data.death_date||null
+  });
+
+  let msg=`✅ ${j.nama} diproses sebagai Meninggal Dunia`;
+  if(data.new_head_name)msg+=` · KK → ${data.new_head_name}`;
+  if(Array.isArray(data.closed_roles)&&data.closed_roles.length)msg+=` · ${data.closed_roles.length} dapukan dinonaktifkan`;
+  toast(msg);
+  closeMod('modal-jamaah');
+  await loadAll();
+  return true;
+}
+
 async function simpanJamaah(){
   if(!canEdit()){toast('Akses ditolak: akun view-only',true);return;}
   if(!_editDid) return;
@@ -4180,11 +4317,25 @@ async function simpanJamaah(){
     kelas_kbm:newNikah==='Belum Menikah'?(document.getElementById('ej-kelas-kbm').value||null):null,
     status_nikah:newNikah,
     status_sambung:document.getElementById('ej-sambung').value||null,
+    tgl_meninggal:document.getElementById('ej-sambung').value==='Meninggal Dunia'
+      ?(document.getElementById('ej-tgl-meninggal')?.value||null)
+      :null,
     nomor_wa:document.getElementById('ej-wa').value.trim()||null,
     is_sarjana:sj(document.getElementById('ej-sarjana').value),
     is_haji:sj(document.getElementById('ej-haji').value),
     is_aghnia:sj(document.getElementById('ej-aghnia').value),
   };
+
+  const activeRole=aPengurus.some(p=>String(p.did)===String(j.did)&&p.aktif===true);
+  const isCurrentHead=String(j.nama||'').trim().toLowerCase()===String(j.nama_kk||'').trim().toLowerCase();
+  const needsDeceasedProcedure=payload.status_sambung==='Meninggal Dunia' &&
+    (j.status_sambung!=='Meninggal Dunia'||activeRole||isCurrentHead);
+
+  if(needsDeceasedProcedure){
+    await prosesJamaahMeninggal(j,payload);
+    return;
+  }
+
   const {error}=await sb.from('jamaah_desa').update(payload).eq('did',_editDid);
   if(error){toast('Gagal simpan: '+error.message,true);return;}
   toast('✅ '+nama+' berhasil diperbarui');
