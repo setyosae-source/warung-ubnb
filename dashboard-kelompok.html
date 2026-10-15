@@ -1448,6 +1448,19 @@ body.modal-open{overflow:hidden!important;}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<script id="ppg-v97-session-time">
+window.ppgSessionTime97=function(s){
+  const parse=v=>{if(!v)return null;const d=new Date(v);return Number.isFinite(d.getTime())?d:null};
+  const start=parse(s?.startedAt),end=parse(s?.finishedAt||s?.endedAt);
+  const clock=d=>new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d);
+  const day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+  const date=d=>new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',day:'numeric',month:'short'}).format(d);
+  if(!start)return end?'Selesai '+clock(end)+' WIB':'Jam belum tercatat';
+  if(!end)return 'Dibuka '+clock(start)+' WIB';
+  if(end<start)return 'Dibuka '+clock(start)+' WIB · jam selesai perlu diperiksa';
+  return clock(start)+'–'+(day(start)!==day(end)?date(end)+' ':'')+clock(end)+' WIB';
+};
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -20188,7 +20201,7 @@ window.ppg37Start=async()=>{const date=document.getElementById('p37date')?.value
 function teacherStep(s){const e=document.getElementById('p37detail');if(!e)return;const ts=tfc(s.className);e.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">Absensi Dewan Guru</div><div class="ppg-panel-sub">Wajib sebelum kelas aktif.</div></div></div><div class="ppg-table-wrap"><table class="ppg-table"><thead><tr><th>No</th><th>Nama</th><th>Status</th></tr></thead><tbody>${ts.map((t,i)=>`<tr><td>${i+1}</td><td><b>${esc(t.nama)}</b></td><td><select class="p37ta" data-id="${esc(t.did)}"><option value="">— Pilih —</option><option ${t.did===s.teacherDid?'selected':''}>Hadir</option><option>Izin</option><option>Sakit</option><option>Tidak Hadir</option><option>Terlambat</option></select></td></tr>`).join('')}</tbody></table></div><div class="ppg36-actions"><button class="ppg-btn" onclick="ppg37TeacherDone('${esc(s.id)}')">Selesai Absensi Guru & Aktifkan Kelas</button></div></div>`;e.scrollIntoView({behavior:'smooth'})}
 window.ppg37TeacherDone=id=>{const a=ss(),s=a.find(x=>x.id===id),els=[...document.querySelectorAll('.p37ta')];if(els.some(x=>!x.value))return toast('Status semua dewan guru harus diisi.',true);const tm=new Map(teachers().map(t=>[t.did,t]));s.teacherAttendance=els.map(x=>({did:x.dataset.id,nama:tm.get(x.dataset.id)?.nama||'',status:x.value}));if(!s.teacherAttendance.some(x=>['Hadir','Terlambat'].includes(x.status)))return toast('Belum ada dewan guru yang hadir.',true);s.status='active';saveSS(a);startOpen=false;tab='active';kelas();setTimeout(()=>detail(id),0)};
 window.ppg37Open=id=>detail(id);
-function detail(id){const s=ss().find(x=>x.id===id),e=document.getElementById('p37detail');if(!s||!e)return;const sec=st=>s.students.filter(x=>x.status===st);e.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">${esc(s.className)} · ${esc(s.date)}</div><div class="ppg-panel-sub">Guru: ${esc(s.teacherName)}</div></div><button class="ppg-btn gold" onclick="ppg37Finish('${esc(id)}')">Kelas Selesai</button></div><div class="ppg-panel-body"><div class="ppg37-material-box"><b style="font-size:10.5px">Materi Umum Hari Ini</b><div class="ppg37-material-row" style="margin-top:6px"><input id="p37gm" placeholder="Materi untuk semua murid hadir"><button class="ppg-btn" onclick="ppg37AddGeneral('${esc(id)}')">+ Tambah</button></div><div>${s.generalMaterials.map(m=>`<span class="ppg37-chip">${esc(m.text)}</span>`).join('')}</div></div>${[['Hadir',true],['Izin',false],['Belum Hadir',false]].map(([st,p])=>`<div class="ppg37-status-section"><div class="ppg37-status-title"><span>${st}</span><span>${sec(st).length}</span></div>${sec(st).map(x=>studentRow(s,x,p)).join('')||'<div class="ppg-mini-note">Tidak ada.</div>'}</div>`).join('')}${finishMode?finishPanel(s):''}</div></div>`;e.scrollIntoView({behavior:'smooth'})}
+function detail(id){const s=ss().find(x=>x.id===id),e=document.getElementById('p37detail');if(!s||!e)return;const sec=st=>s.students.filter(x=>x.status===st);e.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">${esc(s.className)} · ${esc(s.date)}</div><div class="ppg-panel-sub">Guru: ${esc(s.teacherName)} · ${window.ppgSessionTime97(s)}</div></div><button class="ppg-btn gold" onclick="ppg37Finish('${esc(id)}')">Kelas Selesai</button></div><div class="ppg-panel-body"><div class="ppg37-material-box"><b style="font-size:10.5px">Materi Umum Hari Ini</b><div class="ppg37-material-row" style="margin-top:6px"><input id="p37gm" placeholder="Materi untuk semua murid hadir"><button class="ppg-btn" onclick="ppg37AddGeneral('${esc(id)}')">+ Tambah</button></div><div>${s.generalMaterials.map(m=>`<span class="ppg37-chip">${esc(m.text)}</span>`).join('')}</div></div>${[['Hadir',true],['Izin',false],['Belum Hadir',false]].map(([st,p])=>`<div class="ppg37-status-section"><div class="ppg37-status-title"><span>${st}</span><span>${sec(st).length}</span></div>${sec(st).map(x=>studentRow(s,x,p)).join('')||'<div class="ppg-mini-note">Tidak ada.</div>'}</div>`).join('')}${finishMode?finishPanel(s):''}</div></div>`;e.scrollIntoView({behavior:'smooth'})}
 function studentRow(s,x,p){const j=(aJamaah||[]).find(y=>String(y.did)===x.did);return `<div class="ppg37-student-row ${p?'present':''}"><div ${p?`onclick="ppg37Student('${esc(s.id)}','${esc(x.did)}')"`:''}><div class="ppg37-student-name">${esc(x.nama)}</div><div class="ppg37-student-kk">KK: ${esc(j?.nama_kk||'-')}</div></div><select class="ppg37-status-select" onchange="ppg37Status('${esc(s.id)}','${esc(x.did)}',this.value)">${['Hadir','Izin','Belum Hadir'].map(v=>`<option ${x.status===v?'selected':''}>${v}</option>`).join('')}</select>${p?`<button class="ppg37-mini-btn" onclick="ppg37Student('${esc(s.id)}','${esc(x.did)}')">Materi / Catatan</button>`:'<span></span>'}</div>`}
 window.ppg37Status=(id,did,v)=>{const a=ss(),s=a.find(x=>x.id===id),x=s?.students.find(y=>y.did===did);if(x)x.status=v;saveSS(a);kelas();setTimeout(()=>detail(id),0)};
 window.ppg37AddGeneral=id=>{const t=document.getElementById('p37gm')?.value.trim();if(!t)return;const a=ss(),s=a.find(x=>x.id===id);s.generalMaterials.push({text:t,at:new Date().toISOString()});saveSS(a);detail(id)};
@@ -25571,7 +25584,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
         <button type="button" class="ppg52-active-summary" onclick="ppg52ToggleActive('${esc(s.id)}')">
           <div class="ppg52-active-main">
             <div class="ppg52-active-name">${esc(s.className)}</div>
-            <div class="ppg52-active-meta">Guru: ${esc(s.teacherName||'-')} · Hadir ${a.hadir}/${a.total}${s.substituteTeacher?' · Pengganti':''}</div>
+            <div class="ppg52-active-meta">Guru: ${esc(s.teacherName||'-')} · ${window.ppgSessionTime97(s)} · Hadir ${a.hadir}/${a.total}${s.substituteTeacher?' · Pengganti':''}</div>
           </div>
           <div class="ppg52-active-att">
             <div class="ppg52-active-pct">${a.pct}%</div>
@@ -25630,7 +25643,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
             const a=attendance(s);
             return `<div class="ppg52-history-row">
               <b>${esc(s.date)}</b>
-              <span><b>${esc(s.className)}</b><br><span class="ppg-mini-note">${esc(s.teacherName||'-')}</span></span>
+              <span><b>${esc(s.className)}</b><br><span class="ppg-mini-note">${esc(s.teacherName||'-')}<br>${window.ppgSessionTime97(s)}</span></span>
               <span>${a.hadir}/${a.total} · ${a.pct}%</span>
             </div>`;
           }).join('')}
@@ -26622,7 +26635,7 @@ body.ppg54-lock-page{
     document.getElementById('ppg54-finish-body').innerHTML=`
       <div class="ppg54-finish-meta">
         <b>${esc(s.className||'-')}</b> · ${esc(s.date||'-')}<br>
-        Guru: ${esc(s.teacherName||'-')}
+        Guru: ${esc(s.teacherName||'-')}<br>${window.ppgSessionTime97(s)}
       </div>
 
       <div class="ppg54-finish-field">
@@ -27203,7 +27216,7 @@ body.ppg54-lock-page{
             const a=attendanceStats(s);
             return `<button type="button" class="ppg55-history-row" onclick="ppg55ReviewKBM('${esc(s.id)}')">
               <b>${esc(s.date)}</b>
-              <span><b>${esc(s.className||'-')}</b><br><span class="ppg-mini-note">${esc(s.teacherName||'-')}</span></span>
+              <span><b>${esc(s.className||'-')}</b><br><span class="ppg-mini-note">${esc(s.teacherName||'-')}<br>${window.ppgSessionTime97(s)}</span></span>
               <span>${a.hadir}/${a.total} · ${a.pct}%</span>
               <span class="ppg55-history-arrow">›</span>
             </button>`;
@@ -27295,6 +27308,7 @@ body.ppg54-lock-page{
         <div class="ppg55-review-stat"><small>Guru</small><b>${esc(s.teacherName||'-')}</b></div>
         <div class="ppg55-review-stat"><small>Kehadiran</small><b>${a.hadir}/${a.total} · ${a.pct}%</b></div>
         <div class="ppg55-review-stat"><small>Status</small><b>Selesai</b></div>
+        <div class="ppg55-review-stat"><small>Jam Sesi</small><b>${window.ppgSessionTime97(s)}</b></div>
       </div>
 
       <div class="ppg55-section">
