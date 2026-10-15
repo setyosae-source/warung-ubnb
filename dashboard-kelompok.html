@@ -23441,7 +23441,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       <div id="ppg46-start-modal" class="ppg46-modal">
         <div class="ppg46-modal-card">
           <div class="ppg46-modal-head">
-            <b>Mulai Kelas</b>
+            <b>Mulai Sesi KBM</b>
             <button class="ppg46-modal-close" onclick="ppg46CloseStart()">✕</button>
           </div>
           <div class="ppg46-modal-body">
@@ -23689,7 +23689,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <button class="ppg46-tab ${kelasMode46==='active'?'active':''}" onclick="ppg46KelasMode('active')">Aktif Hari Ini</button>
           <button class="ppg46-tab ${kelasMode46==='history'?'active':''}" onclick="ppg46KelasMode('history')">Riwayat</button>
         </div>
-        ${controller46()?'':'<button class="ppg46-start-btn" onclick="ppg46OpenStart()">+ Mulai Kelas</button>'}
+        ${controller46()?'':'<button class="ppg46-start-btn" onclick="ppg46OpenStart()">+ Mulai Sesi KBM</button>'}
       </div>
       ${kelasMode46==='active'?activeCards46():history46()}`;
 
@@ -25379,7 +25379,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       <div id="ppg52-start-modal" class="ppg52-modal">
         <div class="ppg52-modal-card">
           <div class="ppg52-modal-head">
-            <b>Mulai Kelas</b>
+            <b>Mulai Sesi KBM</b>
             <button class="ppg52-modal-close" onclick="ppg52CloseStart()">✕</button>
           </div>
           <div class="ppg52-modal-body">
@@ -25402,7 +25402,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
                   <div id="ppg52-other-classes" class="ppg52-class-buttons"></div>
                 </div>
               </div>
-              <div class="ppg52-help">Satu kali Mulai Kelas hanya membuka satu kelas. Guru dapat membuka kelas lain secara terpisah.</div>
+              <div class="ppg52-help">Satu sesi untuk satu kelas dan peserta pilihan. Beberapa guru boleh membuka sesi kelas yang sama.</div>
             </div>
             <div class="ppg52-modal-actions">
               <button class="ppg52-secondary" onclick="ppg52CloseStart()">Batal</button>
@@ -25434,6 +25434,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     document.getElementById('ppg52-start-date').value=today();
     start52={selected:'',otherOpen:false};
     renderStartClasses();
+    document.getElementById('ppg96-participants')?.remove();
     document.getElementById('ppg52-start-modal').classList.add('show');
   };
 
@@ -25444,6 +25445,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   window.ppg52TeacherChanged=function(){
     start52={selected:'',otherOpen:false};
     renderStartClasses();
+    document.getElementById('ppg96-participants')?.remove();
   };
 
   window.ppg52ToggleOther=function(){
@@ -25454,6 +25456,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   window.ppg52SelectClass=function(k){
     start52.selected=k;
     renderStartClasses();
+    renderSessionParticipants96();
   };
 
   function classButtons(list){
@@ -25491,6 +25494,13 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     if(otherBox)otherBox.innerHTML=classButtons(other);
   }
 
+  function renderSessionParticipants96(){
+    let box=document.getElementById('ppg96-participants');
+    if(!box){box=document.createElement('div');box.id='ppg96-participants';document.querySelector('#ppg52-start-modal .ppg52-modal-actions').before(box)}
+    const peers=sessions().filter(s=>s.scope===scopeId()&&s.date===document.getElementById('ppg52-start-date').value&&s.status==='active');
+    const rows=rosterForClass(start52.selected);
+    box.innerHTML=`<label>Peserta sesi (${esc(start52.selected)})</label><p class="ppg52-help">Pilih peserta yang diajar pada sesi ini. Kelas yang sama boleh memiliki beberapa sesi guru.</p><label><input type="checkbox" onchange="document.querySelectorAll('.ppg96-student').forEach(x=>x.checked=this.checked)"> Pilih semua</label><div style="max-height:240px;overflow:auto">${rows.map(x=>{const busy=peers.find(s=>(s.students||[]).some(y=>String(y.did)===String(x.did)));return `<label style="display:block;padding:6px"><input class="ppg96-student" type="checkbox" value="${esc(x.did)}"> ${esc(x.nama)}${busy?` <small>· sesi aktif ${esc(busy.teacherName)}</small>`:''}</label>`}).join('')}</div>`;
+  }
   window.ppg52StartClass=async function(){
     const date=document.getElementById('ppg52-start-date')?.value||today();
     const teacherDid=document.getElementById('ppg52-start-teacher')?.value||'';
@@ -25502,15 +25512,16 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const t=teachers().find(x=>String(x.did)===String(teacherDid));
     if(!t){toast('Guru tidak ditemukan.',true);return}
 
-    const dupe=sessions().some(s=>
-      s.scope===scopeId()&&s.date===date&&s.className===className&&s.status==='active'
-    );
-    if(dupe){toast('Kelas ini sudah aktif hari ini.',true);return}
+    const selected=new Set([...document.querySelectorAll('.ppg96-student:checked')].map(x=>String(x.value)));
+    const participants=rosterForClass(className).filter(x=>selected.has(String(x.did)));
+    if(!participants.length){toast('Pilih peserta sesi terlebih dahulu.',true);return}
+    const overlap=sessions().filter(x=>x.scope===scopeId()&&x.date===date&&x.status==='active').some(x=>(x.students||[]).some(y=>selected.has(String(y.did))));
+    if(overlap&&!confirm('Sebagian peserta masih tercatat di sesi aktif lain. Tetap mulai sesi ini?'))return;
 
     const isSubstitute=!t.classes.includes(className);
 
     const s={
-      id:'K'+Date.now(),
+      id:'K'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)),
       scope:scopeId(),
       date,
       className,
@@ -25524,7 +25535,8 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
         did:String(t.did),nama:t.nama,status:'Hadir',
         source:isSubstitute?'selected_substitute_teacher':'selected_teacher'
       }],
-      students:rosterForClass(className),
+      students:participants,
+      participantSelection:true,
       generalMaterials:[],
       studentMaterials:{},
       generalNote:'',
@@ -25647,7 +25659,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <button class="ppg52-tab ${mode52==='active'?'active':''}" onclick="ppg52KelasMode('active')">Aktif Hari Ini</button>
           <button class="ppg52-tab ${mode52==='history'?'active':''}" onclick="ppg52KelasMode('history')">Riwayat</button>
         </div>
-        ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}
+        ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Sesi KBM</button>'}
       </div>
       ${mode52==='active'?activeCards():historyHtml()}`;
 
@@ -27214,7 +27226,7 @@ body.ppg54-lock-page{
           <button class="ppg52-tab" onclick="ppg52KelasMode('active')">Aktif Hari Ini</button>
           <button class="ppg52-tab active" onclick="ppg55HistoryMode('${historyMode55}')">Riwayat</button>
         </div>
-        ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}
+        ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Sesi KBM</button>'}
       </div>
       ${historyRowsHtml()}`;
   }
@@ -30015,26 +30027,7 @@ body.ppg54-lock-page{
       byId.set(id,chooseSession(byId.get(id),x));
     }
 
-    /* Pass 2: only one canonical session per scope + date + class.
-       Old duplicate IDs from localStorage are discarded locally and therefore
-       no longer create double rows in Riwayat. */
-    const byClassDay=new Map();
-    for(const x of byId.values()){
-      const key=[
-        String(x?.scope||''),
-        String(x?.date||''),
-        String(x?.className||'').trim().toLowerCase()
-      ].join('|');
-      if(!x?.date || !x?.className){
-        byClassDay.set('id:'+String(x?.id||Math.random()),x);
-        continue;
-      }
-      byClassDay.set(key,chooseSession(byClassDay.get(key),x));
-    }
-
-    return [...byClassDay.values()].sort((x,y)=>
-      String(x?.startedAt||x?.id||'').localeCompare(String(y?.startedAt||y?.id||''))
-    );
+    return [...byId.values()].sort((x,y)=>String(x?.startedAt||x?.id||'').localeCompare(String(y?.startedAt||y?.id||'')));
   }
 
   function mergeLogs(a,b){
@@ -36402,7 +36395,7 @@ ${body}
   function dedupe83(rows){
     const map=new Map();
     rows.forEach(s=>{
-      const key=`${s?.scope||''}|${s?.date||''}|${s?.className||''}`;
+      const key=String(s?.id||'');
       const o=map.get(key);
       if(!o || sessionTime83(s)>sessionTime83(o) || (sessionTime83(s)===sessionTime83(o)&&richness83(s)>richness83(o))) map.set(key,s);
     });
@@ -36444,8 +36437,8 @@ ${body}
         <div class="ppg83-field ppg83-span2"><label>Catatan Umum</label><textarea id="p83-note">${esc83(s.generalNote||'')}</textarea></div>
       </div>
       <div class="ppg83-students">
-        <div class="ppg83-students-head">Kehadiran Siswa</div>
-        ${(s.students||[]).map(x=>`<div class="ppg83-student"><span><b>${esc83(x.nama||'-')}</b>${x.kind==='simpatisan'||String(x.did||'').startsWith('SYM-')?'<br><small>Simpatisan</small>':''}</span><select class="p83-student-status" data-id="${esc83(x.did)}">${statusOpts.map(v=>`<option ${v===x.status?'selected':''}>${v}</option>`).join('')}</select></div>`).join('')}
+        <div class="ppg83-students-head">Peserta dan Kehadiran Sesi · centang murid yang benar-benar menjadi peserta</div>
+        ${(s.students||[]).map(x=>`<div class="ppg83-student"><span><label><input type="checkbox" class="ppg96-history-member" data-id="${esc83(x.did)}" checked> <b>${esc83(x.nama||'-')}</b></label>${x.kind==='simpatisan'||String(x.did||'').startsWith('SYM-')?'<br><small>Simpatisan</small>':''}</span><select class="p83-student-status" data-id="${esc83(x.did)}">${statusOpts.map(v=>`<option ${v===x.status?'selected':''}>${v}</option>`).join('')}</select></div>`).join('')}
       </div>
       <div class="ppg83-savebar"><button class="cancel" onclick="ppg83CloseEdit()">Batal</button><button class="save" onclick="ppg83SaveEdit()">Simpan Perubahan</button></div>`;
     document.getElementById('ppg83-edit').classList.add('show');
@@ -36458,7 +36451,9 @@ ${body}
     const texts=String(document.getElementById('p83-materials')?.value||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
     const generalMaterials=texts.map(text=>oldMaterials.find(x=>String(x?.text||x||'').trim().toLowerCase()===text.toLowerCase())||{text,at:new Date().toISOString()});
     const stMap=new Map([...document.querySelectorAll('.p83-student-status')].map(x=>[String(x.dataset.id),x.value]));
-    const students=(s.students||[]).map(x=>({...x,status:stMap.get(String(x.did))||x.status||'Belum Hadir'}));
+    const memberIds=new Set([...document.querySelectorAll('.ppg96-history-member:checked')].map(x=>String(x.dataset.id)));
+    const students=(s.students||[]).filter(x=>memberIds.has(String(x.did))).map(x=>({...x,status:stMap.get(String(x.did))||x.status||'Belum Hadir'}));
+    if(!students.length){toast('Pilih minimal satu peserta sesi.',true);return}
     const status=document.getElementById('p83-status')?.value||s.status||'finished';
     const payload={
       date:document.getElementById('p83-date')?.value||s.date,
@@ -36557,12 +36552,16 @@ ${body}
     ss.forEach(s=>(s.students||[]).forEach(x=>{
       const id=String(x.did||x.nama||'');if(!people.has(id))people.set(id,{nama:x.nama||'-',kind:(x.kind==='simpatisan'||id.startsWith('SYM-'))?'simpatisan':'jamaah',st:{}});
       const st=String(x.status||'—');
-      people.get(id).st[s.date]=st;
+      const priority={'Hadir':6,'Terlambat':5,'Izin':4,'Sakit':3,'Tidak Hadir':2,'Belum Hadir':1};
+      const old=people.get(id).st[s.date];
+      if(!old||(priority[st]||0)>(priority[old]||0))people.get(id).st[s.date]=st;
       if(st && st!=='—'){
         recorded++;
         if(st==='Hadir'||st==='Terlambat')attended++;
       }
     }));
+    recorded=0;attended=0;
+    people.forEach(p=>Object.values(p.st).forEach(st=>{if(st&&st!=='—'){recorded++;if(st==='Hadir'||st==='Terlambat')attended++}}));
     return {
       dates,
       people:[...people.values()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id')),
@@ -36636,7 +36635,7 @@ ${body}
   }
   function renderPivot83(mode){
     mode83=mode;const el=document.getElementById('ppg-page-kelas');if(!el)return;
-    el.innerHTML=`<div class="ppg52-topline"><div class="ppg52-tabs"><button class="ppg52-tab" onclick="ppg52KelasMode('active')">Aktif Hari Ini</button><button class="ppg52-tab active" onclick="ppg55HistoryMode('${mode}')">Riwayat</button></div>${scopeObj83()?.type==='controller'?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}</div>${pivotHtml83(mode)}`;
+    el.innerHTML=`<div class="ppg52-topline"><div class="ppg52-tabs"><button class="ppg52-tab" onclick="ppg52KelasMode('active')">Aktif Hari Ini</button><button class="ppg52-tab active" onclick="ppg55HistoryMode('${mode}')">Riwayat</button></div>${scopeObj83()?.type==='controller'?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Sesi KBM</button>'}</div>${pivotHtml83(mode)}`;
   }
   const oldHistoryMode83=window.ppg55HistoryMode;
   window.ppg55HistoryMode=function(m){mode83=m;if(m==='weekly'||m==='monthly'){renderPivot83(m);return}return oldHistoryMode83?.apply(this,arguments)};
@@ -36690,14 +36689,7 @@ ${body}
       if(!o || rank(x)>=rank(o))idMap.set(id,x);
     });
 
-    const dayMap=new Map();
-    idMap.forEach(x=>{
-      const k=`${x?.scope||''}|${x?.date||''}|${String(x?.className||'').trim().toLowerCase()}`;
-      const o=dayMap.get(k);
-      if(!o || rank(x)>=rank(o))dayMap.set(k,x);
-    });
-
-    const clean=[...dayMap.values()].sort((a,b)=>String(a?.startedAt||a?.id||'').localeCompare(String(b?.startedAt||b?.id||'')));
+    const clean=[...idMap.values()].sort((a,b)=>String(a?.startedAt||a?.id||'').localeCompare(String(b?.startedAt||b?.id||'')));
     if(JSON.stringify(clean)!==JSON.stringify(rows)){
       localStorage.setItem(key,JSON.stringify(clean));
     }
