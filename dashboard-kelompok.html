@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Dashboard Kelompok v102 - Powered by UBNB</title>
+<title>Dashboard Kelompok v103 - Powered by UBNB</title>
 <style>
 :root{
   --green:#1a6640;--green-dark:#0f4428;--green-light:#e8f5ee;
@@ -25612,7 +25612,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   window.ppg98Status=function(id,did,status){const x=sessions().find(s=>String(s.id)===String(id))?.students.find(x=>String(x.did)===String(did));if(x)return record98(id,x,status)};
 
   function classLearning99(session,k){
-    return (session.classLearning||[]).find(x=>x.className===k)||{className:k,generalMaterials:[],generalNote:''};
+    return (session.classLearning||[]).find(x=>norm(x.className).replace(/\s+/g,' ')===norm(k).replace(/\s+/g,' '))||{className:k,generalMaterials:[],generalNote:''};
   }
   window.ppg99LearningBlock=function(session,k,writable){
     const entry=classLearning99(session,k);
@@ -25621,8 +25621,15 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     return `<div class="ppg101-learning"><div class="ppg101-learning-row"><b>Materi Umum</b><div>${esc(materials.join('\n')||'—')}</div></div><div class="ppg101-learning-row"><b>Catatan Umum</b><div>${esc(entry.generalNote||'—')}</div></div>${writable?`<button class="ppg52-secondary" onclick="ppg99EditLearning('${esc(session.id)}','${key}')">Isi / Edit Materi dan Catatan Kelas</button>`:''}</div>`;
   };
   window.ppg99Summary=function(session){
-    const keys=[...new Set([...(session.students||[]).map(x=>x.className||session.className),...(session.classLearning||[]).map(x=>x.className)])];
+    const keys=[...new Map([...(session.students||[]).map(x=>x.className||session.className),...(session.classLearning||[]).map(x=>x.className)].filter(Boolean).map(k=>[norm(k).replace(/\s+/g,' '),String(k).trim()])).values()];
     return keys.sort(window.ppg101ClassCompare).map(k=>`<section class="ppg100-class-panel"><header class="ppg100-class-header"><div><span class="ppg100-class-label">KELAS</span><h4>${esc(k)}</h4></div></header><div class="ppg100-class-body">${window.ppg99LearningBlock(session,k,false)}</div></section>`).join('');
+  };
+  window.ppg103ReviewClasses=function(session){
+    const groups=new Map();(session.students||[]).forEach(x=>{
+      const label=String(x.className||session.className||'Belum Ditentukan').trim().replace(/\s+/g,' '),key=norm(label);
+      if(!groups.has(key))groups.set(key,{label,students:[]});groups.get(key).students.push(x);
+    });
+    return [...groups.values()].sort((a,b)=>window.ppg101ClassCompare(a.label,b.label)).map(({label,students})=>`<section class="ppg100-class-panel"><header class="ppg100-class-header"><h4>${esc(label)}</h4><span class="ppg100-class-count">${students.length} peserta</span></header><div class="ppg100-class-body">${students.map(x=>`<div class="ppg55-att-row"><span>${esc(x.nama)}</span><span class="ppg55-status">${esc(x.status)}</span></div>`).join('')}${window.ppg99LearningBlock(session,label,false)}${String(CU?.did)==='4075'?`<button class="ppg52-secondary ppg103-edit" onclick="ppg99EditLearning('${esc(session.id)}','${encodeURIComponent(label).replace(/'/g,'%27')}')">Edit materi / catatan</button>`:''}</div></section>`).join('');
   };
   let editing99=null;
   window.ppg99EditLearning=function(id,encoded){
@@ -27389,7 +27396,7 @@ body.ppg54-lock-page{
       }));
     });
 
-    document.getElementById('ppg55-review-title').textContent=`Review KBM · ${s.className||'-'}`;
+    document.getElementById('ppg55-review-title').textContent=s.multiClass?'Ringkasan KBM':`Review KBM · ${s.className||'-'}`;
     document.getElementById('ppg55-review-body').innerHTML=`
       <div class="ppg55-review-meta">
         <div class="ppg55-review-stat"><small>Tanggal</small><b>${esc(s.date||'-')}</b></div>
@@ -27399,11 +27406,11 @@ body.ppg54-lock-page{
         <div class="ppg55-review-stat"><small>Jam Sesi</small><b>${window.ppgSessionTime97(s)}</b></div>
       </div>
 
-      <div class="ppg55-section">
-        <div class="ppg55-section-head">Kehadiran Murid</div>
+      <div class="ppg55-section ppg103-attendance">
+        <div class="ppg55-section-head">Peserta Didik per Kelas</div>
         <div class="ppg55-section-body">
           <div class="ppg55-att-list">
-            ${window.ppg101AttendanceHTML(s)}
+            ${s.multiClass?window.ppg103ReviewClasses(s):window.ppg101AttendanceHTML(s)}
           </div>
         </div>
       </div>
@@ -27418,23 +27425,23 @@ body.ppg54-lock-page{
         </div>
       </div>`:''}
 
-      <div class="ppg55-section">
+      ${!s.multiClass?`<div class="ppg55-section">
         <div class="ppg55-section-head">Materi Umum</div>
         <div class="ppg55-section-body">
           <div class="ppg55-material-list">
             ${gm.length?gm.map(m=>`<div class="ppg55-material-item">${esc(m?.text||String(m||''))}</div>`).join(''):'<div class="ppg-empty">Belum ada materi umum.</div>'}
           </div>
         </div>
-      </div>
+      </div>`:''}
 
-      <div class="ppg55-section">
+      ${special.length?`<div class="ppg55-section">
         <div class="ppg55-section-head">Materi Khusus</div>
         <div class="ppg55-section-body">
           <div class="ppg55-material-list">
             ${special.length?special.map(m=>`<div class="ppg55-material-item">${esc(m.text)}<small>${esc(m.nama)}</small></div>`).join(''):'<div class="ppg-empty">Belum ada materi khusus.</div>'}
           </div>
         </div>
-      </div>
+      </div>`:''}
 
       ${(s.generalNote||s.general_note||Object.values(sn).some(Boolean))?`
       <div class="ppg55-section">
@@ -36093,31 +36100,8 @@ html,body{margin:0;padding:0;background:#fff;color:#17201c;font-family:Arial,Hel
 .portrait-table td strong{font-size:9.1pt}
 .portrait-table td small{font-size:7.7pt}
 </style>
-<style id="ppg100-class-separation">
-.ppg100-class-panel{margin:22px 0 28px;border:2px solid #96b9a5;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 3px 10px rgba(15,68,40,.08)}
-.ppg100-class-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;background:#155c3c;color:#fff;border-bottom:3px solid #c9a84c}
-.ppg100-class-label{display:block;font-size:10px;letter-spacing:1.4px;opacity:.8;margin-bottom:3px}
-.ppg100-class-header h4{margin:0!important;font-size:16px;font-weight:800;color:#fff;line-height:1.35}
-.ppg100-class-count{flex-shrink:0;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.12);border-radius:20px;padding:5px 10px;font-size:12px;font-weight:700}
-.ppg100-class-body{padding:12px 14px 16px}
-.ppg100-class-panel+.ppg100-class-panel{margin-top:28px}
-@media(max-width:520px){.ppg100-class-header{padding:12px}.ppg100-class-body{padding:8px 9px 12px}.ppg100-class-header h4{font-size:15px}.ppg100-class-count{font-size:11px;padding:4px 8px}}
-</style>
-<style id="ppg101-compact-history">
-.ppg101-att-group+.ppg101-att-group{margin-top:14px}
-.ppg101-att-head{padding:7px 10px;background:#e6f1e9;border-left:4px solid #155c3c;color:#155c3c;font-weight:800}
-.ppg101-att-head small{font-weight:500}
-.ppg101-learning{padding:7px 9px;margin:6px 0;background:#f0f7f2;border:1px solid #d4e5d9;border-radius:7px;height:auto;min-height:0}
-.ppg101-learning-row{display:grid;grid-template-columns:105px minmax(0,1fr);gap:8px;align-items:start;padding:3px 0;font-size:12px;line-height:1.4;height:auto;min-height:0}
-.ppg101-learning-row>div{white-space:pre-wrap;overflow-wrap:anywhere;margin:0!important;padding:0!important;min-height:0!important;height:auto!important}
-.ppg101-learning>.ppg52-secondary{margin-top:5px;padding:5px 9px;min-height:0}
-#ppg55-review-body .ppg55-material-item{padding:6px 9px;margin-bottom:4px;min-height:0;height:auto;line-height:1.4}
-#ppg55-review-body .ppg-empty{padding:6px 9px;min-height:0;height:auto}
-#ppg55-review-body .ppg100-class-panel{margin:10px 0 14px}
-#ppg55-review-body .ppg100-class-header{padding:7px 11px}
-#ppg55-review-body .ppg100-class-header .ppg100-class-label{display:none}
-#ppg55-review-body .ppg100-class-body{padding:5px 9px}
-</style>
+
+
 </head>
 <body>
 ${body}
@@ -37027,7 +37011,7 @@ body.jamaah-profile-open #login-screen{
  window.ppg55ReviewKBM=function(id){
    const r=prior?.apply(this,arguments);let session;
    try{session=JSON.parse(localStorage.getItem('ubnb_ppg_v37_classes')||'[]').find(x=>String(x.id)===String(id))}catch(_){}
-   if(!session?.multiClass)return r;
+   if(!session?.multiClass||window.ppg103ReviewClasses)return r;
    const body=document.getElementById('ppg55-review-body');if(!body)return r;
    const section=document.createElement('div');section.className='ppg55-section';
    section.innerHTML='<div class="ppg55-section-head">Materi dan Catatan Umum Per Kelas</div>'+window.ppg99Summary(session);
@@ -37039,5 +37023,60 @@ body.jamaah-profile-open #login-screen{
  };
 })();
 </script>
+<style id="ppg100-class-separation">
+.ppg100-class-panel{margin:22px 0 28px;border:2px solid #96b9a5;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 3px 10px rgba(15,68,40,.08)}
+.ppg100-class-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;background:#155c3c;color:#fff;border-bottom:3px solid #c9a84c}
+.ppg100-class-label{display:block;font-size:10px;letter-spacing:1.4px;opacity:.8;margin-bottom:3px}
+.ppg100-class-header h4{margin:0!important;font-size:16px;font-weight:800;color:#fff;line-height:1.35}
+.ppg100-class-count{flex-shrink:0;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.12);border-radius:20px;padding:5px 10px;font-size:12px;font-weight:700}
+.ppg100-class-body{padding:12px 14px 16px}
+.ppg100-class-panel+.ppg100-class-panel{margin-top:28px}
+@media(max-width:520px){.ppg100-class-header{padding:12px}.ppg100-class-body{padding:8px 9px 12px}.ppg100-class-header h4{font-size:15px}.ppg100-class-count{font-size:11px;padding:4px 8px}}
+</style>
+<style id="ppg101-compact-history">
+.ppg101-att-group+.ppg101-att-group{margin-top:14px}
+.ppg101-att-head{padding:7px 10px;background:#e6f1e9;border-left:4px solid #155c3c;color:#155c3c;font-weight:800}
+.ppg101-att-head small{font-weight:500}
+.ppg101-learning{padding:7px 9px;margin:6px 0;background:#f0f7f2;border:1px solid #d4e5d9;border-radius:7px;height:auto;min-height:0}
+.ppg101-learning-row{display:grid;grid-template-columns:105px minmax(0,1fr);gap:8px;align-items:start;padding:3px 0;font-size:12px;line-height:1.4;height:auto;min-height:0}
+.ppg101-learning-row>div{white-space:pre-wrap;overflow-wrap:anywhere;margin:0!important;padding:0!important;min-height:0!important;height:auto!important}
+.ppg101-learning>.ppg52-secondary{margin-top:5px;padding:5px 9px;min-height:0}
+#ppg55-review-body .ppg55-material-item{padding:6px 9px;margin-bottom:4px;min-height:0;height:auto;line-height:1.4}
+#ppg55-review-body .ppg-empty{padding:6px 9px;min-height:0;height:auto}
+#ppg55-review-body .ppg100-class-panel{margin:10px 0 14px}
+#ppg55-review-body .ppg100-class-header{padding:7px 11px}
+#ppg55-review-body .ppg100-class-header .ppg100-class-label{display:none}
+#ppg55-review-body .ppg100-class-body{padding:5px 9px}
+</style><style id="ppg103-modal-proportions">
+#ppg55-review-modal .ppg55-modal-card,#ppg54-finish-modal .ppg54-finish-card{width:min(700px,100%);max-height:calc(100dvh - 24px);border-radius:12px}
+#ppg55-review-modal .ppg55-modal-head,#ppg54-finish-modal .ppg54-finish-head{padding:12px 14px!important;min-height:50px!important}
+#ppg55-review-modal .ppg55-modal-head b,#ppg54-finish-modal .ppg54-finish-head b{font-size:16px!important;line-height:1.3}
+#ppg55-review-body,#ppg54-finish-body{padding:12px!important;font-size:13px;line-height:1.4}
+#ppg55-review-body .ppg55-review-meta{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+#ppg55-review-body .ppg55-review-stat{padding:7px 9px!important;min-height:0!important}
+#ppg55-review-body .ppg55-review-stat:last-child{grid-column:1/-1}
+#ppg55-review-body .ppg55-review-stat small{font-size:11px!important}
+#ppg55-review-body .ppg55-review-stat b{font-size:13px!important;line-height:1.35}
+#ppg55-review-body .ppg55-section-head{font-size:13px!important;padding:8px 10px!important}
+#ppg55-review-body .ppg103-attendance>.ppg55-section-body{padding:0 8px 3px!important}
+#ppg55-review-body .ppg55-att-row{font-size:13px!important;line-height:1.4;padding:7px 2px!important;grid-template-columns:minmax(0,1fr) auto}
+#ppg55-review-body .ppg55-status{font-size:11px!important;padding:3px 7px;background:#e9f3ed;color:#235b3a}
+#ppg55-review-body .ppg100-class-header,#ppg54-finish-body .ppg100-class-header{padding:8px 10px!important;border-bottom-width:2px}
+#ppg55-review-body .ppg100-class-header h4,#ppg54-finish-body .ppg100-class-header h4{font-size:14px!important;font-weight:700}
+#ppg55-review-body .ppg100-class-panel,#ppg54-finish-body .ppg100-class-panel{margin:10px 0!important;border-width:1px;box-shadow:none}
+#ppg54-finish-body .ppg100-class-label{display:none}
+#ppg55-review-body .ppg101-learning,#ppg54-finish-body .ppg101-learning{margin:5px 0!important;padding:5px 7px!important}
+#ppg55-review-body .ppg101-learning-row,#ppg54-finish-body .ppg101-learning-row{font-size:12px!important;grid-template-columns:90px minmax(0,1fr);line-height:1.4;gap:6px;padding:2px 0!important}
+#ppg55-review-body .ppg101-learning-row b,#ppg54-finish-body .ppg101-learning-row b{font-size:12px!important;font-weight:600}
+#ppg54-finish-body .ppg54-finish-meta{font-size:12px!important;padding:8px 10px!important;margin-bottom:10px}
+#ppg54-finish-body .ppg54-finish-field{margin-top:10px!important}
+#ppg54-finish-body label,#ppg54-finish-body .ppg54-child-note b{font-size:12px!important;line-height:1.4}
+#ppg54-finish-body textarea{height:64px!important;min-height:64px!important;padding:8px 10px!important;font-size:13px!important;line-height:1.4}
+#ppg54-finish-body .ppg54-child-note input{height:36px!important;min-height:36px!important;padding:7px 9px!important;font-size:13px!important}
+#ppg54-finish-body .ppg54-child-note{padding:7px 0!important}
+#ppg55-review-body .ppg103-edit{font-size:11px;padding:5px 8px;margin-top:3px}
+#ppg55-review-body .ppg83-owner-actions{padding:10px 0 0;gap:6px;flex-wrap:wrap}
+#ppg55-review-body .ppg83-owner-actions button{font-size:12px;padding:8px 10px}
+</style>
 </body>
 </html>
