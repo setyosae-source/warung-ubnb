@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Dashboard Kelompok v101 - Powered by UBNB</title>
+<title>Dashboard Kelompok v102 - Powered by UBNB</title>
 <style>
 :root{
   --green:#1a6640;--green-dark:#0f4428;--green-light:#e8f5ee;
@@ -25573,9 +25573,18 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     window.ppg98Matches=rows;
     document.getElementById('ppg98-results').innerHTML=rows.map((x,i)=>`<button type="button" class="ppg52-secondary" style="display:block;width:100%;text-align:left;margin:4px 0" onclick="ppg98Pick('${esc(id)}',${i})">${esc(x.nama)} · ${esc(x.kelompok_nama||'')} · ${esc(x.kelas)}${(session.students||[]).some(y=>y.did===x.did)?' · sudah diabsen':''}</button>`).join('')||(q.trim()?'<p>Nama tidak ditemukan.</p>':'');
   };
+  window.ppg102CloseAttendance=function(){
+    if(saving98)return;
+    document.getElementById('ppg102-attendance')?.classList.remove('show');selected98=null;
+    document.getElementById('ppg98-search')?.focus();
+  };
   window.ppg98Pick=function(id,i){
+    if(saving98)return;
     selected98=window.ppg98Matches?.[i];if(!selected98)return;
-    document.getElementById('ppg98-choice').innerHTML=`<b>${esc(selected98.nama)} · ${esc(selected98.kelas)}</b><div>${['Hadir','Izin','Sakit'].map(st=>`<button class="ppg52-primary" style="margin:5px" onclick="ppg98Add('${esc(id)}','${st}')">${st}</button>`).join('')}</div>`;
+    let modal=document.getElementById('ppg102-attendance');
+    if(!modal){modal=document.createElement('div');modal.id='ppg102-attendance';modal.className='ppg52-modal';document.body.appendChild(modal)}
+    modal.innerHTML=`<div class="ppg52-modal-card" role="dialog" aria-modal="true" aria-labelledby="ppg102-name"><div class="ppg52-modal-head"><b>Pilih Kehadiran</b><button class="ppg52-modal-close" aria-label="Tutup" onclick="ppg102CloseAttendance()">✕</button></div><div class="ppg52-modal-body"><h3 id="ppg102-name" style="margin:0 0 5px">${esc(selected98.nama)}</h3><p style="margin:0 0 18px">${esc(selected98.kelompok_nama||'')} · ${esc(selected98.kelas)}</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${['Hadir','Sakit','Izin'].map(st=>`<button class="ppg52-primary" style="padding:14px 8px" onclick="ppg98Add('${esc(id)}','${st}')">${st}</button>`).join('')}</div><p id="ppg102-save-status" role="status" style="margin-top:10px"></p></div></div>`;
+    modal.classList.add('show');
   };
   async function record98(id,student,status){
     if(saving98)return;if(!['Hadir','Izin','Sakit'].includes(status))return;
@@ -25583,9 +25592,23 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const session=JSON.parse(JSON.stringify(old));const existing=session.students.find(x=>String(x.did)===String(student.did));
     if(existing)existing.status=status;
     else session.students.push({...student,className:student.kelas||'Belum Ditentukan',status,attendedAt:new Date().toISOString(),attendanceOrder:session.students.length+1});
-    saving98=true;try{await persist98(session);window.ppg98Open(id);toast('Absensi murid tersimpan.')}catch(e){toast(e.message,true)}finally{saving98=false}
+    saving98=true;try{await persist98(session);window.ppg98Open(id);toast('Absensi murid tersimpan.');return true}catch(e){toast(e.message,true);return false}finally{saving98=false}
   }
-  window.ppg98Add=function(id,status){if(selected98)return record98(id,selected98,status)};
+  window.ppg98Add=async function(id,status){
+    if(!selected98||saving98)return;
+    const modal=document.getElementById('ppg102-attendance');
+    const buttons=modal?[...modal.querySelectorAll('button')]:[];buttons.forEach(x=>x.disabled=true);
+    const note=document.getElementById('ppg102-save-status');if(note)note.textContent='Menyimpan absensi...';
+    try{
+      const ok=await record98(id,selected98,status);
+      if(ok){
+        modal?.classList.remove('show');selected98=null;window.ppg98Matches=[];
+        const search=document.getElementById('ppg98-search');if(search){search.value='';search.focus()}
+        const results=document.getElementById('ppg98-results');if(results)results.innerHTML='';
+        const choice=document.getElementById('ppg98-choice');if(choice)choice.innerHTML='';
+      }else if(note)note.textContent='Belum tersimpan. Silakan pilih lagi untuk mencoba ulang.';
+    }finally{buttons.forEach(x=>x.disabled=false)}
+  };
   window.ppg98Status=function(id,did,status){const x=sessions().find(s=>String(s.id)===String(id))?.students.find(x=>String(x.did)===String(did));if(x)return record98(id,x,status)};
 
   function classLearning99(session,k){
