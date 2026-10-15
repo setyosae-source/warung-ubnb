@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Dashboard Kelompok v95 - Powered by UBNB</title>
+<title>Dashboard Kelompok v98 - Powered by UBNB</title>
 <style>
 :root{
   --green:#1a6640;--green-dark:#0f4428;--green-light:#e8f5ee;
@@ -1448,6 +1448,13 @@ body.modal-open{overflow:hidden!important;}
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<script id="ppg98-report-adapter">
+window.ppg98ReportRows=function(rows){return rows.flatMap(s=>{
+ if(!s.multiClass)return [s];
+ const groups=new Map();(s.students||[]).forEach(x=>{const k=x.className||'Belum Ditentukan';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(x)});
+ return [...groups].map(([className,students])=>({...s,className,students}));
+});};
+</script>
 <script id="ppg-v97-session-time">
 window.ppgSessionTime97=function(s){
   const parse=v=>{if(!v)return null;const d=new Date(v);return Number.isFinite(d.getTime())?d:null};
@@ -23391,7 +23398,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
     const drafts=get46(DRAFT_KEY,{});
     return rows.map(j=>({
-      did:String(j.did),nama:j.nama||'-',nama_kk:j.nama_kk||'-',
+      did:String(j.did),nama:j.nama||'-',nama_kk:j.nama_kk||'-',kelompok_nama:j.kelompok_nama||'',
       kelas:drafts[String(j.did)]||j.kelas_kbm||j.kelas_usia||'Belum Ditentukan',
       kind:'jamaah'
     }));
@@ -25311,7 +25318,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     if(scope()?.type==='kelompok')rows=rows.filter(j=>j.kelompok_nama===scope().kelompok);
 
     const jamaah=rows.map(j=>({
-      did:String(j.did),nama:j.nama||'-',nama_kk:j.nama_kk||'-',
+      did:String(j.did),nama:j.nama||'-',nama_kk:j.nama_kk||'-',kelompok_nama:j.kelompok_nama||'',
       kelas:drafts[String(j.did)]||j.kelas_kbm||j.kelas_usia||'Belum Ditentukan',
       kind:'jamaah'
     }));
@@ -25404,19 +25411,6 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
               <label>Guru</label>
               <select id="ppg52-start-teacher" onchange="ppg52TeacherChanged()"></select>
             </div>
-            <div class="ppg52-field">
-              <label>Pilih Kelas</label>
-              <div class="ppg52-class-block">
-                <div class="ppg52-class-label">Kelas Binaan</div>
-                <div id="ppg52-binaan-classes" class="ppg52-class-buttons"></div>
-                <button id="ppg52-other-toggle" class="ppg52-other-toggle" type="button" onclick="ppg52ToggleOther()">Mengajar Kelas Lain</button>
-                <div id="ppg52-other-wrap" class="ppg52-other-wrap">
-                  <div class="ppg52-class-label">Kelas Lain</div>
-                  <div id="ppg52-other-classes" class="ppg52-class-buttons"></div>
-                </div>
-              </div>
-              <div class="ppg52-help">Satu sesi untuk satu kelas dan peserta pilihan. Beberapa guru boleh membuka sesi kelas yang sama.</div>
-            </div>
             <div class="ppg52-modal-actions">
               <button class="ppg52-secondary" onclick="ppg52CloseStart()">Batal</button>
               <button class="ppg52-primary" onclick="ppg52StartClass()">Mulai Kelas</button>
@@ -25446,7 +25440,6 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
     document.getElementById('ppg52-start-date').value=today();
     start52={selected:'',otherOpen:false};
-    renderStartClasses();
     document.getElementById('ppg96-participants')?.remove();
     document.getElementById('ppg52-start-modal').classList.add('show');
   };
@@ -25457,7 +25450,6 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
   window.ppg52TeacherChanged=function(){
     start52={selected:'',otherOpen:false};
-    renderStartClasses();
     document.getElementById('ppg96-participants')?.remove();
   };
 
@@ -25514,59 +25506,73 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const rows=rosterForClass(start52.selected);
     box.innerHTML=`<label>Peserta sesi (${esc(start52.selected)})</label><p class="ppg52-help">Pilih peserta yang diajar pada sesi ini. Kelas yang sama boleh memiliki beberapa sesi guru.</p><label><input type="checkbox" onchange="document.querySelectorAll('.ppg96-student').forEach(x=>x.checked=this.checked)"> Pilih semua</label><div style="max-height:240px;overflow:auto">${rows.map(x=>{const busy=peers.find(s=>(s.students||[]).some(y=>String(y.did)===String(x.did)));return `<label style="display:block;padding:6px"><input class="ppg96-student" type="checkbox" value="${esc(x.did)}"> ${esc(x.nama)}${busy?` <small>· sesi aktif ${esc(busy.teacherName)}</small>`:''}</label>`}).join('')}</div>`;
   }
+  let saving98=false;
+  async function persist98(session){
+    const did=String(CU?.did||CU?.id||'');
+    const item={...session,_updatedAt:new Date().toISOString(),_updatedBy:did};
+    const {data,error}=await sb.rpc('ppg_state_save',{p_editor_did:did,p_scope:item.scope,p_state_key:SESSION_KEY,p_payload:[item],p_owner_did:''});
+    if(error||!data?.ok)throw new Error(error?.message||data?.error||'Gagal menyimpan sesi');
+    const saved=(data.payload||[]).find(x=>String(x.id)===String(item.id));
+    const canonical=v=>JSON.stringify(v,(_,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.keys(x).sort().reduce((o,k)=>(o[k]=x[k],o),{}):x);
+    if(!saved||canonical(saved.students||[])!==canonical(item.students||[])||saved.status!==item.status)throw new Error('Perubahan belum terkonfirmasi. Muat ulang data sesi.');
+    saveSessions(data.payload);
+    return saved;
+  }
   window.ppg52StartClass=async function(){
-    const date=document.getElementById('ppg52-start-date')?.value||today();
+    if(saving98)return;
     const teacherDid=document.getElementById('ppg52-start-teacher')?.value||'';
-    const className=start52.selected||'';
-
-    if(!teacherDid){toast('Pilih guru terlebih dahulu.',true);return}
-    if(!className){toast('Pilih satu kelas.',true);return}
-
     const t=teachers().find(x=>String(x.did)===String(teacherDid));
-    if(!t){toast('Guru tidak ditemukan.',true);return}
-
-    const selected=new Set([...document.querySelectorAll('.ppg96-student:checked')].map(x=>String(x.value)));
-    const participants=rosterForClass(className).filter(x=>selected.has(String(x.did)));
-    if(!participants.length){toast('Pilih peserta sesi terlebih dahulu.',true);return}
-    const overlap=sessions().filter(x=>x.scope===scopeId()&&x.date===date&&x.status==='active').some(x=>(x.students||[]).some(y=>selected.has(String(y.did))));
-    if(overlap&&!confirm('Sebagian peserta masih tercatat di sesi aktif lain. Tetap mulai sesi ini?'))return;
-
-    const isSubstitute=!t.classes.includes(className);
-
-    const s={
-      id:'K'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)),
-      scope:scopeId(),
-      date,
-      className,
-      teacherDid:String(t.did),
-      teacherName:t.nama,
-      substituteTeacher:isSubstitute,
-      startedAt:new Date().toISOString(),
-      startedBy:CU?.nama||CU?.username||'-',
-      status:'active',
-      teacherAttendance:[{
-        did:String(t.did),nama:t.nama,status:'Hadir',
-        source:isSubstitute?'selected_substitute_teacher':'selected_teacher'
-      }],
-      students:participants,
-      participantSelection:true,
-      generalMaterials:[],
-      studentMaterials:{},
-      generalNote:'',
-      studentNotes:{}
-    };
-
-    const all=sessions();
-    all.push(s);
-    saveSessions(all);
-    gpsSilent().then(g=>logStart(s,g));
-
-    ppg52CloseStart();
-    mode52='active';
-    expanded52=null;
-    renderKelas();
-    toast('Kelas aktif.');
+    if(!t){toast('Pilih guru terlebih dahulu.',true);return}
+    const j=typeof findJamaahAny==='function'?findJamaahAny(t.did):null;
+    const gender=String(j?.jenis_kelamin||'').trim().toLowerCase();
+    const female=['p','perempuan','wanita','female'].includes(gender);
+    const male=['l','laki-laki','laki laki','pria','male'].includes(gender);
+    const now=new Date().toISOString();
+    const session={id:'K'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)),scope:scopeId(),date:today(),className:'KBM',multiClass:true,teacherDid:String(t.did),teacherName:t.nama,startedAt:now,startedByDid:String(CU?.did||CU?.id||''),startedBy:CU?.nama||CU?.username||'-',status:'active',teacherAttendance:[{did:String(t.did),nama:t.nama,status:'Hadir',at:now,source:'start_session'}],students:[],generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}};
+    saving98=true;
+    try{
+      const saved=await persist98(session);
+      gpsSilent().then(g=>logStart(saved,g));
+      ppg52CloseStart();mode52='active';expanded52=saved.id;renderKelas();
+      let modal=document.getElementById('ppg98-thanks');
+      if(!modal){modal=document.createElement('div');modal.id='ppg98-thanks';modal.className='ppg52-modal';document.body.appendChild(modal)}
+      const phrase=female?'jazaa killahu':male?'jazaa kallohu':'jazaakumullohu';
+      const title=female?'Mba ':male?'Mas ':'';
+      modal.innerHTML=`<div class="ppg52-modal-card"><div class="ppg52-modal-body"><p>Alhamdulillah ${phrase} khoiro ${title}${esc(t.nama)}, sudah absen mengajar kelas KBM hari ini.</p><button class="ppg52-primary" onclick="document.getElementById('ppg98-thanks').classList.remove('show');ppg98Open('${esc(saved.id)}')">Lanjutkan</button></div></div>`;
+      modal.classList.add('show');
+    }catch(e){toast(e.message||'Gagal membuka sesi. Silakan coba lagi.',true)}finally{saving98=false}
   };
+  function owns98(session){return String(session.startedByDid||session.teacherDid)===String(CU?.did||CU?.id)||String(CU?.did)==='4075'}
+  let selected98=null;
+  window.ppg98Open=function(id){
+    const session=sessions().find(x=>String(x.id)===String(id));if(!session)return;
+    let root=document.getElementById('p37detail');if(!root)return;
+    const writable=owns98(session)&&session.status==='active';
+    const groups=new Map();
+    (session.students||[]).forEach(x=>{const k=x.className||session.className||'Belum Ditentukan';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(x)});
+    root.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><b>Peserta Didik · ${esc(session.teacherName)}</b><div>${window.ppgSessionTime97(session)}</div></div>${writable?`<button class="ppg-btn gold" onclick="ppg37Finish('${esc(id)}')">Kelas Selesai</button>`:''}</div><div class="ppg-panel-body">${writable?`<label>Cari nama generus yang belum menikah</label><input id="ppg98-search" style="width:100%;padding:10px" placeholder="Ketik nama murid..." oninput="ppg98Search('${esc(id)}',this.value)"><div id="ppg98-results"></div><div id="ppg98-choice"></div>`:''}${[...groups].map(([k,rows])=>`<h4>${esc(k)}</h4><div style="overflow:auto"><table class="ppg37-setup-table"><thead><tr><th>No.</th><th>Nama</th><th>Kehadiran</th><th>Jam Absen</th><th>Materi / Catatan</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.nama)}</td><td>${writable?`<select onchange="ppg98Status('${esc(id)}','${esc(x.did)}',this.value)">${['Hadir','Izin','Sakit'].map(st=>`<option ${x.status===st?'selected':''}>${st}</option>`).join('')}</select>`:esc(x.status)}</td><td>${x.attendedAt?esc(new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit'}).format(new Date(x.attendedAt))):'—'}</td><td><button class="ppg-btn secondary" onclick="ppg37Student('${esc(id)}','${esc(x.did)}')">Detail</button></td></tr>`).join('')}</tbody></table></div>`).join('')||'<p>Belum ada peserta. Cari nama lalu pilih kehadirannya.</p>'}</div></div>`;
+  };
+  window.ppg98Search=function(id,q){
+    selected98=null;document.getElementById('ppg98-choice').innerHTML='';
+    const session=sessions().find(x=>String(x.id)===String(id));
+    const rows=q.trim()?studentRows().filter(x=>x.kind==='jamaah'&&norm(x.nama).includes(norm(q))).slice(0,30):[];
+    window.ppg98Matches=rows;
+    document.getElementById('ppg98-results').innerHTML=rows.map((x,i)=>`<button type="button" class="ppg52-secondary" style="display:block;width:100%;text-align:left;margin:4px 0" onclick="ppg98Pick('${esc(id)}',${i})">${esc(x.nama)} · ${esc(x.kelompok_nama||'')} · ${esc(x.kelas)}${(session.students||[]).some(y=>y.did===x.did)?' · sudah diabsen':''}</button>`).join('')||(q.trim()?'<p>Nama tidak ditemukan.</p>':'');
+  };
+  window.ppg98Pick=function(id,i){
+    selected98=window.ppg98Matches?.[i];if(!selected98)return;
+    document.getElementById('ppg98-choice').innerHTML=`<b>${esc(selected98.nama)} · ${esc(selected98.kelas)}</b><div>${['Hadir','Izin','Sakit'].map(st=>`<button class="ppg52-primary" style="margin:5px" onclick="ppg98Add('${esc(id)}','${st}')">${st}</button>`).join('')}</div>`;
+  };
+  async function record98(id,student,status){
+    if(saving98)return;if(!['Hadir','Izin','Sakit'].includes(status))return;
+    const old=sessions().find(x=>String(x.id)===String(id));if(!old||!owns98(old)||old.status!=='active'){toast('Sesi tidak dapat diedit.',true);return}
+    const session=JSON.parse(JSON.stringify(old));const existing=session.students.find(x=>String(x.did)===String(student.did));
+    if(existing)existing.status=status;
+    else session.students.push({...student,className:student.kelas||'Belum Ditentukan',status,attendedAt:new Date().toISOString(),attendanceOrder:session.students.length+1});
+    saving98=true;try{await persist98(session);window.ppg98Open(id);toast('Absensi murid tersimpan.')}catch(e){toast(e.message,true)}finally{saving98=false}
+  }
+  window.ppg98Add=function(id,status){if(selected98)return record98(id,selected98,status)};
+  window.ppg98Status=function(id,did,status){const x=sessions().find(s=>String(s.id)===String(id))?.students.find(x=>String(x.did)===String(did));if(x)return record98(id,x,status)};
 
   /* ---------------- KELAS AKTIF ---------------- */
   function activeCards(){
@@ -25603,7 +25609,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     expanded52=String(expanded52)===String(id)?null:id;
     renderKelas();
     if(expanded52&&typeof legacyOpen==='function'){
-      setTimeout(()=>legacyOpen(id),0);
+      setTimeout(()=>{const s=sessions().find(x=>String(x.id)===String(id));if(s?.multiClass)window.ppg98Open(id);else legacyOpen(id)},0);
     }
   };
 
@@ -27369,7 +27375,7 @@ body.ppg54-lock-page{
 
   /* ---------------- LAPORAN ---------------- */
   function classSessions(rows,k){
-    return rows.filter(s=>s.className===k);
+    return window.ppg98ReportRows(rows).filter(s=>s.className===k);
   }
 
   function reportClassStats(rows,k){
@@ -28461,7 +28467,7 @@ body.ppg54-lock-page{
   function generalMaterials(s){return s.generalMaterials||s.general_materials||[]}
   function studentMaterials(s){return s.studentMaterials||s.student_materials||{}}
 
-  function classSessions(rows,k){return rows.filter(s=>s.className===k)}
+  function classSessions(rows,k){return window.ppg98ReportRows(rows).filter(s=>s.className===k)}
   function classStats(rows,k){
     const ss=classSessions(rows,k);
     const people=new Set();
@@ -28542,7 +28548,7 @@ body.ppg54-lock-page{
 
     if(r){
       const rows=reportSessions(r);
-      const activeClasses=[...new Set(rows.map(s=>s.className).filter(Boolean))];
+      const activeClasses=[...new Set(window.ppg98ReportRows(rows).map(s=>s.className).filter(Boolean))];
       const totalKBM=rows.length;
       const uniqueStudents=new Set(rows.flatMap(s=>(s.students||[]).map(x=>String(x.did)))).size;
       let hadir=0,total=0;
@@ -28835,7 +28841,7 @@ body.ppg54-lock-page{
       if(!r)throw new Error('Laporan tidak ditemukan.');
 
       const rows=reportSessions(r);
-      const activeClasses=[...new Set(rows.map(s=>s.className).filter(Boolean))];
+      const activeClasses=[...new Set(window.ppg98ReportRows(rows).map(s=>s.className).filter(Boolean))];
       if(!activeClasses.length)throw new Error('Tidak ada kelas pada laporan ini.');
 
       const jsPDFCtor=window.jspdf?.jsPDF;
@@ -29332,7 +29338,7 @@ body.ppg54-lock-page{
   function generalMaterials57(s){return s.generalMaterials||s.general_materials||[]}
   function studentMaterials57(s){return s.studentMaterials||s.student_materials||{}}
 
-  function classSessions57(rows,k){return rows.filter(s=>s.className===k)}
+  function classSessions57(rows,k){return window.ppg98ReportRows(rows).filter(s=>s.className===k)}
   function classStats57(rows,k){
     const ss=classSessions57(rows,k);
     const people=new Set();
@@ -29575,7 +29581,7 @@ body.ppg54-lock-page{
       if(!r)throw new Error('Laporan tidak ditemukan.');
 
       const rows=reportSessions57(r);
-      const activeClasses=[...new Set(rows.map(s=>s.className).filter(Boolean))];
+      const activeClasses=[...new Set(window.ppg98ReportRows(rows).map(s=>s.className).filter(Boolean))];
       if(!activeClasses.length)throw new Error('Tidak ada kelas pada laporan ini.');
 
       const jsPDFCtor=window.jspdf?.jsPDF;
@@ -36545,7 +36551,7 @@ ${body}
     if(s==='Hadir')return ['H','h'];if(s==='Izin')return ['I','i'];if(s==='Sakit')return ['S','s'];if(s==='Tidak Hadir')return ['TH','th'];if(s==='Belum Hadir')return ['BH','bh'];if(s==='Terlambat')return ['T','t'];return ['—','none'];
   }
   function periodGroups83(mode){
-    const rows=visibleFinished83();const g=new Map();
+    const rows=window.ppg98ReportRows(visibleFinished83());const g=new Map();
     rows.forEach(s=>{
       let key,start,end,title;
       if(mode==='monthly'){
@@ -36560,7 +36566,7 @@ ${body}
     return [...g.values()].sort((a,b)=>String(b.start).localeCompare(String(a.start)));
   }
   function pivotClass83(rows,className){
-    const ss=rows.filter(s=>s.className===className).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const ss=window.ppg98ReportRows(rows).filter(s=>s.className===className).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     const dates=[...new Set(ss.map(s=>s.date))].sort();const people=new Map();
     let recorded=0,attended=0;
     ss.forEach(s=>(s.students||[]).forEach(x=>{
@@ -36909,5 +36915,8 @@ body.jamaah-profile-open #login-screen{
 })();
 </script>
 
+<script id="ppg98-open-route">
+(function(){const prev=window.ppg37Open;window.ppg37Open=function(id){let s;try{s=JSON.parse(localStorage.getItem('ubnb_ppg_v37_classes')||'[]').find(x=>String(x.id)===String(id))}catch(_){}if(s?.multiClass)return window.ppg98Open(id);return prev?.apply(this,arguments)}})();
+</script>
 </body>
 </html>
