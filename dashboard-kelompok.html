@@ -14014,6 +14014,16 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     if(wantJamaah){
       let pool=allJ.slice();
       if(scopeLevel==='kelompok')pool=pool.filter(j=>j.kelompok_nama===scopeKelompok);
+      // Dapukan juga berlaku saat jenis peserta Jamaah, bukan hanya Pengurus.
+      const roleNames=selectedVals(m,'dapukan'),roleScopes=selectedVals(m,'pengurus_scope'),roleUnits=selectedVals(m,'unit_khusus');
+      if(roleNames.length||roleScopes.length||roleUnits.length){
+        const roleDids=new Set((aPengurus||[]).filter(p=>p&&p.aktif!==false&&p.did)
+          .filter(p=>!roleNames.length||roleNames.includes(String(p.dapukan||'').trim()))
+          .filter(p=>!roleScopes.length||roleScopes.includes(p.level))
+          .filter(p=>!roleUnits.length||(p.level==='khusus'&&roleUnits.includes(p.unit_nama)))
+          .map(p=>String(p.did)));
+        pool=pool.filter(j=>roleDids.has(String(j.did)));
+      }
       pool.filter(j=>commonJamaahPass(j,m)).forEach(j=>map.set(String(j.did),jamaahToPeserta(j)));
     }
 
@@ -14022,7 +14032,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
       const pScope=selectedVals(m,'pengurus_scope');
       if(pScope.length)pool=pool.filter(p=>pScope.includes(p.level));
       else if(scopeLevel==='kelompok')pool=pool.filter(p=>p.level==='kelompok'&&p.kelompok_nama===scopeKelompok);
-      const daps=selectedVals(m,'dapukan');if(daps.length)pool=pool.filter(p=>daps.includes(p.dapukan));
+      const daps=selectedVals(m,'dapukan');if(daps.length)pool=pool.filter(p=>daps.includes(String(p.dapukan||'').trim()));
       const units=selectedVals(m,'unit_khusus');if(units.length)pool=pool.filter(p=>p.level==='khusus'&&units.includes(p.unit_nama));
       pool.forEach(p=>{const j=findJamaahAny(p.did);if(j&&commonJamaahPass(j,m))map.set(String(j.did),jamaahToPeserta(j));});
     }
@@ -37237,8 +37247,8 @@ button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
  const baseFilter=window.calendarFilterFromForm,baseParticipants=window.calendarParticipantsForFilter,baseRender=window._renderCalendarEventForm;
  function sync(){if(!loading&&groups.length)groups[active]=copy(baseFilter.apply(window,[]).criteria_builder||kg105GetRows());}
  function bar(){const wrap=document.getElementById('kg-criteria-builder-wrap'),list=document.getElementById('kg-criteria-list');if(!wrap||!list)return;
- let b=document.getElementById('kg105-groupbar');if(!b){b=document.createElement('div');b.id='kg105-groupbar';b.className='kg105-groupbar';list.before(b);}
- b.innerHTML='<strong>Kelompok Kriteria Peserta</strong><p>Peserta cukup memenuhi salah satu kelompok (ATAU). Di dalam setiap kelompok, semua baris kriteria harus terpenuhi (DAN).</p>'+groups.map((r,i)=>`<button type="button" class="${i===active?'active':''}" onclick="kg105Switch(${i})">Kelompok ${i+1}</button>`).join('')+'<button type="button" onclick="kg105AddGroup()">＋ Kelompok ATAU</button>'+(groups.length>1?'<button type="button" onclick="kg105RemoveGroup()">Hapus kelompok ini</button>':'');
+ let b=document.getElementById('kg105-groupbar');if(!b){b=document.createElement('div');b.id='kg105-groupbar';b.className='kg105-groupbar';wrap.insertBefore(b,wrap.firstChild);}
+ b.innerHTML='<strong>Kategori Peserta</strong><p>Peserta cukup memenuhi salah satu kategori (ATAU). Semua kriteria di dalam satu kategori harus terpenuhi (DAN).</p>'+groups.map((r,i)=>`<button type="button" class="${i===active?'active':''}" onclick="kg105Switch(${i})">Kategori ${i+1}</button>`).join('')+'<button type="button" onclick="kg105AddGroup()">＋ Tambah Kategori Peserta</button>'+(groups.length>1?'<button type="button" onclick="kg105RemoveGroup()">Hapus kategori ini</button>':'');
  }
  window.kg105Switch=function(i){sync();active=i;kg105SetRows(groups[active]);bar();previewPeserta();};
  window.kg105AddGroup=function(){sync();groups.push([{type:'participant_type',values:['jamaah']},{type:'status_sambung',values:['Tetap']}]);active=groups.length-1;kg105SetRows(groups[active]);bar();previewPeserta();};
