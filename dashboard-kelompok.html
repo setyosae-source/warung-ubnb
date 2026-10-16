@@ -37242,24 +37242,26 @@ button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
 </style>
 <script id="acara105-criteria-groups">
 (function(){
- let groups=[],active=0,loading=false;
+ let groups=[],names=[],active=0,loading=false;
  const copy=x=>JSON.parse(JSON.stringify(x||[]));
  const baseFilter=window.calendarFilterFromForm,baseParticipants=window.calendarParticipantsForFilter,baseRender=window._renderCalendarEventForm;
  function sync(){if(!loading&&groups.length)groups[active]=copy(baseFilter.apply(window,[]).criteria_builder||kg105GetRows());}
  function bar(){const wrap=document.getElementById('kg-criteria-builder-wrap'),list=document.getElementById('kg-criteria-list');if(!wrap||!list)return;
  let b=document.getElementById('kg105-groupbar');if(!b){b=document.createElement('div');b.id='kg105-groupbar';b.className='kg105-groupbar';wrap.insertBefore(b,wrap.firstChild);}
- b.innerHTML='<strong>Kategori Peserta</strong><p>Peserta cukup memenuhi salah satu kategori (ATAU). Semua kriteria di dalam satu kategori harus terpenuhi (DAN).</p>'+groups.map((r,i)=>`<button type="button" class="${i===active?'active':''}" onclick="kg105Switch(${i})">Kategori ${i+1}</button>`).join('')+'<button type="button" onclick="kg105AddGroup()">＋ Tambah Kategori Peserta</button>'+(groups.length>1?'<button type="button" onclick="kg105RemoveGroup()">Hapus kategori ini</button>':'');
+ b.innerHTML='<strong>Kategori Peserta</strong><p>Peserta cukup memenuhi salah satu kategori (ATAU). Semua kriteria di dalam satu kategori harus terpenuhi (DAN).</p>'+groups.map((r,i)=>`<button type="button" class="${i===active?'active':''}" onclick="kg105Switch(${i})">${escH(names[i]||('Kategori '+(i+1)))}</button>`).join('')+'<button type="button" onclick="kg105AddGroup()">＋ Tambah Kategori Peserta</button>'+(groups.length>1?'<button type="button" onclick="kg105RemoveGroup()">Hapus kategori ini</button>':'')+`<label style="display:block;margin-top:8px;font-size:12px">Nama kategori aktif<input id="kg105-category-name" type="text" maxlength="100" value="${escH(names[active]||'')}" placeholder="Contoh: Bapak-Ibu" oninput="kg105Rename(this.value)" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:8px;border:1px solid #aac7b6;border-radius:6px"></label>`;
  }
+ window.kg105Rename=function(value){names[active]=String(value||'').slice(0,100);const tabs=document.querySelectorAll('#kg105-groupbar button');if(tabs[active])tabs[active].textContent=names[active]||('Kategori '+(active+1));};
  window.kg105Switch=function(i){sync();active=i;kg105SetRows(groups[active]);bar();previewPeserta();};
- window.kg105AddGroup=function(){sync();groups.push([{type:'participant_type',values:['jamaah']},{type:'status_sambung',values:['Tetap']}]);active=groups.length-1;kg105SetRows(groups[active]);bar();previewPeserta();};
- window.kg105RemoveGroup=function(){if(groups.length<2)return;groups.splice(active,1);active=Math.min(active,groups.length-1);kg105SetRows(groups[active]);bar();previewPeserta();};
+ window.kg105AddGroup=function(){sync();names.push('');groups.push([{type:'participant_type',values:['jamaah']},{type:'status_sambung',values:['Tetap']}]);active=groups.length-1;kg105SetRows(groups[active]);bar();previewPeserta();};
+ window.kg105RemoveGroup=function(){if(groups.length<2)return;groups.splice(active,1);names.splice(active,1);active=Math.min(active,groups.length-1);kg105SetRows(groups[active]);bar();previewPeserta();};
  window.calendarFilterFromForm=function(){const f=baseFilter.apply(this,arguments);if(loading||!groups.length||!Array.isArray(f.criteria_builder))return f;
  groups[active]=copy(f.criteria_builder);f.criteria_builder=copy(groups[0]);f.criteria_version=4;
- if(groups.length>1)f.criteria_groups=groups.map(rows=>({criteria_builder:copy(rows)}));else delete f.criteria_groups;
+ f.criteria_category_name=names[0]||'';
+ if(groups.length>1)f.criteria_groups=groups.map((rows,i)=>({name:names[i]||'',criteria_builder:copy(rows)}));else delete f.criteria_groups;
  return f;};
  window.calendarParticipantsForFilter=function(f){if(!Array.isArray(f?.criteria_groups)||!f.criteria_groups.length)return baseParticipants.apply(this,arguments);
  const seen=new Set(),out=[];for(const g of f.criteria_groups){const one={...f,criteria_builder:g.criteria_builder};delete one.criteria_groups;const args=Array.from(arguments);args[0]=one;for(const p of baseParticipants.apply(this,args)){const key=String(p?.did||p?.jamaah_did||'');if(key&&!seen.has(key)){seen.add(key);out.push(p);}}}return out;};
- window._renderCalendarEventForm=function(k,j,m){loading=true;groups=[];active=0;let result;try{result=baseRender.apply(this,arguments);const f=j?(j.kriteria_peserta||{}):(k?.filter_peserta||{});groups=Array.isArray(f.criteria_groups)&&f.criteria_groups.length?f.criteria_groups.map(g=>copy(g.criteria_builder)):[kg105GetRows()];kg105SetRows(groups[0]);bar();}finally{loading=false;}previewPeserta();return result;};
+ window._renderCalendarEventForm=function(k,j,m){loading=true;groups=[];names=[];active=0;let result;try{result=baseRender.apply(this,arguments);const f=j?(j.kriteria_peserta||{}):(k?.filter_peserta||{});groups=Array.isArray(f.criteria_groups)&&f.criteria_groups.length?f.criteria_groups.map(g=>copy(g.criteria_builder)):[kg105GetRows()];names=Array.isArray(f.criteria_groups)&&f.criteria_groups.length?f.criteria_groups.map(g=>String(g.name||'').slice(0,100)):[String(f.criteria_category_name||'').slice(0,100)];kg105SetRows(groups[0]);bar();}finally{loading=false;}previewPeserta();return result;};
  ['modal-kegiatan','modal-calendar-detail','modal-kegiatan-peserta'].forEach(id=>{const el=document.getElementById(id);if(el&&el.parentElement!==document.body)document.body.appendChild(el);});
 })();
 </script>
