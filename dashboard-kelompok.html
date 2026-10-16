@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Dashboard Kelompok v103 - Powered by UBNB</title>
+<title>Dashboard Kelompok v104 - Powered by UBNB</title>
 <style>
 :root{
   --green:#1a6640;--green-dark:#0f4428;--green-light:#e8f5ee;
@@ -37078,5 +37078,137 @@ body.jamaah-profile-open #login-screen{
 #ppg55-review-body .ppg83-owner-actions{padding:10px 0 0;gap:6px;flex-wrap:wrap}
 #ppg55-review-body .ppg83-owner-actions button{font-size:12px;padding:8px 10px}
 </style>
+<style id="acara104-style">.dk104-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.dk104-actions button,.dk104-card button{border:1px solid #cedbd3;background:white;color:#235d3c;border-radius:7px;padding:9px 12px;font-family:inherit;font-weight:600;font-size:12px;cursor:pointer}
+.dk104-actions button:disabled,.dk104-card button:disabled{opacity:.55;cursor:wait}
+button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
+.dk104-overlay{display:none;position:fixed;inset:0;background:#0008;z-index:65000;align-items:center;justify-content:center;padding:12px}
+.dk104-overlay.show{display:flex}
+.dk104-card{background:white;border-radius:12px;width:min(650px,100%);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;overflow:hidden;font-size:13px;color:#20392a}
+.dk104-card header,.dk104-card footer{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:12px 14px;flex-shrink:0}
+.dk104-card header{background:#155c3c;color:white}
+.dk104-content{overflow:auto;padding:14px;line-height:1.5}
+.dk104-content h3{margin:0;font-size:16px}.dk104-content p{margin:6px 0}
+.dk104-note{padding:9px 11px;border-radius:7px;background:#edf5f0;margin:10px 0}
+.dk104-counts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.dk104-counts>div{padding:9px;border:1px solid #d9e5dd;border-radius:7px}
+.dk104-counts small,.dk104-counts b{display:block}.dk104-counts b{font-size:20px}
+.dk104-list{border-bottom:1px solid #e1e8e3;padding:9px 0}.dk104-list summary{font-weight:600;cursor:pointer}.dk104-list ol{padding-left:23px;margin:8px 0}
+#dk104-error{color:#b91c1c;font-weight:600}.dk104-card footer{border-top:1px solid #e1e8e3}
+</style>
+<script id="acara104-procedure">(function(){
+ 'use strict';
+ let pending=null,editingKey=null,busy=false;
+ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ function resolve(key){
+  const e=calendarFindEntry(key);if(!e)return null;
+  if(e.kind==='virtual'){
+   const k=(aKegiatan||[]).find(x=>Number(x.jadwal_id)===Number(e.jadwal_id)&&String(x.occurrence_date||'').slice(0,10)===String(e.original_date||'').slice(0,10));
+   if(k)return calendarEntryFromActual(k);
+  }return e;
+ }
+ function locked(e){return !e||e.cancelled||['selesai','dibatalkan'].includes(e.status)||!!e.raw?.closed_at}
+ function current(e){return e.actual?(aHadir||[]).filter(h=>Number(h.kegiatan_id)===Number(e.id)):[]}
+ function criteria(e){return calendarParticipantsForFilter(e.filter_peserta||{},e.scope_level,e.scope_kelompok)}
+ function params(e,rows){return {p_token:DK_ATT_TOKEN,p_kegiatan_id:e.actual?Number(e.id):null,p_jadwal_id:e.actual?null:Number(e.jadwal_id),p_occurrence_date:e.actual?null:e.original_date,p_peserta:rows}}
+ async function rpc(args){const {data,error}=await sb.rpc('dk_calendar_participants_plan',args);if(error||data?.ok!==true)throw new Error(error?.message||data?.error||'Gagal memproses peserta');return data}
+ function ensure(){
+  if(document.getElementById('dk104-preview'))return;
+  document.body.insertAdjacentHTML('beforeend',`<div id="dk104-preview" class="dk104-overlay"><section class="dk104-card" role="dialog" aria-modal="true" aria-labelledby="dk104-title"><header><b id="dk104-title">Pratinjau Peserta</b><button aria-label="Tutup" onclick="dk104Close()">✕</button></header><div id="dk104-preview-content" class="dk104-content"></div><footer><button onclick="dk104Close()">Kembali</button><button id="dk104-confirm" class="dk104-primary" onclick="dk104Apply()">Konfirmasi & Simpan Peserta</button></footer></section></div>`);
+ }
+ function names(title,rows){return `<details class="dk104-list"><summary>${esc(title)} (${rows.length})</summary>${rows.length?`<ol>${rows.map(x=>`<li>${esc(x.nama||'Slot tanpa nama')}${x.status?' · '+esc(x.status):''}</li>`).join('')}</ol>`:'<p>Tidak ada.</p>'}</details>`}
+ function showPreview(e,rows,data,source){
+  ensure();pending={key:e.key,rows,args:params(e,rows),fingerprint:data.fingerprint,source};
+  const added=data.added||[],removed=data.removed||[],protectedRows=data.protected||[];
+  document.getElementById('dk104-preview-content').innerHTML=`<h3>${esc(e.name)}</h3><p>${esc(calFmtDate(e.date))} · ${esc(calScopeLabel(e.scope_level,e.scope_kelompok))}</p><div class="dk104-note">Sumber: <b>${source==='criteria'?'kriteria tersimpan dan data jamaah terbaru':'pilihan peserta manual untuk tanggal ini'}</b>.<br>Kriteria dan jadwal rutin tidak diubah.</div><div class="dk104-counts"><div><small>Saat ini</small><b>${data.current_count}</b></div><div><small>Setelah disimpan</small><b>${data.final_count}</b></div></div>${names('Daftar yang diajukan',data.participants||rows)}${names('Ditambahkan',added)}${names('Dikeluarkan dari daftar, belum ada catatan kehadiran',removed)}${names('Tetap dipertahankan karena kehadiran sudah tercatat',protectedRows)}${data.final_count===0?'<div class="dk104-note">Daftar peserta akan kosong. Periksa kembali sebelum mengonfirmasi.</div>':''}<p id="dk104-error" role="status"></p>`;
+  const button=document.getElementById('dk104-confirm');button.disabled=false;button.textContent='Konfirmasi & Simpan Peserta';button.onclick=window.dk104Apply;
+  document.getElementById('dk104-preview').classList.add('show');
+ }
+ async function preview(key,chosen,source){
+  if(busy)return;busy=true;
+  try{
+   const loaded=await reloadAttendanceSecure(false);if(loaded===false)throw new Error('Gagal memuat data terbaru. Silakan coba lagi.');
+   const e=resolve(key);if(locked(e))throw new Error('Acara sudah ditutup atau dibatalkan');
+   if(!calendarCanManageEntry(e))throw new Error('Tidak memiliki hak mengelola acara ini');
+   if(!calendarH7Ready(e))throw new Error('Peserta dapat digenerate mulai H-7');
+   const rows=source==='criteria'?criteria(e):chosen;
+   const data=await rpc({...params(e,rows),p_apply:false,p_expected_fingerprint:null});
+   showPreview(e,rows,data,source);
+  }catch(error){toast(error.message,true)}finally{busy=false}
+ }
+ window.dk104Generate=key=>preview(key,null,'criteria');
+ window.generateCalendarParticipants=function(key){return window.dk104Generate(key)};
+ window.dk104Close=function(){if(busy)return;document.getElementById('dk104-preview')?.classList.remove('show');pending=null};
+ window.dk104Apply=async function(){
+  if(busy||!pending)return;busy=true;
+  const plan=pending,button=document.getElementById('dk104-confirm');button.disabled=true;button.textContent='Menyimpan...';
+  try{
+   const data=await rpc({...plan.args,p_apply:true,p_expected_fingerprint:plan.fingerprint});
+   document.getElementById('dk104-preview').classList.remove('show');pending=null;editingKey=null;
+   closeMod('modal-kegiatan-peserta');closeMod('modal-calendar-detail');_kpContext='snapshot';_kpVirtualKey=null;_kpKegiatanId=null;
+   await reloadAttendanceSecure(false);renderKegiatanList();toast(`✅ ${Number(data.count??0)} peserta tersimpan untuk tanggal pelaksanaan ini.`);
+  }catch(error){
+   document.getElementById('dk104-error').textContent=error.message;
+   button.textContent='Muat Pratinjau Terbaru';button.disabled=false;
+   button.onclick=()=>{busy=false;return preview(plan.key,plan.rows,plan.source)};
+  }finally{busy=false}
+ };
+ window.dk104Edit=function(key){
+  const e=resolve(key);if(locked(e)||!calendarCanManageEntry(e))return;
+  if(!calendarH7Ready(e)){toast('Peserta dapat disiapkan mulai H-7',true);return}
+  editingKey=e.key;_kpContext='snapshot';_kpVirtualKey=e.actual?null:e.key;_kpKegiatanId=e.actual?e.id:null;
+  let ids;
+  if(e.generated)ids=current(e).filter(h=>h.jamaah_did).map(h=>String(h.jamaah_did));
+  else{
+   ids=calendarParticipantsForEntry(e).filter(x=>x.did).map(x=>String(x.did));
+  }
+  _kpSelected=new Set(ids);_kpTargetScope={level:e.scope_level,kelompok:e.scope_kelompok};
+  setupKpScopeOptions(_kpTargetScope);
+  document.getElementById('kp-title').textContent='Pilih / Edit Peserta: '+e.name;
+  document.getElementById('kp-sub').textContent=calFmtDate(e.date)+' · '+calScopeLabel(e.scope_level,e.scope_kelompok)+' · hanya tanggal ini';
+  renderKegiatanParticipantEditor();openMod('modal-kegiatan-peserta');closeMod('modal-calendar-detail');
+ };
+ const oldSave=window.saveKegiatanParticipantSelection;
+ window.saveKegiatanParticipantSelection=async function(){
+  if(!editingKey||_kpContext!=='snapshot')return oldSave?.apply(this,arguments);
+  const rows=[..._kpSelected].map(did=>findJamaahAny(did)).filter(Boolean).map(j=>jamaahToPeserta(j));
+  return preview(editingKey,rows,'manual');
+ };
+ // Other entry points must load existing selections instead of an empty virtual list.
+ window.openVirtualPeserta=function(key){return window.dk104Edit(key)};
+ window.openKegiatanPeserta=function(id){return window.dk104Edit('K'+id)};
+ const oldStartForm=window.openFormTargetParticipants;
+ if(oldStartForm)window.openFormTargetParticipants=function(){editingKey=null;return oldStartForm.apply(this,arguments)};
+ const oldTarget=window.openTargetParticipantsEntry;
+ if(oldTarget)window.openTargetParticipantsEntry=function(){editingKey=null;return oldTarget.apply(this,arguments)};
+ const oldDetail=window.renderCalendarDetail;
+ window.renderCalendarDetail=function(){
+  const result=oldDetail?.apply(this,arguments),e=resolve(_calCurrentEntry?.key),box=document.getElementById('calendar-detail-content');
+  if(!e||!box)return result;
+  box.querySelectorAll('.dk104-actions').forEach(x=>x.remove());
+  const info=box.querySelector('.ubnb58-participant-box');
+  if(info){
+   if(e.generated)info.innerHTML=`<b>${Number(e.participant_count||0)} peserta terdaftar</b> untuk ${esc(calFmtDate(e.date))}. Daftar absen sudah disimpan.`;
+   else{
+    let n=0;try{n=criteria(e).length}catch(_){}
+    const m=targetRowsForEntry(e).length;
+    info.innerHTML=`<b>${n} calon peserta</b> berdasarkan kriteria tersimpan · <b>belum dibuatkan absen</b>.${m?`<br>Target manual tersimpan: ${m} nama; tersedia melalui Pilih / Edit Peserta.`:''}`;
+   }
+  }
+  box.querySelectorAll('.cal-detail-actions button').forEach(button=>{
+   if(/Update Peserta|Generate dari Kriteria|Refresh Kriteria|Pilih \/ Edit Peserta|Pilih Peserta Manual/.test(button.textContent||''))button.remove();
+  });
+  if(!locked(e)&&calendarCanManageEntry(e)){
+   const row=document.createElement('div');row.className='dk104-actions';
+   const ready=calendarH7Ready(e);
+   const generate=document.createElement('button');generate.className='dk104-primary';generate.textContent=e.generated?'Perbarui dari Kriteria':'Generate dari Kriteria';generate.disabled=!ready;generate.onclick=()=>window.dk104Generate(e.key);
+   const edit=document.createElement('button');edit.textContent='Pilih / Edit Peserta';edit.disabled=!ready;edit.onclick=()=>window.dk104Edit(e.key);
+   row.appendChild(generate);row.appendChild(edit);
+   const actions=box.querySelector('.cal-detail-actions');if(actions)actions.before(row);else box.appendChild(row);
+  }return result;
+ };
+ window.dk104Audit={resolve,criteria,locked};
+})();
+</script>
 </body>
 </html>
