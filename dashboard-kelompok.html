@@ -10350,7 +10350,7 @@ onCalendarScopeChange=function(){_onCalendarScopeChangeBase();if(document.getEle
 
 previewPeserta=function(){
   const el=document.getElementById('kg-preview');if(!el)return;const sc=currentCalendarScopeFromForm(),filter=calendarFilterFromForm(),mode=targetModeOfFilter(filter);
-  const criteria=mode==='manual'?[]:calendarParticipantsForFilter(filter,sc.level,sc.kelompok);const manual=[..._kgTargetSelected].map(d=>findJamaahAny(d)).filter(Boolean).map(j=>jamaahToPeserta(j));const map=new Map();[...criteria,...manual].forEach(p=>p?.did&&map.set(String(p.did),p));
+  const criteria=mode==='manual'?[]:calendarParticipantsForFilter(filter,sc.level,sc.kelompok);const manual=[...(mode==='criteria'?[]:_kgTargetSelected)].map(d=>findJamaahAny(d)).filter(Boolean).map(j=>jamaahToPeserta(j));const map=new Map();[...criteria,...manual].forEach(p=>p?.did&&map.set(String(p.did),p));
   const slots=_kgSlotsDraft.reduce((n,x)=>n+(x.scope_kelompok==='ALL'&&sc.level!=='kelompok'?Number(x.kuota||1)*4:Number(x.kuota||1)),0);
   el.innerHTML=`🎯 <b>${map.size} target bernama</b> (${targetModeLabel(mode)})${slots?` + <b>${slots} kuota slot</b>`:''}. Nama target dapat dipakai untuk undangan sejak sekarang; snapshot absensi aktual tetap dibuat mulai H-7.`;
   const c=document.getElementById('kg-target-count');if(c)c.textContent=`${_kgTargetSelected.size} nama dipilih`;
@@ -13891,6 +13891,18 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     return Object.entries(defs).filter(([k])=>k===current||!used.has(k)).map(([k,d])=>`<option value="${escH(k)}" ${k===current?'selected':''}>${escH(d.label)}</option>`).join('');
   }
 
+  function kgRoleOptions(){
+    const scopes=_kgCriteriaRows.find(r=>r.type==='pengurus_scope')?.values||[];
+    return critDefs().dapukan.options.filter(([v])=>(aPengurus||[]).some(p=>p?.aktif!==false&&String(p.dapukan||'').trim()===v&&(!scopes.length||scopes.includes(p.level))));
+  }
+  function kgSyncRoles(reset){
+    const scope=_kgCriteriaRows.find(r=>r.type==='pengurus_scope');
+    let role=_kgCriteriaRows.find(r=>r.type==='dapukan');
+    if(scope&&!role){role={type:'dapukan',values:[]};_kgCriteriaRows.splice(_kgCriteriaRows.indexOf(scope)+1,0,role);}
+    if(role&&(reset||!role.values?.length))role.values=kgRoleOptions().map(x=>x[0]);
+    if(role&&!role.values.length)role.values=['__none__'];
+  }
+  window.kgRoleBulk=function(i,checked){_kgCriteriaRows[i].values=checked?kgRoleOptions().map(x=>x[0]):['__none__'];if(!_kgCriteriaRows[i].values.length)_kgCriteriaRows[i].values=['__none__'];renderKgCriteriaBuilder();previewPeserta();};
   function critAllActive(row){return !Array.isArray(row.values)||row.values.length===0;}
 
   function renderCriterionOptions(row,index){
@@ -13902,8 +13914,10 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     const option=(v,l,n)=>{const on=!all&&(row.values||[]).includes(v);return `<label class="kg-opt ${on?'active':''}"><input type="checkbox" value="${escH(v)}" ${on?'checked':''} onchange="kg105Option(${index},${n},this.checked,this)"><span>${escH(l)}</span></label>`;};
     let opts=(def.options||[]).map(([v,l],n)=>option(v,l,n)).join('');
     if(row.type==='dapukan'){
-      const scopes=[['desa','Desa'],['kelompok','Kelompok'],['other','Selain Desa & Kelompok']];
-      opts=`<div class="kg105-table-wrap"><table class="kg105-dapukan"><thead><tr>${scopes.map(x=>`<th>${x[1]}</th>`).join('')}</tr></thead><tbody><tr>${scopes.map(([scope])=>`<td>${def.options.map(([v,l],n)=>{const matches=(aPengurus||[]).filter(p=>p?.aktif!==false&&String(p.dapukan||'').trim()===v);return matches.some(p=>(['desa','kelompok'].includes(p.level)?p.level:'other')===scope)?option(v,l,n):'';}).join('')||'—'}</td>`).join('')}</tr></tbody></table></div><small>Kolom mengelompokkan nama dapukan. Gunakan kriteria Scope Dapukan untuk membatasi lingkup peserta.</small>`;
+      const selectedScopes=_kgCriteriaRows.find(r=>r.type==='pengurus_scope')?.values||[];
+      const scopes=[['desa','Desa'],['kelompok','Kelompok'],['other','Selain Desa & Kelompok']].filter(([scope])=>!selectedScopes.length||selectedScopes.includes(scope==='other'?'khusus':scope));
+      const content=scopes.map(([scope,label])=>`<section><strong>${label}</strong><div>${def.options.map(([v,l],n)=>{const matches=(aPengurus||[]).filter(p=>p?.aktif!==false&&String(p.dapukan||'').trim()===v&&(!selectedScopes.length||selectedScopes.includes(p.level)));return matches.some(p=>(['desa','kelompok'].includes(p.level)?p.level:'other')===scope)?option(v,l,n):'';}).join('')||'<small>Belum ada dapukan aktif.</small>'}</div></section>`).join('');
+      return `<div style="width:100%"><button type="button" class="kg-opt" onclick="kgRoleBulk(${index},true)">Centang Semua</button><button type="button" class="kg-opt" onclick="kgRoleBulk(${index},false)">Hapus Semua Centang</button><div class="kg106-role-grid" style="--role-cols:${Math.max(1,scopes.length)}">${content}</div><small>Hanya dapukan sesuai scope. Tanpa centang berarti tidak ada peserta dari kategori ini.</small></div>`;
     }
     return `<button type="button" class="kg-opt ${all?'active':''}" onclick="kgCriterionAll(${index})">Semua</button>${opts||'<span class="kg-all-note">Belum ada opsi data.</span>'}`;
   }
@@ -13911,9 +13925,10 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
   window.renderKgCriteriaBuilder=function(){
     const box=document.getElementById('kg-criteria-list');if(!box)return;
     if(!_kgCriteriaRows.length)_kgCriteriaRows=[{type:'participant_type',values:['jamaah']},{type:'status_sambung',values:['Tetap']}];
+    kgSyncRoles(false);
     box.innerHTML=_kgCriteriaRows.map((r,i)=>`<div class="kg-criteria-row">
       <select class="kg-criteria-type" onchange="kgCriterionType(${i},this.value)">${criteriaTypeOptions(r.type,i)}</select>
-      <div class="kg-criteria-options">${renderCriterionOptions(r,i)}</div>
+      <div class="kg-criteria-options" ${r.type==='dapukan'?'data-empty-none="true"':''}>${renderCriterionOptions(r,i)}</div>
       <button type="button" class="kg-criteria-remove" onclick="kgCriterionRemove(${i})" title="Hapus kriteria">×</button>
     </div>`).join('');
   };
@@ -13924,14 +13939,15 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     _kgCriteriaRows.push({type:next,values:[]});renderKgCriteriaBuilder();previewPeserta();
   };
   window.kgCriterionRemove=function(i){_kgCriteriaRows.splice(i,1);renderKgCriteriaBuilder();previewPeserta();};
-  window.kgCriterionType=function(i,type){_kgCriteriaRows[i]={type,values:[],min:'',max:''};renderKgCriteriaBuilder();previewPeserta();};
-  window.kgCriterionAll=function(i){if(_kgCriteriaRows[i])_kgCriteriaRows[i].values=[];renderKgCriteriaBuilder();previewPeserta();};
+  window.kgCriterionType=function(i,type){_kgCriteriaRows[i]={type,values:[],min:'',max:''};if(type==='pengurus_scope')kgSyncRoles(true);renderKgCriteriaBuilder();previewPeserta();};
+  window.kgCriterionAll=function(i){if(_kgCriteriaRows[i])_kgCriteriaRows[i].values=[];if(_kgCriteriaRows[i]?.type==='pengurus_scope')kgSyncRoles(true);renderKgCriteriaBuilder();previewPeserta();};
   window.kgCriterionToggle=function(i,v,checked,inputEl){
     const r=_kgCriteriaRows[i];if(!r)return;
-    let vals=Array.isArray(r.values)?[...r.values]:[];
+    let vals=Array.isArray(r.values)?r.values.filter(x=>x!=='__none__'):[];
     if(checked&&!vals.includes(v))vals.push(v);
     if(!checked)vals=vals.filter(x=>x!==v);
-    r.values=vals;
+    r.values=r.type==='dapukan'&&!vals.length?['__none__']:vals;
+    if(r.type==='pengurus_scope'){kgSyncRoles(true);renderKgCriteriaBuilder();previewPeserta();return;}
 
     const row=inputEl?.closest('.kg-criteria-row');
     if(row){
@@ -14009,6 +14025,7 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
     const wantPengurus=!types.length||types.includes('pengurus');
     const wantIstriPengurus=!types.length||types.includes('istri_pengurus');
     const map=new Map();
+    if(selectedVals(m,'dapukan').includes('__none__'))return [];
     const allJ=(aJamaahDesa&&aJamaahDesa.length?aJamaahDesa:aJamaah||[]);
 
     if(wantJamaah){
@@ -16438,7 +16455,7 @@ ${table.outerHTML}
         return (inp.closest('label')?.textContent||'').trim();
       }).filter(Boolean);
 
-      return {type,values,min:'',max:''};
+      return {type,values:type==='dapukan'&&!values.length?['__none__']:[...new Set(values)],min:'',max:''};
     }).filter(Boolean);
   }
 
@@ -16486,7 +16503,7 @@ ${table.outerHTML}
       ?[]
       :calendarParticipantsForFilter(filter,sc.level,sc.kelompok);
 
-    const manual=[..._kgTargetSelected]
+    const manual=[...(mode==='criteria'?[]:_kgTargetSelected)]
       .map(d=>findJamaahAny(d))
       .filter(Boolean)
       .map(j=>jamaahToPeserta(j));
@@ -37265,5 +37282,7 @@ button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
  ['modal-kegiatan','modal-calendar-detail','modal-kegiatan-peserta'].forEach(id=>{const el=document.getElementById(id);if(el&&el.parentElement!==document.body)document.body.appendChild(el);});
 })();
 </script>
+
+<style id="dapukan106-style">.kg106-role-grid{display:grid;grid-template-columns:repeat(var(--role-cols),minmax(0,1fr));gap:7px;margin:8px 0}.kg106-role-grid section{min-width:0;border:1px solid #d7e2dd;border-radius:6px;overflow:hidden}.kg106-role-grid section>strong{display:block;padding:8px;background:#eaf3ee;font-size:12px}.kg106-role-grid section>div{padding:5px}.kg106-role-grid .kg-opt{display:flex!important;align-items:flex-start;gap:5px;margin:0 0 5px!important;padding:7px!important;white-space:normal!important;font-size:12px!important;max-width:100%;box-sizing:border-box}.kg106-role-grid input{flex:none;margin-top:2px}.kg106-role-grid span{overflow-wrap:anywhere}</style>
 </body>
 </html>
