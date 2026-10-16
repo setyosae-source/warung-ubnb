@@ -13831,6 +13831,13 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
      A. GENERIC CRITERIA BUILDER FOR +BUAT ACARA
      ========================================================= */
   var _kgCriteriaRows=[];
+  window.kg105GetRows=()=>cloneRows(_kgCriteriaRows);
+  window.kg105SetRows=rows=>{_kgCriteriaRows=cloneRows(rows);window.renderKgCriteriaBuilder();};
+  window.kg105Option=function(i,n,checked,el){const v=critDefs()[_kgCriteriaRows[i].type].options[n][0];
+    const row=el.closest('.kg-criteria-row');
+    row.querySelectorAll('input[type="checkbox"]').forEach(x=>{if(x.value===v){x.checked=checked;x.closest('label')?.classList.toggle('active',checked);}});
+    window.kgCriterionToggle(i,v,checked,el);
+  };
 
   function critDefs(){
     const dapukan=[...new Set((aPengurus||[]).filter(p=>p?.aktif!==false&&p.dapukan).map(p=>String(p.dapukan).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id'));
@@ -13892,10 +13899,12 @@ body{font-size:var(--ui-font-v14)!important;line-height:1.38!important;}
       return `<div class="kg-range"><input type="number" min="0" placeholder="Usia min" value="${escH(row.min||'')}" oninput="kgCriterionRange(${index},'min',this.value)"><span>–</span><input type="number" min="0" placeholder="Usia max" value="${escH(row.max||'')}" oninput="kgCriterionRange(${index},'max',this.value)"></div>`;
     }
     const all=critAllActive(row);
-    const opts=(def.options||[]).map(([v,l])=>{
-      const on=!all&&(row.values||[]).includes(v);
-      return `<label class="kg-opt ${on?'active':''}"><input type="checkbox" value="${escH(v)}" ${on?'checked':''} onchange="kgCriterionToggle(${index},${JSON.stringify(v)},this.checked,this)">${escH(l)}</label>`;
-    }).join('');
+    const option=(v,l,n)=>{const on=!all&&(row.values||[]).includes(v);return `<label class="kg-opt ${on?'active':''}"><input type="checkbox" value="${escH(v)}" ${on?'checked':''} onchange="kg105Option(${index},${n},this.checked,this)"><span>${escH(l)}</span></label>`;};
+    let opts=(def.options||[]).map(([v,l],n)=>option(v,l,n)).join('');
+    if(row.type==='dapukan'){
+      const scopes=[['desa','Desa'],['kelompok','Kelompok'],['other','Selain Desa & Kelompok']];
+      opts=`<div class="kg105-table-wrap"><table class="kg105-dapukan"><thead><tr>${scopes.map(x=>`<th>${x[1]}</th>`).join('')}</tr></thead><tbody><tr>${scopes.map(([scope])=>`<td>${def.options.map(([v,l],n)=>{const matches=(aPengurus||[]).filter(p=>p?.aktif!==false&&String(p.dapukan||'').trim()===v);return matches.some(p=>(['desa','kelompok'].includes(p.level)?p.level:'other')===scope)?option(v,l,n):'';}).join('')||'—'}</td>`).join('')}</tr></tbody></table></div><small>Kolom mengelompokkan nama dapukan. Gunakan kriteria Scope Dapukan untuk membatasi lingkup peserta.</small>`;
+    }
     return `<button type="button" class="kg-opt ${all?'active':''}" onclick="kgCriterionAll(${index})">Semua</button>${opts||'<span class="kg-all-note">Belum ada opsi data.</span>'}`;
   }
 
@@ -37208,6 +37217,40 @@ button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
   }return result;
  };
  window.dk104Audit={resolve,criteria,locked};
+})();
+</script>
+
+<style id="acara105-style">
+#modal-kegiatan,#modal-calendar-detail{position:fixed!important;inset:0!important;padding:12px!important;align-items:center!important;z-index:40000!important;overflow:hidden!important}
+#modal-kegiatan{z-index:44000!important}
+#modal-kegiatan-peserta{z-index:50000!important}
+#modal-kegiatan>.modal,#modal-calendar-detail>.modal{display:flex!important;flex-direction:column!important;margin:0 auto!important;max-height:calc(100dvh - 24px)!important;overflow:hidden!important;transform:none!important}
+#modal-kegiatan>.modal>div,#modal-calendar-detail>.modal>div{flex-shrink:0}
+#modal-kegiatan-body,#calendar-detail-content{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;max-height:none!important;overscroll-behavior:contain}
+#modal-kegiatan>.modal>div:nth-child(2),#modal-calendar-detail>.modal>div:nth-child(2){padding:12px 16px!important;background:white;position:relative;z-index:2}
+.kg105-table-wrap{width:100%;overflow:auto}.kg105-dapukan{width:100%;table-layout:fixed;border-collapse:collapse;min-width:390px}.kg105-dapukan th,.kg105-dapukan td{width:33.33%;border:1px solid #d7e2dd;padding:7px;vertical-align:top;font-size:12px}.kg105-dapukan th{background:#eaf3ee;text-align:left}.kg105-dapukan .kg-opt{display:flex;align-items:flex-start;gap:5px;margin:0 0 5px;padding:6px;white-space:normal;word-break:normal}.kg105-dapukan input{flex:none;margin-top:2px}.kg105-groupbar{padding:10px;background:#edf5f0;border:1px solid #c7ddcf;border-radius:8px;margin:8px 0}.kg105-groupbar button{padding:7px 9px;margin:3px;border:1px solid #aac7b6;border-radius:6px;background:white;font-size:12px}.kg105-groupbar button.active{background:#176044;color:white}.kg105-groupbar p{font-size:12px;margin:5px 0;color:#43594c}
+</style>
+<script id="acara105-criteria-groups">
+(function(){
+ let groups=[],active=0,loading=false;
+ const copy=x=>JSON.parse(JSON.stringify(x||[]));
+ const baseFilter=window.calendarFilterFromForm,baseParticipants=window.calendarParticipantsForFilter,baseRender=window._renderCalendarEventForm;
+ function sync(){if(!loading&&groups.length)groups[active]=copy(baseFilter.apply(window,[]).criteria_builder||kg105GetRows());}
+ function bar(){const wrap=document.getElementById('kg-criteria-builder-wrap'),list=document.getElementById('kg-criteria-list');if(!wrap||!list)return;
+ let b=document.getElementById('kg105-groupbar');if(!b){b=document.createElement('div');b.id='kg105-groupbar';b.className='kg105-groupbar';list.before(b);}
+ b.innerHTML='<strong>Kelompok Kriteria Peserta</strong><p>Peserta cukup memenuhi salah satu kelompok (ATAU). Di dalam setiap kelompok, semua baris kriteria harus terpenuhi (DAN).</p>'+groups.map((r,i)=>`<button type="button" class="${i===active?'active':''}" onclick="kg105Switch(${i})">Kelompok ${i+1}</button>`).join('')+'<button type="button" onclick="kg105AddGroup()">＋ Kelompok ATAU</button>'+(groups.length>1?'<button type="button" onclick="kg105RemoveGroup()">Hapus kelompok ini</button>':'');
+ }
+ window.kg105Switch=function(i){sync();active=i;kg105SetRows(groups[active]);bar();previewPeserta();};
+ window.kg105AddGroup=function(){sync();groups.push([{type:'participant_type',values:['jamaah']},{type:'status_sambung',values:['Tetap']}]);active=groups.length-1;kg105SetRows(groups[active]);bar();previewPeserta();};
+ window.kg105RemoveGroup=function(){if(groups.length<2)return;groups.splice(active,1);active=Math.min(active,groups.length-1);kg105SetRows(groups[active]);bar();previewPeserta();};
+ window.calendarFilterFromForm=function(){const f=baseFilter.apply(this,arguments);if(loading||!groups.length||!Array.isArray(f.criteria_builder))return f;
+ groups[active]=copy(f.criteria_builder);f.criteria_builder=copy(groups[0]);f.criteria_version=4;
+ if(groups.length>1)f.criteria_groups=groups.map(rows=>({criteria_builder:copy(rows)}));else delete f.criteria_groups;
+ return f;};
+ window.calendarParticipantsForFilter=function(f){if(!Array.isArray(f?.criteria_groups)||!f.criteria_groups.length)return baseParticipants.apply(this,arguments);
+ const seen=new Set(),out=[];for(const g of f.criteria_groups){const one={...f,criteria_builder:g.criteria_builder};delete one.criteria_groups;const args=Array.from(arguments);args[0]=one;for(const p of baseParticipants.apply(this,args)){const key=String(p?.did||p?.jamaah_did||'');if(key&&!seen.has(key)){seen.add(key);out.push(p);}}}return out;};
+ window._renderCalendarEventForm=function(k,j,m){loading=true;groups=[];active=0;let result;try{result=baseRender.apply(this,arguments);const f=j?(j.kriteria_peserta||{}):(k?.filter_peserta||{});groups=Array.isArray(f.criteria_groups)&&f.criteria_groups.length?f.criteria_groups.map(g=>copy(g.criteria_builder)):[kg105GetRows()];kg105SetRows(groups[0]);bar();}finally{loading=false;}previewPeserta();return result;};
+ ['modal-kegiatan','modal-calendar-detail','modal-kegiatan-peserta'].forEach(id=>{const el=document.getElementById(id);if(el&&el.parentElement!==document.body)document.body.appendChild(el);});
 })();
 </script>
 </body>
