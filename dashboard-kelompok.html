@@ -37284,5 +37284,105 @@ button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
 </script>
 
 <style id="dapukan106-style">.kg106-role-grid{display:grid;grid-template-columns:repeat(var(--role-cols),minmax(0,1fr));gap:7px;margin:8px 0}.kg106-role-grid section{min-width:0;border:1px solid #d7e2dd;border-radius:6px;overflow:hidden}.kg106-role-grid section>strong{display:block;padding:8px;background:#eaf3ee;font-size:12px}.kg106-role-grid section>div{padding:5px}.kg106-role-grid .kg-opt{display:flex!important;align-items:flex-start;gap:5px;margin:0 0 5px!important;padding:7px!important;white-space:normal!important;font-size:12px!important;max-width:100%;box-sizing:border-box}.kg106-role-grid input{flex:none;margin-top:2px}.kg106-role-grid span{overflow-wrap:anywhere}</style>
+<style id="routine-recap-style">
+#modal-routine-recap{z-index:1300;align-items:center}
+.rr-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.rr-controls label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700}.rr-controls label:first-child{flex:1;min-width:180px}
+.rr-controls select,.rr-controls input{padding:8px;border:1px solid var(--border);border-radius:6px;max-width:100%;font:inherit;background:white}.rr-controls button{padding:9px 12px;cursor:pointer;border-radius:6px;border:1px solid var(--border)}.rr-controls button:disabled{opacity:.5}
+.rr-table-wrap{overflow:auto;max-height:53vh;border:1px solid var(--border);border-radius:7px}.rr-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}.rr-table th{position:sticky;top:0;background:var(--green);color:white;z-index:2}.rr-table td,.rr-table th{padding:8px;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light);text-align:center}.rr-table th small{display:block;font-size:9px;font-weight:400;margin-top:3px}.rr-table td:nth-child(2),.rr-table th:nth-child(2){position:sticky;left:0;text-align:left;z-index:1;background:white;min-width:160px;max-width:230px;white-space:normal}.rr-table th:nth-child(2){z-index:3;background:var(--green)}.rr-table .rr-H{color:#166534;background:#dcfce7}.rr-table .rr-T{color:#991b1b;background:#fef2f2}.rr-table .rr-I{color:#1d4ed8}.rr-table .rr-S{color:#7e22ce}
+@media(max-width:640px){#modal-routine-recap{align-items:stretch}#modal-routine-recap>.modal{max-height:100dvh!important;width:100vw!important;border-radius:0!important}.rr-controls label{flex:1}.rr-table-wrap{max-height:48vh}}
+</style>
+<script id="routine-recap-script">
+// Rekap khusus seri jadwal rutin; memakai RPC laporan dan hak akses yang sama.
+let rrRun=0,rrReport=null;
+function rrSchedules(){
+  const map=new Map();
+  (aJadwal||[]).forEach(j=>{const m=(aAcaraMaster||[]).find(x=>Number(x.id)===Number(j.acara_id));map.set(String(j.id),{id:String(j.id),name:m?.nama||'Acara Rutin',scope:j.scope_kelompok||m?.scope_kelompok||m?.kelompok||'',inactive:j.aktif===false});});
+  (aKegiatan||[]).filter(k=>k.jadwal_id).forEach(k=>{const id=String(k.jadwal_id);if(!map.has(id))map.set(id,{id,name:k.acara_nama||'Acara Rutin',scope:k.scope_kelompok||k.kelompok||'',inactive:true});});
+  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'id'));
+}
+function rrBuild(events,reports){
+  const people=new Map();
+  reports.forEach((d,i)=>{
+    const seen=new Set();
+    (d.peserta||[]).forEach(p=>{
+      if(p.did==null||String(p.did)==='')throw new Error('Ada peserta tanpa ID jamaah pada '+events[i].tanggal+'. Rekap tidak diteruskan agar nama tidak tercampur.');
+      const key=String(p.did);if(seen.has(key))throw new Error('ID peserta ganda pada '+events[i].tanggal);seen.add(key);
+      let row=people.get(key);if(!row){row={did:key,nama:p.nama||'-',lp:p.lp||'-',cells:Array(events.length).fill('—')};people.set(key,row);}
+      row.nama=p.nama||row.nama;row.lp=p.lp||row.lp;
+      const status=String(p.status_hadir||p.status_kehadiran||'').toLowerCase();
+      row.cells[i]=status==='hadir'?'H':status==='izin'?'I':status==='sakit'?'S':'T';
+    });
+  });
+  const rows=[...people.values()].map(r=>{r.wajib=r.cells.filter(x=>x!=='—').length;r.hadir=r.cells.filter(x=>x==='H').length;r.izin=r.cells.filter(x=>x==='I').length;r.sakit=r.cells.filter(x=>x==='S').length;r.tidak=r.cells.filter(x=>x==='T').length;r.pct=r.wajib?Math.round(r.hadir/r.wajib*1000)/10:0;return r;});
+  rows.sort((a,b)=>a.nama.localeCompare(b.nama,'id'));
+  return {events,rows,preview:reports.filter(d=>!d.final).length};
+}
+function rrEnsure(){
+  if(document.getElementById('modal-routine-recap'))return;
+  const wrap=document.createElement('div');wrap.id='modal-routine-recap';wrap.className='modal-overlay';
+  wrap.innerHTML=`<div class="modal" style="max-width:1200px;width:98vw;border-radius:12px;max-height:95vh"><div style="padding:14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)"><b>📊 Rekap Acara Rutin</b><button class="filter-btn" onclick="rrClose()">✕ Tutup</button></div><div style="padding:12px"><div class="rr-controls"><label>Acara rutin<select id="rr-schedule" onchange="rrInvalidate()"></select></label><label>Dari tanggal<input type="date" id="rr-start" onchange="rrInvalidate()"></label><label>Sampai tanggal<input type="date" id="rr-end" onchange="rrInvalidate()"></label><button class="btn-save" id="rr-load" onclick="rrLoad()">Tampilkan Rekap</button></div><p style="font-size:11px;color:var(--text-muted);margin:10px 0">Khusus satu seri jadwal rutin. Hanya pelaksanaan yang sudah selesai dan sudah dibuat absensinya. Jadwal mendatang atau dibatalkan tidak dihitung.</p><div id="rr-output"></div></div></div>`;
+  document.body.appendChild(wrap);
+}
+function rrClose(){rrRun++;document.getElementById('modal-routine-recap')?.classList.remove('show');rrReport=null;}
+function rrInvalidate(){rrRun++;rrReport=null;const b=document.getElementById('rr-load');if(b)b.disabled=false;document.getElementById('rr-output').innerHTML='<div class="cal-empty">Klik Tampilkan Rekap untuk memuat periode yang dipilih.</div>';}
+function rrOpen(id){
+  rrEnsure();const schedules=rrSchedules(),sel=document.getElementById('rr-schedule');
+  sel.innerHTML=schedules.map(j=>`<option value="${escH(j.id)}">${escH(j.name)}${j.scope?' · '+escH(j.scope):''} · #${escH(j.id)}${j.inactive?' (riwayat)':''}</option>`).join('');
+  if(id&&schedules.some(j=>j.id===String(id)))sel.value=String(id);
+  const today=calToday();document.getElementById('rr-start').value=today.slice(0,7)+'-01';document.getElementById('rr-end').value=today;
+  document.getElementById('modal-routine-recap').classList.add('show');rrInvalidate();
+  if(!schedules.length)document.getElementById('rr-output').innerHTML='<div class="cal-empty">Belum ada acara rutin.</div>';
+}
+async function rrLoad(){
+  const token=++rrRun;rrReport=null;
+  const id=document.getElementById('rr-schedule').value,start=document.getElementById('rr-start').value,end=document.getElementById('rr-end').value,box=document.getElementById('rr-output'),button=document.getElementById('rr-load');
+  if(!id||!start||!end||start>end){box.innerHTML='<div class="cal-empty">Pilih acara rutin dan rentang tanggal yang valid.</div>';return;}
+  const events=(aKegiatan||[]).filter(k=>String(k.jadwal_id||'')===id&&String(k.tanggal).slice(0,10)>=start&&String(k.tanggal).slice(0,10)<=end&&calendarEntryPhase(calendarEntryFromActual(k))==='selesai'&&!['batal','dibatalkan','mansuh','cancelled'].includes(String(k.status||'').toLowerCase())).sort((a,b)=>String(a.tanggal).localeCompare(String(b.tanggal))||String(a.waktu||'').localeCompare(String(b.waktu||''))||Number(a.id)-Number(b.id));
+  if(!events.length){box.innerHTML='<div class="cal-empty">Belum ada pelaksanaan acara rutin yang selesai dalam periode ini.</div>';return;}
+  button.disabled=true;box.innerHTML='<div class="cal-empty">Memuat rekap 0 / '+events.length+'...</div>';
+  try{
+    const reports=[];
+    // Muat bertahap agar laporan periode panjang tidak membanjiri server.
+    for(const e of events){
+      if(token!==rrRun)return;
+      const {data,error}=await sb.rpc('dk_attendance_recap_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:Number(e.id)});
+      if(token!==rrRun)return;
+      if(error||data?.ok!==true||!Array.isArray(data.peserta))throw new Error(error?.message||data?.error||'Data laporan tidak lengkap');
+      reports.push(data);box.textContent='Memuat rekap '+reports.length+' / '+events.length+'...';
+    }
+    rrReport={...rrBuild(events,reports),name:document.getElementById('rr-schedule').selectedOptions[0].textContent,start,end};
+    box.innerHTML=`<div class="rr-controls"><input id="rr-search" placeholder="Cari nama jamaah..." oninput="rrRender()" aria-label="Cari nama jamaah"><select id="rr-gender" onchange="rrRender()" aria-label="Jenis kelamin"><option value="">Semua L/P</option><option>L</option><option>P</option></select><button class="filter-btn" onclick="rrExport()">⬇ Excel (CSV)</button><button class="filter-btn" onclick="rrPrint()">🖨 Cetak / PDF</button></div><div id="rr-result"></div>`;rrRender();
+  }catch(e){if(token===rrRun)box.innerHTML='<div class="cal-empty" style="color:#b91c1c">Gagal memuat rekap lengkap: '+escH(e.message||String(e))+'. Silakan coba lagi.</div>';}
+  finally{if(token===rrRun)button.disabled=false;}
+}
+function rrVisibleRows(){const q=(document.getElementById('rr-search')?.value||'').trim().toLowerCase(),g=document.getElementById('rr-gender')?.value||'';return (rrReport?.rows||[]).filter(r=>(!q||r.nama.toLowerCase().includes(q))&&(!g||r.lp===g));}
+function rrTable(rows){
+  const d=rrReport;
+  return `<table class="rr-table"><thead><tr><th>No</th><th>Nama Jamaah</th><th>L/P</th>${d.events.map(e=>`<th>${escH(calFmtDate(String(e.tanggal).slice(0,10),false))}<small>${escH(String(e.waktu||'').slice(0,5))} · #${Number(e.id)}</small></th>`).join('')}<th>Wajib</th><th>Hadir</th><th>Izin</th><th>Sakit</th><th>Tidak Hadir</th><th>Kehadiran</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${escH(r.nama)}</td><td>${escH(r.lp)}</td>${r.cells.map(c=>`<td class="rr-${c}">${c}</td>`).join('')}<td>${r.wajib}</td><td>${r.hadir}</td><td>${r.izin}</td><td>${r.sakit}</td><td>${r.tidak}</td><td><b>${r.pct}%</b></td></tr>`).join('')||`<tr><td colspan="${d.events.length+9}">Tidak ada peserta sesuai filter.</td></tr>`}</tbody></table>`;
+}
+function rrNotes(){return 'H = Hadir · I = Izin · S = Sakit · T = Tidak Hadir · — = tidak masuk daftar peserta. Persentase = Hadir ÷ Wajib × 100%. Izin dan sakit tetap termasuk Wajib.';}
+function rrRender(){
+  if(!rrReport)return;const d=rrReport,rows=rrVisibleRows(),w=rows.reduce((s,r)=>s+r.wajib,0),h=rows.reduce((s,r)=>s+r.hadir,0);
+  document.getElementById('rr-result').innerHTML=`<div style="margin:12px 0;font-weight:700">${d.events.length} pelaksanaan · ${rows.length} jamaah · Hadir ${h}/${w} (${w?Math.round(h/w*1000)/10:0}%)</div>${d.preview?`<div class="fr-note">${d.preview} pelaksanaan belum difinalisasi. Angkanya masih dapat berubah.</div>`:''}<p style="font-size:11px;margin:8px 0">${rrNotes()}</p><div class="rr-table-wrap">${rrTable(rows)}</div>`;
+}
+function rrCSVCell(v){let s=String(v??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
+function rrExport(){
+  if(!rrReport)return;const d=rrReport,rows=rrVisibleRows();
+  const data=[['REKAP ACARA RUTIN',d.name],['Periode',d.start,d.end],['Keterangan',rrNotes()],['Status',d.preview?d.preview+' pelaksanaan belum difinalisasi':'Final'],['No','Nama Jamaah','L/P',...d.events.map(e=>String(e.tanggal).slice(0,10)+' '+String(e.waktu||'').slice(0,5)+' #'+e.id),'Wajib','Hadir','Izin','Sakit','Tidak Hadir','Kehadiran (%)'],...rows.map((r,i)=>[i+1,r.nama,r.lp,...r.cells,r.wajib,r.hadir,r.izin,r.sakit,r.tidak,r.pct])];
+  const blob=new Blob(['\ufeff'+data.map(row=>row.map(rrCSVCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='Rekap_Acara_Rutin_'+d.start+'_'+d.end+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function rrPrint(){
+  if(!rrReport)return;const d=rrReport,w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}
+  w.document.write('<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Rekap Acara Rutin</title><style>@page{size:A4 landscape;margin:8mm}body{font:10px Arial}table{width:100%;border-collapse:collapse;font-size:8px}th,td{border:1px solid #aaa;padding:4px}th{background:#e8f5ee}small{display:block}thead{display:table-header-group}tr{break-inside:avoid}h2{margin-bottom:5px}</style></head><body><h2>Rekap Acara Rutin</h2><b>'+escH(d.name)+'</b><p>'+escH(d.start+' s.d. '+d.end)+'</p><p>'+escH(rrNotes())+'</p>'+(d.preview?'<p>'+d.preview+' pelaksanaan belum difinalisasi.</p>':'')+rrTable(rrVisibleRows())+'</body></html>');w.document.close();w.focus();w.print();
+}
+const rrBaseScheduleCard=calendarScheduleCard;
+calendarScheduleCard=function(j){const html=rrBaseScheduleCard(j);if(!html)return html;return html.replace(/<\/div>$/,'<div class="actions"><button onclick="rrOpen('+Number(j.id)+')">📊 Rekap Kehadiran Rutin</button></div></div>');};
+(function(){
+  const toolbar=document.querySelector('#page-absen .cal-toolbar-main');
+  if(toolbar&&!document.getElementById('rr-open'))toolbar.insertAdjacentHTML('beforeend','<button id="rr-open" class="filter-btn" onclick="rrOpen()">📊 Rekap Rutin</button>');
+})();
+
+</script>
 </body>
 </html>
