@@ -37294,10 +37294,27 @@ button.dk104-primary{background:#17633f;color:#fff;border-color:#17633f}
 <script id="routine-recap-script">
 // Rekap khusus seri jadwal rutin; memakai RPC laporan dan hak akses yang sama.
 let rrRun=0,rrReport=null;
+function rrScheduleKey(acara,scope){return String(acara)+'|'+String(scope||'');}
 function rrSchedules(){
-  const map=new Map();
-  (aJadwal||[]).forEach(j=>{const m=(aAcaraMaster||[]).find(x=>Number(x.id)===Number(j.acara_id));map.set(String(j.id),{id:String(j.id),name:m?.nama||'Acara Rutin',scope:j.scope_kelompok||m?.scope_kelompok||m?.kelompok||'',inactive:j.aktif===false});});
-  (aKegiatan||[]).filter(k=>k.jadwal_id).forEach(k=>{const id=String(k.jadwal_id);if(!map.has(id))map.set(id,{id,name:k.acara_nama||'Acara Rutin',scope:k.scope_kelompok||k.kelompok||'',inactive:true});});
+  const map=new Map(),scheduleKeys=new Map();
+  (aKegiatan||[]).filter(k=>k.jadwal_id&&k.acara_id).forEach(k=>scheduleKeys.set(String(k.jadwal_id),rrScheduleKey(k.acara_id,k.scope_kelompok||k.kelompok)));
+  function add(id,key,name,scope,inactive){
+    let item=map.get(key);
+    if(!item){item={id:key,name:name||'Acara Rutin',scope:scope||'',inactive:true,scheduleIds:[]};map.set(key,item);}
+    if(!item.scheduleIds.includes(String(id)))item.scheduleIds.push(String(id));
+    if(!inactive)item.inactive=false;
+  }
+  (aJadwal||[]).forEach(j=>{
+    const m=(aAcaraMaster||[]).find(x=>Number(x.id)===Number(j.acara_id));
+    const scope=j.scope_kelompok||m?.scope_kelompok||m?.kelompok||'';
+    const key=scheduleKeys.get(String(j.id))||rrScheduleKey(j.acara_id,scope);
+    add(j.id,key,m?.nama,scope,j.aktif===false);
+  });
+  (aKegiatan||[]).filter(k=>k.jadwal_id).forEach(k=>{
+    const scope=k.scope_kelompok||k.kelompok||'';
+    const key=k.acara_id?rrScheduleKey(k.acara_id,scope):'schedule:'+k.jadwal_id;
+    add(k.jadwal_id,key,k.acara_nama,scope,true);
+  });
   return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'id'));
 }
 function rrBuild(events,reports){
@@ -37320,15 +37337,15 @@ function rrBuild(events,reports){
 function rrEnsure(){
   if(document.getElementById('modal-routine-recap'))return;
   const wrap=document.createElement('div');wrap.id='modal-routine-recap';wrap.className='modal-overlay';
-  wrap.innerHTML=`<div class="modal" style="max-width:1200px;width:98vw;border-radius:12px;max-height:95vh"><div style="padding:14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)"><b>📊 Rekap Acara Rutin</b><button class="filter-btn" onclick="rrClose()">✕ Tutup</button></div><div style="padding:12px"><div class="rr-controls"><label>Acara rutin<select id="rr-schedule" onchange="rrInvalidate()"></select></label><label>Dari tanggal<input type="date" id="rr-start" onchange="rrInvalidate()"></label><label>Sampai tanggal<input type="date" id="rr-end" onchange="rrInvalidate()"></label><button class="btn-save" id="rr-load" onclick="rrLoad()">Tampilkan Rekap</button></div><p style="font-size:11px;color:var(--text-muted);margin:10px 0">Khusus satu seri jadwal rutin. Hanya pelaksanaan yang sudah selesai dan sudah dibuat absensinya. Jadwal mendatang atau dibatalkan tidak dihitung.</p><div id="rr-output"></div></div></div>`;
+  wrap.innerHTML=`<div class="modal" style="max-width:1200px;width:98vw;border-radius:12px;max-height:95vh"><div style="padding:14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)"><b>📊 Rekap Acara Rutin</b><button class="filter-btn" onclick="rrClose()">✕ Tutup</button></div><div style="padding:12px"><div class="rr-controls"><label>Acara rutin<select id="rr-schedule" onchange="rrInvalidate()"></select></label><label>Dari tanggal<input type="date" id="rr-start" onchange="rrInvalidate()"></label><label>Sampai tanggal<input type="date" id="rr-end" onchange="rrInvalidate()"></label><button class="btn-save" id="rr-load" onclick="rrLoad()">Tampilkan Rekap</button></div><p style="font-size:11px;color:var(--text-muted);margin:10px 0">Seluruh seri jadwal untuk acara rutin dan kelompok yang sama digabung. Hanya pelaksanaan yang sudah selesai dan sudah dibuat absensinya. Jadwal mendatang atau dibatalkan tidak dihitung.</p><div id="rr-output"></div></div></div>`;
   document.body.appendChild(wrap);
 }
 function rrClose(){rrRun++;document.getElementById('modal-routine-recap')?.classList.remove('show');rrReport=null;}
 function rrInvalidate(){rrRun++;rrReport=null;const b=document.getElementById('rr-load');if(b)b.disabled=false;document.getElementById('rr-output').innerHTML='<div class="cal-empty">Klik Tampilkan Rekap untuk memuat periode yang dipilih.</div>';}
 function rrOpen(id){
   rrEnsure();const schedules=rrSchedules(),sel=document.getElementById('rr-schedule');
-  sel.innerHTML=schedules.map(j=>`<option value="${escH(j.id)}">${escH(j.name)}${j.scope?' · '+escH(j.scope):''} · #${escH(j.id)}${j.inactive?' (riwayat)':''}</option>`).join('');
-  if(id&&schedules.some(j=>j.id===String(id)))sel.value=String(id);
+  sel.innerHTML=schedules.map(j=>`<option value="${escH(j.id)}">${escH(j.name)}${j.scope?' · '+escH(j.scope):''} ${j.inactive?' (riwayat)':''}</option>`).join('');
+  if(id){const item=schedules.find(j=>j.id===String(id)||j.scheduleIds.includes(String(id)));if(item)sel.value=item.id;}
   const today=calToday();document.getElementById('rr-start').value=today.slice(0,7)+'-01';document.getElementById('rr-end').value=today;
   document.getElementById('modal-routine-recap').classList.add('show');rrInvalidate();
   if(!schedules.length)document.getElementById('rr-output').innerHTML='<div class="cal-empty">Belum ada acara rutin.</div>';
@@ -37337,8 +37354,9 @@ async function rrLoad(){
   const token=++rrRun;rrReport=null;
   const id=document.getElementById('rr-schedule').value,start=document.getElementById('rr-start').value,end=document.getElementById('rr-end').value,box=document.getElementById('rr-output'),button=document.getElementById('rr-load');
   if(!id||!start||!end||start>end){box.innerHTML='<div class="cal-empty">Pilih acara rutin dan rentang tanggal yang valid.</div>';return;}
-  const events=(aKegiatan||[]).filter(k=>String(k.jadwal_id||'')===id&&String(k.tanggal).slice(0,10)>=start&&String(k.tanggal).slice(0,10)<=end&&calendarEntryPhase(calendarEntryFromActual(k))==='selesai'&&!['batal','dibatalkan','mansuh','cancelled'].includes(String(k.status||'').toLowerCase())).sort((a,b)=>String(a.tanggal).localeCompare(String(b.tanggal))||String(a.waktu||'').localeCompare(String(b.waktu||''))||Number(a.id)-Number(b.id));
-  if(!events.length){box.innerHTML='<div class="cal-empty">Belum ada pelaksanaan acara rutin yang selesai dalam periode ini.</div>';return;}
+  const selected=rrSchedules().find(j=>j.id===id);
+  const events=(aKegiatan||[]).filter(k=>!!k.jadwal_id&&selected?.scheduleIds.includes(String(k.jadwal_id))&&rrScheduleKey(k.acara_id,k.scope_kelompok||k.kelompok)===id&&String(k.tanggal).slice(0,10)>=start&&String(k.tanggal).slice(0,10)<=end&&calendarEntryPhase(calendarEntryFromActual(k))==='selesai'&&!['batal','dibatalkan','mansuh','cancelled'].includes(String(k.status||'').toLowerCase())).sort((a,b)=>String(a.tanggal).localeCompare(String(b.tanggal))||String(a.waktu||'').localeCompare(String(b.waktu||''))||Number(a.id)-Number(b.id));
+  if(!events.length){box.innerHTML='<div class="cal-empty">Belum ada pelaksanaan acara rutin dalam periode ini. Coba perluas rentang tanggal; hanya acara yang sudah lewat dan sudah dibuat absensinya yang ditampilkan.</div>';return;}
   button.disabled=true;box.innerHTML='<div class="cal-empty">Memuat rekap 0 / '+events.length+'...</div>';
   try{
     const reports=[];
