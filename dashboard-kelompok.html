@@ -25632,7 +25632,11 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const session=JSON.parse(JSON.stringify(old));const existing=session.students.find(x=>String(x.did)===String(student.did));
     if(existing)existing.status=status;
     else session.students.push({...student,className:student.kelas||'Belum Ditentukan',status,attendedAt:new Date().toISOString(),attendanceOrder:session.students.length+1});
-    saving98=true;try{await persist98(session);window.ppg98Open(id);toast('Absensi murid tersimpan.');return true}catch(e){toast(e.message,true);return false}finally{saving98=false}
+    const notify=['Izin','Sakit'].includes(status)&&old.students.find(x=>String(x.did)===String(student.did))?.status!==status;
+    const reason=notify?prompt('Keterangan '+status+' (boleh dikosongkan):',''):'';if(reason===null)return false;
+    const url=notify?izinPrepare(session.scope==='DESA'?'desa':'kelompok',session.scope,student.nama||'-','KBM '+(student.kelas||session.className||''),status,reason,session.date):null;
+    const waPopup=url?window.open('about:blank','_blank'):null;
+    saving98=true;try{await persist98(session);window.ppg98Open(id);toast('Absensi murid tersimpan.');if(notify)izinOpenSaved(url,waPopup);return true}catch(e){waPopup?.close();toast(e.message,true);return false}finally{saving98=false}
   }
   window.ppg98Add=async function(id,status){
     if(!selected98||saving98)return;
@@ -37482,5 +37486,77 @@ rrVisibleRows=function(){const rows=rrVisibleOld(),sort=document.getElementById(
 #page-absen>#recap-navigation{display:flex!important;visibility:visible!important;opacity:1!important;gap:8px;flex-wrap:wrap;margin:0 0 12px;padding:10px;background:#e8f5ee;border:1px solid #bbd9c8;border-radius:10px}
 #recap-navigation>button{display:block!important;visibility:visible!important;flex:1 1 160px;padding:11px 12px;min-height:44px;background:#fff;color:#155f3b;border:1px solid #9bc7ae;border-radius:8px;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer}
 #recap-navigation>button:last-child{background:#155f3b;color:white}
-</style></body>
+</style><script id="izin-pdf-update-script">
+function izinPhone(v){let n=String(v||'').replace(/\D/g,'');if(n.startsWith('0'))n='62'+n.slice(1);if(n.startsWith('8'))n='62'+n;return /^62\d{8,13}$/.test(n)?n:'';}
+function izinKI(level,group){
+ if(level==='kelompok'&&group==='PW4')return {nama:'Ngadiman',phone:'6285691069111'};
+ const matches=(aPengurus||[]).filter(p=>p.aktif!==false&&String(p.dapukan||'').trim().toLowerCase()==='ki'&&p.level===level&&(level!=='kelompok'||p.kelompok_nama===group));
+ const unique=[...new Set(matches.map(p=>String(p.did)))];if(unique.length!==1)return null;
+ const p=matches[0],j=findJamaahAny(p.did);const phone=izinPhone(j?.nomor_wa||p.nomor_wa);return phone?{nama:j?.nama||p.nama||'KI',phone}:null;
+}
+function izinMessage(nama,ki,event,status,reason,date){return 'Assalamu’alaikum warohmatullohi wabarokatuh.\n\nSaya '+nama+' mohon maaf kepada Bapak '+ki.nama+' karena saya tidak bisa menghadiri '+event+' '+(date&&date!==calToday()?'pada tanggal '+date:'pada hari ini')+' dikarenakan '+String(status).toLowerCase()+(reason?' ('+reason+')':'')+'.\n\nAlhamdulillah jazaakallohu khoiro.';}
+function izinPrepare(level,group,nama,event,status,reason,date){const ki=izinKI(level,group);if(!ki)return null;return 'https://wa.me/'+ki.phone+'?text='+encodeURIComponent(izinMessage(nama,ki,event,status,reason,date));}
+function izinOpenSaved(url,popup){
+ if(!url){popup?.close();toast('Data tersimpan. Nomor atau identitas KI untuk scope ini belum lengkap; WhatsApp belum dibuka.',true);return;}
+ if(popup&&!popup.closed)popup.location.href=url;
+ else {const b=document.createElement('a');b.href=url;b.target='_blank';b.rel='noopener';b.textContent='Buka WhatsApp KI';b.style.cssText='position:fixed;bottom:22px;left:20px;z-index:100001;padding:12px;background:#155f3b;color:white;border-radius:8px';b.onclick=()=>setTimeout(()=>b.remove(),500);document.body.appendChild(b);toast('Data tersimpan. Klik Buka WhatsApp KI.');}
+}
+const izinSetHadirOld=setHadir;
+setHadir=async function(id,status){
+ if(!['izin','sakit'].includes(status))return izinSetHadirOld(id,status);
+ const h=(aHadir||[]).find(x=>Number(x.id)===Number(id)),k=(aKegiatan||[]).find(x=>Number(x.id)===Number(h?.kegiatan_id||curKegiatanId));
+ if(!h||!k)return izinSetHadirOld(id,status);
+ const old=h.status_hadir;if(old===status)return izinSetHadirOld(id,status);
+ const reason=prompt('Keterangan '+status+' (boleh dikosongkan):','');if(reason===null)return;
+ const url=izinPrepare(k.scope_level||'kelompok',k.scope_kelompok||k.kelompok,h.jamaah_nama||findJamaahAny(h.jamaah_did)?.nama||'Jamaah',k.acara_nama,status,reason,String(k.tanggal||'').slice(0,10));
+ const popup=url?window.open('about:blank','_blank'):null;
+ try{await izinSetHadirOld(id,status);const saved=(aHadir||[]).find(x=>Number(x.id)===Number(id));if(saved?.status_hadir!==status){popup?.close();return;}izinOpenSaved(url,popup);}catch(e){popup?.close();throw e;}
+};
+let izinGuruBusy=false;
+function izinPPGScope(){try{const s=JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null');return s?.type==='kelompok'?s.kelompok:'DESA';}catch(e){return 'DESA';}}
+const izinGuruOpenOld=window.ppg52OpenStart;
+window.ppg52OpenStart=function(){
+ izinGuruOpenOld.apply(this,arguments);const m=document.getElementById('ppg52-start-modal');if(!m)return;
+ if(!document.getElementById('izin-guru-panel')){
+ const box=document.createElement('section');box.id='izin-guru-panel';box.style.cssText='margin:12px 0;padding:12px;border:1px solid #ddd;border-radius:8px';
+ box.innerHTML='<b>Izin / Sakit Guru</b><p style="font-size:12px;margin:6px 0">Pilih guru di atas. Pencatatan ini tidak membuka kelas KBM.</p><select id="izin-guru-status"><option>Izin</option><option>Sakit</option></select><input id="izin-guru-reason" placeholder="Keterangan (opsional)" maxlength="500" style="width:100%;padding:9px;margin:8px 0"><button id="izin-guru-save" class="ppg52-secondary" onclick="izinGuruSave()">Simpan Izin / Sakit & Buka WA KI</button><button class="ppg52-secondary" onclick="izinGuruHistory()">Riwayat Izin / Sakit Guru</button><div id="izin-guru-history" style="margin-top:10px"></div>';
+ m.querySelector('.ppg52-modal-actions').before(box);
+ }
+ document.getElementById('izin-guru-reason').value='';document.getElementById('izin-guru-history').innerHTML='';
+};
+async function izinGuruSave(){
+ if(izinGuruBusy)return;
+ const select=document.getElementById('ppg52-start-teacher'),did=select?.value;if(!did){toast('Pilih guru terlebih dahulu.',true);return;}
+ const scope=izinPPGScope(),date=document.getElementById('ppg52-start-date').value,status=document.getElementById('izin-guru-status').value,reason=document.getElementById('izin-guru-reason').value.trim(),nama=select.selectedOptions[0].textContent,editor=String(CU?.did||CU?.id||'');
+ const sessions=JSON.parse(localStorage.getItem('ubnb_ppg_v37_classes')||'[]');
+ if(sessions.some(s=>s.scope===scope&&s.date===date&&String(s.teacherDid)===String(did)&&(s.teacherAttendance||[]).some(a=>String(a.did)===String(did)&&['Hadir','Terlambat'].includes(a.status)))){toast('Guru sudah tercatat hadir mengajar pada tanggal ini. Koreksi kehadiran melalui pengelola PPG.',true);return;}
+ const url=izinPrepare(scope==='DESA'?'desa':'kelompok',scope,nama,'mengajar KBM',status,reason,date),popup=url?window.open('about:blank','_blank'):null;
+ izinGuruBusy=true;document.getElementById('izin-guru-save').disabled=true;
+ try{
+  const payload={id:date+':'+did,teacherDid:String(did),nama,scope,date,status,reason,updatedAt:new Date().toISOString(),updatedBy:editor};
+  const {data,error}=await sb.rpc('ppg_state_save',{p_editor_did:editor,p_scope:scope,p_state_key:'ubnb_ppg_teacher_absence_'+date+'_'+did,p_payload:payload,p_owner_did:''});
+  if(error||!data?.ok||data.payload?.status!==status||String(data.payload?.teacherDid)!==String(did))throw new Error(error?.message||data?.error||'Penyimpanan belum terkonfirmasi');
+  toast('Izin / sakit guru tersimpan.');izinOpenSaved(url,popup);await izinGuruHistory();
+ }catch(e){popup?.close();toast('Gagal menyimpan: '+e.message,true);}finally{izinGuruBusy=false;document.getElementById('izin-guru-save').disabled=false;}
+}
+async function izinGuruHistory(){
+ const box=document.getElementById('izin-guru-history');box.textContent='Memuat riwayat...';
+ const {data,error}=await sb.rpc('ppg_state_snapshot',{p_editor_did:String(CU?.did||CU?.id||''),p_scope:izinPPGScope()});
+ if(error||!data?.ok){box.textContent='Gagal memuat riwayat: '+(error?.message||data?.error||'');return;}
+ const rows=(data.data||[]).filter(x=>x.state_key.startsWith('ubnb_ppg_teacher_absence_')).map(x=>x.payload).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.nama).localeCompare(String(b.nama)));
+ box.innerHTML='<b>Riwayat Izin / Sakit Guru</b>'+rows.map(r=>'<div style="padding:8px;border-bottom:1px solid #ddd">'+escH(r.date)+' · '+escH(r.nama)+' · <b>'+escH(r.status)+'</b>'+(r.reason?' · '+escH(r.reason):'')+'</div>').join('')+(rows.length?'':'<p>Belum ada izin / sakit guru.</p>');
+}
+// Cetak ringkasan yang mudah dibaca; detail tanggal dibagi menjadi enam kolom.
+rrPrint=function(){
+ if(!rrReport)return;const d=rrReport,rows=rrVisibleRows(),w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}
+ const E=escH;let pages=[];
+ const header='<h1>Rekap Ketertiban Kehadiran</h1><p><b>'+E(d.name)+'</b><br>Periode '+E(d.start)+' s.d. '+E(d.end)+'</p>'+(d.preview?'<p class="note">'+d.preview+' pelaksanaan belum difinalisasi; data dapat berubah.</p>':'');
+ const table=(heads,body)=>'<table><thead><tr>'+heads.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table>';
+ for(let a=0;a<Math.max(rows.length,1);a+=16){const chunk=rows.slice(a,a+16);pages.push(header+'<h2>Ringkasan per Jamaah</h2>'+table(['No','Nama Jamaah','L/P','Wajib','Hadir','Izin','Sakit','Tidak Hadir','Kehadiran'],chunk.map((r,i)=>'<tr><td>'+(a+i+1)+'</td><td class="name">'+E(r.nama)+'</td><td>'+E(r.lp)+'</td>'+[r.wajib,r.hadir,r.izin,r.sakit,r.tidak,r.pct+'%'].map(x=>'<td>'+x+'</td>').join('')+'</tr>').join(''))+'<p>Persentase = Hadir ÷ Wajib × 100%. Izin dan sakit termasuk Wajib.</p>');}
+ for(let e=0;e<d.events.length;e+=6){const events=d.events.slice(e,e+6);for(let a=0;a<Math.max(rows.length,1);a+=12){pages.push(header+'<h2>Rincian Kehadiran</h2>'+table(['No','Nama Jamaah','L/P',...events.map((k,i)=>'K'+(e+i+1)+'<br>'+E(String(k.tanggal).slice(0,10)))],rows.slice(a,a+12).map((r,i)=>'<tr><td>'+(a+i+1)+'</td><td class="name">'+E(r.nama)+'</td><td>'+E(r.lp)+'</td>'+r.cells.slice(e,e+6).map(c=>'<td>'+E(c)+'</td>').join('')+'</tr>').join(''))+'<p>H = Hadir · I = Izin · S = Sakit · T = Tidak Hadir · — = tidak masuk daftar peserta.</p><div class="legend">'+events.map((k,i)=>'<div><b>K'+(e+i+1)+'</b>: '+E(k.acara_nama||'Kegiatan')+' · '+E(String(k.waktu||'').slice(0,5))+'</div>').join('')+'</div>');}}
+ w.document.write('<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Rekap Kehadiran</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font:11pt Arial,sans-serif;color:#111}h1{font-size:16pt;margin:0 0 5mm}h2{font-size:12pt;margin:3mm 0}p{font-size:10pt;line-height:1.4;margin:2mm 0}section{break-after:page}section:last-child{break-after:auto}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #888;padding:2mm;text-align:center;overflow-wrap:anywhere}th{background:#e5f1e9;font-size:10pt}td{font-size:11pt}th:nth-child(1){width:12mm}th:nth-child(2){width:65mm}th:nth-child(3){width:12mm}.name{text-align:left}thead{display:table-header-group}tr{break-inside:avoid}.legend{font-size:10pt;line-height:1.4;columns:2;column-gap:8mm}.legend>div{break-inside:avoid}.note{color:#7c4700}</style></head><body>'+pages.map((p,i)=>'<section>'+p+'<p>Halaman '+(i+1)+' / '+pages.length+'</p></section>').join('')+'</body></html>');w.document.close();w.focus();w.print();
+};
+
+</script>
+</body>
 </html>
