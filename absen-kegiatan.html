@@ -199,6 +199,7 @@ let totalCount=0;
 let hadirCount=0;
 let code='';
 let selected=null;
+let pendingReasonStatus='izin';
 let busy=false;
 let searchTimer=null;
 let resetTimer=null;
@@ -363,6 +364,32 @@ function getGps(){
     );
   });
 }
+
+function showReason(status){
+ if(!selected||busy)return;pendingReasonStatus=status;clearStatus();
+ el.actionButtons.style.display='none';el.reasonPanel.classList.add('show');
+ el.reasonPanel.querySelector('.reason-title').textContent=status==='izin'?'Alasan izin':'Keterangan sakit (opsional)';
+ el.reasonPanel.querySelector('.reason-help').textContent='Setelah tersimpan, WhatsApp KI sesuai scope acara akan dibuka. Tekan Kirim di WhatsApp untuk menyampaikan pesan.';
+ el.reason.value='';setTimeout(()=>el.reason.focus(),60);
+}
+function kiPhone(v){let n=String(v||'').replace(/\D/g,'');if(n.startsWith('0'))n='62'+n.slice(1);if(n.startsWith('8'))n='62'+n;return /^62\d{8,13}$/.test(n)?n:'';}
+function kiMessage(name,ki,status,reason){
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ return 'Assalamu’alaikum warohmatullohi wabarokatuh.\n\nSaya '+name+' mohon maaf kepada Bapak '+ki.nama+' karena saya tidak bisa menghadiri '+(eventData?.acara_nama||'kegiatan')+' '+(eventData?.tanggal===today?'pada hari ini':'pada tanggal '+fmtDate(eventData?.tanggal))+' dikarenakan '+status+(String(reason||'').trim()?' ('+String(reason).trim()+')':'')+'.\n\nAlhamdulillah jazaakallohu khoiro.';
+}
+async function notifyKI(name,status,reason){
+ let box=document.getElementById('ki-notification');
+ if(!box){box=document.createElement('div');box.id='ki-notification';box.setAttribute('role','status');box.style.cssText='padding:14px;margin:12px 0;border:1px solid #b7d5c0;border-radius:10px;background:#effaf2;line-height:1.5';el.status.after(box);}
+ box.textContent='Absensi tersimpan. Menyiapkan pesan WhatsApp KI...';
+ try{
+  const {data,error}=await sb.rpc('dk_public_attendance_ki_contact',{p_token:token});
+  if(error||!data?.ok)throw new Error(error?.message||data?.error||'Kontak KI belum tersedia');
+  const phone=kiPhone(data.nomor_wa);if(!phone)throw new Error('Nomor WhatsApp KI belum valid');
+  const url='https://wa.me/'+phone+'?text='+encodeURIComponent(kiMessage(name,data,status,reason));
+  box.innerHTML='<b>Absensi '+esc(status)+' tersimpan.</b><br>Pesan ditujukan kepada Bapak '+esc(data.nama)+'. Tekan Kirim di WhatsApp.<br><a id="ki-whatsapp-link" style="display:inline-block;margin-top:10px;padding:10px 14px;background:#166534;color:white;border-radius:8px" href="'+esc(url)+'">Buka WhatsApp KI</a>';
+  window.location.assign(url);
+ }catch(e){box.textContent='Absensi '+status+' sudah tersimpan. WhatsApp belum dapat dibuka: '+(e.message||'Kontak KI belum tersedia')+'. Silakan hubungi pengurus.';}
+}
 async function submitStatus(status,reason=''){
   if(!selected||busy)return;
   setBusy(true);
@@ -395,6 +422,7 @@ async function submitStatus(status,reason=''){
     if(error)throw new Error(error.message||'Gagal menyimpan absen');
     if(!data?.ok)throw new Error(data?.error||'Gagal menyimpan absen');
 
+    const notifyName=selected.nama||'-';
     const before=selected.status_hadir;
     if(status==='hadir' && before!=='hadir')hadirCount++;
     selected.status_hadir=status;
@@ -414,6 +442,7 @@ async function submitStatus(status,reason=''){
 
     clearTimeout(resetTimer);
     resetTimer=setTimeout(clearStatus,2200);
+    if(status==='izin'||status==='sakit')await notifyKI(notifyName,status,reason);
   }catch(e){
     setStatus(e?.message||String(e),'err');
     setBusy(false);
@@ -511,21 +540,16 @@ el.nameSearch.addEventListener('input',()=>{
 });
 
 el.hadir.onclick=()=>submitStatus('hadir');
-el.sakit.onclick=()=>submitStatus('sakit');
-el.izin.onclick=()=>{
-  if(!selected)return;
-  clearStatus();
-  el.actionButtons.style.display='none';
-  el.reasonPanel.classList.add('show');
-  setTimeout(()=>el.reason.focus(),60);
-};
+el.sakit.onclick=()=>showReason('sakit');
+el.izin.onclick=()=>showReason('izin');
 el.cancelReason.onclick=()=>{
   el.reasonPanel.classList.remove('show');
   el.reason.value='';
   el.actionButtons.style.display='grid';
   clearStatus();
 };
-el.sendReason.onclick=()=>submitStatus('izin',el.reason.value);
+el.sendReason.textContent='Simpan & Buka WA KI';
+el.sendReason.onclick=()=>submitStatus(pendingReasonStatus,el.reason.value);
 el.closeAction.onclick=()=>{
   if(busy)return;
   closeActionModal();
@@ -537,7 +561,7 @@ el.actionModal.addEventListener('click',e=>{
   if(e.target===el.actionModal && !busy)el.closeAction.click();
 });
 el.reason.addEventListener('keydown',e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key==='Enter')submitStatus('izin',el.reason.value);
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter')submitStatus(pendingReasonStatus,el.reason.value);
 });
 
 load();
