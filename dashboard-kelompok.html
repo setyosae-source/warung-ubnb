@@ -33754,6 +33754,7 @@ body.ppg54-lock-page{
   }
 
   function quickPdf73(){
+    return window.senjaExport.openPdf();
     try{
       const cols=defaultCols73();
       if(!cols.length)throw new Error('Konfigurasi kolom export belum siap.');
@@ -34118,6 +34119,7 @@ body.ppg54-lock-page{
   function csv74(){return window.senjaExport.download('csv');}
 
   function pdf74(){
+    return window.senjaExport.openPdf();
     try{
       const list=list74();
       if(!list.length)throw new Error('Tidak ada data sesuai filter aktif.');
@@ -37551,9 +37553,12 @@ function guruReportPrint(){if(!guruReportData)return;const w=window.open('','_bl
 
 </script>
 <script id="senja-daerah-jamaah-export">
-/* SENJA: Excel/CSV use the daerah's 19 fields, followed by Nama Kepala Keluarga. */
+/* Export jamaah: 18 kolom ringkas; PDF per kelompok dan keluarga. */
 (function(){
-  const headers=['Timestamp','Pernyataan Persetujuan','Desa','Kelompok','Hubungan dalam KK','Nama Lengkap','Jenis Kelamin','Tanggal Lahir','Nomor WA','Status Pernikahan','Alamat Domisili Lengkap Saat Ini','Pendidikan Terakhir','Pekerjaan','Status Mubaligh','Haji','Hobi','Pengurus Kelompok','Pengurus Desa','Pengurus Daerah','Nama Kepala Keluarga'];
+  const sourceHeaders=['Timestamp','Pernyataan Persetujuan','Desa','Kelompok','Hubungan dalam KK','Nama Lengkap','Jenis Kelamin','Tanggal Lahir','Nomor WA','Status Pernikahan','Alamat Domisili Lengkap Saat Ini','Pendidikan Terakhir','Pekerjaan','Status Mubaligh','Haji','Hobi','Pengurus Kelompok','Pengurus Desa','Pengurus Daerah','Nama Kepala Keluarga'];
+  const order=[2,3,19,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+  const headers=order.map(i=>sourceHeaders[i]);
+  const pdfFields=[{i:5,label:'Nama Lengkap',w:43},{i:4,label:'Hubungan dalam KK',w:26},{i:6,label:'Jenis Kelamin',w:22},{i:7,label:'Tanggal Lahir',w:26},{i:8,label:'Nomor WA',w:32},{i:9,label:'Status Pernikahan',w:29},...order.filter(i=>![2,3,19,4,5,6,7,8,9,10].includes(i)).map(i=>({i,label:sourceHeaders[i],w:i>=16?45:32}))];
   let busy=false;
   function wallDate(value,birth){
     if(!value)return null;
@@ -37565,46 +37570,106 @@ function guruReportPrint(){if(!guruReportData)return;const w=window.open('','_bl
   function displayDate(value,birth){const d=wallDate(value,birth);if(!d)return '';const two=x=>String(x).padStart(2,'0');return two(d.getDate())+'/'+two(d.getMonth()+1)+'/'+d.getFullYear()+(birth?'':' '+two(d.getHours())+':'+two(d.getMinutes())+':'+two(d.getSeconds()));}
   function csvText(rows){return '\ufeff'+rows.map(row=>row.map(v=>{let s=String(v??'');if(/^[\s]*[=+@-]/.test(s)||/^[\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(',')).join('\r\n');}
   function csvDownload(rows,name){const url=URL.createObjectURL(new Blob([csvText(rows)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);}
+  const norm=x=>String(x??'').trim().toLocaleLowerCase('id');
+  function familyKey(j){return norm(j.kelompok_nama)+'|'+(j.keluarga_id!=null?'id:'+j.keluarga_id:'nama:'+norm(j.nama_kk||j.nama));}
+  function rank(r){const v=r.values;return norm(v[4])==='kepala keluarga'||norm(v[5])===norm(v[19])?0:['istri','suami','pasangan'].includes(norm(v[4]))?1:2;}
+  function compare(a,b){return String(a.values[3]||'').localeCompare(String(b.values[3]||''),'id',{numeric:true})||String(a.values[19]||'').localeCompare(String(b.values[19]||''),'id',{sensitivity:'base'})||rank(a)-rank(b)||String(a.values[7]||'9999').localeCompare(String(b.values[7]||'9999'))||String(a.values[5]||'').localeCompare(String(b.values[5]||''),'id')||a.did.localeCompare(b.did);}
+  async function fetchRows(withHeads){
+    if(!CU||isViewer())throw new Error('Unduhan ini memerlukan login pengurus.');
+    const list=getFilteredJamaah().slice();
+    if(!list.length)throw new Error('Tidak ada jamaah sesuai filter aktif.');
+    const selected=new Set(list.map(j=>String(j.did))), local=new Map(aJamaah.map(j=>[String(j.did),j]));
+    const keys=new Set(list.map(familyKey));
+    const extra=withHeads?aJamaah.filter(j=>keys.has(familyKey(j))&&norm(j.nama)===norm(j.nama_kk)):[];
+    const dids=[...new Set([...selected,...extra.map(j=>String(j.did))])];
+    if(!DK_ATT_TOKEN)await dkAttendanceAuthenticate();
+    const result=await sb.rpc('dashboard_senja_export',{p_token:DK_ATT_TOKEN,p_dids:dids});
+    if(result.error)throw new Error(result.error.message||'Gagal mengambil data sensus.');
+    const d=result.data;if(!d?.ok||!Array.isArray(d.rows))throw new Error(d?.error||'Data belum dapat diambil.');
+    const seen=new Set();for(const r of d.rows){if(!dids.includes(r.did)||seen.has(r.did)||!Array.isArray(r.values)||r.values.length!==20)throw new Error('Format data tidak sesuai.');seen.add(r.did);}
+    if(seen.size!==dids.length)throw new Error('Data belum lengkap dimuat. Muat ulang daftar.');
+    const all=d.rows.map(r=>({...r,key:familyKey(local.get(r.did)||{}),local:local.get(r.did)}));
+    const rows=all.filter(r=>selected.has(r.did)).sort(compare);
+    return {rows,all};
+  }
+  function basename(){const scope=String(CU.kelompok_scope||'Desa_Perwira').replace(/[^a-z0-9_-]/gi,'_');const stamp=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/[^0-9-]/g,'');return 'Jamaah_'+scope+'_'+stamp;}
   async function download(format){
-    if(busy)return;
-    busy=true;
+    if(format==='pdf'){openPdf();return;}
+    if(busy)return;busy=true;
     try{
-      if(!CU||isViewer())throw new Error('Unduhan format daerah memerlukan login pengurus.');
-      const list=typeof getFilteredJamaah==='function'?getFilteredJamaah().slice():[];
-      if(!list.length)throw new Error('Tidak ada jamaah sesuai filter aktif.');
       if(format==='xlsx'&&typeof XLSX==='undefined')throw new Error('Library Excel belum siap. Muat ulang halaman.');
-      const dids=[...new Set(list.map(j=>String(j.did)))];
-      if(!DK_ATT_TOKEN)await dkAttendanceAuthenticate();
-      toast('Menyiapkan data format daerah…');
-      const result=await sb.rpc('dashboard_senja_export',{p_token:DK_ATT_TOKEN,p_dids:dids});
-      if(result.error)throw new Error(result.error.message||'Gagal mengambil data sensus.');
-      const d=result.data;
-      if(!d?.ok||!Array.isArray(d.rows))throw new Error(d?.error||'Data sensus belum dapat diambil.');
-      const seen=new Set();
-      for(const r of d.rows){if(!dids.includes(r.did)||seen.has(r.did)||!Array.isArray(r.values)||r.values.length!==20)throw new Error('Format data tidak sesuai.');seen.add(r.did);}
-      if(seen.size!==dids.length)throw new Error('Data belum lengkap dimuat. Silakan muat ulang daftar.');
-      const scope=String(CU.kelompok_scope||'Desa_Perwira').replace(/[^a-z0-9_-]/gi,'_');
-      const stamp=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/[^0-9-]/g,'');
-      const name='SENJA_Bekasi_Timur_2026_'+scope+'_'+stamp;
-      const rows=[headers,...d.rows.map(r=>r.values.map((v,i)=>i===0||i===7?displayDate(v,i===7):v??''))];
+      toast('Menyiapkan data jamaah…');
+      const d=await fetchRows(false), name=basename();
+      const rows=[headers,...d.rows.map(r=>order.map(i=>i===7?displayDate(r.values[i],true):r.values[i]??''))];
       if(format==='csv')csvDownload(rows,name+'.csv');
       else{
-        const excel=[headers,...d.rows.map(r=>r.values.map((v,i)=>i===0||i===7?wallDate(v,i===7)||'':v??''))];
+        const excel=[headers,...d.rows.map(r=>order.map(i=>i===7?wallDate(r.values[i],true)||'':r.values[i]??''))];
         const ws=XLSX.utils.aoa_to_sheet(excel,{cellDates:true});
-        for(let n=1;n<excel.length;n++){for(const c of [0,7]){const cell=ws[XLSX.utils.encode_cell({r:n,c})];if(cell?.t==='d')cell.z=c===0?'dd/mm/yyyy hh:mm:ss':'dd/mm/yyyy';}}
+        const birthcol=order.indexOf(7);for(let n=1;n<excel.length;n++){const cell=ws[XLSX.utils.encode_cell({r:n,c:birthcol})];if(cell?.t==='d')cell.z='dd/mm/yyyy';}
         ws['!cols']=headers.map((h,c)=>({wch:Math.min(44,Math.max(12,h.length+2,...rows.slice(1).map(r=>String(r[c]??'').length+2)))}));
         const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Data Jamaah');XLSX.writeFile(wb,name+'.xlsx',{bookType:'xlsx'});
       }
-      toast('✅ '+(rows.length-1)+' jamaah diunduh: format daerah + Nama Kepala Keluarga.');
-      if(typeof closeMod==='function')closeMod('modal-export');
-    }catch(e){console.error('[SENJA export]',e);toast('Gagal mengunduh: '+(e.message||e),true);}finally{busy=false;}
+      toast('✅ '+d.rows.length+' jamaah diunduh.');if(typeof closeMod==='function')closeMod('modal-export');
+    }catch(e){console.error('[Jamaah export]',e);toast('Gagal mengunduh: '+(e.message||e),true);}finally{busy=false;}
   }
-  window.senjaExport={download,headers,displayDate,csvText};
+  function ensurePdfModal(){
+    if(document.getElementById('senja-pdf-options'))return;
+    const el=document.createElement('div');el.className='modal-overlay';el.id='senja-pdf-options';
+    el.innerHTML='<div class="modal" style="max-width:640px"><div class="modal-handle"></div><div style="padding:16px"><strong>Unduh PDF Jamaah</strong><p style="font-size:12px;line-height:1.6">Mengikuti filter daftar jamaah. Dipisah per kelompok dan KK, kepala keluarga lalu pasangan, kemudian anggota dari usia tertua. Alamat kepala keluarga tampil di header KK.</p><p style="font-size:12px">Pilih data yang ingin ditampilkan. Nama selalu disertakan. Kolom yang banyak dibagi ke beberapa bagian agar tetap terbaca.</p><div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn-cancel" type="button" data-pick="all">Pilih semua</button><button class="btn-cancel" type="button" data-pick="basic">Data dasar</button></div><div id="senja-pdf-columns" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px"></div><div style="display:flex;gap:8px;margin-top:20px"><button class="btn-cancel" type="button" data-close>Tutup</button><button class="btn-save" type="button" data-preview>Pratinjau</button><button class="btn-save" type="button" data-save>Unduh PDF</button></div></div></div>';
+    const fields=el.querySelector('#senja-pdf-columns');
+    pdfFields.forEach(f=>{const label=document.createElement('label');label.style.cssText='display:flex;align-items:center;gap:6px;font-size:12px';const input=document.createElement('input');input.type='checkbox';input.value=String(f.i);input.checked=[5,4,6,7,8,9].includes(f.i);input.disabled=f.i===5;label.append(input,document.createTextNode(f.label));fields.append(label);});
+    el.querySelector('[data-close]').onclick=()=>closeMod(el.id);
+    el.querySelector('[data-pick="all"]').onclick=()=>el.querySelectorAll('input').forEach(x=>x.checked=true);
+    el.querySelector('[data-pick="basic"]').onclick=()=>el.querySelectorAll('input').forEach(x=>x.checked=[5,4,6,7,8,9].includes(+x.value));
+    el.querySelector('[data-save]').onclick=()=>makePdf(false);el.querySelector('[data-preview]').onclick=()=>makePdf(true);document.body.append(el);
+  }
+  function openPdf(){ensurePdfModal();openMod('senja-pdf-options');}
+  function columnBands(fields,usable){const name=fields.find(f=>f.i===5);const bands=[];let band=[name],width=10+name.w;fields.filter(f=>f.i!==5).forEach(f=>{if(width+f.w>usable&&band.length>1){bands.push(band);band=[name];width=10+name.w;}band.push(f);width+=f.w;});bands.push(band);return bands;}
+  function buildPdf(data,fields){
+    const Ctor=window.jspdf?.jsPDF;if(!Ctor)throw new Error('Library PDF belum siap. Muat ulang halaman.');
+    const landscape=fields.reduce((n,f)=>n+f.w,10)>190;
+    const doc=new Ctor({orientation:landscape?'landscape':'portrait',unit:'mm',format:'a4'});
+    if(typeof doc.autoTable!=='function')throw new Error('Library tabel PDF belum siap.');
+    const width=doc.internal.pageSize.getWidth(),height=doc.internal.pageSize.getHeight(),usable=width-20;
+    const bands=columnBands(fields,usable), groups=new Map();
+    data.rows.forEach(r=>{const group=r.values[3]||'Tanpa Kelompok';if(!groups.has(group))groups.set(group,new Map());const families=groups.get(group);if(!families.has(r.key))families.set(r.key,[]);families.get(r.key).push(r);});
+    const heads=new Map();data.all.filter(r=>rank(r)===0).forEach(r=>heads.set(r.key,r));
+    let first=true;
+    for(const [group,families] of groups){for(let b=0;b<bands.length;b++){
+      if(!first)doc.addPage();first=false;let y=30;
+      const band=bands[b], count=band.length+1;
+      const drawPage=()=>{doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(23,76,50);doc.text('DATA JAMAAH DESA PERWIRA',10,12);doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(50);doc.text(group+' | '+(bands.length>1?'Bagian '+(b+1)+'/'+bands.length+' | ':'')+new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta'}),10,19);};
+      for(const members of families.values()){
+        members.sort(compare);const sample=members[0],head=heads.get(sample.key);
+        const kk=sample.values[19]||'Belum ada nama KK',address=head?.values[10]||'Belum tersedia';
+        const headRows=[[{content:'KK: '+kk+' ('+members.length+' jamaah sesuai filter)\nAlamat kepala keluarga: '+address,colSpan:count,styles:{fillColor:[233,243,237],textColor:[23,76,50],fontStyle:'bold',halign:'left',fontSize:9}}],['No.',...band.map(f=>f.label)]];
+        const body=members.map((r,i)=>[{content:String(i+1)},...band.map(f=>({content:f.i===7?displayDate(r.values[f.i],true):String(r.values[f.i]??''),styles:{fontStyle:rank(r)===0?'bold':'normal'}}))]);
+        const sum=band.reduce((n,f)=>n+f.w,10),scale=Math.min(1,usable/sum),styles={0:{cellWidth:10*scale}};
+        band.forEach((f,i)=>styles[i+1]={cellWidth:f.w*scale});
+        doc.autoTable({startY:y,head:headRows,body,theme:'grid',showHead:'everyPage',pageBreak:'avoid',rowPageBreak:'avoid',tableWidth:sum*scale,margin:{top:27,bottom:13,left:10,right:10},styles:{font:'helvetica',fontSize:8.5,cellPadding:2,overflow:'linebreak',valign:'middle',lineWidth:0.15},headStyles:{fillColor:[23,107,66],textColor:255,fontSize:8.5},columnStyles:styles,didDrawPage:drawPage});
+        y=doc.lastAutoTable.finalY+5;if(y>height-25)y=height;
+      }
+    }}
+    const pages=doc.getNumberOfPages();for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90);doc.text('Powered by UBNB Desa Perwira',10,height-6);doc.text('Halaman '+i+'/'+pages,width-10,height-6,{align:'right'});}
+    return doc;
+  }
+  async function makePdf(preview){
+    if(busy)return;busy=true;
+    try{const chosen=new Set([...document.querySelectorAll('#senja-pdf-columns input:checked')].map(x=>+x.value));chosen.add(5);const fields=pdfFields.filter(f=>chosen.has(f.i));toast('Menyiapkan PDF jamaah…');const data=await fetchRows(true);const doc=buildPdf(data,fields);
+      if(preview){if(_exportPdfPreviewUrl)URL.revokeObjectURL(_exportPdfPreviewUrl);_exportPdfPreviewUrl=URL.createObjectURL(doc.output('blob'));document.getElementById('export-pdf-preview-frame').src=_exportPdfPreviewUrl;document.getElementById('export-pdf-preview-info').textContent=data.rows.length+' jamaah | Per kelompok dan KK';closeMod('senja-pdf-options');openMod('modal-export-pdf-preview');}
+      else{doc.save(basename()+'.pdf');toast('✅ PDF '+data.rows.length+' jamaah diunduh.');}
+    }catch(e){console.error('[PDF Jamaah]',e);toast('Gagal membuat PDF: '+(e.message||e),true);}finally{busy=false;}
+  }
+  window.senjaExport={download,headers,displayDate,csvText,openPdf,makePdf,compare,rank,familyKey,columnBands,buildPdf,pdfFields};
   const previous=window.doExport;
-  window.doExport=function(format){if(['csv','xlsx','xls'].includes(format))return download(format==='csv'?'csv':'xlsx');return previous.apply(this,arguments);};
-  if(window.ubnb73){window.ubnb73.downloadXls=()=>download('xlsx');window.ubnb73.downloadCsv=()=>download('csv');}
+  window.doExport=function(format){if(format==='pdf')return (document.getElementById('senja-pdf-options')?.classList.contains('show')||document.getElementById('modal-export-pdf-preview')?.classList.contains('show'))?makePdf(false):openPdf();if(['csv','xlsx','xls'].includes(format))return download(format==='csv'?'csv':'xlsx');return previous.apply(this,arguments);};
+  window.closeExportPdfPreview=function(){closeMod('modal-export-pdf-preview');document.getElementById('export-pdf-preview-frame').src='about:blank';if(_exportPdfPreviewUrl){URL.revokeObjectURL(_exportPdfPreviewUrl);_exportPdfPreviewUrl='';}openPdf();};
+  window.previewExportJamaahPDF=openPdf;
+  window.exportJamaahPDF=openPdf;
+  if(window.ubnb73){window.ubnb73.downloadXls=()=>download('xlsx');window.ubnb73.downloadCsv=()=>download('csv');window.ubnb73.downloadPdf=openPdf;}
 })();
 </script>
+
 
 </body>
 </html>
