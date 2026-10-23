@@ -33778,7 +33778,7 @@ body.ppg54-lock-page{
     m=document.createElement('div');
     m.id=MENU_ID;
     m.innerHTML=`
-      <button type="button" data-format="xls"><span>📊</span><span>Download XLS</span></button>
+      <button type="button" data-format="xls"><span>📊</span><span>Excel (.xlsx)</span></button>
       <button type="button" data-format="csv"><span>📄</span><span>Download CSV</span></button>
       <div class="v73-sep"></div>
       <button type="button" data-format="pdf"><span>📕</span><span>Download PDF</span></button>
@@ -34113,58 +34113,9 @@ body.ppg54-lock-page{
     setTimeout(()=>URL.revokeObjectURL(url),1200);
   }
 
-  function xls74(){
-    try{
-      if(typeof XLSX==='undefined'){
-        throw new Error('Library Excel belum siap. Refresh halaman lalu coba lagi.');
-      }
+  function xls74(){return window.senjaExport.download('xlsx');}
 
-      const {rows}=rows74();
-      if(rows.length<=1)throw new Error('Tidak ada data sesuai filter aktif.');
-
-      const ws=XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols']=QUICK_COLS_74.map((c,i)=>{
-        let max=String(c.label).length;
-        for(let r=1;r<rows.length;r++){
-          max=Math.max(max,String(rows[r][i]??'').length);
-        }
-        return {wch:Math.min(max+2,40)};
-      });
-
-      const wb=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb,ws,'Jamaah');
-
-      /* BIFF8 = XLS, bukan XLSX */
-      XLSX.writeFile(wb,filename74('xls'),{bookType:'biff8'});
-      toast(`✅ XLS diunduh (${rows.length-1} jamaah sesuai filter/search aktif)`);
-    }catch(e){
-      console.error('[v74 XLS]',e);
-      toast('Gagal membuat XLS: '+(e.message||e),true);
-    }
-  }
-
-  function csv74(){
-    try{
-      const {rows}=rows74();
-      if(rows.length<=1)throw new Error('Tidak ada data sesuai filter aktif.');
-
-      const csv=rows.map(row=>row.map(cell=>{
-        let s=String(cell??'');
-        if(/[",\n]/.test(s))s='"'+s.replace(/"/g,'""')+'"';
-        return s;
-      }).join(',')).join('\n');
-
-      downloadBlob74(
-        new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),
-        filename74('csv')
-      );
-
-      toast(`✅ CSV diunduh (${rows.length-1} jamaah sesuai filter/search aktif)`);
-    }catch(e){
-      console.error('[v74 CSV]',e);
-      toast('Gagal membuat CSV: '+(e.message||e),true);
-    }
-  }
+  function csv74(){return window.senjaExport.download('csv');}
 
   function pdf74(){
     try{
@@ -34199,7 +34150,7 @@ body.ppg54-lock-page{
     m=document.createElement('div');
     m.id=MENU_ID;
     m.innerHTML=`
-      <button type="button" data-format="xls"><span>📊</span><span>Download XLS</span></button>
+      <button type="button" data-format="xls"><span>📊</span><span>Excel (.xlsx)</span></button>
       <button type="button" data-format="csv"><span>📄</span><span>Download CSV</span></button>
       <div class="v74-sep"></div>
       <button type="button" data-format="pdf"><span>📕</span><span>Download PDF</span></button>
@@ -37599,5 +37550,61 @@ function guruReportCSV(){if(!guruReportData)return;const d=guruReportData,header
 function guruReportPrint(){if(!guruReportData)return;const w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}const d=guruReportData;w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Kehadiran Guru</title><style>@page{size:A4 landscape;margin:10mm}body{font:11pt Arial}h1{font-size:16pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #888;padding:2mm;font-size:10pt;text-align:center}td:nth-child(2){text-align:left}th{background:#eaf4ee}tr{break-inside:avoid}thead{display:table-header-group}</style></head><body><h1>Laporan Kehadiran Guru</h1><p>'+escH(d.scope)+' · '+escH(d.start)+' s.d. '+escH(d.end)+'</p><p>Per guru per hari. Hari tanpa catatan tidak otomatis dianggap tidak hadir. Terlambat termasuk hadir dalam persentase. Persentase berdasarkan hari tercatat.</p>'+guruReportTable(guruReportRows())+(d.conflicts?'<p>Ada '+d.conflicts+' konflik hadir dan izin/sakit; hadir diprioritaskan.</p>':'')+'</body></html>');w.document.close();w.focus();w.print();}
 
 </script>
+<script id="senja-daerah-jamaah-export">
+/* SENJA: Excel/CSV use the daerah's 19 fields, followed by Nama Kepala Keluarga. */
+(function(){
+  const headers=['Timestamp','Pernyataan Persetujuan','Desa','Kelompok','Hubungan dalam KK','Nama Lengkap','Jenis Kelamin','Tanggal Lahir','Nomor WA','Status Pernikahan','Alamat Domisili Lengkap Saat Ini','Pendidikan Terakhir','Pekerjaan','Status Mubaligh','Haji','Hobi','Pengurus Kelompok','Pengurus Desa','Pengurus Daerah','Nama Kepala Keluarga'];
+  let busy=false;
+  function wallDate(value,birth){
+    if(!value)return null;
+    if(birth){const m=String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?new Date(Number(m[1]),Number(m[2])-1,Number(m[3])):null;}
+    const d=new Date(value);if(!Number.isFinite(d.getTime()))return null;
+    const p=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(d).map(x=>[x.type,x.value]));
+    return new Date(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
+  }
+  function displayDate(value,birth){const d=wallDate(value,birth);if(!d)return '';const two=x=>String(x).padStart(2,'0');return two(d.getDate())+'/'+two(d.getMonth()+1)+'/'+d.getFullYear()+(birth?'':' '+two(d.getHours())+':'+two(d.getMinutes())+':'+two(d.getSeconds()));}
+  function csvText(rows){return '\ufeff'+rows.map(row=>row.map(v=>{let s=String(v??'');if(/^[\s]*[=+@-]/.test(s)||/^[\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(',')).join('\r\n');}
+  function csvDownload(rows,name){const url=URL.createObjectURL(new Blob([csvText(rows)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);}
+  async function download(format){
+    if(busy)return;
+    busy=true;
+    try{
+      if(!CU||isViewer())throw new Error('Unduhan format daerah memerlukan login pengurus.');
+      const list=typeof getFilteredJamaah==='function'?getFilteredJamaah().slice():[];
+      if(!list.length)throw new Error('Tidak ada jamaah sesuai filter aktif.');
+      if(format==='xlsx'&&typeof XLSX==='undefined')throw new Error('Library Excel belum siap. Muat ulang halaman.');
+      const dids=[...new Set(list.map(j=>String(j.did)))];
+      if(!DK_ATT_TOKEN)await dkAttendanceAuthenticate();
+      toast('Menyiapkan data format daerah…');
+      const result=await sb.rpc('dashboard_senja_export',{p_token:DK_ATT_TOKEN,p_dids:dids});
+      if(result.error)throw new Error(result.error.message||'Gagal mengambil data sensus.');
+      const d=result.data;
+      if(!d?.ok||!Array.isArray(d.rows))throw new Error(d?.error||'Data sensus belum dapat diambil.');
+      const seen=new Set();
+      for(const r of d.rows){if(!dids.includes(r.did)||seen.has(r.did)||!Array.isArray(r.values)||r.values.length!==20)throw new Error('Format data tidak sesuai.');seen.add(r.did);}
+      if(seen.size!==dids.length)throw new Error('Data belum lengkap dimuat. Silakan muat ulang daftar.');
+      const scope=String(CU.kelompok_scope||'Desa_Perwira').replace(/[^a-z0-9_-]/gi,'_');
+      const stamp=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/[^0-9-]/g,'');
+      const name='SENJA_Bekasi_Timur_2026_'+scope+'_'+stamp;
+      const rows=[headers,...d.rows.map(r=>r.values.map((v,i)=>i===0||i===7?displayDate(v,i===7):v??''))];
+      if(format==='csv')csvDownload(rows,name+'.csv');
+      else{
+        const excel=[headers,...d.rows.map(r=>r.values.map((v,i)=>i===0||i===7?wallDate(v,i===7)||'':v??''))];
+        const ws=XLSX.utils.aoa_to_sheet(excel,{cellDates:true});
+        for(let n=1;n<excel.length;n++){for(const c of [0,7]){const cell=ws[XLSX.utils.encode_cell({r:n,c})];if(cell?.t==='d')cell.z=c===0?'dd/mm/yyyy hh:mm:ss':'dd/mm/yyyy';}}
+        ws['!cols']=headers.map((h,c)=>({wch:Math.min(44,Math.max(12,h.length+2,...rows.slice(1).map(r=>String(r[c]??'').length+2)))}));
+        const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Data Jamaah');XLSX.writeFile(wb,name+'.xlsx',{bookType:'xlsx'});
+      }
+      toast('✅ '+(rows.length-1)+' jamaah diunduh: format daerah + Nama Kepala Keluarga.');
+      if(typeof closeMod==='function')closeMod('modal-export');
+    }catch(e){console.error('[SENJA export]',e);toast('Gagal mengunduh: '+(e.message||e),true);}finally{busy=false;}
+  }
+  window.senjaExport={download,headers,displayDate,csvText};
+  const previous=window.doExport;
+  window.doExport=function(format){if(['csv','xlsx','xls'].includes(format))return download(format==='csv'?'csv':'xlsx');return previous.apply(this,arguments);};
+  if(window.ubnb73){window.ubnb73.downloadXls=()=>download('xlsx');window.ubnb73.downloadCsv=()=>download('csv');}
+})();
+</script>
+
 </body>
 </html>
