@@ -37523,21 +37523,34 @@ rrPrint=function(){
 </style><script id="guru-report-script">
 let guruReportRun=0,guruReportData=null;
 function guruReportBuild(snapshot,teachers,start,end){
- const days=new Map(),persons=new Map(),conflicts=new Set();
- function person(scope,did,nama){const key=scope+'|'+did;if(!persons.has(key))persons.set(key,{scope,did,nama:nama||'-',days:{}});const r=persons.get(key);if(nama)r.nama=nama;return r;}
+ const days=new Map(),persons=new Map(),conflicts=new Set(),calendar=new Map();
+ const norm=s=>String(s||'').toLowerCase();
+ const today=calToday(),limit=end<today?end:today,dates=[];
+ for(let date=start;date<=limit;){dates.push(date);const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+1);date=d.toISOString().slice(0,10);}
+ (snapshot||[]).filter(r=>r.state_key==='ubnb_ppg_calendar_exceptions'&&Array.isArray(r.payload)).forEach(r=>r.payload.forEach(e=>{if(e.teachers)calendar.set(r.scope+'|'+e.date,e.required);}));
+ const required=(scope,date)=>calendar.has(scope+'|'+date)?calendar.get(scope+'|'+date):![0,6].includes(new Date(date+'T12:00:00Z').getUTCDay());
+ function person(scope,did,nama){const key=scope+'|'+did;if(!persons.has(key))persons.set(key,{scope,did,nama:nama||'-',days:{}});const p=persons.get(key);if(nama)p.nama=nama;return p;}
  (teachers||[]).forEach(t=>person(t.scope||t.kelompok_nama||'',String(t.did),t.nama));
- function put(scope,date,a,source){if(!date||date<start||date>end||!a.did)return;const status=a.status; if(!['Hadir','Terlambat','Izin','Sakit','Tidak Hadir','Belum Hadir'].includes(status)||status==='Belum Hadir')return;const p=person(scope,String(a.did),a.nama),key=scope+'|'+a.did+'|'+date,old=days.get(key),present=['Hadir','Terlambat'];if(old&&present.includes(old.status)!==present.includes(status))conflicts.add(key);const rank=s=>s==='Hadir'?5:s==='Terlambat'?4:s==='Sakit'?3:s==='Izin'?2:1;if(!old||rank(status)>rank(old.status))days.set(key,{scope,date,did:String(a.did),nama:p.nama,status,source});}
- const sessions=new Map();(snapshot||[]).forEach(row=>{if(row.state_key==='ubnb_ppg_v37_classes'&&Array.isArray(row.payload))row.payload.forEach(s=>{const key=row.scope+'|'+s.id,old=sessions.get(key),time=x=>Date.parse(x?._updatedAt||x?.finishedAt||x?.startedAt||'')||0;if(!old||time(s)>=time(old.s))sessions.set(key,{s,scope:row.scope});});});
- sessions.forEach(({s,scope})=>{if(['deleted','cancelled','dibatalkan'].includes(s.status))return;const att=Array.isArray(s.teacherAttendance)&&s.teacherAttendance.length?s.teacherAttendance:(s.teacherDid?[{did:s.teacherDid,nama:s.teacherName,status:'Hadir'}]:[]);att.forEach(a=>put(s.scope||scope,s.date,a,'Sesi KBM'));});
- (snapshot||[]).filter(row=>row.state_key.startsWith('ubnb_ppg_teacher_absence_')&&row.payload).forEach(row=>{const a=row.payload;put(row.scope,a.date,{did:a.teacherDid,nama:a.nama,status:a.status},'Izin / Sakit Guru');});
- days.forEach(d=>person(d.scope,d.did,d.nama).days[d.date]=d.status);
- const rows=[...persons.values()].map(r=>{const v=Object.values(r.days);return {...r,total:v.length,hadir:v.filter(x=>x==='Hadir').length,terlambat:v.filter(x=>x==='Terlambat').length,izin:v.filter(x=>x==='Izin').length,sakit:v.filter(x=>x==='Sakit').length,tidak:v.filter(x=>x==='Tidak Hadir').length,pct:v.length?Math.round(v.filter(x=>['Hadir','Terlambat'].includes(x)).length/v.length*1000)/10:null};}).sort((a,b)=>a.scope.localeCompare(b.scope)||a.nama.localeCompare(b.nama,'id'));
- return {rows,dates:[...new Set([...days.values()].map(x=>x.date))].sort(),conflicts:conflicts.size,start,end};
+ function put(scope,date,a,source,override=false){
+  if(!date||date<start||date>limit||!a.did)return;
+  const allowed=['Hadir','Terlambat','Izin','Sakit','Tidak Hadir','Belum Hadir'];if(!allowed.includes(a.status))return;
+  const p=person(scope,String(a.did),a.nama),key=scope+'|'+a.did+'|'+date,old=days.get(key),rank=s=>s==='Hadir'?5:s==='Terlambat'?4:s==='Sakit'?3:s==='Izin'?2:1;
+  if(override){days.set(key,{scope,date,did:String(a.did),nama:p.nama,status:a.status,source,reason:a.reason||''});conflicts.delete(key);return;}
+  if(old&&['Hadir','Terlambat'].includes(old.status)!==['Hadir','Terlambat'].includes(a.status))conflicts.add(key);
+  if(!old||rank(a.status)>rank(old.status))days.set(key,{scope,date,did:String(a.did),nama:p.nama,status:a.status,source});
+ }
+ const sessions=new Map();(snapshot||[]).filter(r=>r.state_key==='ubnb_ppg_v37_classes'&&Array.isArray(r.payload)).forEach(r=>r.payload.forEach(s=>{if(['deleted','cancelled','dibatalkan','batal'].includes(norm(s.status)))return;const key=r.scope+'|'+s.id,old=sessions.get(key),time=x=>Date.parse(x?._updatedAt||x?.finishedAt||x?.startedAt||'')||0;if(!old||time(s)>=time(old.s))sessions.set(key,{s,scope:r.scope});}));
+ sessions.forEach(({s,scope})=>{const att=Array.isArray(s.teacherAttendance)&&s.teacherAttendance.length?s.teacherAttendance:s.teacherDid?[{did:s.teacherDid,nama:s.teacherName,status:'Hadir'}]:[];att.forEach(a=>put(s.scope||scope,s.date,a,'Sesi KBM'));});
+ (snapshot||[]).filter(r=>r.state_key.startsWith('ubnb_ppg_teacher_absence_')&&r.payload).forEach(r=>{const a=r.payload;put(r.scope,a.date,{did:a.teacherDid,nama:a.nama,status:a.status},'Izin / Sakit Guru');});
+ (snapshot||[]).filter(r=>r.state_key.startsWith('ubnb_ppg_teacher_attendance_override_')&&r.payload).forEach(r=>{const a=r.payload;put(r.scope,a.date,{did:a.teacherDid,nama:a.nama,status:a.status,reason:a.reason},'Koreksi Pengurus',true);});
+ days.forEach(d=>{if(required(d.scope,d.date))person(d.scope,d.did,d.nama).days[d.date]=d.status;});
+ const rows=[...persons.values()].map(p=>{const mandatory=dates.filter(d=>required(p.scope,d));mandatory.forEach(d=>{if(!p.days[d])p.days[d]='Tidak Hadir';});const values=mandatory.map(d=>p.days[d]);return {...p,total:mandatory.length,hadir:values.filter(x=>x==='Hadir').length,terlambat:values.filter(x=>x==='Terlambat').length,izin:values.filter(x=>x==='Izin').length,sakit:values.filter(x=>x==='Sakit').length,tidak:values.filter(x=>['Tidak Hadir','Belum Hadir'].includes(x)).length,pct:values.length?Math.round(values.filter(x=>['Hadir','Terlambat'].includes(x)).length/values.length*1000)/10:null};}).sort((a,b)=>a.scope.localeCompare(b.scope)||a.nama.localeCompare(b.nama,'id'));
+ return {rows,dates,conflicts:conflicts.size,start,end:limit};
 }
 function guruReportClose(){guruReportRun++;guruReportData=null;document.getElementById('guru-report-modal')?.classList.remove('show');}
 function guruReportInvalidate(){guruReportRun++;guruReportData=null;document.getElementById('guru-report-output').textContent='Klik Tampilkan untuk memuat periode ini.';document.getElementById('guru-report-load').disabled=false;}
 function guruReportOpen(){
- let m=document.getElementById('guru-report-modal');if(!m){m=document.createElement('div');m.id='guru-report-modal';m.className='modal-overlay';m.style.cssText='z-index:100001;position:fixed;inset:0;align-items:center;justify-content:center';m.innerHTML='<div class="modal" style="width:98vw;max-width:1200px;height:94dvh;max-height:94dvh;display:flex;flex-direction:column;overflow:hidden;border-radius:12px"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid #ddd;flex:none"><b>Laporan Kehadiran Guru</b><button class="filter-btn" onclick="guruReportClose()">✕ Tutup</button></div><div style="padding:12px;overflow:auto;min-height:0"><div class="rr-controls"><label>Dari tanggal<input id="guru-report-start" type="date" onchange="guruReportInvalidate()"></label><label>Sampai tanggal<input id="guru-report-end" type="date" onchange="guruReportInvalidate()"></label><button id="guru-report-load" onclick="guruReportLoad()">Tampilkan</button></div><p style="margin:10px 0;font-size:12px">Dihitung per guru per hari. Beberapa sesi mengajar pada hari yang sama dihitung satu hari hadir. Hari tanpa catatan tidak otomatis dianggap tidak hadir. Persentase hanya berdasarkan hari yang tercatat, bukan seluruh jadwal wajib mengajar.</p><div id="guru-report-output"></div></div></div>';document.body.appendChild(m);}
+ let m=document.getElementById('guru-report-modal');if(!m){m=document.createElement('div');m.id='guru-report-modal';m.className='modal-overlay';m.style.cssText='z-index:100001;position:fixed;inset:0;align-items:center;justify-content:center';m.innerHTML='<div class="modal" style="width:98vw;max-width:1200px;height:94dvh;max-height:94dvh;display:flex;flex-direction:column;overflow:hidden;border-radius:12px"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid #ddd;flex:none"><b>Laporan Kehadiran Guru</b><button class="filter-btn" onclick="guruReportClose()">✕ Tutup</button></div><div style="padding:12px;overflow:auto;min-height:0"><div class="rr-controls"><label>Dari tanggal<input id="guru-report-start" type="date" onchange="guruReportInvalidate()"></label><label>Sampai tanggal<input id="guru-report-end" type="date" onchange="guruReportInvalidate()"></label><button id="guru-report-load" onclick="guruReportLoad()">Tampilkan</button></div><p style="margin:10px 0;font-size:12px">Dihitung per guru per hari. Beberapa sesi mengajar pada hari yang sama dihitung satu hari hadir. Hari wajib tanpa hadir/izin/sakit dihitung Tanpa Keterangan. Kewajiban Senin-Jumat mengikuti hari libur dan jadwal pengganti KBM.</p><div id="guru-report-output"></div></div></div>';document.body.appendChild(m);}
  const today=calToday();document.getElementById('guru-report-start').value=today.slice(0,7)+'-01';document.getElementById('guru-report-end').value=today;m.classList.add('show');guruReportLoad();
 }
 async function guruReportLoad(){
@@ -37546,10 +37559,10 @@ async function guruReportLoad(){
  try{const scope=izinPPGScope(),{data,error}=await sb.rpc('ppg_state_snapshot',{p_editor_did:String(CU?.did||CU?.id||''),p_scope:scope});if(run!==guruReportRun)return;if(error||!data?.ok)throw new Error(error?.message||data?.error||'Gagal memuat data');const teachers=typeof window.ppgIzinTeachers==='function'?window.ppgIzinTeachers():[];guruReportData={...guruReportBuild(data.data||[],teachers.map(t=>({...t,scope:t.kelompok_nama||scope})),start,end),scope};box.innerHTML='<div class="rr-controls"><input id="guru-report-search" placeholder="Cari nama guru" oninput="guruReportRender()"><button onclick="guruReportCSV()">⬇ Excel (CSV)</button><button onclick="guruReportPrint()">🖨 Cetak / PDF</button></div><div id="guru-report-result"></div>';guruReportRender();}catch(e){if(run===guruReportRun)box.textContent='Gagal memuat: '+e.message;}finally{if(run===guruReportRun)button.disabled=false;}
 }
 function guruReportRows(){const q=(document.getElementById('guru-report-search')?.value||'').toLowerCase();return (guruReportData?.rows||[]).filter(r=>r.nama.toLowerCase().includes(q));}
-function guruReportTable(rows,detail=false){const d=guruReportData;return '<table class="rr-table"><thead><tr>'+['No','Nama Guru','Kelompok','Hari Tercatat','Hadir','Terlambat','Izin','Sakit','Tidak Hadir','% Hadir',...(detail?d.dates:[])].map(x=>'<th>'+escH(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map((r,i)=>'<tr>'+[i+1,r.nama,r.scope,r.total,r.hadir,r.terlambat,r.izin,r.sakit,r.tidak,r.pct==null?'—':r.pct+'%',...(detail?d.dates.map(date=>r.days[date]||'—'):[])].map(x=>'<td>'+escH(x)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
+function guruReportTable(rows,detail=false){const d=guruReportData;return '<table class="rr-table"><thead><tr>'+['No','Nama Guru','Kelompok','Hari Wajib','Hadir','Terlambat','Izin','Sakit','Tanpa Keterangan','% Hadir',...(detail?d.dates:[])].map(x=>'<th>'+escH(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map((r,i)=>'<tr>'+[i+1,r.nama,r.scope,r.total,r.hadir,r.terlambat,r.izin,r.sakit,r.tidak,r.pct==null?'—':r.pct+'%',...(detail?d.dates.map(date=>r.days[date]||'—'):[])].map(x=>'<td>'+escH(x)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
 function guruReportRender(){if(!guruReportData)return;const rows=guruReportRows(),d=guruReportData;document.getElementById('guru-report-result').innerHTML='<p style="margin:12px 0"><b>'+rows.length+' guru · '+d.dates.length+' tanggal tercatat</b></p>'+(d.conflicts?'<p class="fr-note">Ada '+d.conflicts+' catatan guru/tanggal berisi hadir dan izin/sakit bersamaan. Hadir mengajar diprioritaskan; periksa riwayat bila perlu.</p>':'')+'<h4>Ringkasan</h4><div class="rr-table-wrap">'+guruReportTable(rows)+'</div><h4 style="margin-top:14px">Rincian tanggal</h4><div class="rr-table-wrap">'+guruReportTable(rows,true)+'</div>';}
-function guruReportCSV(){if(!guruReportData)return;const d=guruReportData,headers=['No','Nama Guru','Kelompok','Hari Tercatat','Hadir','Terlambat','Izin','Sakit','Tidak Hadir','Persentase Hadir',...d.dates],records=guruReportRows().map((r,i)=>[i+1,r.nama,r.scope,r.total,r.hadir,r.terlambat,r.izin,r.sakit,r.tidak,r.pct==null?'':r.pct,...d.dates.map(date=>r.days[date]||'—')]);const data=[['Laporan Kehadiran Guru',d.start,d.end],['Catatan','Per hari tercatat; hari tanpa data tidak dinilai. Terlambat termasuk hadir.'],headers,...records].map(r=>r.map(rrCSVCell).join(';')).join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+data],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='Kehadiran_Guru_'+d.start+'_'+d.end+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function guruReportPrint(){if(!guruReportData)return;const w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}const d=guruReportData;w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Kehadiran Guru</title><style>@page{size:A4 landscape;margin:10mm}body{font:11pt Arial}h1{font-size:16pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #888;padding:2mm;font-size:10pt;text-align:center}td:nth-child(2){text-align:left}th{background:#eaf4ee}tr{break-inside:avoid}thead{display:table-header-group}</style></head><body><h1>Laporan Kehadiran Guru</h1><p>'+escH(d.scope)+' · '+escH(d.start)+' s.d. '+escH(d.end)+'</p><p>Per guru per hari. Hari tanpa catatan tidak otomatis dianggap tidak hadir. Terlambat termasuk hadir dalam persentase. Persentase berdasarkan hari tercatat.</p>'+guruReportTable(guruReportRows())+(d.conflicts?'<p>Ada '+d.conflicts+' konflik hadir dan izin/sakit; hadir diprioritaskan.</p>':'')+'</body></html>');w.document.close();w.focus();w.print();}
+function guruReportCSV(){if(!guruReportData)return;const d=guruReportData,headers=['No','Nama Guru','Kelompok','Hari Wajib','Hadir','Terlambat','Izin','Sakit','Tanpa Keterangan','Persentase Hadir',...d.dates],records=guruReportRows().map((r,i)=>[i+1,r.nama,r.scope,r.total,r.hadir,r.terlambat,r.izin,r.sakit,r.tidak,r.pct==null?'':r.pct,...d.dates.map(date=>r.days[date]||'—')]);const data=[['Laporan Kehadiran Guru',d.start,d.end],['Catatan','Per hari wajib Senin-Jumat dengan penyesuaian kalender KBM. Terlambat termasuk hadir.'],headers,...records].map(r=>r.map(rrCSVCell).join(';')).join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+data],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='Kehadiran_Guru_'+d.start+'_'+d.end+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function guruReportPrint(){if(!guruReportData)return;const w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}const d=guruReportData;w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Kehadiran Guru</title><style>@page{size:A4 landscape;margin:10mm}body{font:11pt Arial}h1{font-size:16pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #888;padding:2mm;font-size:10pt;text-align:center}td:nth-child(2){text-align:left}th{background:#eaf4ee}tr{break-inside:avoid}thead{display:table-header-group}</style></head><body><h1>Laporan Kehadiran Guru</h1><p>'+escH(d.scope)+' · '+escH(d.start)+' s.d. '+escH(d.end)+'</p><p>Per guru per hari. Kewajiban Senin-Jumat mengikuti hari libur dan jadwal pengganti. Hari wajib tanpa catatan dihitung Tanpa Keterangan.</p>'+guruReportTable(guruReportRows())+(d.conflicts?'<p>Ada '+d.conflicts+' konflik hadir dan izin/sakit; hadir diprioritaskan.</p>':'')+'</body></html>');w.document.close();w.focus();w.print();}
 
 </script>
 <script id="senja-daerah-jamaah-export">
@@ -37746,7 +37759,7 @@ function sessions(snapshot,g){
  }
  return [...map.values()].sort((a,b)=>String(a._updatedAt||a.finishedAt||a.startedAt||'').localeCompare(String(b._updatedAt||b.finishedAt||b.startedAt||'')));
 }
-function childReport(child,dates,ss,reports){
+function childReport(child,dates,ss,reports,exceptions=[]){
  const cells=new Map(),materials=new Map(),notes=[];
  const putMat=(s,date)=>{let k=norm(s);if(['bcm cerdas cermat','bcm (cerdas cermat)'].includes(k))k='bcm';if(!k)return;if(!materials.has(k))materials.set(k,{text:k==='bcm'?'BCM':String(s).trim(),dates:new Set()});materials.get(k).dates.add(date);};
  for(const s of ss){
@@ -37766,7 +37779,7 @@ function childReport(child,dates,ss,reports){
    if(!cells.has(d)||rank[v]>rank[cells.get(d)])cells.set(d,v);
   }
  }
- const isRequired=d=>child.cls==='Balita'?false:child.cls==='Remaja & Dewasa'?[0,2,5].includes(weekday(d)):[1,2,3,4,5].includes(weekday(d));
+ const isRequired=d=>{if(child.cls==='Balita')return false;const exception=exceptions.find(e=>e.date===d&&(!Array.isArray(e.classes)||e.classes.map(actual).includes(child.cls)));if(exception&&typeof exception.required==='boolean')return exception.required;return child.cls==='Remaja & Dewasa'?[0,2,5].includes(weekday(d)):[1,2,3,4,5].includes(weekday(d));};
  const counts={H:0,I:0,S:0,TK:0,wajib:0};
  const daily=dates.map(d=>{const v=cells.get(d)||'TK',req=isRequired(d);if(req){counts[v]++;counts.wajib++;}else if(child.cls==='Balita'&&v==='H')counts.H++;return {date:d,status:req?v:v==='H'?'H':'-',required:req};});
  return {child,daily,counts,pct:percent(counts.H,counts.wajib),materials:[...materials.values()].map(m=>({text:m.text,freq:m.dates.size})).sort((a,b)=>a.text.localeCompare(b.text,'id')),notes};
@@ -37798,9 +37811,9 @@ function ensure(){
 function invalidate(){run++;result=null;if(id('load'))id('load').disabled=!model;id('output').innerHTML='';for(const n of ['pdf','share','print'])if(id(n))id(n).disabled=true;id('error').textContent='';}
 function form(){
  const groups=activeGroups(),d=today(),g=groups[0]||'';
- id('page').innerHTML=`<div class="kfr-heading"><div><h2>Laporan KBM</h2><span>Keluarga & Anak</span></div><div class="kfr-actions"><button id="kfr-share" disabled>Bagikan Raport</button><button id="kfr-pdf" disabled>Download PDF</button><button id="kfr-print" disabled>Cetak</button></div></div><div class="kfr-filters"><label>Kelompok<select id="kfr-group">${groups.map(g=>`<option value="${E(g)}">${E(g)}</option>`).join('')}</select></label><label>Bulan<input id="kfr-month" type="month" value="${d.slice(0,7)}" max="${d.slice(0,7)}"></label><label>Laporan<select id="kfr-mode"><option value="family">Per keluarga</option><option value="child">Per anak</option></select></label><label class="kfr-search">Cari<input id="kfr-search" type="search" placeholder="Nama keluarga atau anak" autocomplete="off"></label><label class="kfr-target"><span id="kfr-target-label">Keluarga</span><select id="kfr-target"></select></label><button id="kfr-load">Tampilkan</button></div><div id="kfr-parents" class="kfr-filters" hidden></div><div id="kfr-error" role="status" aria-live="polite"></div><div id="kfr-output"></div>`;
+ id('page').innerHTML=`<div class="kfr-heading"><div><h2>Laporan KBM</h2><span>Keluarga & Anak</span></div><div class="kfr-actions"><button id="kfr-link">Link Orang Tua</button><button id="kfr-share" disabled>Bagikan Raport</button><button id="kfr-pdf" disabled>Download PDF</button><button id="kfr-print" disabled>Cetak</button></div></div><div class="kfr-filters"><label>Kelompok<select id="kfr-group">${groups.map(g=>`<option value="${E(g)}">${E(g)}</option>`).join('')}</select></label><label>Bulan<input id="kfr-month" type="month" value="${d.slice(0,7)}" max="${d.slice(0,7)}"></label><label>Laporan<select id="kfr-mode"><option value="family">Per keluarga</option><option value="child">Per anak</option></select></label><label class="kfr-search">Cari<input id="kfr-search" type="search" placeholder="Nama keluarga atau anak" autocomplete="off"></label><label class="kfr-target"><span id="kfr-target-label">Keluarga</span><select id="kfr-target"></select></label><button id="kfr-load">Tampilkan</button></div><div id="kfr-parents" class="kfr-filters" hidden></div><div id="kfr-error" role="status" aria-live="polite"></div><div id="kfr-output"></div>`;
  id('mode').onchange=()=>{invalidate();options();};id('search').oninput=()=>{invalidate();options();};id('target').onchange=()=>{invalidate();parentOptions();};id('month').onchange=invalidate;
- id('group').onchange=loadRoster;id('load').onclick=loadReport;id('pdf').onclick=()=>downloadPDF(false);id('share').onclick=()=>downloadPDF(true);id('print').onclick=printReport;
+ id('link').onclick=sharePublicLink;id('group').onchange=loadRoster;id('load').onclick=loadReport;id('pdf').onclick=()=>downloadPDF(false);id('share').onclick=()=>downloadPDF(true);id('print').onclick=printReport;
  id('group').value=g;loadRoster();
 }
 function open(){
@@ -37820,7 +37833,7 @@ async function loadRoster(){
   const deleted=new Set(deletedResult.data.data.map(String));
   if(error||data?.ok!==true||!Array.isArray(data.data))throw Error(error?.message||data?.error||'Data KBM belum dapat dimuat.');
   const people=scopedPeople(),snapshot=data.data;
-  model={g,people,snapshot,children:roster(people,snapshot,g),sessions:sessions(snapshot,g).filter(s=>!deleted.has(String(s.id)))};
+  model={g,people,snapshot,children:roster(people,snapshot,g),sessions:sessions(snapshot,g).filter(s=>!deleted.has(String(s.id))),exceptions:snapshot.filter(x=>x.state_key==='ubnb_ppg_calendar_exceptions'&&(x.scope||g)===g&&Array.isArray(x.payload)).flatMap(x=>x.payload)};
   options();id('load').disabled=false;
  }catch(e){if(n===rosterRun){id('target').innerHTML='<option value="">Tidak tersedia</option>';id('error').textContent=e.message;}}
 }
@@ -37872,7 +37885,7 @@ async function loadReport(){
    }
   }
   if(n!==run)return;
-  result={title:id('mode').value==='family'?'Laporan KBM Keluarga':'Laporan KBM Anak',name:t.label,group:selectedG,dates,children:t.children.map(c=>childReport(c,dates,model.sessions,reports)),parents:parents.map(p=>parentReport(p,reports))};
+  result={title:id('mode').value==='family'?'Laporan KBM Keluarga':'Laporan KBM Anak',name:t.label,group:selectedG,dates,children:t.children.map(c=>childReport(c,dates,model.sessions,reports,model.exceptions)),parents:parents.map(p=>parentReport(p,reports))};
   id('error').textContent='';render();id('pdf').disabled=false;id('share').disabled=false;id('print').disabled=false;
  }catch(e){if(n===run){result=null;id('output').innerHTML='';id('error').textContent='Gagal memuat: '+e.message;}}
  finally{if(n===run)id('load').disabled=false;}
@@ -37906,12 +37919,13 @@ async function sharePDFFile(doc,filename,title,nav){
  }
  doc.save(filename);return 'downloaded';
 }
-async function downloadPDF(share=false){
- if(!result||exporting)return;exporting=true;id('pdf').disabled=true;id('share').disabled=true;
+async function downloadPDF(share=false,supplied=null){
+ const report=supplied||result;
+ if(!report||exporting)return;exporting=true;id('pdf').disabled=true;id('share').disabled=true;
  try{
   const Ctor=window.jspdf?.jsPDF;if(!Ctor)throw Error('PDF belum siap. Muat ulang halaman.');
   const doc=new Ctor({orientation:'landscape',unit:'mm',format:'a4'});if(typeof doc.autoTable!=='function')throw Error('Tabel PDF belum siap. Muat ulang halaman.');
-  const d=result;let y=15;
+  const d=report;let y=15;
   function title(name,sub){doc.setFontSize(17);doc.setTextColor(23,77,53);const lines=doc.splitTextToSize(name,277);doc.text(lines,10,y);y+=lines.length*7;doc.setFontSize(10);doc.text(sub,10,y);y+=8;}
   function grid(head,body,width){doc.autoTable({head:[head],body,startY:y,margin:{left:10,right:10,top:12,bottom:12},tableWidth:width||'auto',styles:{font:'helvetica',fontSize:9,cellPadding:2,overflow:'linebreak'},headStyles:{fillColor:[23,95,59]},didDrawPage:()=>{}});y=doc.lastAutoTable.finalY+7;}
   function section(label){if(y>178){doc.addPage();y=15;}doc.setFontSize(12);doc.text(label,10,y);y+=6;}
@@ -37930,10 +37944,19 @@ async function downloadPDF(share=false){
   if(share){const outcome=await sharePDFFile(doc,filename,'Raport KBM '+d.name+' - '+d.dates[0].slice(0,7));if(outcome==='downloaded'&&typeof toast==='function')toast('PDF diunduh. Bagikan file tersebut melalui WhatsApp atau aplikasi pilihan.');}
   else doc.save(filename);
  }catch(e){id('error').textContent=e.message;}
- finally{exporting=false;id('pdf').disabled=!result;id('share').disabled=!result;}
+ finally{exporting=false;id('pdf').disabled=!(supplied||result);id('share').disabled=!(supplied||result);}
+}
+function publicURL(base){return new URL('raport-kbm.html',base).href;}
+async function sharePublicLink(){
+ const url=publicURL(location.href);
+ try{
+  if(navigator.share){await navigator.share({title:'Raport KBM Bulanan',url});return;}
+  if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(url);if(typeof toast==='function')toast('Link raport orang tua disalin.');return;}
+  prompt('Link Raport KBM Bulanan',url);
+ }catch(e){if(e.name!=='AbortError')prompt('Link Raport KBM Bulanan',url);}
 }
 window.kbmFamilyOpen=open;
-window.KBMFamilyReport={calendar,familyKey,defaultParents,roster,sessions,childReport,parentReport,status,percent,reportHTML,sharePDFFile,open};
+window.KBMFamilyReport={calendar,familyKey,defaultParents,roster,sessions,childReport,parentReport,status,percent,reportHTML,sharePDFFile,exportPDF:downloadPDF,printCSS,publicURL,open};
 let pending=false;const observer=new MutationObserver(()=>{if(pending)return;pending=true;queueMicrotask(()=>{pending=false;ensure();});});observer.observe(document.body,{childList:true,subtree:true});ensure();
 })();
 
