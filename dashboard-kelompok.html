@@ -37341,14 +37341,23 @@ function rrTable(rows){
   return `<table class="rr-table"><thead><tr><th>No</th><th>Nama Jamaah</th><th>L/P</th>${d.events.map(e=>`<th>${escH(calFmtDate(String(e.tanggal).slice(0,10),false))}<small>${escH(e.acara_nama||'')}</small><small>${escH(String(e.waktu||'').slice(0,5))} · #${Number(e.id)}</small></th>`).join('')}<th>Wajib</th><th>Hadir</th><th>Izin</th><th>Sakit</th><th>Tidak Hadir</th><th>Kehadiran</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${escH(r.nama)}</td><td>${escH(r.lp)}</td>${r.cells.map(c=>`<td class="rr-${c}">${c}</td>`).join('')}<td>${r.wajib}</td><td>${r.hadir}</td><td>${r.izin}</td><td>${r.sakit}</td><td>${r.tidak}</td><td><b>${r.pct}%</b></td></tr>`).join('')||`<tr><td colspan="${d.events.length+9}">Tidak ada peserta sesuai filter.</td></tr>`}</tbody></table>`;
 }
 function rrNotes(){return 'H = Hadir · I = Izin · S = Sakit · T = Tidak Hadir · — = tidak masuk daftar peserta. Persentase = Hadir ÷ Wajib × 100%. Izin dan sakit tetap termasuk Wajib.';}
+function rrGenderGroups(rows){
+ if(rrReport?.mode!=='orang')return [{label:'',rows}];
+ const code=r=>String(r.lp||'').trim().toLowerCase();
+ return [{label:'Laki-laki',rows:rows.filter(r=>['l','laki-laki','laki laki'].includes(code(r)))},{label:'Perempuan',rows:rows.filter(r=>['p','perempuan'].includes(code(r)))},{label:'Jenis kelamin belum tercatat',rows:rows.filter(r=>!['l','laki-laki','laki laki','p','perempuan'].includes(code(r)))}].filter(g=>g.rows.length);
+}
+function rrGenderTables(rows){return rrGenderGroups(rows).map(g=>{
+ const w=g.rows.reduce((a,r)=>a+r.wajib,0),h=g.rows.reduce((a,r)=>a+r.hadir,0);
+ return (g.label?'<h3 style="margin:18px 0 8px">'+escH(g.label)+' · '+g.rows.length+' jamaah · '+(w?Math.round(h/w*1000)/10:0)+'%</h3>':'')+'<div class="rr-table-wrap">'+rrTable(g.rows)+'</div>';
+}).join('')||'<p>Tidak ada peserta sesuai filter.</p>';}
 function rrRender(){
   if(!rrReport)return;const d=rrReport,rows=rrVisibleRows(),w=rows.reduce((s,r)=>s+r.wajib,0),h=rows.reduce((s,r)=>s+r.hadir,0);
-  document.getElementById('rr-result').innerHTML=`<div style="margin:12px 0;font-weight:700">${d.events.length} pelaksanaan · ${rows.length} jamaah · Hadir ${h}/${w} (${w?Math.round(h/w*1000)/10:0}%)</div>${d.preview?`<div class="fr-note">${d.preview} pelaksanaan belum difinalisasi. Angkanya masih dapat berubah.</div>`:''}<p style="font-size:11px;margin:8px 0">${rrNotes()}</p><div class="rr-table-wrap">${rrTable(rows)}</div>`;
+  document.getElementById('rr-result').innerHTML=`<div style="margin:12px 0;font-weight:700">${d.events.length} pelaksanaan · ${rows.length} jamaah · Hadir ${h}/${w} (${w?Math.round(h/w*1000)/10:0}%)</div>${d.preview?`<div class="fr-note">${d.preview} pelaksanaan belum difinalisasi. Angkanya masih dapat berubah.</div>`:''}<p style="font-size:11px;margin:8px 0">${rrNotes()}</p>${rrGenderTables(rows)}`;
 }
 function rrCSVCell(v){let s=String(v??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
 function rrExport(){
   if(!rrReport)return;const d=rrReport,rows=rrVisibleRows();
-  const data=[['REKAP KEHADIRAN',d.name],['Periode',d.start,d.end],['Keterangan',rrNotes()],['Status',d.preview?d.preview+' pelaksanaan belum difinalisasi':'Final'],['No','Nama Jamaah','L/P',...d.events.map(e=>(e.acara_nama||'')+' '+String(e.tanggal).slice(0,10)+' '+String(e.waktu||'').slice(0,5)+' #'+e.id),'Wajib','Hadir','Izin','Sakit','Tidak Hadir','Kehadiran (%)'],...rows.map((r,i)=>[i+1,r.nama,r.lp,...r.cells,r.wajib,r.hadir,r.izin,r.sakit,r.tidak,r.pct])];
+  const data=[['REKAP KEHADIRAN',d.name],['Periode',d.start,d.end],['Keterangan',rrNotes()],['Status',d.preview?d.preview+' pelaksanaan belum difinalisasi':'Final'],['No','Nama Jamaah','L/P',...d.events.map(e=>(e.acara_nama||'')+' '+String(e.tanggal).slice(0,10)+' '+String(e.waktu||'').slice(0,5)+' #'+e.id),'Wajib','Hadir','Izin','Sakit','Tidak Hadir','Kehadiran (%)'],...rrGenderGroups(rows).flatMap(g=>[...(g.label?[[g.label]]:[]),...g.rows.map((r,i)=>[i+1,r.nama,r.lp,...r.cells,r.wajib,r.hadir,r.izin,r.sakit,r.tidak,r.pct])])];
   const blob=new Blob(['\ufeff'+data.map(row=>row.map(rrCSVCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='Rekap_Kehadiran_'+d.start+'_'+d.end+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
@@ -37507,10 +37516,12 @@ async function izinGuruHistory(){
 rrPrint=function(){
  if(!rrReport)return;const d=rrReport,rows=rrVisibleRows(),w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}
  const E=escH;let pages=[];
- const header='<h1>Rekap Ketertiban Kehadiran</h1><p><b>'+E(d.name)+'</b><br>Periode '+E(d.start)+' s.d. '+E(d.end)+'</p>'+(d.preview?'<p class="note">'+d.preview+' pelaksanaan belum difinalisasi; data dapat berubah.</p>':'');
+ const baseHeader='<h1>Rekap Ketertiban Kehadiran</h1><p><b>'+E(d.name)+'</b><br>Periode '+E(d.start)+' s.d. '+E(d.end)+'</p>'+(d.preview?'<p class="note">'+d.preview+' pelaksanaan belum difinalisasi; data dapat berubah.</p>':'');
  const table=(heads,body)=>'<table><thead><tr>'+heads.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table>';
+ for(const group of rrGenderGroups(rows)){const rows=group.rows,header=baseHeader+(group.label?'<h2>'+E(group.label)+'</h2>':'');
  for(let a=0;a<Math.max(rows.length,1);a+=16){const chunk=rows.slice(a,a+16);pages.push(header+'<h2>Ringkasan per Jamaah</h2>'+table(['No','Nama Jamaah','L/P','Wajib','Hadir','Izin','Sakit','Tidak Hadir','Kehadiran'],chunk.map((r,i)=>'<tr><td>'+(a+i+1)+'</td><td class="name">'+E(r.nama)+'</td><td>'+E(r.lp)+'</td>'+[r.wajib,r.hadir,r.izin,r.sakit,r.tidak,r.pct+'%'].map(x=>'<td>'+x+'</td>').join('')+'</tr>').join(''))+'<p>Persentase = Hadir ÷ Wajib × 100%. Izin dan sakit termasuk Wajib.</p>');}
  for(let e=0;e<d.events.length;e+=6){const events=d.events.slice(e,e+6);for(let a=0;a<Math.max(rows.length,1);a+=12){pages.push(header+'<h2>Rincian Kehadiran</h2>'+table(['No','Nama Jamaah','L/P',...events.map((k,i)=>'K'+(e+i+1)+'<br>'+E(String(k.tanggal).slice(0,10)))],rows.slice(a,a+12).map((r,i)=>'<tr><td>'+(a+i+1)+'</td><td class="name">'+E(r.nama)+'</td><td>'+E(r.lp)+'</td>'+r.cells.slice(e,e+6).map(c=>'<td>'+E(c)+'</td>').join('')+'</tr>').join(''))+'<p>H = Hadir · I = Izin · S = Sakit · T = Tidak Hadir · — = tidak masuk daftar peserta.</p><div class="legend">'+events.map((k,i)=>'<div><b>K'+(e+i+1)+'</b>: '+E(k.acara_nama||'Kegiatan')+' · '+E(String(k.waktu||'').slice(0,5))+'</div>').join('')+'</div>');}}
+ }
  w.document.write('<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Rekap Kehadiran</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font:11pt Arial,sans-serif;color:#111}h1{font-size:16pt;margin:0 0 5mm}h2{font-size:12pt;margin:3mm 0}p{font-size:10pt;line-height:1.4;margin:2mm 0}section{break-after:page}section:last-child{break-after:auto}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #888;padding:2mm;text-align:center;overflow-wrap:anywhere}th{background:#e5f1e9;font-size:10pt}td{font-size:11pt}th:nth-child(1){width:12mm}th:nth-child(2){width:65mm}th:nth-child(3){width:12mm}.name{text-align:left}thead{display:table-header-group}tr{break-inside:avoid}.legend{font-size:10pt;line-height:1.4;columns:2;column-gap:8mm}.legend>div{break-inside:avoid}.note{color:#7c4700}</style></head><body>'+pages.map((p,i)=>'<section>'+p+'<p>Halaman '+(i+1)+' / '+pages.length+'</p></section>').join('')+'</body></html>');w.document.close();w.focus();w.print();
 };
 
