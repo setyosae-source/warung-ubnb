@@ -37394,7 +37394,14 @@ rrSchedules=function(){
  (aKegiatan||[]).filter(k=>k.jadwal_id||rrIsSambung(k)).forEach(k=>add(k,k.jadwal_id,true));
  return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name,'id'));
 };
-function rrEligible(events,mode,id,start,end){return events.filter(k=>(mode==='orang'||rrKey(k)===id&&(!!k.jadwal_id||rrIsSambung(k)))&&String(k.tanggal).slice(0,10)>=start&&String(k.tanggal).slice(0,10)<=end&&calendarEntryPhase(calendarEntryFromActual(k))==='selesai'&&!['batal','dibatalkan','mansuh','cancelled'].includes(String(k.status||'').toLowerCase())).sort((a,b)=>String(a.tanggal).localeCompare(String(b.tanggal))||String(a.waktu||'').localeCompare(String(b.waktu||''))||Number(a.id)-Number(b.id));}
+function rrEventElapsed(k){
+ const date=String(k.tanggal||'').slice(0,10),today=calToday();
+ if(!date||date>today)return false;
+ if(date<today||String(k.status||'').toLowerCase()==='selesai')return true;
+ const end=String(k.waktu_selesai||'').match(/^(\d{2}):(\d{2})/);
+ return !!end&&calNowMinutes()>=Number(end[1])*60+Number(end[2]);
+}
+function rrEligible(events,mode,id,start,end){return events.filter(k=>(mode==='orang'||rrKey(k)===id&&(!!k.jadwal_id||rrIsSambung(k)))&&String(k.tanggal).slice(0,10)>=start&&String(k.tanggal).slice(0,10)<=end&&rrEventElapsed(k)&&!['batal','dibatalkan','mansuh','cancelled'].includes(String(k.status||'').toLowerCase())).sort((a,b)=>String(a.tanggal).localeCompare(String(b.tanggal))||String(a.waktu||'').localeCompare(String(b.waktu||''))||Number(a.id)-Number(b.id));}
 function rrMatches(p,group,criterion){
  const j=typeof findJamaahAny==='function'?findJamaahAny(p.did):null;
  if(group&&(p.kelompok||p.scope_kelompok||j?.kelompok||'')!==group)return false;
@@ -37516,11 +37523,14 @@ async function izinGuruHistory(){
 rrPrint=function(){
  if(!rrReport)return;const d=rrReport,rows=rrVisibleRows(),w=window.open('','_blank');if(!w){toast('Popup diblokir browser',true);return;}
  const E=escH,table=(heads,body)=>'<table><thead><tr>'+heads.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table>';
- let html='<h1>Rekap Ketertiban Kehadiran</h1><p><b>'+E(d.name)+'</b><br>Periode '+E(d.start)+' s.d. '+E(d.end)+'</p>'+(d.preview?'<p class="note">'+d.preview+' pelaksanaan belum difinalisasi; data dapat berubah.</p>':'');
+ const reportHeader='<h1>Rekap Ketertiban Kehadiran</h1><p><b>'+E(d.name)+'</b><br>Periode '+E(d.start)+' s.d. '+E(d.end)+'</p>'+(d.preview?'<p class="note">'+d.preview+' pelaksanaan belum difinalisasi; data dapat berubah.</p>':'');
+ let html=reportHeader;
  html+='<div class="legend"><h2>Keterangan</h2><p>'+E(rrNotes())+'</p>'+d.events.map((k,i)=>'<div><b>K'+(i+1)+'</b>: '+E(k.acara_nama||'Kegiatan')+' · '+E(String(k.tanggal).slice(0,10))+' · '+E(String(k.waktu||'').slice(0,5))+'</div>').join('')+'</div>';
  let genderIndex=0;
  for(const group of rrGenderGroups(rows)){
-  const list=group.rows;html+=(group.label?'<h2 class="gender'+(genderIndex++?' new-page':'')+'">'+E(group.label)+'</h2>':'')+'<h2>Ringkasan per Jamaah</h2>';
+  const list=group.rows;
+  if(group.label&&genderIndex++)html+='<div class="new-page">'+reportHeader+'</div>';
+  html+=(group.label?'<h2 class="gender">'+E(group.label)+'</h2>':'')+'<h2>Ringkasan per Jamaah</h2>';
   html+=table(['No','Nama Jamaah','L/P','Wajib','Hadir','Izin','Sakit','Tidak Hadir','Kehadiran'],list.map((r,i)=>'<tr><td>'+(i+1)+'</td><td class="name">'+E(r.nama)+'</td><td>'+E(r.lp)+'</td>'+[r.wajib,r.hadir,r.izin,r.sakit,r.tidak,r.pct+'%'].map(x=>'<td>'+x+'</td>').join('')+'</tr>').join(''));
   for(let e=0;e<d.events.length;e+=6){const events=d.events.slice(e,e+6);
    html+='<h2>Rincian Kehadiran'+(group.label?' · '+E(group.label):'')+' · K'+(e+1)+'–K'+(e+events.length)+'</h2>'+table(['No','Nama Jamaah','L/P',...events.map((k,i)=>'K'+(e+i+1)+'<br>'+E(String(k.tanggal).slice(0,10)))],list.map((r,i)=>'<tr><td>'+(i+1)+'</td><td class="name">'+E(r.nama)+'</td><td>'+E(r.lp)+'</td>'+r.cells.slice(e,e+6).map(c=>'<td>'+E(c)+'</td>').join('')+'</tr>').join(''));
