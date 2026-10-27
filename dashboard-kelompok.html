@@ -37835,8 +37835,8 @@ function ensure(){
 function invalidate(){run++;result=null;if(id('load'))id('load').disabled=!model;id('output').innerHTML='';for(const n of ['pdf','share','print'])if(id(n))id(n).disabled=true;id('error').textContent='';}
 function form(){
  const groups=activeGroups(),d=today(),g=groups[0]||'';
- id('page').innerHTML=`<div class="kfr-heading"><div><h2>Laporan KBM</h2><span>Keluarga & Anak</span></div><div class="kfr-actions"><button id="kfr-link">Link Orang Tua</button><button id="kfr-share" disabled>Bagikan Raport</button><button id="kfr-pdf" disabled>Download PDF</button><button id="kfr-print" disabled>Cetak</button></div></div><div class="kfr-filters"><label>Kelompok<select id="kfr-group">${groups.map(g=>`<option value="${E(g)}">${E(g)}</option>`).join('')}</select></label><label>Bulan<input id="kfr-month" type="month" value="${d.slice(0,7)}" max="${d.slice(0,7)}"></label><label>Laporan<select id="kfr-mode"><option value="family">Per keluarga</option><option value="child">Per anak</option></select></label><label class="kfr-search">Cari<input id="kfr-search" type="search" placeholder="Nama keluarga atau anak" autocomplete="off"></label><label class="kfr-target"><span id="kfr-target-label">Keluarga</span><select id="kfr-target"></select></label><button id="kfr-load">Tampilkan</button></div><div id="kfr-parents" class="kfr-filters" hidden></div><div id="kfr-error" role="status" aria-live="polite"></div><div id="kfr-output"></div>`;
- id('mode').onchange=()=>{invalidate();options();};id('search').oninput=()=>{invalidate();options();};id('target').onchange=()=>{invalidate();parentOptions();};id('month').onchange=invalidate;
+ id('page').innerHTML=`<div class="kfr-heading"><div><h2>Laporan KBM</h2><span>Keluarga & Anak</span></div><div class="kfr-actions"><button id="kfr-link">Link Orang Tua</button><button id="kfr-share" disabled>Bagikan Raport</button><button id="kfr-pdf" disabled>Download PDF</button><button id="kfr-print" disabled>Cetak</button></div></div><div class="kfr-filters"><label>Kelompok<select id="kfr-group">${groups.map(g=>`<option value="${E(g)}">${E(g)}</option>`).join('')}</select></label><label>Bulan<input id="kfr-month" type="month" value="${d.slice(0,7)}" max="${d.slice(0,7)}"></label><label>Laporan<select id="kfr-mode"><option value="family">Per keluarga</option><option value="child">Per anak</option><option value="daily">Laporan KBM Murid Harian</option></select></label><label id="kfr-day-label" hidden>Tanggal<input id="kfr-day" type="date" value="${d}" max="${d}"></label><label class="kfr-search">Cari<input id="kfr-search" type="search" placeholder="Nama keluarga atau anak" autocomplete="off"></label><label class="kfr-target"><span id="kfr-target-label">Keluarga</span><select id="kfr-target"></select></label><button id="kfr-load">Tampilkan</button></div><div id="kfr-parents" class="kfr-filters" hidden></div><div id="kfr-error" role="status" aria-live="polite"></div><div id="kfr-output"></div>`;
+ id('mode').onchange=()=>{invalidate();const daily=id('mode').value==='daily';id('day-label').hidden=!daily;id('month').closest('label').hidden=daily;options();};id('day').onchange=invalidate;id('search').oninput=()=>{invalidate();options();};id('target').onchange=()=>{invalidate();parentOptions();};id('month').onchange=invalidate;
  id('link').onclick=sharePublicLink;id('group').onchange=loadRoster;id('load').onclick=loadReport;id('pdf').onclick=()=>downloadPDF(false);id('share').onclick=()=>downloadPDF(true);id('print').onclick=printReport;
  id('group').value=g;loadRoster();
 }
@@ -37875,7 +37875,7 @@ function options(){
  if(ts.some(t=>t.key===old))id('target').value=old;parentOptions();
 }
 function parentOptions(){
- const box=id('parents'),t=selected();box.innerHTML='';box.hidden=true;
+ const box=id('parents'),t=selected();box.innerHTML='';box.hidden=true;if(id('mode').value==='daily')return;
  id('target-label').textContent=t?.children.length&&t.children.every(c=>c.sym)?'Raport Simpatisan':id('mode').value==='child'?'Anak':'Keluarga';
  const child=t?.children.find(c=>!c.sym);if(!child)return;
  const defaults=defaultParents(child,model.people,typeof aSpouseOverrides!=='undefined'?aSpouseOverrides:[]);
@@ -37892,8 +37892,8 @@ function finished(e){
 async function loadReport(){
  invalidate();if(!model){id('error').textContent='Data KBM belum tersedia.';return;}
  const t=selected();if(!t){id('error').textContent='Pilih keluarga atau anak.';return;}
- const n=run;let dates;try{dates=calendar(id('month').value);}catch(e){id('error').textContent=e.message;return;}
- const pids=t.children.some(c=>!c.sym)?[...new Set([id('parent-0')?.value,id('parent-1')?.value].filter(Boolean))]:[];
+ const n=run;let dates;try{dates=id('mode').value==='daily'?calendar(id('day').value.slice(0,7)).filter(d=>d===id('day').value):calendar(id('month').value);if(!dates.length)throw Error('Tanggal tidak tersedia.');}catch(e){id('error').textContent=e.message;return;}
+ const pids=id('mode').value!=='daily'&&t.children.some(c=>!c.sym)?[...new Set([id('parent-0')?.value,id('parent-1')?.value].filter(Boolean))]:[];
  const parents=pids.map(k=>model.people.find(p=>String(p.did)===k)).filter(Boolean);
  const selectedG=model.g,needsEvents=parents.length||t.children.some(c=>c.cls==='Remaja & Dewasa');
  id('load').disabled=true;id('error').textContent='Memuat laporan...';
@@ -37910,7 +37910,7 @@ async function loadReport(){
    }
   }
   if(n!==run)return;
-  result={title:id('mode').value==='family'?'Laporan KBM Keluarga':'Laporan KBM Anak',name:t.label,group:selectedG,dates,children:t.children.map(c=>childReport(c,dates,model.sessions,reports,model.exceptions)),parents:parents.map(p=>parentReport(p,reports))};
+  result=id('mode').value==='daily'?window.KBMDaily.build(t.children,dates[0],model.sessions,reports,model.exceptions,t.label,selectedG):{title:id('mode').value==='family'?'Laporan KBM Keluarga':'Laporan KBM Anak',name:t.label,group:selectedG,dates,children:t.children.map(c=>childReport(c,dates,model.sessions,reports,model.exceptions)),parents:parents.map(p=>parentReport(p,reports))};
   id('error').textContent='';render();id('pdf').disabled=false;id('share').disabled=false;id('print').disabled=false;
  }catch(e){if(n===run){result=null;id('output').innerHTML='';id('error').textContent='Gagal memuat: '+e.message;}}
  finally{if(n===run)id('load').disabled=false;}
@@ -37926,11 +37926,12 @@ function familySummary(d){
  return {head,rows};
 }
 function reportHTML(d){
+ if(d.kind==='daily')return window.KBMDaily.html(d);
  const showParents=d.children.some(r=>!r.child.sym);
  return `<div class="kfr-report-head"><h1>${E(d.title)}</h1><h2>${E(d.name)}</h2><p>${E(d.group)} · ${E(d.dates[0])} s.d. ${E(d.dates.at(-1))}</p></div>${d.children.length>1?'<h3>Rekap keluarga</h3>'+table(familySummary(d).head,familySummary(d).rows):''}${d.children.map(r=>`<article class="kfr-child"><h2>${E(r.child.nama)}${r.child.sym?' (S)':''}</h2><div class="kfr-class">${E(r.child.cls)}</div><h3>Kehadiran harian</h3>${calendarHTML(r)}<div class="kfr-bottom"><section><h3>Rekapitulasi kehadiran</h3>${r.child.cls==='Balita'?table(['Hadir'],[[r.counts.H]]):summary(r)}</section><section><h3>Materi</h3>${table(['Materi','Frekuensi'],r.materials.map(m=>[m.text,m.freq]))}</section></div>${r.notes.length?'<h3>Catatan pembelajaran</h3>'+table(['Tanggal','Catatan'],r.notes.map(n=>[n.date,n.text])):''}</article>`).join('')}${showParents&&d.parents.length?`<section class="kfr-parent"><h2>Ketertiban Kegiatan Kelompok Orang Tua</h2>${d.parents.map(r=>`<article><h3>${E(r.parent.nama)}</h3>${summary(r)}${table(['Tanggal','Kegiatan','Kehadiran'],r.activities.map(a=>[a.date,a.name,a.status]))}</article>`).join('')}</section>`:''}`;
 }
 function render(){if(result)id('output').innerHTML=reportHTML(result);}
-const printCSS=`@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font:11pt Arial,sans-serif;color:#173d2e}h1{font-size:20pt}h2{font-size:15pt;margin:12px 0}h3{font-size:12pt}p{font-size:11pt}.kfr-class{font-size:11pt}table{width:100%;border-collapse:collapse;table-layout:fixed;margin:8px 0 16px}th,td{border:1px solid #aabbb4;padding:5px;font-size:9pt;overflow-wrap:anywhere}th{background:#e9f3ee}small{display:block}.sat{background:#e8effa}.sun{background:#fbe5e5}.present{font-weight:bold;color:#155f3b}.kfr-child,.kfr-parent article{break-inside:auto;break-before:page}.kfr-report-head+.kfr-child{break-before:auto}.kfr-bottom{display:grid;grid-template-columns:1fr 1fr;gap:20px}.kfr-parent{break-before:page}.kfr-parent article:first-of-type{break-before:auto}tr{break-inside:avoid}thead{display:table-header-group}.kfr-calendar th,.kfr-calendar td{text-align:center;padding:4px 1px;font-size:8pt}.kfr-scroll{overflow:visible}`;
+const printCSS=`.kbm-daily-table{width:100%;table-layout:fixed}.daily-note td{background:#fff4cb!important;border-left:4px solid #d4a52a;white-space:pre-wrap}.daily-note strong{display:block;margin-bottom:5px}.daily-taught{font-style:italic}@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font:11pt Arial,sans-serif;color:#173d2e}h1{font-size:20pt}h2{font-size:15pt;margin:12px 0}h3{font-size:12pt}p{font-size:11pt}.kfr-class{font-size:11pt}table{width:100%;border-collapse:collapse;table-layout:fixed;margin:8px 0 16px}th,td{border:1px solid #aabbb4;padding:5px;font-size:9pt;overflow-wrap:anywhere}th{background:#e9f3ee}small{display:block}.sat{background:#e8effa}.sun{background:#fbe5e5}.present{font-weight:bold;color:#155f3b}.kfr-child,.kfr-parent article{break-inside:auto;break-before:page}.kfr-report-head+.kfr-child{break-before:auto}.kfr-bottom{display:grid;grid-template-columns:1fr 1fr;gap:20px}.kfr-parent{break-before:page}.kfr-parent article:first-of-type{break-before:auto}tr{break-inside:avoid}thead{display:table-header-group}.kfr-calendar th,.kfr-calendar td{text-align:center;padding:4px 1px;font-size:8pt}.kfr-scroll{overflow:visible}`;
 function printReport(){
  if(!result)return;const w=window.open('','_blank');if(!w){if(typeof toast==='function')toast('Izinkan jendela cetak pada browser.',true);return;}
  w.document.write('<!doctype html><html lang="id"><head><meta charset="utf-8"><title>'+E(result.title+' - '+result.name)+'</title><style>'+printCSS+'</style></head><body>'+id('output').innerHTML+'</body></html>');w.document.close();w.focus();w.print();
@@ -37946,6 +37947,7 @@ async function sharePDFFile(doc,filename,title,nav){
 }
 async function downloadPDF(share=false,supplied=null){
  const report=supplied||result;
+ if(report?.kind==='daily'){try{return await window.KBMDaily.pdf(report,share);}catch(e){if(id('error'))id('error').textContent=e.message;return;}}
  if(!report||exporting)return;exporting=true;id('pdf').disabled=true;id('share').disabled=true;
  try{
   const Ctor=window.jspdf?.jsPDF;if(!Ctor)throw Error('PDF belum siap. Muat ulang halaman.');
@@ -38172,5 +38174,46 @@ body.nav39-ready .modal-overlay{z-index:40000!important}
 #kbm40-controls .kbm42-actions>button{width:100%;min-width:0;margin:0;align-self:stretch;padding:13px 8px;min-height:50px;font-size:14px;box-sizing:border-box}
 @media(max-width:390px){#kbm40-controls .kbm42-actions>button{font-size:13px;padding:12px 6px}}
 </style>
+<script id="kbm-daily43">(function(){
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const cls=c=>['Remaja','Dewasa','Remaja & Dewasa'].includes(c)?'Remaja & Dewasa':({'Kelas A':'Cabe Rawit Tahap A','Kelas B':'Cabe Rawit Tahap B','Kelas C':'Cabe Rawit Tahap C'}[c]||c);
+ const text=x=>typeof x==='string'?x:String(x?.text||x?.materi||x?.name||'');
+ const unique=a=>[...new Map(a.map(text).map(s=>s.trim()).filter(Boolean).map(s=>[s.toLocaleLowerCase('id').replace(/\s+/g,' '),s])).values()];
+ function build(children,date,sessions,reports=[],exceptions=[],name='',group=''){
+ const ranks={H:4,S:3,I:2,TK:1,'-':0};const state={H:'Hadir',S:'Sakit',I:'Izin',TK:'Tanpa Keterangan','-':'Tidak ada jadwal'};
+ const rows=children.map(c=>{let code=window.KBMFamilyReport.childReport(c,[date],sessions,reports,exceptions).daily[0]?.status||'-';const common=[],individual=[],notes=[];
+ for(const s of sessions.filter(s=>s.date===date&&!['deleted','cancelled','batal','dibatalkan'].includes(s.status))){
+ const st=(s.students||[]).find(x=>String(x.did)===String(c.did));
+ const learning=(s.classLearning||[]).filter(l=>cls(l.className)===cls(c.cls));
+ if(!st&&!learning.length&&cls(s.className)!==cls(c.cls))continue;
+ if(st){const v=window.KBMFamilyReport.status(st.status);if(ranks[v]>ranks[code])code=v;}
+ const materials=learning.flatMap(l=>l.generalMaterials||[]);common.push(...(materials.length?materials:(st||cls(s.className)===cls(c.cls)?s.generalMaterials||[]:[])));
+ if(st){const m=s.studentMaterials?.[c.did];individual.push(...(Array.isArray(m)?m:m?[m]:[]));const note=s.studentNotes?.[c.did];if(note)notes.push(text(note));}
+ }
+ return {did:c.did,nama:c.nama,cls:c.cls,status:state[code]||state.TK,present:code==='H',general:unique(common),special:unique(individual),notes:unique(notes)};});
+ return {kind:'daily',title:'Laporan KBM Murid Harian',name,group,date,dates:[date],rows};
+ }
+ function html(d){return `<div class="kfr-report-head"><h1>${esc(d.title)}</h1><h2>${esc(d.name)}</h2><p>${esc(d.group)} · ${esc(d.date)}</p></div><div class="kfr-scroll"><table class="kbm-daily-table"><thead><tr><th>Nama Anak</th><th>Kehadiran</th><th>Materi Umum</th><th>Materi Khusus</th></tr></thead><tbody>${d.rows.map(r=>`<tr class="daily-child"><td><b>${esc(r.nama)}</b><small>${esc(r.cls)}</small></td><td>${esc(r.status)}</td><td>${!r.present&&r.general.length?'<small class="daily-taught">Materi yang diajarkan</small>':''}${r.general.map(esc).join('<br>')||'—'}</td><td>${r.special.map(esc).join('<br>')||'—'}</td></tr>${r.notes.length?`<tr class="daily-note"><td colspan="4"><strong>📝 Catatan Khusus Guru</strong><div>${r.notes.map(esc).join('<br>')}</div></td></tr>`:''}`).join('')}</tbody></table></div>`;}
+ const css='#kfr-page [hidden]{display:none!important}.kbm-daily-table{width:100%;border-collapse:collapse;table-layout:fixed}.kbm-daily-table th,.kbm-daily-table td{border:1px solid #cbdcd1;padding:10px;vertical-align:top;overflow-wrap:anywhere;white-space:normal}.kbm-daily-table th{background:#e5f1e9;color:#155f3b}.kbm-daily-table th:nth-child(1){width:24%}.kbm-daily-table th:nth-child(2){width:17%}.kbm-daily-table small{display:block;color:#64766a;font-size:11px;margin-top:4px}.kbm-daily-table .daily-note td{background:#fff4cb!important;border-left:4px solid #d4a52a;color:#604b13}.daily-note strong{display:block;margin-bottom:5px}.daily-note div{white-space:pre-wrap}.daily-child:not(:first-child) td{border-top:2px solid #91ad9b}.daily-taught{font-style:italic}';
+ let busy=false;async function pdf(d,share=false){if(busy)return;busy=true;try{const C=window.jspdf?.jsPDF;if(!C)throw Error('PDF belum siap. Muat ulang halaman.');const doc=new C({orientation:'landscape',unit:'mm',format:'a4'});doc.setFontSize(17);doc.text(d.title,10,15);doc.setFontSize(11);doc.text(d.name+' | '+d.group+' | '+d.date,10,23);const body=[];for(const r of d.rows){body.push([r.nama+'\n'+r.cls,r.status,(r.present?'':r.general.length?'Materi yang diajarkan:\n':'')+(r.general.join('\n')||'-'),r.special.join('\n')||'-']);if(r.notes.length)body.push([{content:'Catatan Khusus Guru:\n'+r.notes.join('\n'),colSpan:4,styles:{fillColor:[255,244,203],textColor:[96,75,19],fontStyle:'bold'}}]);}doc.autoTable({startY:29,head:[['Nama Anak','Kehadiran','Materi Umum','Materi Khusus']],body,margin:10,styles:{fontSize:10,cellPadding:3,overflow:'linebreak'},headStyles:{fillColor:[21,95,59]},rowPageBreak:'avoid'});const file='KBM_Harian_'+d.date+'_'+d.name.replace(/[^\p{L}\p{N}._-]/gu,'_')+'.pdf';if(share)await window.KBMFamilyReport.sharePDFFile(doc,file,d.title);else doc.save(file);}finally{busy=false;}}
+ window.KBMDaily={build,html,pdf,css};const style=document.createElement('style');style.textContent=css;document.head.appendChild(style);
+})();
+</script>
+<style id="kbm44-wa-style">#kbm44-wa{display:none;position:fixed;inset:0;z-index:2147483100;background:#102a2077;padding:18px;align-items:center;justify-content:center;box-sizing:border-box}#kbm44-wa.show{display:flex}.kbm44-card{width:100%;max-width:440px;box-sizing:border-box;background:white;border-radius:14px;padding:22px;box-shadow:0 16px 50px #102a2033;color:#244e35;font-family:inherit}.kbm44-card h3{font-size:19px;margin:0 0 14px}.kbm44-card p{font-size:15px;line-height:1.5}.kbm44-card .kbm44-help{font-size:12px;color:#68796e}.kbm44-actions{display:flex;gap:10px;margin-top:20px}.kbm44-actions button{flex:1;min-width:0;min-height:46px;border:1px solid #c7d8cc;border-radius:8px;padding:10px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;background:#f1f5f2;color:#45604d}.kbm44-actions #kbm44-send{background:#176a41;color:#fff;border-color:#176a41}</style>
+<script id="kbm44-wa-script">(function(){
+ const pending=new Map(),queue=[],offered=new Set();let current=null;
+ function sessions(){try{return JSON.parse(localStorage.getItem('ubnb_ppg_v37_classes')||'[]');}catch(_){return [];}}
+ function key(s){return String(s.scope||'')+'|'+String(s.id);}
+ function ensure(){let modal=document.getElementById('kbm44-wa');if(modal)return modal;modal=document.createElement('div');modal.id='kbm44-wa';modal.innerHTML='<div class="kbm44-card" role="dialog" aria-modal="true" aria-labelledby="kbm44-title"><h3 id="kbm44-title">Kelas berhasil ditutup</h3><p>Kirim informasi ke grup orang tua murid?</p><p class="kbm44-help">Pesan berisi link raport harian. Pilih grup yang dituju di WhatsApp.</p><div class="kbm44-actions"><button type="button" id="kbm44-skip">Lewati</button><button type="button" id="kbm44-send">Kirim via WhatsApp</button></div></div>';document.body.appendChild(modal);document.getElementById('kbm44-skip').onclick=next;document.getElementById('kbm44-send').onclick=()=>{if(!current)return;window.open('https://wa.me/?text='+encodeURIComponent(message(current)),'_blank','noopener,noreferrer');next();};return modal;}
+ function message(s){const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());let when='hari ini';if(s.date&&s.date!==today){try{when='tanggal '+new Intl.DateTimeFormat('id-ID',{day:'numeric',month:'long',year:'numeric'}).format(new Date(s.date+'T12:00:00Z'));}catch(_){when='tanggal '+s.date;}}return 'Bismillahirrahmanirrahim.\nAssalamu’alaikum warahmatullohi wabarokatuh.\n\nBapak/Ibu, laporan KBM anak '+when+' sudah dapat dilihat melalui:\nhttps://ubnb.pw/raport-kbm.html\n\nUntuk memantau kehadiran, materi, dan catatan guru, silakan buka link tersebut, lalu cari dan pilih nama anak.\n\nAlhamdulillah jazaakumullohu khoiro.';}
+ function next(){ensure().classList.remove('show');current=null;if(queue.length){current=queue.shift();ensure().classList.add('show');document.getElementById('kbm44-send').focus();}}
+ const finish=window.ppg54ConfirmFinish;if(typeof finish==='function')window.ppg54ConfirmFinish=function(id){const before=sessions().find(s=>String(s.id)===String(id));if(before&&before.status!=='finished')pending.set(key(before),{...before});const result=finish.apply(this,arguments);const after=sessions().find(s=>String(s.id)===String(id));if(before&&after?.status!=='finished')pending.delete(key(before));return result;};
+ const rpc=sb.rpc;sb.rpc=async function(name,args){const result=await rpc.apply(this,arguments);if(name==='ppg_state_save'&&args?.p_state_key==='ubnb_ppg_v37_classes'&&!result.error&&result.data?.ok===true&&Array.isArray(result.data.payload)){
+  for(const s of result.data.payload){const k=String(args.p_scope||s.scope||'')+'|'+String(s.id);if(s.status==='finished'&&pending.has(k)&&!offered.has(k)){const old=pending.get(k);pending.delete(k);offered.add(k);queue.push({...old,...s});}}
+  if(!current&&queue.length)next();
+ }return result;};
+ document.addEventListener('keydown',e=>{if(!document.getElementById('kbm44-wa')?.classList.contains('show'))return;if(e.key==='Escape')next();if(e.key==='Tab'){const first=document.getElementById('kbm44-skip'),last=document.getElementById('kbm44-send');if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+})();
+</script>
 </body>
 </html>
