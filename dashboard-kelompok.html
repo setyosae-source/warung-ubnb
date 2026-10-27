@@ -30140,6 +30140,9 @@ body.ppg54-lock-page{
     if(!a)return b;
     if(!b)return a;
 
+    const correction=x=>Number(x?.attendanceCorrectionRevision)||0;
+    if(correction(a)!==correction(b))return correction(b)>correction(a)?b:a;
+
     /* v84:
        Owner-finalized record is authoritative over stale active/reopen cache.
        This fixes a class disappearing from Riwayat after another device pushes
@@ -32585,7 +32588,10 @@ body.ppg54-lock-page{
         continue;
       }
 
-      if(owns68(old)){
+      if(Number(incoming.attendanceCorrectionRevision||0)>Number(old.attendanceCorrectionRevision||0)
+         && (owns68(old)||String(old.teacherDid||'')===did)){
+        out.push(incoming);
+      }else if(owns68(old)){
         out.push({
           ...incoming,
           startedByDid: old.startedByDid || did,
@@ -38213,6 +38219,98 @@ body.nav39-ready .modal-overlay{z-index:40000!important}
   if(!current&&queue.length)next();
  }return result;};
  document.addEventListener('keydown',e=>{if(!document.getElementById('kbm44-wa')?.classList.contains('show'))return;if(e.key==='Escape')next();if(e.key==='Tab'){const first=document.getElementById('kbm44-skip'),last=document.getElementById('kbm44-send');if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+})();
+</script>
+<style id="kbm45-correction-style">#kbm45[hidden],#kbm45 [hidden]{display:none!important}
+#kbm45{position:fixed;inset:0;z-index:2147483200;background:#102b2299;display:flex;align-items:center;justify-content:center;padding:12px;font-family:Arial,sans-serif;color:#243b30}
+#kbm45 .kbm45-card{width:min(680px,100%);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 15px 50px #0004;font-size:14px}
+#kbm45 header{background:#155c3c;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;flex-shrink:0}
+#kbm45 header b{font-size:17px}#kbm45 header button{background:transparent;color:#fff;border:0;font-size:20px}
+#kbm45 .kbm45-body{padding:14px 16px;overflow:auto;overscroll-behavior:contain}
+#kbm45 p{margin:0 0 12px;line-height:1.45}#kbm45 .kbm45-help{color:#64736b;font-size:13px}
+#kbm45 label{display:block;font-weight:700;margin:8px 0}#kbm45 label span{font-weight:400}
+#kbm45 input,#kbm45 textarea{width:100%;padding:10px;border:1px solid #cbd9cf;border-radius:8px;font:inherit}#kbm45 textarea{resize:vertical;min-height:66px}
+#kbm45 button,#kbm45 select{font:inherit;cursor:pointer;border:1px solid #cedbd3;border-radius:8px;padding:9px;background:#fff;color:#234f37;min-height:40px}
+#kbm45 button:disabled,#kbm45 select:disabled{opacity:.6;cursor:wait}
+#kbm45-results{max-height:200px;overflow:auto}#kbm45-results button{display:block;width:100%;text-align:left;margin-top:5px}
+#kbm45-choice{padding:12px;margin:10px 0;background:#edf6f0;border:1px solid #a6c8b1;border-radius:9px}#kbm45-choice p{margin:6px 0}#kbm45-choice>div{display:flex;gap:8px}#kbm45-choice button{flex:1}
+#kbm45 h4{margin:16px 0 6px}#kbm45 .kbm45-student{display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #e4ebe6}#kbm45 .kbm45-student>div{flex:1;min-width:0;overflow-wrap:anywhere}#kbm45 small{display:block;color:#69796e;font-size:12px;margin-top:4px}#kbm45 .kbm45-change{color:#8a5909}#kbm45 select{max-width:135px}
+#kbm45 footer{display:flex;gap:10px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #dfe8e1;flex-shrink:0}#kbm45-save,.kbm45-actions button{background:#17643e!important;color:#fff!important;border:0!important;font-weight:700!important}
+#kbm45-history{margin-top:14px;font-size:12px}#kbm45-history summary{cursor:pointer;font-weight:700;padding:8px 0}#kbm45-history article{padding:9px;background:#f5f8f6;margin:6px 0;border-radius:7px}#kbm45-history p{margin:5px 0}#kbm45-message{color:#9c4218;margin-top:10px!important;min-height:18px}
+.kbm45-actions{padding-top:12px}.kbm45-actions button{padding:11px 16px;border-radius:8px;cursor:pointer}
+@media(max-width:520px){#kbm45{padding:8px}#kbm45 .kbm45-card{max-height:calc(100dvh - 16px)}#kbm45 .kbm45-body{padding:12px}#kbm45 select{max-width:113px;font-size:13px}}
+</style>
+<script id="kbm45-correction-script">(function(){
+ 'use strict';
+ const KEY='ubnb_ppg_v37_classes', $=id=>document.getElementById(id);
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const read=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(_){return []}};
+ const did=()=>String(typeof CU!=='undefined'?(CU?.did||CU?.id||''):'');
+ const allowed=s=>!!s&&['finished','closed'].includes(s.status)&&typeof canEdit==='function'&&canEdit()&&!!did()&&(did()==='4075'||CU?.role==='pemilik'||[s.startedByDid,s.teacherDid].some(x=>String(x||'')===did())||(!s.startedByDid&&s.startedBy&&[CU?.nama,CU?.username].includes(s.startedBy)));
+ let draft=null,busy=false,opening=false,previousFocus=null,selected=null,matches=[];
+ const changed=()=>draft?[...draft.changes].map(([id,status])=>({did:id,status})):[];
+ function message(text){$('kbm45-message').textContent=text||'';}
+ function ensure(){if($('kbm45'))return;
+  const el=document.createElement('div');el.id='kbm45';el.hidden=true;
+  el.innerHTML='<section class="kbm45-card" role="dialog" aria-modal="true" aria-labelledby="kbm45-title"><header><b id="kbm45-title">Koreksi Absen</b><button type="button" id="kbm45-close" aria-label="Tutup">✕</button></header><div class="kbm45-body"><p id="kbm45-meta"></p><p class="kbm45-help">Tambahkan murid yang tertinggal atau perbaiki kehadirannya. Kelas tetap selesai dan jam mengajar tetap.</p><label for="kbm45-search">Ketik Nama Generus dan Pilih</label><input id="kbm45-search" type="search" autocomplete="off" placeholder="Ketik nama murid…"><div id="kbm45-results"></div><div id="kbm45-choice" hidden></div><div id="kbm45-students"></div><label for="kbm45-reason">Alasan koreksi <span>(wajib)</span></label><textarea id="kbm45-reason" rows="2" maxlength="500" placeholder="Contoh: murid sudah hadir, tetapi belum sempat diabsen."></textarea><details id="kbm45-history"><summary>Riwayat Koreksi</summary><div></div></details><p id="kbm45-message" role="status" aria-live="polite"></p></div><footer><button type="button" id="kbm45-cancel">Batal</button><button type="button" id="kbm45-save">Simpan Koreksi</button></footer></section>';
+  document.body.appendChild(el);
+  $('kbm45-close').onclick=$('kbm45-cancel').onclick=close;
+  $('kbm45-search').oninput=search;
+  $('kbm45-save').onclick=save;
+  el.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close()}if(e.key==='Tab'){const focus=[...el.querySelectorAll('button,input,textarea,select,summary')].filter(x=>!x.disabled&&x.getClientRects().length);const first=focus[0],last=focus.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}}});
+ }
+ function close(){if(busy)return;if(draft?.changes.size&&!confirm('Batalkan perubahan absen yang belum disimpan?'))return;$('kbm45').hidden=true;draft=null;selected=null;previousFocus?.focus?.()}
+ async function rpc(args){
+  if(!DK_ATT_TOKEN)await dkAttendanceAuthenticate();
+  let r=await sb.rpc('ppg_class_attendance_correction',{p_token:DK_ATT_TOKEN,...args});
+  if(!r.error&&r.data?.code==='AUTH_REQUIRED'){await dkAttendanceAuthenticate();r=await sb.rpc('ppg_class_attendance_correction',{p_token:DK_ATT_TOKEN,...args})}
+  if(r.error||!r.data?.ok)throw new Error(r.error?.message||r.data?.error||'Gagal menyimpan koreksi');
+  return r.data;
+ }
+ window.ppg45CorrectAttendance=async function(id){
+  if(opening||busy)return;const s=read().find(x=>String(x.id)===String(id));if(!allowed(s)){toast('Koreksi hanya untuk guru pemilik sesi dan admin PPG.',true);return}
+  opening=true;
+  try{
+   const data=await rpc({p_scope:s.scope,p_session_id:String(s.id)});
+   ensure();previousFocus=document.activeElement;draft={session:data.payload,revision:data.revision,roster:data.roster||[],history:data.history||[],changes:new Map(),added:new Map()};
+   $('kbm45-meta').textContent=`${draft.session.date} · ${draft.session.teacherName||'Guru'} · ${draft.session.scope}`;
+   $('kbm45-search').value='';$('kbm45-reason').value='';$('kbm45-results').replaceChildren();$('kbm45-choice').hidden=true;message('');renderStudents();renderHistory();$('kbm45').hidden=false;$('kbm45-search').focus();
+  }catch(e){toast(e.message,true)}finally{opening=false}
+ };
+ function allStudents(){return [...(draft.session.students||[]),...draft.added.values()]}
+ function renderStudents(){
+  const root=$('kbm45-students');root.innerHTML='<h4>Peserta Didik</h4>'+(allStudents().map(s=>{
+   const id=String(s.did),original=(draft.session.students||[]).find(x=>String(x.did)===id),status=draft.changes.get(id)||s.status||'Belum Hadir';
+   return `<div class="kbm45-student"><div><b>${esc(s.nama)}</b><small>${esc(s.className||s.kelas||draft.session.className)}${draft.changes.has(id)?' · koreksi':''}</small>${draft.changes.has(id)?`<small class="kbm45-change">${esc(original?.status||'Belum tercatat')} → ${esc(status)}</small>`:''}</div><select aria-label="Kehadiran ${esc(s.nama)}" data-did="${esc(id)}">${[...new Set([status,'Hadir','Izin','Sakit'])].map(st=>`<option ${st===status?'selected':''}>${esc(st)}</option>`).join('')}</select>${draft.added.has(id)?`<button type="button" data-remove="${esc(id)}" aria-label="Batalkan tambahan ${esc(s.nama)}">✕</button>`:''}</div>`;
+  }).join('')||'<p>Belum ada murid tercatat di sesi ini.</p>');
+  root.querySelectorAll('select').forEach(el=>el.onchange=()=>{const id=el.dataset.did,old=(draft.session.students||[]).find(x=>String(x.did)===id);if(old?.status===el.value)draft.changes.delete(id);else draft.changes.set(id,el.value);renderStudents()});
+  root.querySelectorAll('[data-remove]').forEach(el=>el.onclick=()=>{draft.added.delete(el.dataset.remove);draft.changes.delete(el.dataset.remove);renderStudents()});
+ }
+ function search(){if(!draft||busy)return;selected=null;$('kbm45-choice').hidden=true;const q=$('kbm45-search').value.trim().toLocaleLowerCase('id');
+  matches=q?draft.roster.filter(x=>String(x.nama||'').toLocaleLowerCase('id').includes(q)).slice(0,30):[];
+  const root=$('kbm45-results');root.replaceChildren();matches.forEach((s,i)=>{const b=document.createElement('button');b.type='button';b.textContent=`${s.nama} · ${s.kelas}${s.kind==='simpatisan'?' · Simpatisan':''}`;b.onclick=()=>pick(i);root.appendChild(b)});
+  if(q&&!matches.length)root.textContent='Nama tidak ditemukan.';
+ }
+ function pick(i){selected=matches[i];if(!selected)return;const box=$('kbm45-choice');box.hidden=false;box.innerHTML=`<b>${esc(selected.nama)}</b><p>Pilih kehadiran pada tanggal ${esc(draft.session.date)}</p><div>${['Hadir','Sakit','Izin'].map(st=>`<button type="button" data-status="${st}">${st}</button>`).join('')}</div>`;
+  box.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{const s=selected,id=String(s.did),old=(draft.session.students||[]).find(x=>String(x.did)===id);if(!old)draft.added.set(id,{...s,className:draft.session.multiClass?s.kelas:draft.session.className});if(old?.status===b.dataset.status)draft.changes.delete(id);else draft.changes.set(id,b.dataset.status);selected=null;box.hidden=true;$('kbm45-search').value='';$('kbm45-results').replaceChildren();renderStudents();$('kbm45-search').focus()});
+  box.querySelector('button')?.focus();
+ }
+ function renderHistory(){const h=$('kbm45-history');h.open=false;h.querySelector('div').innerHTML=draft.history.length?draft.history.map(x=>`<article><b>${esc(x.actor_name)}</b> · ${esc(new Date(x.corrected_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}))} WIB<p>${esc(x.reason)}</p>${(x.changes||[]).map(c=>`<div>${esc(c.nama)}: ${esc(c.before||'Belum tercatat')} → ${esc(c.after)}</div>`).join('')}</article>`).join(''):'Belum ada koreksi.'}
+ async function save(){
+  if(busy||!draft)return;const changes=changed(),reason=$('kbm45-reason').value.trim();
+  if(!changes.length){message('Belum ada perubahan kehadiran.');return}if(reason.length<3){message('Isi alasan koreksi, minimal 3 karakter.');$('kbm45-reason').focus();return}
+  busy=true;message('Menyimpan koreksi…');const controls=[...$('kbm45').querySelectorAll('button,input,select,textarea')];controls.forEach(x=>x.disabled=true);
+  try{
+   const s=draft.session,data=await rpc({p_scope:s.scope,p_session_id:String(s.id),p_changes:changes,p_expected_revision:draft.revision,p_reason:reason});
+   const all=read(),i=all.findIndex(x=>String(x.id)===String(s.id));if(i>=0)all[i]=data.payload;else all.push(data.payload);localStorage.setItem(KEY,JSON.stringify(all));
+   draft=null;$('kbm45').hidden=true;window.ppg55ReviewKBM?.(s.id);toast(`${data.changed} kehadiran murid berhasil dikoreksi.`);
+   Promise.resolve(window.ppg60SyncNow?.()).catch(()=>{});
+  }catch(e){message(e.message)}finally{busy=false;controls.forEach(x=>x.disabled=false)}
+ }
+ const review=window.ppg55ReviewKBM;
+ window.ppg55ReviewKBM=function(id){const result=review?.apply(this,arguments);const s=read().find(x=>String(x.id)===String(id)),root=$('ppg55-review-body');if(root&&allowed(s)){
+  const box=document.createElement('div');box.className='kbm45-actions';const b=document.createElement('button');b.type='button';b.textContent='Koreksi Absen';b.onclick=()=>window.ppg45CorrectAttendance(id);box.appendChild(b);root.appendChild(box);
+ }return result};
 })();
 </script>
 </body>
