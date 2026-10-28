@@ -38388,11 +38388,37 @@ body.nav39-ready .modal-overlay{z-index:40000!important}
  function heading(){return state.kind==='minutes'?'Notulen Musyawarah':'Laporan Kegiatan'}
  function text(){const p=state.payload,e=state.event;return [heading().toUpperCase(),e.name,e.date+' · '+(e.scope||''),e.location||'',state.status==='draft'?'DRAF':'',...fields[state.kind].filter(([k])=>p[k]).map(([k,l])=>l+':\n'+p[k]),p.actions?.length?'Tindak Lanjut:\n'+p.actions.map((a,i)=>`${i+1}. ${a.task}\nPIC: ${a.person||'—'} · Tenggat: ${a.due||'—'}`).join('\n'):'',p.attachments?.length?'Lampiran: '+p.attachments.map(f=>f.name).join(', '):''].filter(Boolean).join('\n\n')}
  function share(){if(busy||!state)return;if(dirty){msg('Simpan perubahan sebelum membagikan.');return}if(!state.version){msg('Simpan dokumen terlebih dahulu.');return}window.open('https://wa.me/?text='+encodeURIComponent(text()),'_blank','noopener,noreferrer')}
+ async function attendance(){
+  let id=state.key.match(/^K(\d+)$/)?.[1];
+  if(!id){
+   const m=state.key.match(/^S(\d+):(\d{4}-\d{2}-\d{2})$/);if(!m)throw Error('Identitas acara tidak valid.');
+   const {data,error}=await sb.rpc('dk_attendance_snapshot',{p_token:DK_ATT_TOKEN});
+   if(error||!data?.ok||!Array.isArray(data.kegiatan))throw Error(error?.message||data?.error||'Gagal memuat pelaksanaan acara.');
+   id=data.kegiatan.find(k=>String(k.jadwal_id)===m[1]&&String(k.occurrence_date||k.tanggal).slice(0,10)===m[2])?.id;
+  }
+  if(!id)return {missing:true};
+  const {data,error}=await sb.rpc('dk_attendance_recap_event',{p_token:DK_ATT_TOKEN,p_kegiatan_id:Number(id)});
+  if(error||!data?.ok||!Array.isArray(data.peserta))throw Error(error?.message||data?.error||'Gagal memuat daftar kehadiran. PDF belum dibuat.');
+  const groups=[['hadir','Hadir'],['izin','Izin'],['sakit','Sakit'],['tk','Tanpa Keterangan']].map(([key,label])=>({key,label,rows:[]}));
+  for(const p of data.peserta){const st=String(p.status_hadir||p.status_kehadiran||'').trim().toLowerCase(),key=['hadir','izin','sakit'].includes(st)?st:'tk';groups.find(g=>g.key===key).rows.push(p)}
+  groups.forEach(g=>g.rows.sort((a,b)=>String(a.nama||'').localeCompare(String(b.nama||''),'id')));
+  return {groups,total:data.peserta.length,final:!!data.final,at:new Date().toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB'};
+ }
  async function pdf(){if(busy||!state)return;if(dirty){msg('Simpan perubahan sebelum mengunduh PDF.');return}if(!state.version){msg('Simpan dokumen terlebih dahulu.');return}const C=window.jspdf?.jsPDF;if(!C){msg('Fitur PDF belum siap. Muat ulang halaman lalu coba lagi.');return}
-  setBusy(true);msg('Menyiapkan PDF…');try{const p=state.payload,e=state.event,doc=new C({unit:'mm',format:'a4'});doc.setFontSize(15);doc.text(heading()+(state.status==='draft'?' · DRAF':''),14,18);
+  setBusy(true);msg('Menyiapkan PDF…');try{const att=await attendance(),p=state.payload,e=state.event,doc=new C({unit:'mm',format:'a4'});doc.setFontSize(15);doc.text(heading()+(state.status==='draft'?' · DRAF':''),14,18);
    const rows=[['Acara',e.name],['Tanggal',e.date],['Lingkup',e.scope||''],['Lokasi',e.location||''],...fields[state.kind].map(([k,l])=>[l,p[k]||'—'])];
+   rows.push(['Rekap Kehadiran',att.missing?'Absen acara belum dibuat.':`Total peserta: ${att.total}\n${att.groups.map(g=>g.label+': '+g.rows.length).join(' · ')}\n${att.final?'Rekap final':'Sementara — acara belum ditutup'}\nDiambil: ${att.at}`]);
    doc.autoTable({startY:24,body:rows,theme:'grid',styles:{fontSize:10,cellPadding:3,overflow:'linebreak'},columnStyles:{0:{cellWidth:40,fontStyle:'bold'},1:{cellWidth:'auto'}}});
    if(p.actions?.length)doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Tindak Lanjut','Penanggung Jawab','Batas Waktu']],body:p.actions.map(a=>[a.task,a.person||'—',a.due||'—']),styles:{fontSize:10,cellPadding:3},headStyles:{fillColor:[21,92,60]}});
+   if(!att.missing){
+    doc.addPage();doc.setFontSize(14);doc.text('Lampiran Kehadiran',14,18);
+    doc.setFontSize(9);doc.text(att.final?'Rekap final':'Sementara — acara belum ditutup',14,25);
+    let y=31;
+    for(const g of att.groups){
+     doc.autoTable({startY:y,head:[[{content:g.label+' · '+g.rows.length+' orang',colSpan:3}],['No.','Nama Peserta','Kepala Keluarga']],body:g.rows.length?g.rows.map((p,i)=>[String(i+1),p.nama||p.jamaah_nama||'—',p.kk||p.jamaah_kk||'—']):[[{content:'Tidak ada',colSpan:3}]],theme:'grid',styles:{fontSize:10,cellPadding:3,overflow:'linebreak'},headStyles:{fillColor:[21,92,60]},columnStyles:{0:{cellWidth:12},1:{cellWidth:85},2:{cellWidth:'auto'}},margin:{top:18,bottom:18}});
+     y=doc.lastAutoTable.finalY+7;
+    }
+   }
    if(p.attachments?.length){doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[['Lampiran']],body:p.attachments.map(f=>[f.name]),styles:{fontSize:10}});for(const f of p.attachments.filter(f=>f.mime.startsWith('image/'))){const data='data:'+f.mime+';base64,'+await content(f),prop=doc.getImageProperties(data),w=Math.min(180,180*prop.width/prop.height),h=w*prop.height/prop.width;doc.addPage();doc.setFontSize(10);doc.text(doc.splitTextToSize(f.name,180),14,14);doc.addImage(data,prop.fileType,14,24,w,Math.min(h,250))}}
    for(let n=1;n<=doc.getNumberOfPages();n++){doc.setPage(n);doc.setFontSize(8);doc.text(`Database Perwira · Versi ${state.version} · ${n}/${doc.getNumberOfPages()}`,14,288)}doc.save((heading()+'_'+e.date+'_'+e.name).replace(/[^\p{L}\p{N}_ -]/gu,'').slice(0,140)+'.pdf');msg('PDF selesai.');
   }catch(e){msg('Gagal membuat PDF: '+e.message)}finally{setBusy(false)}
