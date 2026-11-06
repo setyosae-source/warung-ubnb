@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Dashboard Kelompok v104 - Powered by UBNB</title>
+<title>Dashboard Kelompok v104 · UBAID v1 - Powered by UBNB</title>
 <style>
 :root{
   --green:#1a6640;--green-dark:#0f4428;--green-light:#e8f5ee;
@@ -812,6 +812,7 @@ body.modal-open{overflow:hidden!important;}
     </div>
     <div class="cal-toolbar">
       <div class="cal-toolbar-main">
+        <button class="btn-save" onclick="ubaidOpen()" style="padding:8px 13px">UBAID · Alat Absen</button>
         <button id="btn-acara-create" class="btn-save" onclick="bukaModalKegiatan()" style="padding:8px 13px;border-radius:7px;font-size:12px;">＋ Buat Acara</button>
       </div>
       <div class="cal-view-toggle">
@@ -9956,6 +9957,7 @@ function renderCalendarDetail(){
     }
   }
   if(manage&&e.kind==='virtual'&&e.exception)actions+=`<button onclick="restoreCalendarException('${e.key}')">↩ Kembalikan Jadwal Normal</button>`;
+  if(manage&&e.actual)actions+=`<button class="blue" onclick="ubaidOpen(${e.id})">UBAID · Pilih Alat</button>`;
   box.innerHTML=`<div class="cal-detail-title">${escH(e.name)}</div>
     <div class="cal-event-badges" style="justify-content:flex-start;margin:5px 0 9px;">${calendarEntryBadges(e)}</div>
     <div class="cal-detail-meta">📅 ${escH(calFmtDate(e.date))}${e.time?' · ⏰ '+escH([e.time,e.end_time].filter(Boolean).join('–')):''}${e.location?' · 📍 '+escH(e.location):''}<br>↻ ${escH(rec)}${e.moved?`<br>↔ Jadwal asal: ${escH(calFmtDate(e.original_date))}`:''}</div>
@@ -38428,3 +38430,52 @@ body.nav39-ready .modal-overlay{z-index:40000!important}
 </script>
 </body>
 </html>
+
+<script>
+/* UBAID v1 - pengelolaan registry dan penugasan acara */
+let ubaidEventId=null,ubaidBusy=false;
+async function ubaidRpc(action,extra={}){
+ const snap=await getAttendanceSnapshot(true);if(!snap)throw Error('Login pengurus diperlukan');
+ const {data,error}=await sb.rpc('ubaid_admin',{p_token:DK_ATT_TOKEN,p_action:action,p_kegiatan_id:ubaidEventId,...extra});
+ if(error||!data?.ok)throw Error(error?.message||data?.error||'UBAID gagal');return data;
+}
+function ubaidDialog(){
+ let d=document.getElementById('ubaid-dialog');if(d)return d;
+ d=document.createElement('dialog');d.id='ubaid-dialog';d.style.cssText='width:min(720px,95vw);max-height:90vh;margin:auto;padding:20px;border:1px solid #ccc;border-radius:12px;overflow:auto';
+ d.innerHTML='<div style="display:flex;justify-content:space-between"><h2>UBAID · Mesin Absen</h2><button id="ubaid-close">Tutup</button></div><p id="ubaid-context"></p><p id="ubaid-message" role="status"></p><button id="ubaid-refresh">Segarkan status</button> <button id="ubaid-create">Daftarkan alat baru</button><section id="ubaid-secret" hidden style="padding:12px;background:#fff4d1;margin:12px 0"></section><div id="ubaid-list"></div>';
+ document.body.appendChild(d);d.querySelector('#ubaid-close').onclick=()=>d.close();d.querySelector('#ubaid-refresh').onclick=ubaidLoad;d.querySelector('#ubaid-create').onclick=ubaidRegister;return d;
+}
+async function ubaidOpen(eventId=null){
+ if(!canManageCalendar()){toast('Akses pengelolaan Acara diperlukan',true);return;}
+ ubaidEventId=eventId?Number(eventId):null;const d=ubaidDialog();
+ const e=(aKegiatan||[]).find(x=>Number(x.id)===ubaidEventId);
+ document.getElementById('ubaid-context').textContent=e?'Penugasan: '+e.acara_nama+' · '+e.tanggal:'Daftar alat. Pilih UBAID dari detail Acara untuk menugaskan.';
+ document.getElementById('ubaid-secret').hidden=true;document.getElementById('ubaid-secret').replaceChildren();
+ if(!d.open)d.showModal();await ubaidLoad();
+}
+async function ubaidLoad(){
+ if(ubaidBusy)return;ubaidBusy=true;const msg=document.getElementById('ubaid-message');msg.textContent='Memuat…';
+ try{const r=await ubaidRpc('list');const list=document.getElementById('ubaid-list');list.replaceChildren();
+  for(const x of r.devices||[]){const c=document.createElement('section');c.style.cssText='padding:14px;border:1px solid #ddd;border-radius:8px;margin:12px 0';
+   const title=document.createElement('h3');title.textContent=x.label_name;c.appendChild(title);
+   const info=document.createElement('p');info.textContent=x.register_no+' · '+(x.online?'Online':'Offline')+' · Terakhir terhubung: '+(x.last_seen?new Date(x.last_seen).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB':'Belum pernah');c.appendChild(info);
+   for(const a of x.assignments||[]){const p=document.createElement('p');p.textContent='Ditugaskan: '+a.acara_nama+' · '+a.tanggal;c.appendChild(p);}
+   const rename=document.createElement('button');rename.textContent='Ubah label';rename.onclick=async()=>{const n=prompt('Label baru (nomor register tetap):',x.label_name);if(n===null)return;await ubaidAction('rename',{p_device_id:x.id,p_label:n})};c.appendChild(rename);
+   if(ubaidEventId){const b=document.createElement('button');b.style.marginLeft='8px';b.textContent=x.assigned?'Lepaskan dari acara ini':'Pilih untuk acara ini';b.onclick=()=>ubaidAction(x.assigned?'unassign':'assign',{p_device_id:x.id});c.appendChild(b);}
+   list.appendChild(c);
+  }
+  if(!r.devices?.length)list.textContent='Belum ada alat terdaftar di lingkup Anda.';
+  msg.textContent='Semua alat ditampilkan, termasuk yang offline. Penugasan awal berlaku per tanggal acara.';
+ }catch(e){msg.textContent=e.message}finally{ubaidBusy=false}
+}
+async function ubaidAction(action,args){if(ubaidBusy)return;ubaidBusy=true;try{await ubaidRpc(action,args);document.getElementById('ubaid-message').textContent='Tersimpan';}catch(e){document.getElementById('ubaid-message').textContent=e.message;ubaidBusy=false;return;}ubaidBusy=false;await ubaidLoad();}
+async function ubaidRegister(){
+ if(ubaidBusy)return;const name=prompt('Label alat baru, misalnya Kelompok 4 atau Desa:');if(name===null)return;
+ ubaidBusy=true;try{const r=await ubaidRpc('register',{p_label:name});const box=document.getElementById('ubaid-secret');box.replaceChildren();box.hidden=false;
+  const p=document.createElement('p');p.textContent='Alat terdaftar. Salin nomor register dan kunci ini ke pengaturan UBAID. Kunci hanya ditampilkan sekali; jangan bagikan.';box.appendChild(p);
+  for(const [label,value] of [['Nomor register',r.register_no],['Kunci alat',r.device_key]]){const l=document.createElement('label');l.textContent=label;const i=document.createElement('input');i.readOnly=true;i.value=value;i.style.cssText='display:block;width:100%;margin:8px 0;padding:10px;box-sizing:border-box';i.onclick=()=>i.select();l.appendChild(i);box.appendChild(l);}
+ }catch(e){document.getElementById('ubaid-message').textContent=e.message}finally{ubaidBusy=false}
+ await ubaidLoad();
+}
+
+</script>
