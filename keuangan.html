@@ -1006,8 +1006,23 @@ async function refreshAll(){
   toast('🔄 Memuat data...');
   try{
     const load=async(tbl,q)=>{
-      try{const r=await q;return r.data||[];}
-      catch(e){console.warn('Load gagal:',tbl,e);return [];}
+      try{
+        if(tbl==='jurnal_umum'||tbl==='jurnal_detail'){
+          const rows=[];const pageSize=500;
+          q=q.order('id',{ascending:true});
+          for(let offset=0;;offset+=pageSize){
+            const r=await q.range(offset,offset+pageSize-1);
+            if(r.error)throw r.error;
+            rows.push(...(r.data||[]));
+            if((r.data||[]).length<pageSize)break;
+          }
+          return rows;
+        }
+        const r=await q;if(r.error)throw r.error;return r.data||[];
+      }catch(e){
+        if(tbl==='jurnal_umum'||tbl==='jurnal_detail')throw e;
+        console.warn('Load gagal:',tbl,e);return [];
+      }
     };
     const[
       kas,hargaSaham,br,akad,angs,trx,ppob,beli,saham,
@@ -1069,7 +1084,7 @@ const PAGE_TITLES={
   neraca:{title:'Neraca',sub:'Laporan Posisi Keuangan'},
   labarugi:{title:'Laba Rugi',sub:'Laporan Kinerja Keuangan'},
   deviasi:{title:'Analisis Deviasi',sub:'Perbandingan Antar Periode'},
-  jurnal:{title:'Jurnal Umum',sub:'Pencatatan Double Entry'},
+  jurnal:{title:'Jurnal Umum',sub:'Pencatatan Double Entry · v2026.11.09'},
   'buku-besar':{title:'Buku Besar',sub:'Rekening per Akun'},
   coa:{title:'Chart of Accounts',sub:'Daftar Akun Keuangan'},
   aset:{title:'Aset Tetap',sub:'Inventaris & Peralatan'},
@@ -2050,12 +2065,7 @@ function renderJurnal(){
 function openModalJurnal(){
   document.getElementById('jurnal-id').value='';
   document.getElementById('jurnal-modal-title').textContent='Jurnal Baru';
-  const thn=new Date().getFullYear();
-  const existing=D.jurnal_umum
-    .filter(j=>j.no_jurnal?.startsWith('JU-'+thn))
-    .map(j=>parseInt(j.no_jurnal.split('-')[2])||0);
-  const next=(existing.length?Math.max(...existing):0)+1;
-  document.getElementById('jurnal-no').value=`JU-${thn}-${String(next).padStart(3,'0')}`;
+  document.getElementById('jurnal-no').value='Otomatis saat disimpan';
   document.getElementById('jurnal-tgl').value=new Date().toISOString().split('T')[0];
   document.getElementById('jurnal-ket').value='';
   document.getElementById('jurnal-ref').value='';
@@ -2087,11 +2097,25 @@ function updateJETotals(){
   document.getElementById('je-d').textContent=rp(d);
   document.getElementById('je-k').textContent=rp(k);
   const bal=document.getElementById('je-bal');
-  if(Math.abs(d-k)<1){bal.className='balance-ok';bal.textContent='✅ Seimbang';}
+  if(Math.abs(d-k)<=0.01){bal.className='balance-ok';bal.textContent='✅ Seimbang';}
   else{bal.className='balance-err';bal.textContent='⚠️ Selisih: '+rp(Math.abs(d-k));}
 }
 
+// v2026.11.09 — penomoran server, penyimpanan jurnal atomik.
+async function kuPastikanTersimpan(query){
+  const result=await query;if(result.error)throw result.error;return result;
+}
+async function simpanJurnalAtomik(payload,entries,id=null){
+  const {data,error}=await sb.rpc('ku_simpan_jurnal_v1',{
+    p_header:payload,p_entries:entries,p_id:id?Number(id):null
+  });
+  if(error)throw error;
+  if(!data?.id)throw new Error('Hasil simpan belum terkonfirmasi. Muat ulang dan periksa jurnal sebelum mengulang.');
+  return data;
+}
 async function simpanJurnal(){
+  const saveButton=document.getElementById('btn-simpan-jurnal');
+  if(saveButton.disabled)return;
   const id=document.getElementById('jurnal-id').value;
   const no=document.getElementById('jurnal-no').value.trim();
   const tgl=document.getElementById('jurnal-tgl').value;
@@ -2108,27 +2132,31 @@ async function simpanJurnal(){
       entries.push({coa_id:parseInt(sel.value),kode_akun:opt.dataset.kode,nama_akun:opt.dataset.nama,debit:d,kredit:k,keterangan:ket2});
     }
   });
-  if(!entries.length){toast('Minimal 1 baris entri',true);return;}
+  const invalidRows=[...document.querySelectorAll('#jurnal-entries tr')].some(tr=>{
+    const account=tr.querySelector('.je-akun')?.value;
+    const d=Number(tr.querySelector('.je-debit')?.value||0);
+    const k=Number(tr.querySelector('.je-kredit')?.value||0);
+    return (!account&&(d!==0||k!==0))||!Number.isFinite(d)||!Number.isFinite(k)||d<0||k<0||(d>0&&k>0);
+  });
+  if(invalidRows){toast('Periksa akun dan nominal: satu baris hanya debit atau kredit positif',true);return;}
+  if(entries.length<2){toast('Minimal 2 baris entri',true);return;}
   const totalD=entries.reduce((s,e)=>s+e.debit,0);
   const totalK=entries.reduce((s,e)=>s+e.kredit,0);
-  if(Math.abs(totalD-totalK)>1){toast('Jurnal harus seimbang (Debit = Kredit)',true);return;}
+  if(Math.abs(totalD-totalK)>0.01){toast('Jurnal harus seimbang (Debit = Kredit)',true);return;}
   const btn=document.getElementById('btn-simpan-jurnal');
   btn.innerHTML='<div class="spinner"></div>';btn.disabled=true;
   const payload={no_jurnal:no,tanggal:tgl,keterangan:ket,referensi:document.getElementById('jurnal-ref').value,status:document.getElementById('jurnal-status').value,total_debit:totalD,total_kredit:totalK,operator:CU.username};
-  let jId;
-  if(id){
-    await sb.from('jurnal_detail').delete().eq('jurnal_id',id);
-    await sb.from('jurnal_umum').update(payload).eq('id',id);
-    jId=parseInt(id);
-  }else{
-    const{data,error}=await sb.from('jurnal_umum').insert([payload]).select('id').single();
-    if(error){toast('Gagal: '+error.message,true);btn.innerHTML='💾 Simpan';btn.disabled=false;return;}
-    jId=data.id;
+  try{
+    const result=await simpanJurnalAtomik(payload,entries,id);
+    document.getElementById('jurnal-id').value=result.id;
+    document.getElementById('jurnal-no').value=result.no_jurnal;
+    closeModal('modal-jurnal');
+    await refreshAll();toast('✅ Jurnal '+result.no_jurnal+' disimpan!');
+  }catch(error){
+    toast('Gagal menyimpan: '+error.message,true);
+  }finally{
+    btn.innerHTML='💾 Simpan';btn.disabled=false;
   }
-  await sb.from('jurnal_detail').insert(entries.map(e=>({...e,jurnal_id:jId})));
-  btn.innerHTML='💾 Simpan';btn.disabled=false;
-  closeModal('modal-jurnal');
-  await refreshAll();toast('✅ Jurnal disimpan!');
 }
 
 async function editJurnal(id){
@@ -2182,7 +2210,8 @@ function lihatJurnal(id){
 
 async function hapusJurnal(id,no){
   if(!confirm('Hapus jurnal '+no+'?'))return;
-  await sb.from('jurnal_umum').delete().eq('id',id);
+  const {error}=await sb.from('jurnal_umum').delete().eq('id',id);
+  if(error){toast('Gagal menghapus: '+error.message,true);return;}
   await refreshAll();toast('✅ Jurnal dihapus!');
 }
 
@@ -2963,56 +2992,52 @@ function openModalMutasiKas(kasId){
 }
 
 async function simpanMutasiKas(){
+  const button=document.querySelector('#modal-mutasi-kas button[onclick="simpanMutasiKas()"]');
+  if(button?.disabled)return;
+  if(button)button.disabled=true;
+  try{
   const kasId=parseInt(document.getElementById('mutasi-kas-id').value);
   const tipe=document.getElementById('mutasi-tipe').value;
   const jumlah=parseFloat(document.getElementById('mutasi-jumlah').value)||0;
-  const ket=document.getElementById('mutasi-ket').value.trim()||tipe==='masuk'?'Top Up':'Pengeluaran';
+  const ket=document.getElementById('mutasi-ket').value.trim()||(tipe==='masuk'?'Top Up':'Pengeluaran');
   const tgl=document.getElementById('mutasi-tgl').value;
   if(!jumlah){toast('Masukkan jumlah',true);return;}
   const k=D.kas.find(x=>x.id===kasId);if(!k)return;
   // Simpan mutasi
-  await sb.from('kas_mutasi').insert([{
+  await kuPastikanTersimpan(sb.from('kas_mutasi').insert([{
     kas_id:kasId,tipe,kategori:tipe,jumlah,keterangan:ket,
     tanggal:tgl,operator:CU.username,
     ref_type:'kas_manual'
-  }]);
+  }]));
   // Update saldo
   const saldoBaru=tipe==='masuk'?k.saldo+jumlah:k.saldo-jumlah;
-  await sb.from('kas').update({saldo:saldoBaru}).eq('id',kasId);
+  await kuPastikanTersimpan(sb.from('kas').update({saldo:saldoBaru}).eq('id',kasId));
   // Buat jurnal otomatis untuk mutasi manual
   await buatJurnalMutasi(kasId,tipe,jumlah,ket,tgl);
   closeModal('modal-mutasi-kas');await refreshAll();
   toast(tipe==='masuk'?`Rp ${jumlah.toLocaleString('id-ID')} masuk ke ${k.nama}`:`Rp ${jumlah.toLocaleString('id-ID')} keluar dari ${k.nama}`);
+  }catch(error){
+    toast("Proses kas belum selesai: "+error.message+". Muat ulang dan periksa mutasi serta jurnal sebelum mengulang.",true);
+  }finally{if(button)button.disabled=false;}
 }
 
 async function buatJurnalMutasi(kasId,tipe,jumlah,ket,tgl){
   const kode=getFnKodeCOA(kasId);
   const{data:coa}=await sb.from('coa').select('id,nama').eq('kode',kode).single();
-  if(!coa)return;
+  if(!coa)throw new Error('Akun COA kas belum tersedia');
   // Cari akun lawan — biaya lain-lain atau pendapatan lain
   const lawanKode=tipe==='masuk'?'4-401':'6-101';
   const{data:lawanCoa}=await sb.from('coa').select('id,nama').eq('kode',lawanKode).single();
-  if(!lawanCoa)return;
-  const tahun=new Date(tgl).getFullYear();
-  // Ambil no jurnal berikutnya
-  const{data:lastJ}=await sb.from('jurnal_umum')
-    .select('no_jurnal').like('no_jurnal',`JU-${tahun}-%`)
-    .order('no_jurnal',{ascending:false}).limit(1);
-  const last=lastJ?.[0]?.no_jurnal;
-  const num=last&&/\d+$/.test(last)?parseInt(last.match(/\d+$/)[0])+1:1;
-  const noJurnal=`JU-${tahun}-${String(num).padStart(3,'0')}`;
-  const{data:ju}=await sb.from('jurnal_umum').insert([{
-    no_jurnal:noJurnal,tanggal:tgl,
+  if(!lawanCoa)throw new Error('Akun lawan jurnal belum tersedia');
+  await simpanJurnalAtomik({tanggal:tgl,
     keterangan:(tipe==='masuk'?'Penerimaan':'Pengeluaran')+' Kas - '+ket,
     referensi:`KAS-${kasId}-${Date.now()}`,
     total_debit:jumlah,total_kredit:jumlah,status:'posted',operator:CU.username
-  }]).select().single();
-  if(!ju)return;
-  await sb.from('jurnal_detail').insert([
-    {jurnal_id:ju.id,coa_id:tipe==='masuk'?coa.id:lawanCoa.id,
+  },[
+    {coa_id:tipe==='masuk'?coa.id:lawanCoa.id,
      kode_akun:tipe==='masuk'?kode:lawanKode,
      nama_akun:tipe==='masuk'?coa.nama:lawanCoa.nama,debit:jumlah,kredit:0},
-    {jurnal_id:ju.id,coa_id:tipe==='masuk'?lawanCoa.id:coa.id,
+    {coa_id:tipe==='masuk'?lawanCoa.id:coa.id,
      kode_akun:tipe==='masuk'?lawanKode:kode,
      nama_akun:tipe==='masuk'?lawanCoa.nama:coa.nama,debit:0,kredit:jumlah}
   ]);
@@ -3052,6 +3077,10 @@ function updateTransferInfo(){
 }
 
 async function simpanTransferKas(){
+  const button=document.querySelector('#modal-transfer-kas button[onclick="simpanTransferKas()"]');
+  if(button?.disabled)return;
+  if(button)button.disabled=true;
+  try{
   const dariId=parseInt(document.getElementById('transfer-dari').value);
   const keId=parseInt(document.getElementById('transfer-ke').value);
   const jumlah=parseFloat(document.getElementById('transfer-jumlah').value)||0;
@@ -3066,49 +3095,42 @@ async function simpanTransferKas(){
   if(dariKas.saldo<jumlah){toast(`Saldo ${dariKas.nama} tidak cukup (${rp(dariKas.saldo)})`,true);return;}
 
   // Update saldo kedua kas
-  await sb.from('kas').update({saldo:dariKas.saldo-jumlah}).eq('id',dariId);
-  await sb.from('kas').update({saldo:keKas.saldo+jumlah}).eq('id',keId);
+  await kuPastikanTersimpan(sb.from('kas').update({saldo:dariKas.saldo-jumlah}).eq('id',dariId));
+  await kuPastikanTersimpan(sb.from('kas').update({saldo:keKas.saldo+jumlah}).eq('id',keId));
 
   // Catat mutasi kedua kas (pakai ref_pair_id untuk pasangkan keluar+masuk)
   const pairId='trf-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
-  await sb.from('kas_mutasi').insert([
+  await kuPastikanTersimpan(sb.from('kas_mutasi').insert([
     {kas_id:dariId,tipe:'keluar',kategori:'transfer',jumlah,
      keterangan:`Transfer ke ${keKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username,
      ref_type:'transfer',ref_pair_id:pairId},
     {kas_id:keId,tipe:'masuk',kategori:'transfer',jumlah,
      keterangan:`Transfer dari ${dariKas.nama} - ${ket}`,tanggal:tgl,operator:CU.username,
      ref_type:'transfer',ref_pair_id:pairId}
-  ]);
+  ]));
 
   // Buat jurnal transfer
   const dariCOA=getFnKodeCOA(dariId);
   const keCOA=getFnKodeCOA(keId);
   const{data:coaDari}=await sb.from('coa').select('id,nama').eq('kode',dariCOA).single();
   const{data:coaKe}=await sb.from('coa').select('id,nama').eq('kode',keCOA).single();
+  if(!coaDari||!coaKe)throw new Error('Akun COA transfer belum tersedia');
   if(coaDari&&coaKe){
-    const tahun=new Date(tgl).getFullYear();
-    const{data:lastJ}=await sb.from('jurnal_umum')
-      .select('no_jurnal').like('no_jurnal',`JU-${tahun}-%`)
-      .order('no_jurnal',{ascending:false}).limit(1);
-    const last=lastJ?.[0]?.no_jurnal;
-    const num=last&&/\d+$/.test(last)?parseInt(last.match(/\d+$/)[0])+1:1;
-    const noJ=`JU-${tahun}-${String(num).padStart(3,'0')}`;
-    const{data:ju}=await sb.from('jurnal_umum').insert([{
-      no_jurnal:noJ,tanggal:tgl,
+    await simpanJurnalAtomik({tanggal:tgl,
       keterangan:`Transfer Kas: ${dariKas.nama} → ${keKas.nama} - ${ket}`,
       referensi:`TRF-${dariId}-${keId}-${Date.now()}`,
       total_debit:jumlah,total_kredit:jumlah,status:'posted',operator:CU.username
-    }]).select().single();
-    if(ju){
-      await sb.from('jurnal_detail').insert([
-        {jurnal_id:ju.id,coa_id:coaKe.id,kode_akun:keCOA,nama_akun:coaKe.nama,debit:jumlah,kredit:0},
-        {jurnal_id:ju.id,coa_id:coaDari.id,kode_akun:dariCOA,nama_akun:coaDari.nama,debit:0,kredit:jumlah}
-      ]);
-    }
+    },[
+        {coa_id:coaKe.id,kode_akun:keCOA,nama_akun:coaKe.nama,debit:jumlah,kredit:0},
+        {coa_id:coaDari.id,kode_akun:dariCOA,nama_akun:coaDari.nama,debit:0,kredit:jumlah}
+    ]);
   }
 
   closeModal('modal-transfer-kas');await refreshAll();
   toast(`✅ Transfer ${rp(jumlah)} dari ${dariKas.nama} ke ${keKas.nama} berhasil!`);
+  }catch(error){
+    toast("Proses kas belum selesai: "+error.message+". Muat ulang dan periksa mutasi serta jurnal sebelum mengulang.",true);
+  }finally{if(button)button.disabled=false;}
 }
 
 // ═══ TUTUP BUKU ═══════════════════════════════════════════
