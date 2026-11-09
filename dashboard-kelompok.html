@@ -36659,29 +36659,35 @@ ${body}
     });
     return [...g.values()].sort((a,b)=>String(b.start).localeCompare(String(a.start)));
   }
+  // Report-only inference: missing attendance within the same class/scope is TH.
+  // Never infer attendance across groups or dates without a finished class.
   function pivotClass83(rows,className){
     const ss=window.ppg98ReportRows(rows).filter(s=>s.className===className).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    const dates=[...new Set(ss.map(s=>s.date))].sort();const people=new Map();
+    const dates=[...new Set(ss.map(s=>s.date))].sort(),people=new Map(),scopeDates=new Map();
+    const priority={'Hadir':6,'Terlambat':5,'Izin':4,'Sakit':3,'Tidak Hadir':2};
+    ss.forEach(s=>{
+      const scope=String(s.scope||'');
+      if(!scopeDates.has(scope))scopeDates.set(scope,new Set());
+      scopeDates.get(scope).add(s.date);
+      (s.students||[]).forEach(x=>{
+        const id=String(x.did||x.nama||'');if(!id)return;
+        const key=JSON.stringify([scope,id]);
+        if(!people.has(key))people.set(key,{nama:x.nama||'-',kind:(x.kind==='simpatisan'||id.startsWith('SYM-'))?'simpatisan':'jamaah',scope,st:{}});
+        const raw=String(x.status||'').trim();
+        const st=priority[raw]?raw:'Tidak Hadir';
+        const p=people.get(key),old=p.st[s.date];
+        if(!old||priority[st]>priority[old])p.st[s.date]=st;
+      });
+    });
     let recorded=0,attended=0;
-    ss.forEach(s=>(s.students||[]).forEach(x=>{
-      const id=String(x.did||x.nama||'');if(!people.has(id))people.set(id,{nama:x.nama||'-',kind:(x.kind==='simpatisan'||id.startsWith('SYM-'))?'simpatisan':'jamaah',st:{}});
-      const st=String(x.status||'—');
-      const priority={'Hadir':6,'Terlambat':5,'Izin':4,'Sakit':3,'Tidak Hadir':2,'Belum Hadir':1};
-      const old=people.get(id).st[s.date];
-      if(!old||(priority[st]||0)>(priority[old]||0))people.get(id).st[s.date]=st;
-      if(st && st!=='—'){
-        recorded++;
-        if(st==='Hadir'||st==='Terlambat')attended++;
-      }
-    }));
-    recorded=0;attended=0;
-    people.forEach(p=>Object.values(p.st).forEach(st=>{if(st&&st!=='—'){recorded++;if(st==='Hadir'||st==='Terlambat')attended++}}));
+    people.forEach(p=>{
+      scopeDates.get(p.scope).forEach(d=>{if(!p.st[d])p.st[d]='Tidak Hadir';});
+      Object.values(p.st).forEach(st=>{recorded++;if(st==='Hadir'||st==='Terlambat')attended++;});
+    });
     return {
       dates,
       people:[...people.values()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id')),
-      sessions:ss.length,
-      recorded,
-      attended,
+      sessions:ss.length,recorded,attended,
       attendancePct:recorded?Math.round(attended/recorded*100):0
     };
   }
@@ -36702,7 +36708,7 @@ ${body}
       <div class="ppg83-legend">
         <span>H = Hadir</span><span>I = Izin</span><span>S = Sakit</span>
         <span>TH = Tidak Hadir</span><span>BH = Belum Hadir</span><span>T = Terlambat</span>
-        <span>% = (H + T) ÷ pertemuan tercatat</span>
+        <span>— = tidak ada pertemuan kelas pada kelompok siswa</span><span>% = (H + T) ÷ pertemuan kelas selesai × 100%. I, S, dan TH termasuk pembagi.</span>
       </div>
       ${periods.map(p=>{
         const used=[...new Set(p.rows.map(s=>s.className))].sort((a,b)=>{
