@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>Dashboard Kelompok v104 · UBAID v1.1 - Powered by UBNB</title>
+<title>Dashboard Kelompok v104 · UBAID v2.0 - Powered by UBNB</title>
 <style>
 :root{
   --green:#1a6640;--green-dark:#0f4428;--green-light:#e8f5ee;
@@ -36659,35 +36659,29 @@ ${body}
     });
     return [...g.values()].sort((a,b)=>String(b.start).localeCompare(String(a.start)));
   }
-  // Report-only inference: missing attendance within the same class/scope is TH.
-  // Never infer attendance across groups or dates without a finished class.
   function pivotClass83(rows,className){
     const ss=window.ppg98ReportRows(rows).filter(s=>s.className===className).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    const dates=[...new Set(ss.map(s=>s.date))].sort(),people=new Map(),scopeDates=new Map();
-    const priority={'Hadir':6,'Terlambat':5,'Izin':4,'Sakit':3,'Tidak Hadir':2};
-    ss.forEach(s=>{
-      const scope=String(s.scope||'');
-      if(!scopeDates.has(scope))scopeDates.set(scope,new Set());
-      scopeDates.get(scope).add(s.date);
-      (s.students||[]).forEach(x=>{
-        const id=String(x.did||x.nama||'');if(!id)return;
-        const key=JSON.stringify([scope,id]);
-        if(!people.has(key))people.set(key,{nama:x.nama||'-',kind:(x.kind==='simpatisan'||id.startsWith('SYM-'))?'simpatisan':'jamaah',scope,st:{}});
-        const raw=String(x.status||'').trim();
-        const st=priority[raw]?raw:'Tidak Hadir';
-        const p=people.get(key),old=p.st[s.date];
-        if(!old||priority[st]>priority[old])p.st[s.date]=st;
-      });
-    });
+    const dates=[...new Set(ss.map(s=>s.date))].sort();const people=new Map();
     let recorded=0,attended=0;
-    people.forEach(p=>{
-      scopeDates.get(p.scope).forEach(d=>{if(!p.st[d])p.st[d]='Tidak Hadir';});
-      Object.values(p.st).forEach(st=>{recorded++;if(st==='Hadir'||st==='Terlambat')attended++;});
-    });
+    ss.forEach(s=>(s.students||[]).forEach(x=>{
+      const id=String(x.did||x.nama||'');if(!people.has(id))people.set(id,{nama:x.nama||'-',kind:(x.kind==='simpatisan'||id.startsWith('SYM-'))?'simpatisan':'jamaah',st:{}});
+      const st=String(x.status||'—');
+      const priority={'Hadir':6,'Terlambat':5,'Izin':4,'Sakit':3,'Tidak Hadir':2,'Belum Hadir':1};
+      const old=people.get(id).st[s.date];
+      if(!old||(priority[st]||0)>(priority[old]||0))people.get(id).st[s.date]=st;
+      if(st && st!=='—'){
+        recorded++;
+        if(st==='Hadir'||st==='Terlambat')attended++;
+      }
+    }));
+    recorded=0;attended=0;
+    people.forEach(p=>Object.values(p.st).forEach(st=>{if(st&&st!=='—'){recorded++;if(st==='Hadir'||st==='Terlambat')attended++}}));
     return {
       dates,
       people:[...people.values()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id')),
-      sessions:ss.length,recorded,attended,
+      sessions:ss.length,
+      recorded,
+      attended,
       attendancePct:recorded?Math.round(attended/recorded*100):0
     };
   }
@@ -36708,7 +36702,7 @@ ${body}
       <div class="ppg83-legend">
         <span>H = Hadir</span><span>I = Izin</span><span>S = Sakit</span>
         <span>TH = Tidak Hadir</span><span>BH = Belum Hadir</span><span>T = Terlambat</span>
-        <span>— = tidak ada pertemuan kelas pada kelompok siswa</span><span>% = (H + T) ÷ pertemuan kelas selesai × 100%. I, S, dan TH termasuk pembagi.</span>
+        <span>% = (H + T) ÷ pertemuan tercatat</span>
       </div>
       ${periods.map(p=>{
         const used=[...new Set(p.rows.map(s=>s.className))].sort((a,b)=>{
@@ -38438,51 +38432,84 @@ body.nav39-ready .modal-overlay{z-index:40000!important}
 </body>
 </html>
 
+<style>
+#ubaid-dialog{--ub-green:var(--green,#1a6640);--ub-dark:var(--green-dark,#0f4428);--ub-light:var(--green-light,#e8f5ee);font-family:inherit;color:#243b30;background:#f5f8f6;width:min(800px,calc(100vw - 28px));max-width:100%;max-height:90dvh;margin:auto;padding:0;border:1px solid #c7d9cc;border-radius:14px;box-shadow:0 24px 80px #092b2340;overflow:auto;font-size:14px;text-align:left}
+#ubaid-dialog::backdrop{background:rgba(10,35,25,.48)}#ubaid-dialog *{box-sizing:border-box}#ubaid-dialog [hidden]{display:none!important}#ubaid-dialog .ub-head{background:linear-gradient(120deg,var(--ub-dark),var(--ub-green));padding:22px 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:18px;color:white}#ubaid-dialog .ub-eyebrow{font-size:10px;font-weight:700;letter-spacing:.9px;color:#c9e4d3;margin-bottom:7px}#ubaid-dialog h2{font-size:23px;font-weight:800;margin:0;color:inherit;line-height:1.3}#ubaid-dialog .ub-head p{font-size:13px;color:#e0f0e5;margin:7px 0 0;line-height:1.5}#ubaid-dialog .ub-body{padding:22px 24px}#ubaid-dialog button{font-family:inherit;font-size:13px;font-weight:700;line-height:1.35;min-height:40px;padding:10px 14px;border:1px solid #bfd3c5;border-radius:7px;background:#fff;color:var(--ub-dark);cursor:pointer;transition:background .15s}#ubaid-dialog button:hover{background:var(--ub-light)}#ubaid-dialog button:focus-visible,#ubaid-dialog input:focus-visible{outline:3px solid #8ac8a6;outline-offset:2px}#ubaid-dialog button:disabled{opacity:.5;cursor:wait}#ubaid-dialog .ub-head-close{background:#ffffff18;color:#fff;border-color:#ffffff55;flex-shrink:0}#ubaid-dialog .ub-head-close:hover{background:#ffffff30}#ubaid-dialog .ub-primary{background:var(--ub-green);color:white;border-color:var(--ub-green)}#ubaid-dialog .ub-primary:hover{background:var(--ub-dark)}#ubaid-dialog .ub-danger{background:#fff;color:#a43535;border-color:#e3bcbc}#ubaid-dialog .ub-danger:hover{background:#fff0f0}#ubaid-dialog .ub-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:22px}#ubaid-dialog .ub-stat{display:flex;align-items:center;gap:10px;padding:13px 16px;background:#fff;border:1px solid #d8e5dc;border-radius:9px}#ubaid-dialog .ub-stat strong{font-size:23px;line-height:1.1;color:var(--ub-dark)}#ubaid-dialog .ub-stat span{font-size:12px;color:#61796b}#ubaid-dialog .ub-stat-online{background:var(--ub-light);border-color:#bcdcc8}#ubaid-dialog .ub-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}#ubaid-dialog h3{font-size:16px;line-height:1.4;color:var(--ub-dark);font-weight:800;margin:0 0 5px}#ubaid-dialog p{margin:7px 0;line-height:1.55}#ubaid-dialog .ub-toolbar p{font-size:12px;color:#62766b;max-width:340px;margin:4px 0 0}#ubaid-dialog .ub-actions{display:flex;flex-wrap:wrap;gap:8px}#ubaid-dialog .ub-notice{font-size:12px;padding:11px 13px;border:1px solid #cce1d3;background:#edf6ef;border-radius:7px;line-height:1.5;margin-bottom:14px}#ubaid-dialog .ub-notice[data-error=true]{color:#973737;border-color:#e9c3c3;background:#fff2f2}#ubaid-dialog .ub-list{display:grid;gap:12px}#ubaid-dialog .ub-device{border:1px solid #d5e2d9;border-left:4px solid var(--ub-green);border-radius:9px;background:white;padding:17px}#ubaid-dialog .ub-device-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}#ubaid-dialog .ub-device h3{font-size:17px;margin:0 0 5px}#ubaid-dialog code{display:block;font:12px ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all;color:#526b5c;line-height:1.6}#ubaid-dialog .ub-badge{font-size:11px;font-weight:700;white-space:nowrap;padding:5px 9px;border-radius:99px;border:1px solid transparent}#ubaid-dialog .ub-online{color:#17623e;background:#e6f6ec;border-color:#bddfc9}#ubaid-dialog .ub-offline{color:#6a7470;background:#f0f2f1;border-color:#dbe2de}#ubaid-dialog .ub-archived{color:#8b4b37;background:#fff0e8;border-color:#ecd1c4}#ubaid-dialog .ub-muted{color:#6b7e72;font-size:12px}#ubaid-dialog .ub-device-actions{display:flex;flex-wrap:wrap;gap:8px;border-top:1px solid #edf1ee;padding-top:12px;margin-top:13px}#ubaid-dialog .ub-push{margin-left:auto}#ubaid-dialog .ub-assignment{font-size:12px;background:#f0f7f2;border-radius:6px;padding:7px 9px;color:#326048}#ubaid-dialog .ub-panel,#ubaid-dialog .ub-confirm,#ubaid-dialog .ub-secret{background:#fff;border:1px solid #c9ddd0;border-radius:9px;padding:17px;margin:14px 0}#ubaid-dialog .ub-confirm{border-color:#e1c2b8;background:#fff9f6}#ubaid-dialog .ub-confirm p{font-size:13px;color:#6e544b}#ubaid-dialog .ub-confirm code{margin-top:4px}#ubaid-dialog .ub-secret{background:#fffbec;border-color:#e9d99f}#ubaid-dialog label{display:block;font-size:12px;font-weight:700;margin:12px 0 7px}#ubaid-dialog input{width:100%;font-family:inherit;font-size:14px;color:#243b30;padding:11px 12px;border:1px solid #b8cebf;border-radius:6px;background:#fff;margin:5px 0 12px}#ubaid-dialog .ub-empty{padding:24px;text-align:center;border:1px dashed #c6d6cb;border-radius:8px;color:#6a8071;background:#fff}#ubaid-dialog details{margin-top:20px;border-top:1px solid #d9e3dc;padding-top:14px}#ubaid-dialog summary{font-size:13px;font-weight:700;color:var(--ub-dark);cursor:pointer;padding:5px 0}#ubaid-dialog .ub-footer{font-size:11px;line-height:1.6;color:#718376;margin-top:18px;border-top:1px solid #dfe7e1;padding-top:12px}@media(max-width:600px){#ubaid-dialog{width:calc(100vw - 16px);max-height:95dvh;border-radius:10px}#ubaid-dialog .ub-head,#ubaid-dialog .ub-body{padding:16px}#ubaid-dialog h2{font-size:20px}#ubaid-dialog .ub-eyebrow{font-size:9px}#ubaid-dialog .ub-toolbar{display:block}#ubaid-dialog .ub-toolbar>.ub-actions{margin-top:12px}#ubaid-dialog .ub-toolbar>.ub-actions button{flex:1}#ubaid-dialog .ub-stat{display:block;padding:12px}#ubaid-dialog .ub-stat span{display:block;margin-top:4px}#ubaid-dialog .ub-device{padding:13px}#ubaid-dialog .ub-device-actions button{flex:1}#ubaid-dialog .ub-device-actions .ub-push{margin-left:0}#ubaid-dialog .ub-badge{padding:5px 7px}}
+
+#ubaid-dialog .ub-head h2{background:transparent;border:0;padding:0;text-align:left;color:#fff;font-size:23px!important;box-shadow:none}@media(max-width:600px){#ubaid-dialog .ub-head h2{font-size:20px!important}}
+
+</style>
 <script>
-/* UBAID v1 - pengelolaan registry dan penugasan acara */
+/* UBAID settings v2.0 - scoped dashboard theme, recoverable device deletion */
 let ubaidEventId=null,ubaidBusy=false;
+let ubaidData={devices:[],archived_devices:[]};
+const ubaidEl=id=>document.getElementById(id);
+function ubaidMsg(text,error=false){const m=ubaidEl('ubaid-message');if(!m)return;m.textContent=text;m.dataset.error=String(error);}
+function ubaidSetBusy(value){ubaidBusy=value;const d=ubaidEl('ubaid-dialog');if(d)d.querySelectorAll('button,input').forEach(b=>b.disabled=value);}
 async function ubaidRpc(action,extra={}){
- const snap=await getAttendanceSnapshot(true);if(!snap)throw Error('Login pengurus diperlukan');
+ if(!DK_ATT_TOKEN){const snap=await getAttendanceSnapshot(true);if(!snap)throw Error('Login pengurus diperlukan');}
  const {data,error}=await sb.rpc('ubaid_admin',{p_token:DK_ATT_TOKEN,p_action:action,p_kegiatan_id:ubaidEventId,...extra});
- if(error||!data?.ok)throw Error(error?.message||data?.error||'UBAID gagal');return data;
+ if(error||!data?.ok)throw Error(error?.message||data?.error||'Permintaan UBAID gagal');return data;
 }
+function ubaidClearSecret(){const b=ubaidEl('ubaid-secret');if(b){b.replaceChildren();b.hidden=true;}}
+function ubaidClose(){if(ubaidBusy)return;ubaidClearSecret();ubaidEl('ubaid-form').hidden=true;ubaidEl('ubaid-confirm').hidden=true;ubaidEl('ubaid-dialog').close();}
 function ubaidDialog(){
- let d=document.getElementById('ubaid-dialog');if(d)return d;
- d=document.createElement('dialog');d.id='ubaid-dialog';d.style.cssText='width:min(720px,95vw);max-height:90vh;margin:auto;padding:20px;border:1px solid #ccc;border-radius:12px;overflow:auto';
- d.innerHTML='<div style="display:flex;justify-content:space-between"><h2>UBAID · Mesin Absen</h2><button id="ubaid-close">Tutup</button></div><p id="ubaid-context"></p><p id="ubaid-message" role="status"></p><button id="ubaid-refresh">Segarkan status</button> <button id="ubaid-create">Daftarkan alat baru</button><section id="ubaid-secret" hidden style="padding:12px;background:#fff4d1;margin:12px 0"></section><div id="ubaid-list"></div>';
- document.body.appendChild(d);d.querySelector('#ubaid-close').onclick=()=>d.close();d.querySelector('#ubaid-refresh').onclick=ubaidLoad;d.querySelector('#ubaid-create').onclick=ubaidRegister;return d;
+ let d=ubaidEl('ubaid-dialog');if(d)return d;
+ d=document.createElement('dialog');d.id='ubaid-dialog';d.setAttribute('aria-labelledby','ubaid-title');
+ d.innerHTML=`<header class="ub-head"><div><div class="ub-eyebrow">DATABASE PERWIRA · PENGATURAN PERANGKAT</div><h2 id="ubaid-title">UBAID · Mesin Absen</h2><p id="ubaid-context"></p></div><button id="ubaid-close" class="ub-head-close" type="button" aria-label="Tutup pengaturan UBAID">Tutup</button></header>
+ <div class="ub-body"><div class="ub-summary" id="ubaid-summary"></div>
+ <div class="ub-toolbar"><div><h3>Daftar alat</h3><p>Nomor register tetap. Label dapat disesuaikan dengan lokasi penggunaan.</p></div><div class="ub-actions"><button id="ubaid-refresh" type="button">↻ Segarkan</button><button id="ubaid-create" class="ub-primary" type="button">＋ Daftarkan alat</button></div></div>
+ <div id="ubaid-message" class="ub-notice" role="status" aria-live="polite"></div>
+ <form id="ubaid-form" class="ub-panel" hidden><h3 id="ubaid-form-title"></h3><label for="ubaid-label">Label alat</label><input id="ubaid-label" maxlength="80" required placeholder="Contoh: Kelompok 4 atau Desa" autocomplete="off"><div class="ub-actions"><button id="ubaid-form-save" type="submit" class="ub-primary">Simpan</button><button id="ubaid-form-cancel" type="button">Batal</button></div></form>
+ <section id="ubaid-secret" class="ub-secret" hidden></section>
+ <section id="ubaid-confirm" class="ub-confirm" hidden><h3 id="ubaid-confirm-title"></h3><strong id="ubaid-confirm-label"></strong><code id="ubaid-confirm-reg"></code><p id="ubaid-confirm-info"></p><div class="ub-actions"><button id="ubaid-confirm-yes" class="ub-danger" type="button">Hapus alat</button><button id="ubaid-confirm-no" type="button">Batal</button></div></section>
+ <div id="ubaid-list" class="ub-list"></div>
+ <details id="ubaid-archive" hidden><summary id="ubaid-archive-title">Arsip alat</summary><p class="ub-muted">Alat yang dihapus tidak bisa terhubung. Pulihkan bila ingin menggunakan register yang sama.</p><div id="ubaid-archive-list" class="ub-list"></div></details>
+ <footer class="ub-footer">UBAID v2.0 · Alat offline tetap dapat dipilih untuk acara. Penugasan berlaku per tanggal acara.</footer></div>`;
+ document.body.append(d);
+ ubaidEl('ubaid-close').onclick=ubaidClose;d.addEventListener('cancel',e=>{e.preventDefault();ubaidClose();});
+ ubaidEl('ubaid-refresh').onclick=ubaidLoad;ubaidEl('ubaid-create').onclick=ubaidRegister;
+ ubaidEl('ubaid-form-cancel').onclick=()=>{ubaidEl('ubaid-form').hidden=true;};
+ ubaidEl('ubaid-confirm-no').onclick=()=>{ubaidEl('ubaid-confirm').hidden=true;};
+ return d;
 }
 async function ubaidOpen(eventId=null){
+ if(ubaidBusy)return;
  if(!canManageCalendar()){toast('Akses pengelolaan Acara diperlukan',true);return;}
  ubaidEventId=eventId?Number(eventId):null;const d=ubaidDialog();
  const e=(aKegiatan||[]).find(x=>Number(x.id)===ubaidEventId);
- document.getElementById('ubaid-context').textContent=e?'Penugasan: '+e.acara_nama+' · '+e.tanggal:'Daftar alat. Pilih UBAID dari detail Acara untuk menugaskan.';
- document.getElementById('ubaid-secret').hidden=true;document.getElementById('ubaid-secret').replaceChildren();
+ ubaidEl('ubaid-context').textContent=e?'Pilih alat untuk '+e.acara_nama+' · '+e.tanggal:'Kelola identitas dan koneksi mesin absen desa.';
+ ubaidClearSecret();ubaidEl('ubaid-form').hidden=true;ubaidEl('ubaid-confirm').hidden=true;
  if(!d.open)d.showModal();await ubaidLoad();
 }
-async function ubaidLoad(){
- if(ubaidBusy)return;ubaidBusy=true;const msg=document.getElementById('ubaid-message');msg.textContent='Memuat…';
- try{const r=await ubaidRpc('list');const list=document.getElementById('ubaid-list');list.replaceChildren();
-  for(const x of r.devices||[]){const c=document.createElement('section');c.style.cssText='padding:14px;border:1px solid #ddd;border-radius:8px;margin:12px 0';
-   const title=document.createElement('h3');title.textContent=x.label_name;c.appendChild(title);
-   const info=document.createElement('p');info.textContent=x.register_no+' · '+(x.online?'Online':'Offline')+' · Terakhir terhubung: '+(x.last_seen?new Date(x.last_seen).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})+' WIB':'Belum pernah');c.appendChild(info);
-   for(const a of x.assignments||[]){const p=document.createElement('p');p.textContent='Ditugaskan: '+a.acara_nama+' · '+a.tanggal;c.appendChild(p);}
-   const rename=document.createElement('button');rename.textContent='Ubah label';rename.onclick=async()=>{const n=prompt('Label baru (nomor register tetap):',x.label_name);if(n===null)return;await ubaidAction('rename',{p_device_id:x.id,p_label:n})};c.appendChild(rename);
-   if(ubaidEventId){const b=document.createElement('button');b.style.marginLeft='8px';b.textContent=x.assigned?'Lepaskan dari acara ini':'Pilih untuk acara ini';b.onclick=()=>ubaidAction(x.assigned?'unassign':'assign',{p_device_id:x.id});c.appendChild(b);}
-   list.appendChild(c);
-  }
-  if(!r.devices?.length)list.textContent='Belum ada alat terdaftar di lingkup Anda.';
-  msg.textContent='Semua alat ditampilkan, termasuk yang offline. Penugasan awal berlaku per tanggal acara.';
- }catch(e){msg.textContent=e.message}finally{ubaidBusy=false}
+function ubaidButton(label,handler,cls=''){const b=document.createElement('button');b.type='button';b.textContent=label;b.className=cls;b.onclick=handler;return b;}
+function ubaidWhen(value){if(!value)return 'Belum pernah terhubung';const dt=new Date(value);return Number.isNaN(dt.getTime())?'Belum tersedia':dt.toLocaleString('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})+' WIB';}
+function ubaidRender(){
+ const active=ubaidData.devices||[],archived=ubaidData.archived_devices||[];const summary=ubaidEl('ubaid-summary');summary.replaceChildren();
+ for(const [label,count,cls] of [['Terdaftar',active.length,''],['Online',active.filter(x=>x.enabled&&x.online).length,'ub-stat-online'],['Offline',active.filter(x=>!x.enabled||!x.online).length,'']]){const box=document.createElement('div');box.className='ub-stat '+cls;const v=document.createElement('strong');v.textContent=count;const l=document.createElement('span');l.textContent=label;box.append(v,l);summary.append(box);}
+ const render=(x,isArchive)=>{
+  const card=document.createElement('section');card.className='ub-device';
+  const head=document.createElement('div');head.className='ub-device-head';const text=document.createElement('div');const title=document.createElement('h3');title.textContent=x.label_name;const reg=document.createElement('code');reg.textContent=x.register_no;text.append(title,reg);
+  const badge=document.createElement('span');const online=!isArchive&&x.enabled&&x.online;badge.className='ub-badge '+(online?'ub-online':isArchive?'ub-archived':'ub-offline');badge.textContent=isArchive?'Dihapus':online?'● Online':'○ Offline';head.append(text,badge);card.append(head);
+  const seen=document.createElement('p');seen.className='ub-muted';seen.textContent=(isArchive?'Dihapus: '+ubaidWhen(x.deleted_at):'Terakhir terhubung: '+ubaidWhen(x.last_seen));card.append(seen);
+  if(!isArchive){for(const a of x.assignments||[]){const p=document.createElement('p');p.className='ub-assignment';p.textContent=a.acara_nama+' · '+a.tanggal;card.append(p);}}
+  const actions=document.createElement('div');actions.className='ub-device-actions';
+  if(isArchive){actions.append(ubaidButton('Pulihkan alat',()=>ubaidConfirm('restore',x),'ub-primary'));}
+  else{
+   actions.append(ubaidButton('Ubah label',()=>ubaidForm('rename',x)));
+   if(ubaidEventId)actions.append(ubaidButton(x.assigned?'Lepaskan dari acara':'Pilih untuk acara ini',()=>ubaidAction(x.assigned?'unassign':'assign',{p_device_id:x.id}),x.assigned?'':'ub-primary'));
+   actions.append(ubaidButton('Hapus alat',()=>ubaidConfirm('delete',x),'ub-danger ub-push'));
+  }card.append(actions);return card;
+ };
+ const list=ubaidEl('ubaid-list');list.replaceChildren();active.forEach(x=>list.append(render(x,false)));
+ if(!active.length){const e=document.createElement('div');e.className='ub-empty';e.textContent='Belum ada alat aktif. Daftarkan alat baru atau pulihkan dari arsip.';list.append(e);}
+ ubaidEl('ubaid-archive').hidden=!archived.length;ubaidEl('ubaid-archive-title').textContent='Arsip alat ('+archived.length+')';const ar=ubaidEl('ubaid-archive-list');ar.replaceChildren();archived.forEach(x=>ar.append(render(x,true)));
 }
-async function ubaidAction(action,args){if(ubaidBusy)return;ubaidBusy=true;try{await ubaidRpc(action,args);document.getElementById('ubaid-message').textContent='Tersimpan';}catch(e){document.getElementById('ubaid-message').textContent=e.message;ubaidBusy=false;return;}ubaidBusy=false;await ubaidLoad();}
-async function ubaidRegister(){
- if(ubaidBusy)return;const name=prompt('Label alat baru, misalnya Kelompok 4 atau Desa:');if(name===null)return;
- ubaidBusy=true;try{const r=await ubaidRpc('register',{p_label:name});const box=document.getElementById('ubaid-secret');box.replaceChildren();box.hidden=false;
-  const p=document.createElement('p');p.textContent='Alat terdaftar. Salin nomor register dan kunci ini ke pengaturan UBAID. Kunci hanya ditampilkan sekali; jangan bagikan.';box.appendChild(p);
-  for(const [label,value] of [['Nomor register',r.register_no],['Kunci alat',r.device_key]]){const l=document.createElement('label');l.textContent=label;const i=document.createElement('input');i.readOnly=true;i.value=value;i.style.cssText='display:block;width:100%;margin:8px 0;padding:10px;box-sizing:border-box';i.onclick=()=>i.select();l.appendChild(i);box.appendChild(l);}
- }catch(e){document.getElementById('ubaid-message').textContent=e.message}finally{ubaidBusy=false}
- await ubaidLoad();
-}
+async function ubaidLoad(){if(ubaidBusy)return;ubaidSetBusy(true);ubaidMsg('Memuat daftar alat…');try{ubaidData=await ubaidRpc('list');ubaidRender();ubaidMsg('Status diperbarui. Pilih alat dari detail acara untuk menugaskan.');}catch(e){ubaidMsg(e.message,true);}finally{ubaidSetBusy(false);}}
+async function ubaidAction(action,args){if(ubaidBusy)return;ubaidSetBusy(true);try{ubaidData=await ubaidRpc(action,args);ubaidRender();ubaidEl('ubaid-confirm').hidden=true;ubaidMsg(action==='delete'?'Alat dihapus dari daftar aktif. Riwayat absensi tetap tersimpan.':action==='restore'?'Alat dipulihkan. Penugasan acara perlu dipilih kembali.':'Perubahan tersimpan.');}catch(e){ubaidMsg(e.message,true);}finally{ubaidSetBusy(false);}}
+function ubaidConfirm(action,x){if(ubaidBusy)return;ubaidClearSecret();ubaidEl('ubaid-form').hidden=true;const restore=action==='restore';ubaidEl('ubaid-confirm').hidden=false;ubaidEl('ubaid-confirm-title').textContent=restore?'Pulihkan register alat?':'Hapus register alat ini?';ubaidEl('ubaid-confirm-label').textContent=x.label_name;ubaidEl('ubaid-confirm-reg').textContent=x.register_no;ubaidEl('ubaid-confirm-info').textContent=restore?'Nomor register dan kunci alat tetap sama. Alat dapat terhubung kembali; penugasan acara lama tidak diaktifkan ulang.':'Alat dinonaktifkan dan semua penugasan dilepas. Riwayat absensi tetap tersimpan. Alat dapat dipulihkan melalui arsip.';const yes=ubaidEl('ubaid-confirm-yes');yes.textContent=restore?'Ya, pulihkan alat':'Ya, hapus alat';yes.className=restore?'ub-primary':'ub-danger';yes.onclick=()=>ubaidAction(action,{p_device_id:x.id});ubaidEl('ubaid-confirm').scrollIntoView({block:'nearest',behavior:'smooth'});ubaidEl('ubaid-confirm-no').focus();}
+function ubaidForm(action,x=null){if(ubaidBusy)return;ubaidClearSecret();ubaidEl('ubaid-confirm').hidden=true;ubaidEl('ubaid-form').hidden=false;ubaidEl('ubaid-form-title').textContent=x?'Ubah label · '+x.register_no:'Daftarkan alat baru';const input=ubaidEl('ubaid-label');input.value=x?x.label_name:'';input.focus();ubaidEl('ubaid-form').onsubmit=async ev=>{ev.preventDefault();if(ubaidBusy)return;const name=input.value.trim();if(!name){input.focus();return;}ubaidSetBusy(true);try{const r=await ubaidRpc(action,{p_label:name,...(x?{p_device_id:x.id}:{})});ubaidEl('ubaid-form').hidden=true;if(action==='register'){ubaidShowSecret(r);ubaidData=await ubaidRpc('list');}else ubaidData=r;ubaidRender();ubaidMsg(action==='register'?'Alat terdaftar. Simpan nomor register dan kunci sebelum menutup halaman ini.':'Label diperbarui; nomor register tetap.');}catch(e){ubaidMsg(e.message,true);}finally{ubaidSetBusy(false);}};}
+function ubaidRegister(){ubaidForm('register');}
+function ubaidShowSecret(r){const box=ubaidEl('ubaid-secret');box.replaceChildren();box.hidden=false;const p=document.createElement('p');p.textContent='Simpan kunci alat sekarang. Kunci hanya ditampilkan sekali dan diperlukan untuk memasangkan ESP32.';box.append(p);for(const [label,value] of [['Nomor register',r.register_no],['Kunci alat',r.device_key]]){const l=document.createElement('label');l.textContent=label;const i=document.createElement('input');i.readOnly=true;i.value=value;i.autocomplete='off';i.spellcheck=false;i.onclick=()=>i.select();l.append(i);box.append(l);}}
 
 </script>
