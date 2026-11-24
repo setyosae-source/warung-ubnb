@@ -115,6 +115,38 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-group .pu-signatures .pu-sign-space{height:44px}
 }`;
 document.body.append(reportStyle);
+const mobileStyle=document.createElement('style');
+mobileStyle.textContent=`@media screen and (max-width:1024px){
+  .pu-panel{padding:10px}
+  .pu-preview{overflow:visible}
+  .pu-report.pu-excel{width:100%;max-width:none;font-size:12px}
+  .pu-excel h2{font-size:17px;line-height:1.2}
+  .pu-excel .pu-sub,.pu-excel .pu-meta{font-size:11px;line-height:1.35}
+  .pu-excel .pu-block{max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-inline:contain;border:1px solid #d5ded5;border-radius:5px;margin:12px 0}
+  .pu-excel .pu-block::before{content:'Geser tabel ke samping →';display:block;position:sticky;left:0;width:max-content;padding:4px 7px;color:#3c664a;background:#eaf4e9;font-size:11px;font-weight:600;z-index:5}
+  .pu-excel .pu-excel-main{width:1403px;min-width:1403px;font-size:10px}
+  .pu-excel .pu-excel-main col.pu-col-no{width:36px}
+  .pu-excel .pu-excel-main col.pu-col-kelompok{width:155px}
+  .pu-excel .pu-excel-main col.pu-col-angka{width:38px}
+  .pu-excel .pu-excel-main col.pu-col-persenan{width:110px}
+  .pu-excel .pu-excel-main th{font-size:9px;line-height:1.2;overflow-wrap:normal;word-break:normal;padding:5px 2px}
+  .pu-excel .pu-excel-main td{font-size:10px;line-height:1.25;white-space:nowrap;overflow-wrap:normal;padding:6px 2px}
+  .pu-excel .pu-excel-main td.pu-left{font-size:11px;white-space:normal;overflow-wrap:normal;word-break:normal}
+  .pu-village .pu-excel-main thead tr:first-child th:first-child,.pu-village .pu-excel-main tbody td:first-child{position:sticky;left:0;background:#edf5e8;z-index:2}
+  .pu-village .pu-excel-main thead tr:first-child th:nth-child(2),.pu-village .pu-excel-main tbody tr:not(.pu-total) td:nth-child(2){position:sticky;left:36px;background:#fff;z-index:2}
+  .pu-village .pu-excel-main thead tr:first-child th:nth-child(2){background:#d9e8cf}
+  .pu-village .pu-excel-main tbody .pu-total td:first-child{background:#edf5ed}
+  .pu-group .pu-excel-main thead tr:first-child th:first-child,.pu-group .pu-excel-main tbody td:first-child{position:sticky;left:0;background:#fff;z-index:2}
+  .pu-group .pu-excel-main thead tr:first-child th:first-child{background:#d9e8cf}
+  .pu-excel .pu-excel-detail{width:1000px;min-width:1000px;font-size:11px}
+  .pu-excel .pu-excel-detail th,.pu-excel .pu-excel-detail td{font-size:11px;padding:6px 4px;overflow-wrap:normal;word-break:normal}
+  .pu-excel .pu-excel-roster,.pu-excel .pu-excel-other{width:760px;min-width:760px;font-size:11px}
+  .pu-excel .pu-excel-roster th,.pu-excel .pu-excel-roster td,.pu-excel .pu-excel-other th,.pu-excel .pu-excel-other td{font-size:11px;line-height:1.35;padding:6px 5px;overflow-wrap:normal;word-break:normal}
+  .pu-excel .pu-signatures{font-size:11px}
+  #pu-editor-dialog{width:100%;padding:12px;overflow-x:auto}
+  #pu-editor-dialog table{min-width:520px}
+}`;
+document.body.append(mobileStyle);
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>{const v=Number(x);return x!==''&&x!==null&&x!==undefined&&Number.isFinite(v)?Math.max(0,Math.floor(v)):null};
 const shown=x=>x===null||x===undefined||x===''?'—':safe(x);
