@@ -66,28 +66,29 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-excel small,body.pu-print-mode #pu-print-sheet .pu-excel .pu-notes{font-size:6pt;margin:2px 0}
   body.pu-print-mode #pu-print-sheet .pu-excel .pu-sign{font-size:7pt;margin:2px 0}
   body.pu-print-mode #pu-print-sheet .pu-excel tr{break-inside:avoid}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-block{margin:8px 0}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-no{width:2.4%}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-kelompok{width:12%}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-angka{width:2.64%}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-persenan{width:9%}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main th,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main td{font-size:7.2pt;padding:3px 1px;line-height:1.18}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main tbody td{height:18px}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail th,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail td,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-roster th,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-roster td,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other th,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:8.5pt;padding:3px 2px;line-height:1.2}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail tbody td{height:20px}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures{font-size:8.5pt;margin-top:4px;break-inside:avoid;page-break-inside:avoid}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures .pu-sign-space{height:34px}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other th,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:7.2pt;padding:1.5px 2px;line-height:1.12}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{border-top:0;border-bottom:0}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other tr:last-child td{border-bottom:1px solid #333}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other{margin-bottom:0}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-block{margin:8px 0}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-no{width:2.4%}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-kelompok{width:12%}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-angka{width:2.64%}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-persenan{width:9%}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main th,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main td{font-size:7.2pt;padding:3px 1px;line-height:1.18}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main tbody td{height:18px}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-detail th,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-detail td,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-roster th,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-roster td,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other th,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other td{font-size:8.5pt;padding:3px 2px;line-height:1.2}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-detail tbody td{height:20px}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-signatures{font-size:8.5pt;margin-top:4px;break-inside:avoid;page-break-inside:avoid}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-signatures .pu-sign-space{height:34px}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other th,
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other td{font-size:7.2pt;padding:1.5px 2px;line-height:1.12}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other td{border-top:0;border-bottom:0}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other tr:last-child td{border-bottom:1px solid #333}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other{margin-bottom:0}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main col.pu-col-angka{width:2.72%}
 }`;
 document.body.append(reportStyle);
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -211,7 +212,7 @@ function render(snapshot){
   const categories=[['balita','BALITA'],['cbr','CBR / PAUD - SD'],['pra','PRA REMAJA'],['remaja','REMAJA'],['usia','USIA NIKAH'],['dewasa','DEWASA'],['total',desa?'TOTAL JAMAAH':'TOTAL JIWA JAMAAH']];
   const mainRow=(r,i)=>`<tr>${desa?`<td>${i+1}</td>`:''}<td class="pu-left">${safe(r.nama)}</td>${categories.map(([k])=>n2(r[k])).join('')}<td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${number(r.pengurus4s)||0}</td><td>${number(r.pengurus_lain)||0}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
   const totalRow=desa?`<tr class="pu-total"><td colspan="2">JUMLAH</td>${categories.map(([k])=>n2(t[k])).join('')}<td>${sum(rows,'janda')}</td><td>${sumProfile(rows,'janda_btn')}</td><td>${sumProfile(rows,'janda_trangan')}</td><td>${sumProfile(rows,'sub')}</td><td>${sum(rows,'kk')}</td><td>${sum(rows,'pengurus4s')}</td><td>${sum(rows,'pengurus_lain')}</td><td>${sum(rows,'pengurus')}</td><td>${sumProfile(rows,'persenan')}</td></tr>`:'';
-  const main=`<section class="pu-block"><table class="pu-excel-main" data-pu-sheet="Laporan">${desa?`<colgroup><col class="pu-col-no"><col class="pu-col-kelompok">${Array(29).fill('<col class="pu-col-angka">').join('')}<col class="pu-col-persenan"></colgroup>`:''}<thead><tr>${desa?'<th rowspan="3">NO</th>':''}<th rowspan="3">KELOMPOK</th><th colspan="21">JUMLAH JAMAAH</th><th colspan="3">JANDA</th><th rowspan="3">SUB</th><th rowspan="3">KK</th><th colspan="3">JUMLAH PENGURUS</th><th rowspan="3">PERSENAN</th></tr><tr>${categories.map(([,label])=>`<th colspan="3">${label}</th>`).join('')}<th rowspan="2">JML</th><th colspan="2">SIAP DIWAYUH</th><th rowspan="2">4-S</th><th rowspan="2">LAIN</th><th rowspan="2">JML</th></tr><tr>${categories.map(()=>'<th>L</th><th>P</th><th>J</th>').join('')}<th>BTN</th><th>TR-AN</th></tr></thead><tbody>${rows.map(mainRow).join('')}${totalRow}</tbody></table></section>`;
+  const main=`<section class="pu-block"><table class="pu-excel-main" data-pu-sheet="Laporan">${desa?`<colgroup><col class="pu-col-no"><col class="pu-col-kelompok">${Array(29).fill('<col class="pu-col-angka">').join('')}<col class="pu-col-persenan"></colgroup>`:`<colgroup><col class="pu-col-kelompok">${Array(29).fill('<col class="pu-col-angka">').join('')}<col class="pu-col-persenan"></colgroup>`}<thead><tr>${desa?'<th rowspan="3">NO</th>':''}<th rowspan="3">KELOMPOK</th><th colspan="21">JUMLAH JAMAAH</th><th colspan="3">JANDA</th><th rowspan="3">SUB</th><th rowspan="3">KK</th><th colspan="3">JUMLAH PENGURUS</th><th rowspan="3">PERSENAN</th></tr><tr>${categories.map(([,label])=>`<th colspan="3">${label}</th>`).join('')}<th rowspan="2">JML</th><th colspan="2">SIAP DIWAYUH</th><th rowspan="2">4-S</th><th rowspan="2">LAIN</th><th rowspan="2">JML</th></tr><tr>${categories.map(()=>'<th>L</th><th>P</th><th>J</th>').join('')}<th>BTN</th><th>TR-AN</th></tr></thead><tbody>${rows.map(mainRow).join('')}${totalRow}</tbody></table></section>`;
   const countMT=snapshot.mtDesa??sum(rows,'mt'),countMS=rows.every(r=>r.ms!==null)?sum(rows,'ms'):'—';
   const sarana=desa?`<section class="pu-block"><table class="pu-excel-detail" data-pu-sheet="Laporan"><thead><tr><th colspan="13">JUMLAH</th><th colspan="6">JUMLAH PENGAJIAN / BULAN</th></tr><tr><th rowspan="2">WAKIL DESA</th><th rowspan="2">KELOMPOK</th><th rowspan="2">SUB</th><th rowspan="2">KK</th><th rowspan="2">Masjid</th><th colspan="2">Jeding</th><th rowspan="2">Aula</th><th rowspan="2">Madrasah</th><th rowspan="2">Pondok</th><th rowspan="2">Sekolah</th><th rowspan="2">MT</th><th rowspan="2">MS</th><th rowspan="2">Desa</th><th rowspan="2">Muda-di</th><th rowspan="2">Ibu-ibu</th><th rowspan="2">Agny'</th><th rowspan="2">Muswrh</th><th rowspan="2">Organisasi</th></tr><tr><th>L</th><th>P</th></tr></thead><tbody><tr><td>${number(snapshot.wakilDesa)||0}</td><td>${GROUPS.length}</td><td>${sumProfile(rows,'sub')}</td><td>${sum(rows,'kk')}</td>${['masjid','jeding_l','jeding_p','aula','madrasah','pondok','sekolah'].map(k=>`<td>${sumKnownProfile(rows,k)}</td>`).join('')}<td>${countMT}</td><td>${countMS}</td>${['kegiatan_desa','kegiatan_mudadi','kegiatan_ibu','kegiatan_agnia','kegiatan_mus','kegiatan_organisasi'].map(k=>`<td>${shown(dp[k])}</td>`).join('')}</tr></tbody></table></section>`:
   `<section class="pu-block"><table class="pu-excel-detail" data-pu-sheet="Laporan"><thead><tr><th colspan="11">SARANA DAN PRASARANA</th><th colspan="6">KEGIATAN KELOMPOK / MINGGU</th></tr><tr><th rowspan="2">MASJID</th><th rowspan="2">AULA</th><th rowspan="2">MADRASAH</th><th colspan="2">JEDING</th><th rowspan="2">SEKOLAH</th><th rowspan="2">PONDOK</th><th rowspan="2">MT</th><th rowspan="2">MS</th><th rowspan="2">KAMAR MT</th><th rowspan="2">KAMAR TAMU</th><th rowspan="2">KLP</th><th rowspan="2">Mdadi</th><th rowspan="2">Cbr</th><th rowspan="2">Ibu2</th><th rowspan="2">5 Unsur</th><th rowspan="2">Msywrh</th></tr><tr><th>PUTRA</th><th>PUTRI</th></tr></thead><tbody><tr>${['masjid','aula','madrasah','jeding_l','jeding_p','sekolah','pondok'].map(k=>`<td>${numericCell(p,k)}</td>`).join('')}<td>${mubCell(group.mt)}</td><td>${mubCell(group.ms)}</td><td>${numericCell(p,'kamar_mt')}</td><td>${numericCell(p,'kamar_tamu')}</td>${['kegiatan_klp','kegiatan_mudadi','kegiatan_cbr','kegiatan_ibu','kegiatan_5unsur','kegiatan_mus'].map(k=>`<td>${shown(p[k])}</td>`).join('')}</tr></tbody></table>${p.kegiatan_lain?`<small>Kegiatan lain: ${safe(p.kegiatan_lain)}</small>`:''}<small>ANJURAN KAMAR MANDI PUTRA PUTRI TERPISAH, SEDANGKAN KAMAR MANDI PUTRI DAN TEMPAT WUDHUNYA KEADAAN TERTUTUP, DAN TEMPAT WUDHU PUTRI DIBERI CERMIN DAN TEMPAT CANTOLAN KERUDUNG.</small></section>`;
@@ -220,9 +221,9 @@ function render(snapshot){
   const normalRoster=`<section class="pu-block"><table class="pu-excel-roster" data-pu-sheet="Laporan"><thead><tr>${roles.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody><tr>${roles.map(([k])=>`<td class="pu-left">${off[k]?.length?off[k].map(safe).join('<br>'):'—'}</td>`).join('')}</tr></tbody></table></section>`;
   const otherRows=(items,label)=>items.length?`<tr><th class="pu-left" colspan="4">KEPENGURUSAN LAIN · ${label}</th></tr>${Array.from({length:Math.ceil(items.length/4)},(_,i)=>`<tr>${Array.from({length:4},(_,c)=>{const x=items[c*Math.ceil(items.length/4)+i];return `<td class="pu-left">${x?`${safe(x.name)} — ${safe(shortRole(x.role))}`:''}</td>`}).join('')}</tr>`).join('')}`:'';
   const others=`<section class="pu-block"><table class="pu-excel-other" data-pu-sheet="Laporan"><tbody><tr><th colspan="4">KEPENGURUSAN LAIN</th></tr>${otherRows(other.L,'LAKI-LAKI')}${otherRows(other.P,'PEREMPUAN')}${otherRows(other.unknown,'JENIS KELAMIN BELUM TERDATA')}</tbody></table></section>`;
-  const sign=off.imam?.[0]||'________________',pnb=off.penerobos?.[0]||'________________';
-  const villageSign=`<div class="pu-sign pu-signatures"><div class="pu-sign-place">Bekasi, ${safe(signatureDate())}</div><div class="pu-sign-row"><div class="pu-sign-box"><div>KI Desa</div><div class="pu-sign-space"></div><div class="pu-sign-name">${safe(sign)}</div></div><div class="pu-sign-box"><div>Penerobos Desa</div><div class="pu-sign-space"></div><div class="pu-sign-name">&nbsp;</div></div></div></div>`;
-  return `<article class="pu-report pu-excel${desa?' pu-village':''}" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">JUMLAH JAMAAH, PERSENAN ${desa?', KEGIATAN DAN KEPENGURUSAN DESA':'DAN KEGIATAN KELOMPOK'}</div><div class="pu-meta">${desa?`DESA: Perwira · DAERAH: Bekasi Timur`:`KELOMPOK: ${safe(names[s])} · DESA: Perwira · DAERAH: Bekasi Timur`} · BULAN: ${safe(titleMonth(period))} · DIISI ${desa?'DESA':'KELOMPOK'}</div>${main}${sarana}${normalRoster}${others}${desa?villageSign:`<p class="pu-sign">Perwira, ${safe(titleMonth(period))}<br>Kyai ${level}: ${safe(sign)} &nbsp; &nbsp; Penerobos ${level}: ${safe(pnb)}</p>`}</article>`;
+  const sign=off.imam?.[0]||'________________';
+  const reportSign=`<div class="pu-sign pu-signatures"><div class="pu-sign-place">Bekasi, ${safe(signatureDate())}</div><div class="pu-sign-row"><div class="pu-sign-box"><div>KI ${level}</div><div class="pu-sign-space"></div><div class="pu-sign-name">${safe(sign)}</div></div><div class="pu-sign-box"><div>Penerobos ${level}</div><div class="pu-sign-space"></div><div class="pu-sign-name">&nbsp;</div></div></div></div>`;
+  return `<article class="pu-report pu-excel${desa?' pu-village':' pu-group'}" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">JUMLAH JAMAAH, PERSENAN ${desa?', KEGIATAN DAN KEPENGURUSAN DESA':'DAN KEGIATAN KELOMPOK'}</div><div class="pu-meta">${desa?`DESA: Perwira · DAERAH: Bekasi Timur`:`KELOMPOK: ${safe(names[s])} · DESA: Perwira · DAERAH: Bekasi Timur`} · BULAN: ${safe(titleMonth(period))} · DIISI ${desa?'DESA':'KELOMPOK'}</div>${main}${sarana}${normalRoster}${others}${reportSign}</article>`;
 }
 async function reload(){
   const [p,h,m]=await Promise.all([
