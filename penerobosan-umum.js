@@ -203,14 +203,16 @@ function edit(){const s=scope(),p=profiles[s]||{};if(!canEdit()){alertMsg('Akun 
   if(s==='DESA')html+=`<div class="pu-form-section"><h4>Sarana desa</h4><div class="pu-profile-grid">${fields(facilities,p)}</div></div>`;
   else html+=`<div class="pu-form-section"><h4>Sarana dan kegiatan kelompok</h4><div class="pu-profile-grid">${fields(facilities.concat(groupExtras),p)}</div></div>`;
   html+=`<div class="pu-form-section"><h4>Nama pengurus</h4><p>MT yang bertugas tercantum bersama Muballigh desa atau kelompok sesuai dapukannya; MS tidak otomatis menjadi pengurus. Nama tambahan yang belum ada di daftar pengurus dapat ditulis per baris.</p><div class="pu-profile-grid">${officers.map(([key,label])=>`<label>${label}<textarea data-pu="nama_${key}" placeholder="Otomatis: ${safe(roster(s,key).join(', '))}">${safe([p['nama_'+key],key==='muballigh'?p.nama_mt:''].filter(Boolean).join('\n'))}</textarea></label>`).join('')}</div></div><button type="button" onclick="puSaveProfile()">💾 Simpan profil ${safe(names[s])}</button> <button type="button" onclick="puCloseProfile()">Tutup</button>`;
-  el('pu-profile').innerHTML=html;el('pu-profile').hidden=false;
+  el('pu-profile').innerHTML=html+'<div id="pu-profile-status" role="status"></div>';el('pu-profile').dataset.scope=s;el('pu-profile').hidden=false;
 }
 async function token(){if(!DK_ATT_TOKEN)await dkAttendanceAuthenticate();if(!DK_ATT_TOKEN)throw new Error('Masuk kembali sebagai pengurus untuk menyimpan.');return DK_ATT_TOKEN;}
 async function saveProfile(){const box=el('pu-profile');if(box.hidden||busy)return;busy=true;try{
-  const s=scope(),data={};for(const input of box.querySelectorAll('[data-pu]')){const key=input.dataset.pu;if(input.type==='number'){if(input.value!==''&&(!Number.isInteger(Number(input.value))||Number(input.value)<0))throw new Error('Isi angka bulat yang tidak negatif: '+key);data[key]=input.value===''?'':Number(input.value);}else data[key]=input.value.trim();}
+  const s=box.dataset.scope,data={};if(!s||scope()!==s)throw new Error('Cakupan profil berubah. Buka kembali profil kelompok/desa yang ingin disimpan.');for(const input of box.querySelectorAll('[data-pu]')){const key=input.dataset.pu;if(input.type==='number'){if(input.value!==''&&(!Number.isInteger(Number(input.value))||Number(input.value)<0))throw new Error('Isi angka bulat yang tidak negatif: '+key);data[key]=input.value===''?'':Number(input.value);}else data[key]=input.value.trim();}
   const {data:res,error}=await sb.rpc('dashboard_penerobosan_save',{p_token:await token(),p_scope:s,p_rincian:data});if(error||!res?.ok)throw new Error(error?.message||res?.error||'Gagal menyimpan profil');
-  profiles[s]=data;box.hidden=true;refresh();alertMsg('Profil '+names[s]+' tersimpan.');
- }catch(e){alertMsg(e.message);}finally{busy=false;}}
+  const {data:stored,error:readError}=await sb.from('ubnb_penerobosan_profil').select('rincian').eq('scope_key',s).single();
+  if(readError||!stored?.rincian||Object.keys(data).some(k=>stored.rincian[k]!==data[k]))throw new Error(readError?.message||'Profil belum terverifikasi tersimpan. Coba simpan kembali.');
+  profiles[s]=stored.rincian;box.hidden=true;refresh();alertMsg('Profil '+names[s]+' tersimpan dan terverifikasi.');
+ }catch(e){alertMsg(e.message);const status=el('pu-profile-status');if(status)status.textContent=e.message;}finally{busy=false;}}
 async function archive(){if(!canEdit()||busy)return;busy=true;try{
   const snap=compute(),existing=history.find(h=>h.scope_key===snap.scope&&h.periode===snap.period);
   if(snap.notes.length&&!confirm('Ada data sensus yang belum lengkap. Simpan laporan dengan catatan tersebut?'))return;
@@ -309,7 +311,10 @@ async function exportExcel(){
   }catch(e){alertMsg('Gagal mengunduh Excel: '+e.message);}
 }
 function print(){if(!current)return alertMsg('Buat pratinjau dahulu.');const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;document.body.append(node);document.body.classList.add('pu-print-mode');const done=()=>{node.remove();document.body.classList.remove('pu-print-mode');window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);window.print();setTimeout(done,60000);}
-async function init(){if(!el('pu-panel'))return;const select=el('pu-scope');select.innerHTML=(CU?.kelompok_scope?[CU.kelompok_scope]:['DESA',...GROUPS]).map(g=>`<option value="${g}">${safe(names[g])} (${g})</option>`).join('');
+async function init(){if(!el('pu-panel'))return;const select=el('pu-scope'),selected=select.value;
+  const allowed=CU?.kelompok_scope?[CU.kelompok_scope]:['DESA',...GROUPS];
+  select.innerHTML=allowed.map(g=>`<option value="${g}">${safe(names[g])} (${g})</option>`).join('');
+  if(allowed.includes(selected))select.value=selected;
   const now=new Date();el('pu-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   el('pu-save').hidden=!canEdit();
   const editButton=el('pu-panel').querySelector('button[onclick="puEditProfile()"]');
