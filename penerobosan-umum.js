@@ -49,8 +49,8 @@ reportStyle.textContent=`
 .pu-excel small{display:block;margin-top:3px;font-size:9px}
 .pu-excel .pu-notes{font-size:9px;line-height:1.2;margin:4px 0}
 .pu-excel .pu-sign{text-align:right;font-size:10px;margin:5px 0}
-.pu-excel .pu-signatures{text-align:initial;margin:12px 0 0;font-size:11px}
-.pu-excel .pu-signatures .pu-sign-place{text-align:right;margin-bottom:8px}
+.pu-excel .pu-signatures{text-align:initial;margin:8px 0 0;font-size:11px;break-inside:avoid;page-break-inside:avoid}
+.pu-excel .pu-signatures .pu-sign-place{text-align:right;margin-bottom:5px}
 .pu-excel .pu-signatures .pu-sign-row{display:flex;justify-content:flex-end;gap:30px;text-align:center}
 .pu-excel .pu-signatures .pu-sign-box{width:160px}
 .pu-excel .pu-signatures .pu-sign-space{height:48px}
@@ -81,8 +81,10 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other th,
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:8.5pt;padding:3px 2px;line-height:1.2}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail tbody td{height:20px}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures{font-size:9pt;margin-top:12px}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures .pu-sign-space{height:46px}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures{font-size:8.5pt;margin-top:6px;break-inside:avoid;page-break-inside:avoid}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures .pu-sign-space{height:34px}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other th,
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:7.2pt;padding:1px 2px;line-height:1.08}
 }`;
 document.body.append(reportStyle);
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -179,6 +181,17 @@ function listCell(x){return Array.isArray(x)&&x.length?x.map(safe).join('<br>'):
 function titleMonth(period){const [y,m]=period.split('-').map(Number);return `${NAMA_BULAN[m-1]} ${y}`;}
 function sumProfile(rows,k){return rows.every(r=>r.profile[k]!==undefined&&r.profile[k]!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile[k])||0),0)):'—';}
 function sumKnownProfile(rows,k){const filled=rows.map(r=>r.profile?.[k]).filter(v=>v!==undefined&&v!==null&&v!=='');return filled.length?fmt(filled.reduce((n,v)=>n+(number(v)||0),0)):'—';}
+function shortRole(label){return String(label||'dapukan belum diisi')
+  .replace(/\bKoordinator\b/gi,'Koord.')
+  .replace(/\bSekretaris\b/gi,'Sekr.')
+  .replace(/\bBendahara\b/gi,'Bend.')
+  .replace(/\bWakil\b/gi,'Wk.')
+  .replace(/\bKetua\b/gi,'Ket.')
+  .replace(/\bKelompok\b/gi,'Klp.')
+  .replace(/\bPembangunan\b/gi,'Pemb.')
+  .replace(/\bDesa\b/gi,'Ds.');
+}
+function signatureDate(){return new Intl.DateTimeFormat('id-ID',{day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Jakarta'}).format(new Date());}
 function otherGrouped(items,genderMap){
   const groups={L:[],P:[],unknown:[]};
   for(const item of items||[]){
@@ -202,10 +215,10 @@ function render(snapshot){
   const off=desa?officersFor('DESA',dp):group.officers,other=otherGrouped(off.lain,snapshot.genderMap||{});
   const roles=[['imam',desa?'IMAM DESA':'Kyai Kelompok'],['wakil',desa?'WAKIL DESA':'Wakil Kelompok'],['penerobos',desa?'PENEROBOS DESA':'Pnb Kelompok'],['muballigh',desa?'MUBALLIGH DESA':'Mubaligh Kelompok'],['ku',desa?'KU DESA':'KU Kelompok'],['aghnia',desa?"AGHNIYA' DESA":"Aghniya' Kelompok"]];
   const normalRoster=`<section class="pu-block"><table class="pu-excel-roster" data-pu-sheet="Laporan"><thead><tr>${roles.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody><tr>${roles.map(([k])=>`<td class="pu-left">${off[k]?.length?off[k].map(safe).join('<br>'):'—'}</td>`).join('')}</tr></tbody></table></section>`;
-  const otherRows=(items,label)=>items.length?`<tr><th class="pu-left" colspan="4">KEPENGURUSAN LAIN · ${label}</th></tr>${Array.from({length:Math.ceil(items.length/4)},(_,i)=>`<tr>${Array.from({length:4},(_,c)=>{const x=items[c*Math.ceil(items.length/4)+i];return `<td class="pu-left">${x?`${safe(x.name)} — ${safe(x.role||'dapukan belum diisi')}`:''}</td>`}).join('')}</tr>`).join('')}`:'';
+  const otherRows=(items,label)=>items.length?`<tr><th class="pu-left" colspan="4">KEPENGURUSAN LAIN · ${label}</th></tr>${Array.from({length:Math.ceil(items.length/4)},(_,i)=>`<tr>${Array.from({length:4},(_,c)=>{const x=items[c*Math.ceil(items.length/4)+i];return `<td class="pu-left">${x?`${safe(x.name)} — ${safe(shortRole(x.role))}`:''}</td>`}).join('')}</tr>`).join('')}`:'';
   const others=`<section class="pu-block"><table class="pu-excel-other" data-pu-sheet="Laporan"><tbody><tr><th colspan="4">KEPENGURUSAN LAIN</th></tr>${otherRows(other.L,'LAKI-LAKI')}${otherRows(other.P,'PEREMPUAN')}${otherRows(other.unknown,'JENIS KELAMIN BELUM TERDATA')}</tbody></table></section>`;
   const sign=off.imam?.[0]||'________________',pnb=off.penerobos?.[0]||'________________';
-  const villageSign=`<div class="pu-sign pu-signatures"><div class="pu-sign-place">Perwira, ${safe(titleMonth(period))}</div><div class="pu-sign-row"><div class="pu-sign-box"><div>KI Desa</div><div class="pu-sign-space"></div><div class="pu-sign-name">${safe(sign)}</div></div><div class="pu-sign-box"><div>Penerobos Desa</div><div class="pu-sign-space"></div><div class="pu-sign-name">&nbsp;</div></div></div></div>`;
+  const villageSign=`<div class="pu-sign pu-signatures"><div class="pu-sign-place">Bekasi, ${safe(signatureDate())}</div><div class="pu-sign-row"><div class="pu-sign-box"><div>KI Desa</div><div class="pu-sign-space"></div><div class="pu-sign-name">${safe(sign)}</div></div><div class="pu-sign-box"><div>Penerobos Desa</div><div class="pu-sign-space"></div><div class="pu-sign-name">&nbsp;</div></div></div></div>`;
   return `<article class="pu-report pu-excel${desa?' pu-village':''}" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">JUMLAH JAMAAH, PERSENAN ${desa?', KEGIATAN DAN KEPENGURUSAN DESA':'DAN KEGIATAN KELOMPOK'}</div><div class="pu-meta">${desa?`DESA: Perwira · DAERAH: Bekasi Timur`:`KELOMPOK: ${safe(names[s])} · DESA: Perwira · DAERAH: Bekasi Timur`} · BULAN: ${safe(titleMonth(period))} · DIISI ${desa?'DESA':'KELOMPOK'}</div>${main}${sarana}${normalRoster}${others}${desa?villageSign:`<p class="pu-sign">Perwira, ${safe(titleMonth(period))}<br>Kyai ${level}: ${safe(sign)} &nbsp; &nbsp; Penerobos ${level}: ${safe(pnb)}</p>`}</article>`;
 }
 async function reload(){
