@@ -57,8 +57,9 @@ reportStyle.textContent=`
 @media print{
   @page{size:A4 landscape;margin:6mm}
   body.pu-print-mode #pu-print-sheet .pu-report.pu-excel{width:100%;max-width:none;min-width:0;font:7pt Arial,sans-serif}
-  body.pu-print-mode #pu-print-sheet .pu-excel h2{font-size:10pt;margin:0}
-  body.pu-print-mode #pu-print-sheet .pu-excel .pu-sub,body.pu-print-mode #pu-print-sheet .pu-excel .pu-meta{font-size:7pt;margin:1px 0}
+  body.pu-print-mode #pu-print-sheet .pu-excel h2{font-size:15pt;line-height:1.1;margin:0 0 2px}
+  body.pu-print-mode #pu-print-sheet .pu-excel .pu-sub{font-size:10pt;line-height:1.2;margin:1px 0}
+  body.pu-print-mode #pu-print-sheet .pu-excel .pu-meta{font-size:9pt;line-height:1.2;margin:2px 0 5px}
   body.pu-print-mode #pu-print-sheet .pu-excel .pu-block{overflow:visible;margin:3px 0;break-inside:avoid}
   body.pu-print-mode #pu-print-sheet .pu-excel table{width:100%;table-layout:fixed;margin:0}
   body.pu-print-mode #pu-print-sheet .pu-excel th,body.pu-print-mode #pu-print-sheet .pu-excel td{padding:1px;line-height:1.08;font-size:6.5pt}
@@ -89,6 +90,22 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other tr:last-child td{border-bottom:1px solid #333}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other{margin-bottom:0}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main col.pu-col-angka{width:2.72%}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-block{margin:7px 0}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main th{font-size:7.6pt}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail th{font-size:9pt}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-block{margin:13px 0}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main th{font-size:8pt;padding:4px 1px;line-height:1.18}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main td{font-size:8.5pt;padding:5px 2px;line-height:1.25;overflow-wrap:anywhere}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main tbody td{height:26px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-detail th{font-size:9.5pt;padding:5px 3px;line-height:1.2}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-detail td{font-size:10pt;padding:5px 3px;line-height:1.25;overflow-wrap:anywhere}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-detail tbody td{height:30px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-roster th{font-size:10pt;padding:5px 3px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-roster td{font-size:10pt;padding:6px 4px;line-height:1.35;overflow-wrap:anywhere}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-other th{font-size:9pt;padding:3px 4px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-other td{font-size:9pt;padding:4px 4px;line-height:1.3;overflow-wrap:anywhere}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-signatures{font-size:10pt;margin-top:12px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-signatures .pu-sign-space{height:50px}
 }`;
 document.body.append(reportStyle);
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
