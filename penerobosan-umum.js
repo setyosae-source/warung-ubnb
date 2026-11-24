@@ -240,7 +240,7 @@ async function exportExcel(){
     sheet.views=[{state:'normal',showGridLines:false}];
     sheet.properties.defaultRowHeight=14;
     for(let i=1;i<=35;i++)sheet.getColumn(i).width=4.3;
-    const green={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9E8CF'}};
+    const green={type:'pattern',pattern:'solid',fgColor:{argb:current.scope==='DESA'?'FFDDEBF7':'FFC6E0B4'}};
     const pale={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDF5ED'}};
     const border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
     const title=sheet.getCell('A1');sheet.mergeCells('A1:AI1');title.value='LAPORAN PENEROBOSAN UMUM';title.font={name:'Arial',size:15,bold:true};title.alignment={horizontal:'center',vertical:'middle'};sheet.getRow(1).height=23;
