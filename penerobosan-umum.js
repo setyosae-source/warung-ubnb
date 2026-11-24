@@ -380,7 +380,19 @@ async function exportExcel(){
     const link=document.createElement('a');link.href=url;link.download=`Penerobosan_Umum_${current.scope}_${current.period}.xlsx`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }catch(e){alertMsg('Gagal mengunduh Excel: '+e.message);}
 }
-function print(){if(!current)return alertMsg('Buat pratinjau dahulu.');const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;document.body.append(node);document.body.classList.add('pu-print-mode');const done=()=>{node.remove();document.body.classList.remove('pu-print-mode');window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);window.print();setTimeout(done,60000);}
+function print(){
+  if(!current)return alertMsg('Buat pratinjau dahulu.');
+  const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;
+  const previousTitle=document.title;
+  const scopeLabel=current.scope==='DESA'?'Desa':`Klp ${String(current.scope).replace(/^PW/,'')}`;
+  document.title=`Penerobosan Umum - ${scopeLabel} - ${titleMonth(current.period)}`;
+  document.body.append(node);document.body.classList.add('pu-print-mode');
+  let finished=false;
+  const done=()=>{if(finished)return;finished=true;node.remove();document.body.classList.remove('pu-print-mode');document.title=previousTitle;window.removeEventListener('afterprint',done);};
+  window.addEventListener('afterprint',done);
+  try{window.print();}catch(e){done();throw e;}
+  setTimeout(done,60000);
+}
 async function init(){if(!el('pu-panel'))return;const select=el('pu-scope'),selected=select.value;
   const allowed=CU?.kelompok_scope?[CU.kelompok_scope]:['DESA',...GROUPS];
   select.innerHTML=allowed.map(g=>`<option value="${g}">${safe(names[g])} (${g})</option>`).join('');
