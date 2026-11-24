@@ -113,6 +113,32 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-other td{font-size:10pt;padding:3px 4px;line-height:1.2;overflow-wrap:anywhere}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-signatures{font-size:10pt;margin-top:12px}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-signatures .pu-sign-space{height:44px}
+  /* Ruang cetak Android lebih pendek; rapatkan jarak tanpa mengubah tabel desktop. */
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-excel h2{font-size:13pt;margin:0}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-excel .pu-sub{font-size:9pt;margin:0}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-excel .pu-meta{font-size:8pt;margin:0 0 2px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-excel .pu-block{margin:2px 0}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-excel .pu-signatures{font-size:8pt;margin:2px 0 0}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-excel .pu-signatures .pu-sign-space{height:18px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-main th{font-size:7.2pt;padding:2px 1px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-main td{font-size:8pt;padding:2px 1px;line-height:1.08}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-main tbody td{height:18px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-main td.pu-left{font-size:8.5pt}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-detail th,
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-detail td{font-size:8pt;padding:2px 1px;line-height:1.08}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-detail tbody td{height:17px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-roster th,
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-roster td{font-size:8pt;padding:2px;line-height:1.1}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-other th,
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-village .pu-excel-other td{font-size:7.6pt;padding:0 1px;line-height:1.04}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-main td{padding:3px 1px;line-height:1.15}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-main tbody td{height:22px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-detail th,
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-detail td{padding:3px 2px;line-height:1.15}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-detail tbody td{height:24px}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-roster td{padding:3px 2px;line-height:1.2}
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-other th,
+  body.pu-print-mode #pu-print-sheet.pu-print-mobile .pu-group .pu-excel-other td{padding:1px 2px;line-height:1.1}
 }`;
 document.body.append(reportStyle);
 const mobileStyle=document.createElement('style');
@@ -426,6 +452,7 @@ function print(){
   if(printCleanup)printCleanup();
   document.querySelectorAll('#pu-print-sheet').forEach(old=>old.remove());
   const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;
+  if(window.matchMedia('(max-width: 1024px)').matches)node.classList.add('pu-print-mobile');
   const previousTitle=document.title;
   const scopeLabel=current.scope==='DESA'?'Desa':`Klp ${String(current.scope).replace(/^PW/,'')}`;
   document.title=`Penerobosan Umum - ${scopeLabel} - ${titleMonth(current.period)}`;
