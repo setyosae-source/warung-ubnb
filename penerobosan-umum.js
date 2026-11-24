@@ -31,39 +31,36 @@ function separateSensusTabs(){
 separateSensusTabs();
 const reportStyle=document.createElement('style');
 reportStyle.textContent=`
-.pu-report{min-width:0;max-width:1100px;margin:auto;font:12px Arial,sans-serif}
-.pu-report .pu-block{margin:14px 0 18px;overflow-x:auto}
-.pu-report h3{font-size:12px;margin:0 0 4px;color:#163e2a}
-.pu-report table{table-layout:fixed;margin:4px 0}
-.pu-report th,.pu-report td{padding:5px 3px;overflow-wrap:anywhere}
-.pu-report table[data-pu-sheet^="Jamaah"] th:first-child,.pu-report table[data-pu-sheet^="Jamaah"] td:first-child{width:15%}
-.pu-report table[data-pu-sheet="Kegiatan"] th:first-child,.pu-report table[data-pu-sheet="Kegiatan"] td:first-child{width:40%}
-.pu-report .pu-roster th,.pu-report .pu-roster td{text-align:left}
-.pu-report .pu-roster th:first-child,.pu-report .pu-roster td:first-child{width:32%}
-.pu-report .pu-print-roster{display:none}
-.pu-report .pu-group-row th{background:#dbe8dd}
-.pu-report .pu-sign{text-align:right;margin:14px 12px}
-.pu-report .pu-notes{font-size:11px;line-height:1.35}
+.pu-report.pu-excel{min-width:0;max-width:1200px;margin:auto;color:#111;font:11px Arial,sans-serif;background:#fff}
+.pu-excel h2{text-align:center;font-size:16px;margin:3px 0}
+.pu-excel .pu-sub{text-align:center;font-weight:bold;margin:0 0 5px}
+.pu-excel .pu-meta{text-align:center;margin-bottom:7px}
+.pu-excel .pu-block{margin:7px 0;overflow-x:auto}
+.pu-excel table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0}
+.pu-excel th,.pu-excel td{border:1px solid #333;text-align:center;padding:3px 2px;overflow-wrap:anywhere;vertical-align:middle}
+.pu-excel th{background:#d9e8cf}
+.pu-excel .pu-left{text-align:left}
+.pu-excel .pu-excel-main{font-size:8px}
+.pu-excel .pu-excel-main th,.pu-excel .pu-excel-main td{padding:3px 1px}
+.pu-excel .pu-excel-detail{font-size:9px}
+.pu-excel .pu-excel-roster td{vertical-align:top;line-height:1.25}
+.pu-excel .pu-excel-other th{text-align:left}
+.pu-excel .pu-total{font-weight:bold;background:#edf5ed}
+.pu-excel small{display:block;margin-top:3px;font-size:9px}
+.pu-excel .pu-notes{font-size:9px;line-height:1.2;margin:4px 0}
+.pu-excel .pu-sign{text-align:right;font-size:10px;margin:5px 0}
 @media print{
-  @page{size:A4 landscape;margin:7mm}
-  body.pu-print-mode #pu-print-sheet .pu-report{width:100%;max-width:none;min-width:0;font:8pt Arial,sans-serif}
-  body.pu-print-mode #pu-print-sheet .pu-report h2{font-size:12pt;margin:0 0 1px}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-sub{margin-bottom:3px}
-  body.pu-print-mode #pu-print-sheet .pu-report h3{font-size:8pt;margin:0 0 2px}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-block{overflow:visible;margin:4px 0;break-inside:avoid}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-roster{break-inside:auto}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-screen-roster{display:none}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster{display:table}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster th,body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster td{width:auto;font-size:6.5pt;line-height:1.05}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster td:nth-child(odd){width:12%}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster td:nth-child(even){width:13%}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-notes{font-size:7pt;margin:3px 0}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-sign{font-size:8pt;margin:3px 0}
-  body.pu-print-mode #pu-print-sheet .pu-report small{font-size:7pt}
-  body.pu-print-mode #pu-print-sheet .pu-report table{width:100%;table-layout:fixed;margin:3px 0}
-  body.pu-print-mode #pu-print-sheet .pu-report th,body.pu-print-mode #pu-print-sheet .pu-report td{padding:1px 2px;font-size:7pt;line-height:1.08}
-  body.pu-print-mode #pu-print-sheet .pu-report thead{display:table-header-group}
-  body.pu-print-mode #pu-print-sheet .pu-report tr{break-inside:avoid}
+  @page{size:A4 landscape;margin:6mm}
+  body.pu-print-mode #pu-print-sheet .pu-report.pu-excel{width:100%;max-width:none;min-width:0;font:7pt Arial,sans-serif}
+  body.pu-print-mode #pu-print-sheet .pu-excel h2{font-size:10pt;margin:0}
+  body.pu-print-mode #pu-print-sheet .pu-excel .pu-sub,body.pu-print-mode #pu-print-sheet .pu-excel .pu-meta{font-size:7pt;margin:1px 0}
+  body.pu-print-mode #pu-print-sheet .pu-excel .pu-block{overflow:visible;margin:3px 0;break-inside:avoid}
+  body.pu-print-mode #pu-print-sheet .pu-excel table{width:100%;table-layout:fixed;margin:0}
+  body.pu-print-mode #pu-print-sheet .pu-excel th,body.pu-print-mode #pu-print-sheet .pu-excel td{padding:1px;line-height:1.08;font-size:6.5pt}
+  body.pu-print-mode #pu-print-sheet .pu-excel .pu-excel-main th,body.pu-print-mode #pu-print-sheet .pu-excel .pu-excel-main td{font-size:5pt;padding:1px 0}
+  body.pu-print-mode #pu-print-sheet .pu-excel small,body.pu-print-mode #pu-print-sheet .pu-excel .pu-notes{font-size:6pt;margin:2px 0}
+  body.pu-print-mode #pu-print-sheet .pu-excel .pu-sign{font-size:7pt;margin:2px 0}
+  body.pu-print-mode #pu-print-sheet .pu-excel tr{break-inside:avoid}
 }`;
 document.body.append(reportStyle);
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -169,38 +166,22 @@ function otherGrouped(items,genderMap){
   return groups;
 }
 function render(snapshot){
-  const {scope:s,period,rows,profiles:ps}=snapshot,desa=s==='DESA',dp=ps.DESA||{};
-  const t=totals(rows),group=rows[0],p=group.profile||{},notes=snapshot.notes||[];
-  const age=(keys,title,sheet)=>`<section class="pu-block"><h3>${title}</h3><table data-pu-sheet="${sheet}"><thead><tr><th rowspan="2">Kelompok</th>${keys.map(k=>`<th colspan="3">${({balita:'Balita',cbr:'CBR / PAUD - SD',pra:'Pra remaja',remaja:'Remaja',usia:'Usia nikah',dewasa:'Dewasa',total:'Total jamaah'})[k]}</th>`).join('')}</tr><tr>${keys.map(()=>'<th>L</th><th>P</th><th>J</th>').join('')}</tr></thead><tbody>${rows.map(r=>`<tr><td class="pu-left">${safe(r.nama)}</td>${keys.map(k=>n2(r[k])).join('')}</tr>`).join('')}${desa?`<tr class="pu-total"><td>JUMLAH</td>${keys.map(k=>n2(t[k])).join('')}</tr>`:''}</tbody></table></section>`;
-  const summaryRow=r=>`<tr><td class="pu-left">${safe(r.nama)}</td><td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${number(r.pengurus4s)||0}</td><td>${number(r.pengurus_lain)||0}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
-  const summary=`<section class="pu-block"><h3>JANDA · SUB · KK · PENGURUS · PERSENAN</h3><table data-pu-sheet="Janda Pengurus"><thead><tr><th rowspan="3">Kelompok</th><th colspan="3">JANDA</th><th rowspan="3">SUB</th><th rowspan="3">KK</th><th colspan="3">JUMLAH PENGURUS</th><th rowspan="3">PERSENAN (Rp)</th></tr><tr><th rowspan="2">JML</th><th colspan="2">SIAP DIWAYUH</th><th rowspan="2">4 S</th><th rowspan="2">LAIN</th><th rowspan="2">JML</th></tr><tr><th>BTN</th><th>TR-AN</th></tr></thead><tbody>${rows.map(summaryRow).join('')}${desa?`<tr class="pu-total"><td>JUMLAH</td><td>${sum(rows,'janda')}</td><td>${sumProfile(rows,'janda_btn')}</td><td>${sumProfile(rows,'janda_trangan')}</td><td>${sumProfile(rows,'sub')}</td><td>${sum(rows,'kk')}</td><td>${sum(rows,'pengurus4s')}</td><td>${sum(rows,'pengurus_lain')}</td><td>${sum(rows,'pengurus')}</td><td>${sumProfile(rows,'persenan')}</td></tr>`:''}</tbody></table></section>`;
-  const allMt=rows.every(r=>r.mt!==null)?sum(rows,'mt'):'—',allMs=rows.every(r=>r.ms!==null)?sum(rows,'ms'):'—';
-  const facilityOrder=desa?['masjid','jeding_l','jeding_p','aula','madrasah','pondok','sekolah']:['masjid','aula','madrasah','jeding_l','jeding_p','sekolah','pondok'];
-  const facilityHead=desa?'<th rowspan="2">Masjid</th><th colspan="2">Jeding</th><th rowspan="2">Aula</th><th rowspan="2">Madrasah</th><th rowspan="2">Pondok</th><th rowspan="2">Sekolah</th>':'<th rowspan="2">Masjid</th><th rowspan="2">Aula</th><th rowspan="2">Madrasah</th><th colspan="2">Jeding</th><th rowspan="2">Sekolah</th><th rowspan="2">Pondok</th>';
-  const facilitiesTable=`<section class="pu-block"><h3>SARANA DAN PRASARANA</h3><table data-pu-sheet="Sarana"><thead><tr>${desa?'<th rowspan="2">Wakil KI desa</th><th rowspan="2">Kelompok</th>':''}${facilityHead}<th rowspan="2">MT</th><th rowspan="2">MS</th>${desa?'':'<th rowspan="2">Kamar MT</th><th rowspan="2">Kamar tamu</th>'}</tr><tr><th>Putra</th><th>Putri</th></tr></thead><tbody><tr>${desa?`<td>${number(snapshot.wakilDesa)||0}</td><td>${GROUPS.length}</td>`:''}${facilityOrder.map(k=>`<td>${numericCell(desa?dp:p,k)}</td>`).join('')}<td>${desa?allMt:mubCell(group.mt)}</td><td>${desa?allMs:mubCell(group.ms)}</td>${desa?'':`<td>${numericCell(p,'kamar_mt')}</td><td>${numericCell(p,'kamar_tamu')}</td>`}</tr></tbody></table><small>MT = Muballigh Tugasan yang bertugas; MS = lulusan pondok yang tidak sedang bertugas dan tidak memiliki SK tugas. Jumlah mengikuti sensus daerah.</small></section>`;
-  const activities=desa?desaExtras:groupExtras.filter(([k])=>k.startsWith('kegiatan_'));
-  const activityTable=`<section class="pu-block"><h3>KEGIATAN ${desa?'DESA / BULAN':'KELOMPOK / MINGGU'}</h3><table data-pu-sheet="Kegiatan"><thead><tr><th>Kegiatan</th><th>Jumlah / keterangan</th></tr></thead><tbody>${activities.map(([k,label])=>`<tr><td class="pu-left">${safe(label)}</td><td class="pu-left">${shown((desa?dp:p)[k])}</td></tr>`).join('')}</tbody></table></section>`;
-  const off=desa?officersFor('DESA',dp):group.officers;
-  const genderMap=snapshot.genderMap||{};
-  const other=otherGrouped(off.lain,genderMap);
-  const rosterEntries=[];
-  for(const [k,label] of officers.filter(([key])=>key!=='lain')){
-    for(const name of off[k]?.length?off[k]:['—'])rosterEntries.push({role:`${label} ${desa?'Desa':'Kelompok'}`,name});
-  }
-  for(const [key,heading] of [['L','laki-laki'],['P','perempuan'],['unknown','jenis kelamin belum terdata']]){
-    if(key==='unknown'&&!other[key].length)continue;
-    rosterEntries.push({heading:`Kepengurusan lain · ${heading}`});
-    for(const x of other[key])rosterEntries.push({role:x.role||'Dapukan belum diisi',name:x.name});
-  }
-  const roleCell=x=>x.heading?`<th colspan="2">${safe(x.heading)}</th>`:`<td>${safe(x.role)}</td><td class="pu-left">${safe(x.name)}</td>`;
-  const columns=rosterEntries.length>55?4:3,perColumn=Math.ceil(rosterEntries.length/columns);
-  const printRows=Array.from({length:perColumn},(_,i)=>`<tr>${Array.from({length:columns},(_,c)=>rosterEntries[c*perColumn+i]?roleCell(rosterEntries[c*perColumn+i]):'<td></td><td></td>').join('')}</tr>`).join('');
-  const rosterTable=`<section class="pu-block pu-roster"><h3>KEPENGURUSAN ${desa?'DESA':'KELOMPOK'}</h3><table class="pu-screen-roster" data-pu-sheet="Kepengurusan"><thead><tr><th>Dapukan</th><th>Nama pengurus</th></tr></thead><tbody>${rosterEntries.map(x=>`<tr>${roleCell(x)}</tr>`).join('')}</tbody></table><table class="pu-print-roster"><thead><tr>${Array.from({length:columns},()=>'<th>Dapukan</th><th>Nama pengurus</th>').join('')}</tr></thead><tbody>${printRows}</tbody></table></section>`;
+  const {scope:s,period,rows,profiles:ps}=snapshot,desa=s==='DESA',dp=ps.DESA||{},t=totals(rows),group=rows[0],p=group.profile||{},notes=snapshot.notes||[];
+  const level=desa?'Desa':'Kelompok';
+  const categories=[['balita','BALITA'],['cbr','CBR / PAUD - SD'],['pra','PRA REMAJA'],['remaja','REMAJA'],['usia','USIA NIKAH'],['dewasa','DEWASA'],['total',desa?'TOTAL JAMAAH':'TOTAL JIWA JAMAAH']];
+  const mainRow=(r,i)=>`<tr>${desa?`<td>${i+1}</td>`:''}<td class="pu-left">${safe(r.nama)}</td>${categories.map(([k])=>n2(r[k])).join('')}<td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${number(r.pengurus4s)||0}</td><td>${number(r.pengurus_lain)||0}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
+  const totalRow=desa?`<tr class="pu-total"><td colspan="2">JUMLAH</td>${categories.map(([k])=>n2(t[k])).join('')}<td>${sum(rows,'janda')}</td><td>${sumProfile(rows,'janda_btn')}</td><td>${sumProfile(rows,'janda_trangan')}</td><td>${sumProfile(rows,'sub')}</td><td>${sum(rows,'kk')}</td><td>${sum(rows,'pengurus4s')}</td><td>${sum(rows,'pengurus_lain')}</td><td>${sum(rows,'pengurus')}</td><td>${sumProfile(rows,'persenan')}</td></tr>`:'';
+  const main=`<section class="pu-block"><table class="pu-excel-main" data-pu-sheet="Laporan"><thead><tr>${desa?'<th rowspan="3">NO</th>':''}<th rowspan="3">KELOMPOK</th><th colspan="21">JUMLAH JAMAAH</th><th colspan="3">JANDA</th><th rowspan="3">SUB</th><th rowspan="3">KK</th><th colspan="3">JUMLAH PENGURUS</th><th rowspan="3">PERSENAN</th></tr><tr>${categories.map(([,label])=>`<th colspan="3">${label}</th>`).join('')}<th rowspan="2">JML</th><th colspan="2">SIAP DIWAYUH</th><th rowspan="2">4-S</th><th rowspan="2">LAIN</th><th rowspan="2">JML</th></tr><tr>${categories.map(()=>'<th>L</th><th>P</th><th>J</th>').join('')}<th>BTN</th><th>TR-AN</th></tr></thead><tbody>${rows.map(mainRow).join('')}${totalRow}</tbody></table></section>`;
+  const countMT=rows.every(r=>r.mt!==null)?sum(rows,'mt'):'—',countMS=rows.every(r=>r.ms!==null)?sum(rows,'ms'):'—';
+  const sarana=desa?`<section class="pu-block"><table class="pu-excel-detail" data-pu-sheet="Laporan"><thead><tr><th colspan="13">JUMLAH</th><th colspan="6">JUMLAH PENGAJIAN / BULAN</th></tr><tr><th rowspan="2">WAKIL DESA</th><th rowspan="2">KELOMPOK</th><th rowspan="2">SUB</th><th rowspan="2">KK</th><th rowspan="2">Masjid</th><th colspan="2">Jeding</th><th rowspan="2">Aula</th><th rowspan="2">Madrasah</th><th rowspan="2">Pondok</th><th rowspan="2">Sekolah</th><th rowspan="2">MT</th><th rowspan="2">MS</th><th rowspan="2">Desa</th><th rowspan="2">Muda-di</th><th rowspan="2">Ibu-ibu</th><th rowspan="2">Agny'</th><th rowspan="2">Muswrh</th><th rowspan="2">Organisasi</th></tr><tr><th>L</th><th>P</th></tr></thead><tbody><tr><td>${number(snapshot.wakilDesa)||0}</td><td>${GROUPS.length}</td><td>${sumProfile(rows,'sub')}</td><td>${sum(rows,'kk')}</td>${['masjid','jeding_l','jeding_p','aula','madrasah','pondok','sekolah'].map(k=>`<td>${numericCell(dp,k)}</td>`).join('')}<td>${countMT}</td><td>${countMS}</td>${['kegiatan_desa','kegiatan_mudadi','kegiatan_ibu','kegiatan_agnia','kegiatan_mus','kegiatan_organisasi'].map(k=>`<td>${shown(dp[k])}</td>`).join('')}</tr></tbody></table></section>`:
+  `<section class="pu-block"><table class="pu-excel-detail" data-pu-sheet="Laporan"><thead><tr><th colspan="11">SARANA DAN PRASARANA</th><th colspan="6">KEGIATAN KELOMPOK / MINGGU</th></tr><tr><th rowspan="2">MASJID</th><th rowspan="2">AULA</th><th rowspan="2">MADRASAH</th><th colspan="2">JEDING</th><th rowspan="2">SEKOLAH</th><th rowspan="2">PONDOK</th><th rowspan="2">MT</th><th rowspan="2">MS</th><th rowspan="2">KAMAR MT</th><th rowspan="2">KAMAR TAMU</th><th rowspan="2">KLP</th><th rowspan="2">Mdadi</th><th rowspan="2">Cbr</th><th rowspan="2">Ibu2</th><th rowspan="2">5 Unsur</th><th rowspan="2">Msywrh</th></tr><tr><th>PUTRA</th><th>PUTRI</th></tr></thead><tbody><tr>${['masjid','aula','madrasah','jeding_l','jeding_p','sekolah','pondok'].map(k=>`<td>${numericCell(p,k)}</td>`).join('')}<td>${mubCell(group.mt)}</td><td>${mubCell(group.ms)}</td><td>${numericCell(p,'kamar_mt')}</td><td>${numericCell(p,'kamar_tamu')}</td>${['kegiatan_klp','kegiatan_mudadi','kegiatan_cbr','kegiatan_ibu','kegiatan_5unsur','kegiatan_mus'].map(k=>`<td>${shown(p[k])}</td>`).join('')}</tr></tbody></table>${p.kegiatan_lain?`<small>Kegiatan lain: ${safe(p.kegiatan_lain)}</small>`:''}<small>ANJURAN KAMAR MANDI PUTRA PUTRI TERPISAH, SEDANGKAN KAMAR MANDI PUTRI DAN TEMPAT WUDHUNYA KEADAAN TERTUTUP, DAN TEMPAT WUDHU PUTRI DIBERI CERMIN DAN TEMPAT CANTOLAN KERUDUNG.</small></section>`;
+  const off=desa?officersFor('DESA',dp):group.officers,other=otherGrouped(off.lain,snapshot.genderMap||{});
+  const roles=[['imam',desa?'IMAM DESA':'Kyai Kelompok'],['wakil',desa?'WAKIL DESA':'Wakil Kelompok'],['penerobos',desa?'PENEROBOS DESA':'Pnb Kelompok'],['muballigh',desa?'MUBALLIGH DESA':'Mubaligh Kelompok'],['ku',desa?'KU DESA':'KU Kelompok'],['aghnia',desa?"AGHNIYA' DESA":"Aghniya' Kelompok"]];
+  const normalRoster=`<section class="pu-block"><table class="pu-excel-roster" data-pu-sheet="Laporan"><thead><tr>${roles.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody><tr>${roles.map(([k])=>`<td class="pu-left">${off[k]?.length?off[k].map(safe).join('<br>'):'—'}</td>`).join('')}</tr></tbody></table></section>`;
+  const otherRows=(items,label)=>items.length?`<tr><th class="pu-left" colspan="4">KEPENGURUSAN LAIN · ${label}</th></tr>${Array.from({length:Math.ceil(items.length/4)},(_,i)=>`<tr>${Array.from({length:4},(_,c)=>{const x=items[c*Math.ceil(items.length/4)+i];return `<td class="pu-left">${x?`${safe(x.name)} — ${safe(x.role||'dapukan belum diisi')}`:''}</td>`}).join('')}</tr>`).join('')}`:'';
+  const others=`<section class="pu-block"><table class="pu-excel-other" data-pu-sheet="Laporan"><tbody><tr><th colspan="4">KEPENGURUSAN LAIN</th></tr>${otherRows(other.L,'LAKI-LAKI')}${otherRows(other.P,'PEREMPUAN')}${otherRows(other.unknown,'JENIS KELAMIN BELUM TERDATA')}</tbody></table></section>`;
   const sign=off.imam?.[0]||'________________',pnb=off.penerobos?.[0]||'________________';
-  return `<article class="pu-report" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">${desa?'DESA':'KELOMPOK'} · ${desa?'Perwira':safe(names[s])} · Bekasi Timur · ${safe(titleMonth(period))}</div>
-  ${age(['balita','cbr','pra'],'JUMLAH JAMAAH · ANAK','Jamaah Anak')}${age(['remaja','usia','dewasa','total'],'JUMLAH JAMAAH · REMAJA DAN DEWASA','Jamaah Dewasa')}${summary}
-  ${facilitiesTable}${activityTable}${rosterTable}
-  ${notes.length?`<p class="pu-notes"><b>Perlu dicek:</b> ${notes.map(safe).join('; ')}.</p>`:''}<p class="pu-sign">Perwira, ${safe(titleMonth(period))}<br>Kyai ${desa?'Desa':'Kelompok'}: ${safe(sign)} &nbsp; &nbsp; Penerobos ${desa?'Desa':'Kelompok'}: ${safe(pnb)}</p></article>`;
+  return `<article class="pu-report pu-excel" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">JUMLAH JAMAAH, PERSENAN ${desa?', KEGIATAN DAN KEPENGURUSAN DESA':'DAN KEGIATAN KELOMPOK'}</div><div class="pu-meta">${desa?`DESA: Perwira · DAERAH: Bekasi Timur`:`KELOMPOK: ${safe(names[s])} · DESA: Perwira · DAERAH: Bekasi Timur`} · BULAN: ${safe(titleMonth(period))} · DIISI ${desa?'DESA':'KELOMPOK'}</div>${main}${sarana}${normalRoster}${others}${notes.length?`<p class="pu-notes">CATATAN: ${notes.map(safe).join('; ')}.</p>`:''}<p class="pu-sign">Perwira, ${safe(titleMonth(period))}<br>Kyai ${level}: ${safe(sign)} &nbsp; &nbsp; Penerobos ${level}: ${safe(pnb)}</p></article>`;
 }
 async function reload(){
   const [p,h,m]=await Promise.all([
@@ -237,14 +218,19 @@ async function archive(){if(!canEdit()||busy)return;busy=true;try{
   if(error||!data?.ok)throw new Error(error?.message||data?.error||'Gagal menyimpan laporan');
   await reload();refresh();alertMsg('Laporan '+titleMonth(snap.period)+' tersimpan.');
  }catch(e){alertMsg(e.message);}finally{busy=false;}}
-function exportExcel(){if(!current)return alertMsg('Buat pratinjau dahulu.');if(typeof XLSX==='undefined')return alertMsg('Komponen Excel belum tersedia.');
-  const book=XLSX.utils.book_new(),tables=el('pu-report').querySelectorAll('table[data-pu-sheet]');
+function exportExcel(){
+  if(!current)return alertMsg('Buat pratinjau dahulu.');
+  if(typeof XLSX==='undefined')return alertMsg('Komponen Excel belum tersedia.');
+  const sheet=XLSX.utils.aoa_to_sheet([['LAPORAN PENEROBOSAN UMUM'],[`${current.scope} · ${titleMonth(current.period)}`],[]]);
+  const tables=el('pu-report').querySelectorAll('table[data-pu-sheet]');
   for(const table of tables){
-    const sheet=XLSX.utils.table_to_sheet(table),name=table.dataset.puSheet;
-    const cols=Array.from({length:XLSX.utils.decode_range(sheet['!ref']).e.c+1},(_,i)=>({wch:i===0?(name==='Kepengurusan'?28:23):name==='Kegiatan'?54:name==='Kepengurusan'?72:13}));
-    sheet['!cols']=cols;
-    XLSX.utils.book_append_sheet(book,sheet,name);
+    const row=XLSX.utils.decode_range(sheet['!ref']).e.r+2;
+    XLSX.utils.sheet_add_dom(sheet,table,{origin:{r:row,c:0}});
   }
+  const width=XLSX.utils.decode_range(sheet['!ref']).e.c+1;
+  sheet['!cols']=Array.from({length:width},(_,i)=>({wch:i<2?15:8}));
+  const book=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book,sheet,'Penerobosan Umum');
   XLSX.writeFile(book,`Penerobosan_Umum_${current.scope}_${current.period}.xlsx`);
 }
 function print(){if(!current)return alertMsg('Buat pratinjau dahulu.');const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;document.body.append(node);document.body.classList.add('pu-print-mode');const done=()=>{node.remove();document.body.classList.remove('pu-print-mode');window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);window.print();setTimeout(done,60000);}
