@@ -40,19 +40,28 @@ reportStyle.textContent=`
 .pu-report table[data-pu-sheet="Kegiatan"] th:first-child,.pu-report table[data-pu-sheet="Kegiatan"] td:first-child{width:40%}
 .pu-report .pu-roster th,.pu-report .pu-roster td{text-align:left}
 .pu-report .pu-roster th:first-child,.pu-report .pu-roster td:first-child{width:32%}
+.pu-report .pu-print-roster{display:none}
 .pu-report .pu-group-row th{background:#dbe8dd}
 .pu-report .pu-sign{text-align:right;margin:14px 12px}
 .pu-report .pu-notes{font-size:11px;line-height:1.35}
 @media print{
-  @page{size:A4 landscape;margin:9mm}
-  body.pu-print-mode #pu-print-sheet .pu-report{width:100%;max-width:none;min-width:0;font:9pt Arial,sans-serif}
-  body.pu-print-mode #pu-print-sheet .pu-report h2{font-size:14pt;margin:0}
-  body.pu-print-mode #pu-print-sheet .pu-report h3{font-size:10pt}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-block{overflow:visible;margin:8px 0;break-inside:avoid}
+  @page{size:A4 landscape;margin:7mm}
+  body.pu-print-mode #pu-print-sheet .pu-report{width:100%;max-width:none;min-width:0;font:8pt Arial,sans-serif}
+  body.pu-print-mode #pu-print-sheet .pu-report h2{font-size:12pt;margin:0 0 1px}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-sub{margin-bottom:3px}
+  body.pu-print-mode #pu-print-sheet .pu-report h3{font-size:8pt;margin:0 0 2px}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-block{overflow:visible;margin:4px 0;break-inside:avoid}
   body.pu-print-mode #pu-print-sheet .pu-report .pu-roster{break-inside:auto}
-  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-break{break-before:page;page-break-before:always}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-screen-roster{display:none}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster{display:table}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster th,body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster td{width:auto;font-size:6.5pt;line-height:1.05}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster td:nth-child(odd){width:12%}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-print-roster td:nth-child(even){width:13%}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-notes{font-size:7pt;margin:3px 0}
+  body.pu-print-mode #pu-print-sheet .pu-report .pu-sign{font-size:8pt;margin:3px 0}
+  body.pu-print-mode #pu-print-sheet .pu-report small{font-size:7pt}
   body.pu-print-mode #pu-print-sheet .pu-report table{width:100%;table-layout:fixed;margin:3px 0}
-  body.pu-print-mode #pu-print-sheet .pu-report th,body.pu-print-mode #pu-print-sheet .pu-report td{padding:2px 3px;font-size:8pt}
+  body.pu-print-mode #pu-print-sheet .pu-report th,body.pu-print-mode #pu-print-sheet .pu-report td{padding:1px 2px;font-size:7pt;line-height:1.08}
   body.pu-print-mode #pu-print-sheet .pu-report thead{display:table-header-group}
   body.pu-print-mode #pu-print-sheet .pu-report tr{break-inside:avoid}
 }`;
@@ -174,13 +183,23 @@ function render(snapshot){
   const off=desa?officersFor('DESA',dp):group.officers;
   const genderMap=snapshot.genderMap||{};
   const other=otherGrouped(off.lain,genderMap);
-  const roleRows=officers.filter(([k])=>k!=='lain').map(([k,label])=>(off[k]?.length?off[k]:['—']).map(name=>`<tr><td>${safe(label)} ${desa?'Desa':'Kelompok'}</td><td class="pu-left">${safe(name)}</td></tr>`).join('')).join('');
-  const otherRows=(items,heading)=>`<tr class="pu-group-row"><th colspan="2">Kepengurusan lain · ${heading}</th></tr>${items.length?items.map(x=>`<tr><td>${safe(x.role||'Dapukan belum diisi')}</td><td class="pu-left">${safe(x.name)}</td></tr>`).join(''):'<tr><td>—</td><td class="pu-left">—</td></tr>'}`;
-  const rosterTable=`<section class="pu-block pu-roster"><h3>KEPENGURUSAN ${desa?'DESA':'KELOMPOK'}</h3><table data-pu-sheet="Kepengurusan"><thead><tr><th>Dapukan</th><th>Nama pengurus</th></tr></thead><tbody>${roleRows}${otherRows(other.L,'laki-laki')}${otherRows(other.P,'perempuan')}${other.unknown.length?otherRows(other.unknown,'jenis kelamin belum terdata'):''}</tbody></table></section>`;
+  const rosterEntries=[];
+  for(const [k,label] of officers.filter(([key])=>key!=='lain')){
+    for(const name of off[k]?.length?off[k]:['—'])rosterEntries.push({role:`${label} ${desa?'Desa':'Kelompok'}`,name});
+  }
+  for(const [key,heading] of [['L','laki-laki'],['P','perempuan'],['unknown','jenis kelamin belum terdata']]){
+    if(key==='unknown'&&!other[key].length)continue;
+    rosterEntries.push({heading:`Kepengurusan lain · ${heading}`});
+    for(const x of other[key])rosterEntries.push({role:x.role||'Dapukan belum diisi',name:x.name});
+  }
+  const roleCell=x=>x.heading?`<th colspan="2">${safe(x.heading)}</th>`:`<td>${safe(x.role)}</td><td class="pu-left">${safe(x.name)}</td>`;
+  const columns=rosterEntries.length>55?4:3,perColumn=Math.ceil(rosterEntries.length/columns);
+  const printRows=Array.from({length:perColumn},(_,i)=>`<tr>${Array.from({length:columns},(_,c)=>rosterEntries[c*perColumn+i]?roleCell(rosterEntries[c*perColumn+i]):'<td></td><td></td>').join('')}</tr>`).join('');
+  const rosterTable=`<section class="pu-block pu-roster"><h3>KEPENGURUSAN ${desa?'DESA':'KELOMPOK'}</h3><table class="pu-screen-roster" data-pu-sheet="Kepengurusan"><thead><tr><th>Dapukan</th><th>Nama pengurus</th></tr></thead><tbody>${rosterEntries.map(x=>`<tr>${roleCell(x)}</tr>`).join('')}</tbody></table><table class="pu-print-roster"><thead><tr>${Array.from({length:columns},()=>'<th>Dapukan</th><th>Nama pengurus</th>').join('')}</tr></thead><tbody>${printRows}</tbody></table></section>`;
   const sign=off.imam?.[0]||'________________',pnb=off.penerobos?.[0]||'________________';
   return `<article class="pu-report" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">${desa?'DESA':'KELOMPOK'} · ${desa?'Perwira':safe(names[s])} · Bekasi Timur · ${safe(titleMonth(period))}</div>
   ${age(['balita','cbr','pra'],'JUMLAH JAMAAH · ANAK','Jamaah Anak')}${age(['remaja','usia','dewasa','total'],'JUMLAH JAMAAH · REMAJA DAN DEWASA','Jamaah Dewasa')}${summary}
-  <div class="pu-print-break"></div>${facilitiesTable}${activityTable}${rosterTable}
+  ${facilitiesTable}${activityTable}${rosterTable}
   ${notes.length?`<p class="pu-notes"><b>Perlu dicek:</b> ${notes.map(safe).join('; ')}.</p>`:''}<p class="pu-sign">Perwira, ${safe(titleMonth(period))}<br>Kyai ${desa?'Desa':'Kelompok'}: ${safe(sign)} &nbsp; &nbsp; Penerobos ${desa?'Desa':'Kelompok'}: ${safe(pnb)}</p></article>`;
 }
 async function reload(){
