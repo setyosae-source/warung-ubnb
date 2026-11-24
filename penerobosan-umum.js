@@ -12,7 +12,7 @@ const groupExtras=[['kamar_mt','Kamar MT','number'],['kamar_tamu','Kamar tamu','
 const desaExtras=[['kegiatan_desa','Pengajian desa / bulan','text'],['kegiatan_mudadi','Muda-mudi / bulan','text'],['kegiatan_ibu','Ibu-ibu / bulan','text'],['kegiatan_agnia','Agnia / bulan','text'],['kegiatan_mus','Musyawarah / bulan','text'],['kegiatan_organisasi','Organisasi / bulan','text']];
 const officers=[['imam','Imam/Kyai'],['wakil','Wakil KI'],['penerobos','Penerobos'],['muballigh','Muballigh'],['ku','KU'],['aghnia','Agnia'],['lain','Kepengurusan lain']];
 const officerPatterns={imam:/^KI (?:Desa|Kelompok)$/i,wakil:/^Wakil KI\b/i,penerobos:/^Penerobos\b/i,muballigh:/^(?:Muballigh|Mubaligh|Muballegh|MT)\b/i,ku:/\bKU\b/i,aghnia:/^(?:Agnia|Aghnia|Aghniya)\b/i};
-let profiles={},history=[],mubCounts={},current=null,archiveView=null,busy=false;
+let profiles={},history=[],mubCounts={},current=null,archiveView=null,busy=false,printCleanup=null;
 const el=id=>document.getElementById(id);
 function separateSensusTabs(){
   const panel=el('pu-panel'),oldPage=el('page-sensus');
@@ -31,6 +31,7 @@ function separateSensusTabs(){
 separateSensusTabs();
 const reportStyle=document.createElement('style');
 reportStyle.textContent=`
+#pu-print-sheet{display:none!important}
 .pu-report.pu-excel{min-width:0;max-width:1200px;margin:auto;color:#111;font:11px Arial,sans-serif;background:#fff}
 .pu-excel h2{text-align:center;font-size:16px;margin:3px 0}
 .pu-excel .pu-sub{text-align:center;font-weight:bold;margin:0 0 5px}
@@ -56,6 +57,7 @@ reportStyle.textContent=`
 .pu-excel .pu-signatures .pu-sign-space{height:48px}
 @media print{
   @page{size:A4 landscape;margin:6mm}
+  body.pu-print-mode #pu-print-sheet{display:block!important}
   body.pu-print-mode #pu-print-sheet .pu-report.pu-excel{width:100%;max-width:none;min-width:0;font:7pt Arial,sans-serif}
   body.pu-print-mode #pu-print-sheet .pu-excel h2{font-size:15pt;line-height:1.1;margin:0 0 2px}
   body.pu-print-mode #pu-print-sheet .pu-excel .pu-sub{font-size:10pt;line-height:1.2;margin:1px 0}
@@ -382,16 +384,24 @@ async function exportExcel(){
 }
 function print(){
   if(!current)return alertMsg('Buat pratinjau dahulu.');
+  if(printCleanup)printCleanup();
+  document.querySelectorAll('#pu-print-sheet').forEach(old=>old.remove());
   const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;
   const previousTitle=document.title;
   const scopeLabel=current.scope==='DESA'?'Desa':`Klp ${String(current.scope).replace(/^PW/,'')}`;
   document.title=`Penerobosan Umum - ${scopeLabel} - ${titleMonth(current.period)}`;
   document.body.append(node);document.body.classList.add('pu-print-mode');
   let finished=false;
-  const done=()=>{if(finished)return;finished=true;node.remove();document.body.classList.remove('pu-print-mode');document.title=previousTitle;window.removeEventListener('afterprint',done);};
+  const done=()=>{
+    if(finished)return;finished=true;
+    clearTimeout(timer);node.remove();document.body.classList.remove('pu-print-mode');
+    document.title=previousTitle;window.removeEventListener('afterprint',done);
+    if(printCleanup===done)printCleanup=null;
+  };
+  printCleanup=done;
   window.addEventListener('afterprint',done);
+  const timer=setTimeout(done,60000);
   try{window.print();}catch(e){done();throw e;}
-  setTimeout(done,60000);
 }
 async function init(){if(!el('pu-panel'))return;const select=el('pu-scope'),selected=select.value;
   const allowed=CU?.kelompok_scope?[CU.kelompok_scope]:['DESA',...GROUPS];
