@@ -13,6 +13,21 @@ const desaExtras=[['wakil_desa','Jumlah wakil desa','number'],['kegiatan_desa','
 const officers=[['imam','Imam/Kyai'],['wakil','Wakil'],['penerobos','Penerobos'],['muballigh','Muballigh'],['ku','KU'],['aghnia','Aghniya'],['lain','Kepengurusan lain']];
 let profiles={},history=[],current=null,archiveView=null,busy=false;
 const el=id=>document.getElementById(id);
+function separateSensusTabs(){
+  const panel=el('pu-panel'),oldPage=el('page-sensus');
+  const bar=document.querySelector('#app > .page-tabs');
+  const monthly=bar?.querySelector('button[onclick="showTab(\'sensus\',this)"]');
+  if(!panel||!oldPage||!monthly||el('page-penerobosan'))return;
+  monthly.textContent='📋 Sensus Bulanan';
+  const button=document.createElement('button');
+  button.type='button';button.className='page-tab';button.id='tab-btn-penerobosan';
+  button.textContent='📑 Sensus Penerobosan Umum';
+  button.onclick=function(){showTab('penerobosan',button);};
+  monthly.after(button);
+  const page=document.createElement('div');page.id='page-penerobosan';page.className='page';
+  oldPage.after(page);page.append(panel);
+}
+separateSensusTabs();
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>{const v=Number(x);return x!==''&&x!==null&&x!==undefined&&Number.isFinite(v)?Math.max(0,Math.floor(v)):null};
 const shown=x=>x===null||x===undefined||x===''?'—':safe(x);
@@ -138,7 +153,19 @@ function exportExcel(){if(!current)return alertMsg('Buat pratinjau dahulu.');if(
 function print(){if(!current)return alertMsg('Buat pratinjau dahulu.');const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;document.body.append(node);document.body.classList.add('pu-print-mode');const done=()=>{node.remove();document.body.classList.remove('pu-print-mode');window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);window.print();setTimeout(done,60000);}
 async function init(){if(!el('pu-panel'))return;const select=el('pu-scope');select.innerHTML=(CU?.kelompok_scope?[CU.kelompok_scope]:['DESA',...GROUPS]).map(g=>`<option value="${g}">${safe(names[g])} (${g})</option>`).join('');
   const now=new Date();el('pu-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  el('pu-save').hidden=!canEdit();try{await reload();refresh();}catch(e){alertMsg('Data penerobosan belum siap: '+e.message);}}
+  el('pu-save').hidden=!canEdit();
+  const editButton=el('pu-panel').querySelector('button[onclick="puEditProfile()"]');
+  if(editButton)editButton.hidden=!canEdit();
+  if(isViewer()){
+    // Pembatasan lama memakai indeks tab. Pulihkan tab penerobosan yang baru dan
+    // tutup dua tab administrasi berdasarkan tujuan, bukan posisi tombol.
+    el('tab-btn-penerobosan').style.setProperty('display','flex','important');
+    for(const target of ['absen','isrun']){
+      const button=document.querySelector(`#app > .page-tabs button[onclick="showTab('${target}',this)"]`);
+      if(button)button.style.setProperty('display','none','important');
+    }
+  }
+  try{await reload();refresh();}catch(e){alertMsg('Data penerobosan belum siap: '+e.message);}}
 window.puScopeChanged=()=>{el('pu-profile').hidden=true;refresh();};window.puRefresh=refresh;window.puEditProfile=edit;window.puCloseProfile=()=>{el('pu-profile').hidden=true;};window.puSaveProfile=saveProfile;window.puArchive=archive;window.puExport=exportExcel;window.puPrint=print;
 const oldRender=window.renderSensus;
 window.renderSensus=function(...args){const result=oldRender?.apply(this,args);if(CU)void init();return result;};
