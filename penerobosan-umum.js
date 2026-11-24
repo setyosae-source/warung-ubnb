@@ -75,7 +75,7 @@ function alertMsg(s){el('pu-message').textContent=s||'';}
 function fields(items,values){return items.map(([key,label,type])=>`<label>${safe(label)}<input data-pu="${key}" type="${type}" ${type==='number'?'min="0" step="1"':''} value="${safe(values[key]??'')}"></label>`).join('');}
 function roster(g,code){
   const lv=g==='DESA'?'desa':'kelompok';
-  const entries=(aPengurus||[]).filter(p=>p.aktif!==false&&p.level===lv&&(g==='DESA'||p.kelompok_nama===g));
+  const entries=(aPengurus||[]).filter(p=>p.aktif!==false&&p.level===lv&&(g==='DESA'||p.kelompok_nama===g)&&!/^MS\b/i.test(p.dapukan||''));
   const other=code==='lain';
   const seen=new Set();
   return entries.filter(p=>other?!Object.values(officerPatterns).some(pattern=>pattern.test(p.dapukan||'')):officerPatterns[code]?.test(p.dapukan||''))
@@ -114,7 +114,7 @@ function groupData(g,date){
   r.members=members.length;r.missing=missing;
   r.kk=new Set(members.map(j=>j.keluarga_id||j.nama_kk).filter(Boolean)).size;
   r.janda=members.filter(j=>normGender(j.jenis_kelamin)==='P'&&String(j.status_nikah||'').trim()==='Janda / Duda').length;
-  const pengurus=(aPengurus||[]).filter(x=>x.aktif!==false&&x.level==='kelompok'&&x.kelompok_nama===g&&x.did);
+  const pengurus=(aPengurus||[]).filter(x=>x.aktif!==false&&x.level==='kelompok'&&x.kelompok_nama===g&&x.did&&!/^MS\b/i.test(x.dapukan||''));
   const semua=new Set(pengurus.map(x=>String(x.did)));
   const empatS=new Set(pengurus.filter(x=>pengurus4S(x.dapukan)).map(x=>String(x.did)));
   r.pengurus4s=empatS.size;
