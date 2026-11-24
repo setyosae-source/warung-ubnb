@@ -320,6 +320,24 @@ body.modal-open{overflow:hidden!important;}
 .btn-foto-ganti{margin-top:6px;padding:5px 12px;background:var(--green);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
 .btn-foto-hapus{padding:5px 10px;background:var(--red-light);color:var(--red);border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
 .foto-upload-progress{font-size:11px;color:var(--green);font-weight:600;margin-top:4px;display:none;}
+.jamaah-view-head{display:flex;align-items:center;gap:14px;padding:18px 16px;background:#f0f7f2;border-bottom:1px solid var(--border);}
+.jamaah-view-photo{width:88px;height:88px;flex:0 0 88px;border-radius:12px;object-fit:cover;background:#fff;border:1px solid var(--border);cursor:zoom-in;}
+.jamaah-view-placeholder{width:88px;height:88px;flex:0 0 88px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#e5eee7;color:#526157;font-size:30px;}
+.jamaah-view-name{font-size:18px;font-weight:800;line-height:1.25;overflow-wrap:anywhere;}
+.jamaah-view-meta{font-size:12px;color:var(--text-muted);margin-top:4px;}
+.jamaah-view-section{padding:14px 16px;border-bottom:1px solid var(--border-light);}
+.jamaah-view-section h4{font-size:12px;color:var(--green);margin:0 0 10px;}
+.jamaah-view-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;}
+.jamaah-view-field{min-width:0;overflow-wrap:anywhere;}
+.jamaah-view-field small{display:block;color:var(--text-muted);font-size:11px;margin-bottom:3px;}
+.jamaah-view-field b{font-size:13px;font-weight:650;}
+@media(max-width:480px){.jamaah-view-grid{grid-template-columns:1fr 1fr}.jamaah-view-photo,.jamaah-view-placeholder{width:72px;height:72px;flex-basis:72px}.jamaah-view-name{font-size:16px}}
+#jamaah-photo-viewer{display:none;position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,.94);color:#fff;align-items:center;justify-content:center;padding:55px 16px 40px;box-sizing:border-box;}
+#jamaah-photo-viewer.show{display:flex;}
+#jamaah-photo-viewer img{display:block;max-width:100%;max-height:calc(100dvh - 120px);object-fit:contain;}
+#jamaah-photo-viewer .photo-viewer-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;font-size:15px;font-weight:700;}
+#jamaah-photo-viewer button{border:1px solid #fff8;background:#333;color:#fff;padding:8px 12px;border-radius:7px;cursor:pointer;font:inherit;}
+body.jamaah-photo-open{overflow:hidden!important;}
 
 /* AUTOCOMPLETE */
 .ac-wrap{position:relative;flex:1;}
@@ -4061,10 +4079,10 @@ function renderJamaah(){
     const umurStr=umur===null?'<span style="color:var(--text-muted);">—</span>':String(umur);
     const safeNm=(j.nama||'').replace(/'/g,"\\'");
     const fotoCell=j.foto_url
-      ?`<img src="${j.foto_url}" class="foto-avatar" alt="foto" onclick="event.stopPropagation();bukaModalEdit('${j.did}')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`+
-       `<div class="foto-avatar-placeholder" style="display:none;" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`
-      :`<div class="foto-avatar-placeholder" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`;
-    html+=`<tr ${isKK?'class="row-iskk"':''} onclick="bukaModalEdit('${j.did}')">
+      ?`<img src="${j.foto_url}" class="foto-avatar" alt="foto" onclick="event.stopPropagation();lihatFotoJamaah('${j.did}')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`+
+       `<div class="foto-avatar-placeholder" style="display:none;" onclick="event.stopPropagation();bukaProfilJamaah('${j.did}')">👤</div>`
+      :`<div class="foto-avatar-placeholder" onclick="event.stopPropagation();bukaProfilJamaah('${j.did}')">👤</div>`;
+    html+=`<tr ${isKK?'class="row-iskk"':''} onclick="bukaProfilJamaah('${j.did}')">
       <td class="tc-num">${idx+1}</td>
       <td style="text-align:center;padding:5px 6px;">${fotoCell}</td>
       <td>${j.nama_kk||'<span style="color:var(--text-muted);">—</span>'}</td>
@@ -4088,6 +4106,70 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 // ===== MODAL EDIT JAMAAH =====
 let _editDid=null,_editOriginalStatus=null,_editOriginalKK=null;
+function bukaProfilJamaah(did){
+  const j=aJamaah.find(x=>String(x.did)===String(did));
+  if(!j)return;
+  const val=x=>escH(x===null||x===undefined||String(x).trim()===''?'—':String(x));
+  const field=(label,value)=>`<div class="jamaah-view-field"><small>${label}</small><b>${val(value)}</b></div>`;
+  const kel=KELOMPOK_LIST.find(x=>x.singkat===j.kelompok_nama);
+  const roles=(aPengurus||[]).filter(p=>p.aktif!==false&&String(p.did)===String(j.did))
+    .map(p=>`${p.dapukan||'Dapukan belum diisi'} (${p.level==='desa'?'Desa':p.level==='kelompok'?'Kelompok '+(p.kelompok_nama||''):'Khusus'})`);
+  const umur=umurFromTgl(j.tgl_lahir);
+  document.getElementById('modal-jamaah-title').textContent='👤 Profil Jamaah';
+  document.getElementById('modal-jamaah-body').innerHTML=`
+    <div class="jamaah-view">
+      <div class="jamaah-view-head">
+        ${j.foto_url?`<img class="jamaah-view-photo" src="${val(j.foto_url)}" alt="Foto ${val(j.nama)}" title="Lihat foto lebih besar">`:'<div class="jamaah-view-placeholder">👤</div>'}
+        <div><div class="jamaah-view-name">${val(j.nama)}</div><div class="jamaah-view-meta">${val(kel?.lengkap||j.kelompok_nama)} · ${val(j.did)}</div>${j.foto_url?'<div class="jamaah-view-meta">Ketuk foto untuk melihat lebih besar</div>':'<div class="jamaah-view-meta">Belum ada foto</div>'}</div>
+      </div>
+      <div class="jamaah-view-section"><h4>DATA JAMAAH</h4><div class="jamaah-view-grid">
+        ${field('Kepala keluarga',j.nama_kk)}${field('Jenis kelamin',j.jenis_kelamin)}
+        ${field('Tanggal lahir',j.tgl_lahir)}${field('Umur',umur===null?'—':umur+' tahun')}
+        ${field('Status nikah',j.status_nikah)}${field('Status sambung',j.status_sambung)}
+        ${field('Kelas KBM',kelasKbmAktual(j))}${field('Nomor WA',j.nomor_wa)}
+        ${field('Alamat',j.alamat)}${j.tgl_meninggal?field('Tanggal meninggal',j.tgl_meninggal):''}
+      </div></div>
+      <div class="jamaah-view-section"><h4>PENGURUS & ATRIBUT SENSUS</h4><div class="jamaah-view-grid">
+        ${field('Dapukan aktif',roles.length?roles.join('; '):'—')}
+        ${field('Sarjana',j.is_sarjana==null?'—':j.is_sarjana?'Ya':'Tidak')}
+        ${field('Haji',j.is_haji==null?'—':j.is_haji?'Ya':'Tidak')}
+        ${field('Aghnia',j.is_aghnia==null?'—':j.is_aghnia?'Ya':'Tidak')}
+      </div></div>
+    </div>`;
+  document.querySelector('#modal-jamaah-body .jamaah-view-photo')?.addEventListener('click',()=>lihatFotoJamaah(did));
+  const btnClose=document.querySelector('#modal-jamaah .btn-cancel');
+  const btnAction=document.querySelector('#modal-jamaah .btn-save');
+  btnClose.textContent='Tutup';
+  btnAction.style.display=canEdit()?'':'none';
+  btnAction.textContent='✏️ Edit Data';
+  btnAction.onclick=()=>bukaModalEdit(did);
+  openMod('modal-jamaah');
+}
+function lihatFotoJamaah(did){
+  const j=aJamaah.find(x=>String(x.did)===String(did));
+  if(!j?.foto_url){toast('Belum ada foto jamaah.',true);return;}
+  let box=document.getElementById('jamaah-photo-viewer');
+  if(!box){
+    box=document.createElement('div');box.id='jamaah-photo-viewer';
+    box.innerHTML='<div class="photo-viewer-top"><span></span><button type="button">Tutup ✕</button></div><img alt="Foto jamaah">';
+    box.addEventListener('click',e=>{if(e.target===box)tutupFotoJamaah();});
+    box.querySelector('button').onclick=tutupFotoJamaah;
+    document.body.appendChild(box);
+  }
+  box.querySelector('span').textContent=j.nama||'Foto jamaah';
+  const img=box.querySelector('img');img.src=j.foto_url;img.alt='Foto '+(j.nama||'jamaah');
+  img.onerror=()=>{toast('Foto tidak dapat dimuat.',true);tutupFotoJamaah();};
+  box.classList.add('show');document.body.classList.add('jamaah-photo-open');
+}
+function tutupFotoJamaah(){
+  document.getElementById('jamaah-photo-viewer')?.classList.remove('show');
+  document.body.classList.remove('jamaah-photo-open');
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&document.getElementById('jamaah-photo-viewer')?.classList.contains('show')){
+    e.stopImmediatePropagation();tutupFotoJamaah();
+  }
+},true);
 function bukaModalEdit(did){
   const j=aJamaah.find(x=>x.did===did);
   if(!j) return;
@@ -4102,10 +4184,10 @@ function bukaModalEdit(did){
   document.getElementById('modal-jamaah-body').innerHTML=`
     <div class="foto-modal-area" id="ej-foto-area">
       ${j.foto_url
-        ?`<img id="ej-foto-img" src="${j.foto_url}" class="foto-modal-img" onclick="triggerFotoUpload()" onerror="this.style.display='none';document.getElementById('ej-foto-placeholder').style.display='flex'">`+
-          `<div id="ej-foto-placeholder" class="foto-modal-placeholder" style="display:none;" onclick="triggerFotoUpload()">👤</div>`
-        :`<div id="ej-foto-placeholder" class="foto-modal-placeholder" onclick="triggerFotoUpload()">👤</div>`+
-          `<img id="ej-foto-img" src="" class="foto-modal-img" style="display:none;">`
+        ?`<img id="ej-foto-img" src="${j.foto_url}" class="foto-modal-img" onclick="lihatFotoJamaah(_editDid)" title="Lihat foto" onerror="this.style.display='none';document.getElementById('ej-foto-placeholder').style.display='flex'">`+
+          `<div id="ej-foto-placeholder" class="foto-modal-placeholder" style="display:none;" title="Belum ada foto">👤</div>`
+        :`<div id="ej-foto-placeholder" class="foto-modal-placeholder" title="Belum ada foto">👤</div>`+
+          `<img id="ej-foto-img" src="" class="foto-modal-img" style="display:none;" onclick="lihatFotoJamaah(_editDid)" title="Lihat foto">`
       }
       <div class="foto-modal-info">
         <div class="nm">${(j.nama||'').replace(/</g,'&lt;')}</div>
@@ -4211,6 +4293,10 @@ function bukaModalEdit(did){
   const selfHead=String(j.nama||'').trim().toLowerCase()===String(j.nama_kk||'').trim().toLowerCase();
   document.getElementById('ej-kk-mode').value=selfHead?'self':'existing';renderDashboardEditKK();
   if(!selfHead){const cur=dashboardKKHeadsForKel(j.kelompok_nama).find(h=>String(h.nama||'').trim().toLowerCase()===String(j.nama_kk||'').trim().toLowerCase());if(cur)kkComboSelectDid('ej',cur.did);updateDashboardKKHint();}
+  const btnSave=document.querySelector('#modal-jamaah .btn-save');
+  const btnCancel=document.querySelector('#modal-jamaah .btn-cancel');
+  btnSave.style.display='';btnSave.textContent='💾 Simpan';btnSave.onclick=simpanJamaah;
+  btnCancel.textContent='Batal';
   openMod('modal-jamaah');
   // Kalau viewer, set semua input readonly + sembunyi tombol simpan
   if(isViewer()){
@@ -16975,15 +17061,15 @@ ${table.outerHTML}
         const umurStr=umur===null?'<span style="color:var(--text-muted);">—</span>':String(umur);
 
         const fotoCell=j.foto_url
-          ?`<img src="${j.foto_url}" class="foto-avatar" alt="foto" onclick="event.stopPropagation();bukaModalEdit('${j.did}')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-             <div class="foto-avatar-placeholder" style="display:none;" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`
-          :`<div class="foto-avatar-placeholder" onclick="event.stopPropagation();bukaModalEdit('${j.did}')">👤</div>`;
+          ?`<img src="${j.foto_url}" class="foto-avatar" alt="foto" onclick="event.stopPropagation();lihatFotoJamaah('${j.did}')" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+             <div class="foto-avatar-placeholder" style="display:none;" onclick="event.stopPropagation();bukaProfilJamaah('${j.did}')">👤</div>`
+          :`<div class="foto-avatar-placeholder" onclick="event.stopPropagation();bukaProfilJamaah('${j.did}')">👤</div>`;
 
         const kkMeta=isKK
           ?`<span class="v29-kk-head">👑 Kepala KK</span> · KK: ${escH(currentKK||'-')}`
           :`KK: ${escH(currentKK||'-')}`;
 
-        out+=`<tr class="${familyStart?'v29-family-start ':''}${isKK?'row-iskk':''}" onclick="bukaModalEdit('${j.did}')">
+        out+=`<tr class="${familyStart?'v29-family-start ':''}${isKK?'row-iskk':''}" onclick="bukaProfilJamaah('${j.did}')">
           <td class="tc-num">${globalNo}</td>
           <td style="text-align:center;padding:4px 5px;">${fotoCell}</td>
           <td>
