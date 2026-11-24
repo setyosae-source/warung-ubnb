@@ -66,7 +66,7 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-excel small,body.pu-print-mode #pu-print-sheet .pu-excel .pu-notes{font-size:6pt;margin:2px 0}
   body.pu-print-mode #pu-print-sheet .pu-excel .pu-sign{font-size:7pt;margin:2px 0}
   body.pu-print-mode #pu-print-sheet .pu-excel tr{break-inside:avoid}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-block{margin:9px 0}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-block{margin:8px 0}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-no{width:2.4%}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-kelompok{width:12%}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main col.pu-col-angka{width:2.64%}
@@ -81,10 +81,13 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other th,
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:8.5pt;padding:3px 2px;line-height:1.2}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail tbody td{height:20px}
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures{font-size:8.5pt;margin-top:6px;break-inside:avoid;page-break-inside:avoid}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures{font-size:8.5pt;margin-top:4px;break-inside:avoid;page-break-inside:avoid}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-signatures .pu-sign-space{height:34px}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other th,
-  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:7.2pt;padding:1px 2px;line-height:1.08}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{font-size:7.2pt;padding:1.5px 2px;line-height:1.12}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other td{border-top:0;border-bottom:0}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other tr:last-child td{border-bottom:1px solid #333}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-other{margin-bottom:0}
 }`;
 document.body.append(reportStyle);
 const safe=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
