@@ -1747,10 +1747,40 @@ function toast(msg,err=false){
 function syncModalBodyLock(){
   document.body.classList.toggle('modal-open',!!document.querySelector('.modal-overlay.show'));
 }
+// Setiap lapisan Jamaah punya langkah riwayat sendiri agar Back Android kembali ke daftar.
+const jamaahHistoryKey='__ubnbJamaahOverlay';
+const jamaahHistorySession=Math.random().toString(36).slice(2);
+let jamaahModalHistoryToken=null,jamaahPhotoHistoryToken=null;
+function pushJamaahHistory(layer){
+  const token=jamaahHistorySession+':'+layer+':'+Math.random().toString(36).slice(2);
+  try{
+    const prev=history.state;
+    history.pushState({...((prev&&typeof prev==='object'&&!Array.isArray(prev))?prev:{}),[jamaahHistoryKey]:token},'',location.href);
+    return token;
+  }catch(e){console.warn('Riwayat profil tidak tersedia:',e);return null;}
+}
+function leaveJamaahHistory(token){
+  if(token&&history.state?.[jamaahHistoryKey]===token)history.back();
+}
+window.addEventListener('popstate',()=>{
+  const token=history.state?.[jamaahHistoryKey];
+  if(jamaahPhotoHistoryToken&&token!==jamaahPhotoHistoryToken){
+    document.getElementById('jamaah-photo-viewer')?.classList.remove('show');
+    document.body.classList.remove('jamaah-photo-open');
+    jamaahPhotoHistoryToken=null;
+  }
+  if(jamaahModalHistoryToken&&token!==jamaahModalHistoryToken){
+    document.getElementById('modal-jamaah')?.classList.remove('show');
+    document.body.classList.remove('jamaah-profile-open');
+    jamaahModalHistoryToken=null;
+    syncModalBodyLock();
+  }
+});
 function openMod(id){
   const m=document.getElementById(id);
   if(!m)return;
   if(id==='modal-jamaah'){
+    if(!m.classList.contains('show'))jamaahModalHistoryToken=pushJamaahHistory('profile');
     document.body.classList.add('jamaah-profile-open');
     if(m.parentElement!==document.body)document.body.appendChild(m);
   }
@@ -1761,13 +1791,16 @@ function closeMod(id){
   const m=document.getElementById(id);
   if(!m)return;
   m.classList.remove('show');
-  if(id==='modal-jamaah')document.body.classList.remove('jamaah-profile-open');
+  if(id==='modal-jamaah'){
+    document.body.classList.remove('jamaah-profile-open');
+    leaveJamaahHistory(jamaahModalHistoryToken);
+    jamaahModalHistoryToken=null;
+  }
   requestAnimationFrame(syncModalBodyLock);
 }
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'));
-    document.body.classList.remove('jamaah-profile-open');
+    document.querySelectorAll('.modal-overlay.show').forEach(m=>closeMod(m.id));
     syncModalBodyLock();
   }
 });
@@ -4159,11 +4192,14 @@ function lihatFotoJamaah(did){
   box.querySelector('span').textContent=j.nama||'Foto jamaah';
   const img=box.querySelector('img');img.src=j.foto_url;img.alt='Foto '+(j.nama||'jamaah');
   img.onerror=()=>{toast('Foto tidak dapat dimuat.',true);tutupFotoJamaah();};
+  if(!box.classList.contains('show'))jamaahPhotoHistoryToken=pushJamaahHistory('photo');
   box.classList.add('show');document.body.classList.add('jamaah-photo-open');
 }
 function tutupFotoJamaah(){
   document.getElementById('jamaah-photo-viewer')?.classList.remove('show');
   document.body.classList.remove('jamaah-photo-open');
+  leaveJamaahHistory(jamaahPhotoHistoryToken);
+  jamaahPhotoHistoryToken=null;
 }
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&document.getElementById('jamaah-photo-viewer')?.classList.contains('show')){
