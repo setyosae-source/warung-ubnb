@@ -218,20 +218,72 @@ async function archive(){if(!canEdit()||busy)return;busy=true;try{
   if(error||!data?.ok)throw new Error(error?.message||data?.error||'Gagal menyimpan laporan');
   await reload();refresh();alertMsg('Laporan '+titleMonth(snap.period)+' tersimpan.');
  }catch(e){alertMsg(e.message);}finally{busy=false;}}
-function exportExcel(){
+function loadExcelWriter(){
+  if(window.ExcelJS)return Promise.resolve(window.ExcelJS);
+  return new Promise((resolve,reject)=>{
+    let script=document.getElementById('pu-excel-writer');
+    if(!script){
+      script=document.createElement('script');
+      script.id='pu-excel-writer';
+      script.src='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+      document.head.appendChild(script);
+    }
+    script.addEventListener('load',()=>window.ExcelJS?resolve(window.ExcelJS):reject(new Error('Komponen format Excel belum siap')),{once:true});
+    script.addEventListener('error',()=>reject(new Error('Gagal memuat komponen format Excel')),{once:true});
+  });
+}
+async function exportExcel(){
   if(!current)return alertMsg('Buat pratinjau dahulu.');
-  if(typeof XLSX==='undefined')return alertMsg('Komponen Excel belum tersedia.');
-  const sheet=XLSX.utils.aoa_to_sheet([['LAPORAN PENEROBOSAN UMUM'],[`${current.scope} · ${titleMonth(current.period)}`],[]]);
-  const tables=el('pu-report').querySelectorAll('table[data-pu-sheet]');
-  for(const table of tables){
-    const row=XLSX.utils.decode_range(sheet['!ref']).e.r+2;
-    XLSX.utils.sheet_add_dom(sheet,table,{origin:{r:row,c:0}});
-  }
-  const width=XLSX.utils.decode_range(sheet['!ref']).e.c+1;
-  sheet['!cols']=Array.from({length:width},(_,i)=>({wch:i<2?15:8}));
-  const book=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book,sheet,'Penerobosan Umum');
-  XLSX.writeFile(book,`Penerobosan_Umum_${current.scope}_${current.period}.xlsx`);
+  try{
+    const ExcelJS=await loadExcelWriter(),book=new ExcelJS.Workbook();
+    const sheet=book.addWorksheet('Penerobosan Umum',{pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:1,margins:{left:0.2,right:0.2,top:0.25,bottom:0.25,header:0.1,footer:0.1}}});
+    sheet.views=[{state:'normal',showGridLines:false}];
+    sheet.properties.defaultRowHeight=14;
+    for(let i=1;i<=35;i++)sheet.getColumn(i).width=4.3;
+    const green={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9E8CF'}};
+    const pale={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDF5ED'}};
+    const border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+    const title=sheet.getCell('A1');sheet.mergeCells('A1:AI1');title.value='LAPORAN PENEROBOSAN UMUM';title.font={name:'Arial',size:15,bold:true};title.alignment={horizontal:'center',vertical:'middle'};sheet.getRow(1).height=23;
+    const subtitle=sheet.getCell('A2');sheet.mergeCells('A2:AI2');subtitle.value=current.scope==='DESA'?'JUMLAH JAMAAH, PERSENAN, KEGIATAN DAN KEPENGURUSAN DESA':'JUMLAH JAMAAH, PERSENAN DAN KEGIATAN KELOMPOK';subtitle.font={name:'Arial',size:10,bold:true};subtitle.alignment={horizontal:'center'};sheet.getRow(2).height=17;
+    const meta=sheet.getCell('A3');sheet.mergeCells('A3:AI3');meta.value=`${current.scope==='DESA'?'DESA: Perwira':'KELOMPOK: '+(names[current.scope]||current.scope)+' · DESA: Perwira'} · DAERAH: Bekasi Timur · BULAN: ${titleMonth(current.period)}`;meta.font={name:'Arial',size:9};meta.alignment={horizontal:'center'};sheet.getRow(3).height=16;
+    let top=5;
+    const tables=el('pu-report').querySelectorAll('table[data-pu-sheet]');
+    for(const table of tables){
+      const trs=Array.from(table.rows),main=table.classList.contains('pu-excel-main');
+      const logicalCount=main?(current.scope==='DESA'?32:31):table.classList.contains('pu-excel-detail')?(current.scope==='DESA'?19:17):table.classList.contains('pu-excel-roster')?6:4;
+      const start=i=>main?(current.scope==='DESA'?(i===0?1:i===1?2:i+4):(i===0?1:i+4)):Math.floor(i*35/logicalCount)+1;
+      const busy=[];
+      trs.forEach((tr,r)=>{
+        let index=0,maxLines=1;
+        Array.from(tr.cells).forEach(dom=>{
+          while(busy[index]>r)index++;
+          const span=Math.max(1,dom.colSpan||1),vertical=Math.max(1,dom.rowSpan||1);
+          const col1=start(index),col2=start(index+span)-1,rr=top+r;
+          const value=(dom.innerText||dom.textContent||'').trim();
+          const cell=sheet.getCell(rr,col1);
+          if(col1!==col2||vertical>1)sheet.mergeCells(rr,col1,rr+vertical-1,col2);
+          const numeric=/^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(value)&&!dom.closest('.pu-excel-roster,.pu-excel-other');
+          cell.value=numeric?Number(value.replace(/\./g,'')):value;
+          if(numeric)cell.numFmt='#,##0';
+          cell.font={name:'Arial',size:main?8:9,bold:dom.tagName==='TH'||tr.classList.contains('pu-total')};
+          cell.alignment={horizontal:dom.classList.contains('pu-left')?'left':'center',vertical:'middle',wrapText:true};
+          cell.border=border;
+          if(dom.tagName==='TH')cell.fill=green;
+          else if(tr.classList.contains('pu-total'))cell.fill=pale;
+          maxLines=Math.max(maxLines,value.split('\n').length);
+          for(let i=index;i<index+span;i++)busy[i]=r+vertical;
+          index+=span;
+        });
+        sheet.getRow(top+r).height=Math.min(220,Math.max(main?18:17,maxLines*12+5));
+      });
+      top+=trs.length+2;
+    }
+    const note=sheet.getCell(top,1);sheet.mergeCells(top,1,top,35);note.value=Array.from(el('pu-report').querySelectorAll('.pu-notes, .pu-sign, small')).map(x=>x.textContent.trim()).filter(Boolean).join('\n');note.font={name:'Arial',size:8};note.alignment={wrapText:true,vertical:'top'};sheet.getRow(top).height=Math.min(80,18+note.value.split('\n').length*11);
+    sheet.pageSetup.printArea=`A1:AI${top}`;
+    const bytes=await book.xlsx.writeBuffer();
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    const link=document.createElement('a');link.href=url;link.download=`Penerobosan_Umum_${current.scope}_${current.period}.xlsx`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){alertMsg('Gagal mengunduh Excel: '+e.message);}
 }
 function print(){if(!current)return alertMsg('Buat pratinjau dahulu.');const node=document.createElement('div');node.id='pu-print-sheet';node.innerHTML=el('pu-preview').innerHTML;document.body.append(node);document.body.classList.add('pu-print-mode');const done=()=>{node.remove();document.body.classList.remove('pu-print-mode');window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);window.print();setTimeout(done,60000);}
 async function init(){if(!el('pu-panel'))return;const select=el('pu-scope');select.innerHTML=(CU?.kelompok_scope?[CU.kelompok_scope]:['DESA',...GROUPS]).map(g=>`<option value="${g}">${safe(names[g])} (${g})</option>`).join('');
