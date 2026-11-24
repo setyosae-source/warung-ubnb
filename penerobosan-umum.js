@@ -243,10 +243,32 @@ async function exportExcel(){
     const green={type:'pattern',pattern:'solid',fgColor:{argb:current.scope==='DESA'?'FFDDEBF7':'FFC6E0B4'}};
     const pale={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDF5ED'}};
     const border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
-    const title=sheet.getCell('A1');sheet.mergeCells('A1:AI1');title.value='LAPORAN PENEROBOSAN UMUM';title.font={name:'Arial',size:15,bold:true};title.alignment={horizontal:'center',vertical:'middle'};sheet.getRow(1).height=23;
-    const subtitle=sheet.getCell('A2');sheet.mergeCells('A2:AI2');subtitle.value=current.scope==='DESA'?'JUMLAH JAMAAH, PERSENAN, KEGIATAN DAN KEPENGURUSAN DESA':'JUMLAH JAMAAH, PERSENAN DAN KEGIATAN KELOMPOK';subtitle.font={name:'Arial',size:10,bold:true};subtitle.alignment={horizontal:'center'};sheet.getRow(2).height=17;
-    const meta=sheet.getCell('A3');sheet.mergeCells('A3:AI3');meta.value=`${current.scope==='DESA'?'DESA: Perwira':'KELOMPOK: '+(names[current.scope]||current.scope)+' · DESA: Perwira'} · DAERAH: Bekasi Timur · BULAN: ${titleMonth(current.period)}`;meta.font={name:'Arial',size:9};meta.alignment={horizontal:'center'};sheet.getRow(3).height=16;
-    let top=5;
+    const desa=current.scope==='DESA',periode=current.period.split('-'),bulan=NAMA_BULAN[Number(periode[1])-1],tahun=periode[0];
+    const header=(range,value,options={})=>{
+      sheet.mergeCells(range);
+      const cell=sheet.getCell(range.split(':')[0]);cell.value=value;
+      cell.font={name:'Arial',size:options.size||9,bold:!!options.bold,color:options.color?{argb:options.color}:undefined};
+      cell.alignment={horizontal:options.align||'left',vertical:'middle'};
+      return cell;
+    };
+    header('A1:AI1','LAPORAN PENEROBOSAN UMUM',{size:15,bold:true,align:'center'});
+    header('A2:AI2',desa?'JUMLAH JAMAAH, PERSENAN, KEGIATAN DAN KEPENGURUSAN DESA':'JUMLAH JAMAAH, PERSENAN DAN KEGIATAN KELOMPOK',{size:11,bold:true,align:'center'});
+    sheet.getRow(1).height=24;sheet.getRow(2).height=21;
+    if(desa){
+      header('A3:N3','DESA     : Perwira');
+      header('A4:N4','DAERAH : Bekasi Timur');
+      header('T3:AA3','BULAN : '+bulan);
+      header('AC3:AI3','TAHUN : '+tahun);
+      header('AC4:AI4','DIISI DESA',{color:'FF2464B5',align:'right'});
+    }else{
+      header('A3:N3','KELOMPOK : '+(names[current.scope]||current.scope));
+      header('A4:N4','DESA        : Perwira');
+      header('A5:N5','DAERAH    : Bekasi Timur');
+      header('W4:AD4','BULAN : '+bulan);
+      header('W5:AD5','TAHUN : '+tahun);
+      header('AE6:AI6','DIISI KELOMPOK',{color:'FF297243',align:'right'});
+    }
+    let top=desa?6:8;
     const tables=el('pu-report').querySelectorAll('table[data-pu-sheet]');
     for(const table of tables){
       const trs=Array.from(table.rows),main=table.classList.contains('pu-excel-main');
