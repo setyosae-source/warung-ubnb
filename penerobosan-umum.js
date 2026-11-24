@@ -4,7 +4,7 @@
 const GROUPS=['PW1','PW2','PW3','PW4'];
 const names={DESA:'Desa Perwira',PW1:'Perwirasari',PW2:'Alinda',PW3:'Bulak Perwira',PW4:'Vila Indah Permai'};
 const common=[
- ['sub','Jumlah sub','number'],['pengurus4s','Pengurus 4 S','number'],['pengurus_lain','Pengurus lain','number'],
+ ['sub','Jumlah sub','number'],
  ['persenan','Persenan bulan ini (Rp)','number'],['janda_siap','Janda siap diwayuh','number'],['janda_btn','Janda BTN','number'],['janda_trangan','Janda trangan','number']
 ];
 const facilities=[['masjid','Masjid','number'],['jeding_l','Jeding putra','number'],['jeding_p','Jeding putri','number'],['aula','Aula','number'],['madrasah','Madrasah','number'],['pondok','Pondok','number'],['sekolah','Sekolah','number'],['mt','MT','number'],['ms','MS','number']];
@@ -48,6 +48,10 @@ function officersFor(g,p){
   const o={};for(const [k] of officers){const value=String(p['nama_'+k]||'').trim();o[k]=value?value.split(/\n|;/).map(x=>x.trim()).filter(Boolean):roster(g,k);}
   return o;
 }
+function pengurus4S(label){
+  // Semua dapukan KU (termasuk KU Pembangunan, Penulis/Pencatat KU) masuk 4S.
+  return /\b(?:KI|Penerobos|KU|Aghnia)\b/i.test(String(label||''));
+}
 function groupData(g,date){
   const p=profiles[g]||{},members=groupMembers(g),r={scope:g,nama:names[g],profile:p};
   for(const key of ['balita','cbr','pra','remaja','usia','dewasa','total']){r[key]={L:0,P:0};}
@@ -68,16 +72,19 @@ function groupData(g,date){
   r.members=members.length;r.missing=missing;
   r.kk=new Set(members.map(j=>j.keluarga_id||j.nama_kk).filter(Boolean)).size;
   r.janda=members.filter(j=>normGender(j.jenis_kelamin)==='P'&&String(j.status_nikah||'').trim()==='Janda / Duda').length;
-  r.pengurus=new Set((aPengurus||[]).filter(x=>x.aktif!==false&&x.level==='kelompok'&&x.kelompok_nama===g).map(x=>x.did).filter(Boolean)).size;
+  const pengurus=(aPengurus||[]).filter(x=>x.aktif!==false&&x.level==='kelompok'&&x.kelompok_nama===g&&x.did);
+  const semua=new Set(pengurus.map(x=>String(x.did)));
+  const empatS=new Set(pengurus.filter(x=>pengurus4S(x.dapukan)).map(x=>String(x.did)));
+  r.pengurus4s=empatS.size;
+  r.pengurus_lain=[...semua].filter(did=>!empatS.has(did)).length;
+  r.pengurus=semua.size;
   r.officers=officersFor(g,p);
   return r;
 }
 function statusFor(rows){const missing=rows.reduce((n,r)=>n+r.missing,0);let notes=[];
   if(missing)notes.push(`${missing} jamaah belum memiliki tanggal lahir, jenis kelamin, atau status nikah lengkap; belum masuk kolom klasifikasi`);
   for(const r of rows){if(r.members!==r.total.L+r.total.P)notes.push(`${r.scope}: ${r.members-r.total.L-r.total.P} jenis kelamin kosong`);}
-  for(const r of rows){const p=r.profile,required=['sub','pengurus4s','pengurus_lain','persenan','janda_siap','janda_btn','janda_trangan'];const incomplete=required.filter(k=>p[k]===undefined||p[k]==='');if(incomplete.length)notes.push(`${r.scope}: ${incomplete.length} rincian profil belum diisi`);
-    if(p.pengurus4s!==undefined&&p.pengurus_lain!==undefined&&p.pengurus4s!==''&&p.pengurus_lain!==''&&Number(p.pengurus4s)+Number(p.pengurus_lain)!==r.pengurus)notes.push(`${r.scope}: 4 S + lain berbeda dari jumlah pengurus aktif`);
-  }
+  for(const r of rows){const p=r.profile,required=['sub','persenan','janda_siap','janda_btn','janda_trangan'];const incomplete=required.filter(k=>p[k]===undefined||p[k]==='');if(incomplete.length)notes.push(`${r.scope}: ${incomplete.length} rincian profil belum diisi`);}
   return notes;
 }
 function compute(){
@@ -100,8 +107,8 @@ function titleMonth(period){const [y,m]=period.split('-').map(Number);return `${
 function render(snapshot){
   const {scope:s,period,rows,profiles:ps}=snapshot,desa=s==='DESA',dp=ps.DESA||{};
   const t=totals(rows),group=rows[0],p=group.profile||{};
-  const statRow=r=>`<tr><td>${safe(r.scope)}</td><td class="pu-left">${safe(r.nama)}</td>${['balita','cbr','pra','remaja','usia','dewasa','total'].map(k=>n2(r[k])).join('')}<td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_siap')}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${numericCell(r.profile,'pengurus4s')}</td><td>${numericCell(r.profile,'pengurus_lain')}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
-  const totalRow=desa?`<tr class="pu-total"><td colspan="2">JUMLAH</td>${['balita','cbr','pra','remaja','usia','dewasa','total'].map(k=>n2(t[k])).join('')}<td>${sum(rows,'janda')}</td>${['janda_siap','janda_btn','janda_trangan','sub'].map(k=>`<td>${rows.every(r=>r.profile[k]!==undefined&&r.profile[k]!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile[k])||0),0)):'—'}</td>`).join('')}<td>${sum(rows,'kk')}</td>${['pengurus4s','pengurus_lain'].map(k=>`<td>${rows.every(r=>r.profile[k]!==undefined&&r.profile[k]!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile[k])||0),0)):'—'}</td>`).join('')}<td>${sum(rows,'pengurus')}</td><td>${rows.every(r=>r.profile.persenan!==undefined&&r.profile.persenan!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile.persenan)||0),0)):'—'}</td></tr>`:'';
+  const statRow=r=>`<tr><td>${safe(r.scope)}</td><td class="pu-left">${safe(r.nama)}</td>${['balita','cbr','pra','remaja','usia','dewasa','total'].map(k=>n2(r[k])).join('')}<td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_siap')}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${number(r.pengurus4s)||0}</td><td>${number(r.pengurus_lain)||0}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
+  const totalRow=desa?`<tr class="pu-total"><td colspan="2">JUMLAH</td>${['balita','cbr','pra','remaja','usia','dewasa','total'].map(k=>n2(t[k])).join('')}<td>${sum(rows,'janda')}</td>${['janda_siap','janda_btn','janda_trangan','sub'].map(k=>`<td>${rows.every(r=>r.profile[k]!==undefined&&r.profile[k]!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile[k])||0),0)):'—'}</td>`).join('')}<td>${sum(rows,'kk')}</td><td>${sum(rows,'pengurus4s')}</td><td>${sum(rows,'pengurus_lain')}</td><td>${sum(rows,'pengurus')}</td><td>${rows.every(r=>r.profile.persenan!==undefined&&r.profile.persenan!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile.persenan)||0),0)):'—'}</td></tr>`:'';
   const detail=desa?`<table><thead><tr><th>Wakil desa</th><th>Kelompok</th><th>Sub</th><th>KK</th>${facilities.map(x=>`<th>${safe(x[1])}</th>`).join('')}<th>Pengajian desa/bulan</th><th>Muda-mudi</th><th>Ibu-ibu</th><th>Aghniya</th><th>Musyawarah</th><th>Organisasi</th></tr></thead><tbody><tr><td>${numericCell(dp,'wakil_desa')}</td><td>${GROUPS.length}</td><td>${rows.every(r=>r.profile.sub!==undefined&&r.profile.sub!=='')?rows.reduce((n,r)=>n+(number(r.profile.sub)||0),0):'—'}</td><td>${sum(rows,'kk')}</td>${facilities.map(([k])=>`<td>${numericCell(dp,k)}</td>`).join('')}${['kegiatan_desa','kegiatan_mudadi','kegiatan_ibu','kegiatan_agnia','kegiatan_mus','kegiatan_organisasi'].map(k=>`<td>${shown(dp[k])}</td>`).join('')}</tr></tbody></table>`
    :`<table><thead><tr>${facilities.map(x=>`<th>${safe(x[1])}</th>`).join('')}<th>Kamar MT</th><th>Kamar tamu</th>${['Kelompok','Muda-mudi','CBR','Ibu-ibu','5 unsur','Musyawarah','Lain'].map(x=>`<th>Kegiatan ${x}</th>`).join('')}</tr></thead><tbody><tr>${facilities.map(([k])=>`<td>${numericCell(p,k)}</td>`).join('')}${['kamar_mt','kamar_tamu'].map(k=>`<td>${numericCell(p,k)}</td>`).join('')}${['kegiatan_klp','kegiatan_mudadi','kegiatan_cbr','kegiatan_ibu','kegiatan_5unsur','kegiatan_mus','kegiatan_lain'].map(k=>`<td>${shown(p[k])}</td>`).join('')}</tr></tbody></table>`;
   const off=desa?officersFor('DESA',dp):group.officers;
@@ -125,7 +132,7 @@ function showHistory(){const s=scope(),items=history.filter(x=>x.scope_key===s);
 }
 function refresh(){try{archiveView=null;current=compute();el('pu-preview').innerHTML=render(current);showHistory();alertMsg(current.notes.join('; '));}catch(e){alertMsg(e.message);}}
 function edit(){const s=scope(),p=profiles[s]||{};if(!canEdit()){alertMsg('Akun hanya dapat melihat laporan.');return;}
-  let html=`<div class="pu-form-section"><h4>Profil ${safe(names[s])}</h4><p>Kolom kosong akan tampil sebagai “—” di laporan. Jumlah pengurus otomatis dari daftar pengurus aktif; rincian 4 S dan lain diisi di sini.</p><div class="pu-profile-grid">${fields(s==='DESA'?desaExtras:common,p)}</div></div>`;
+  let html=`<div class="pu-form-section"><h4>Profil ${safe(names[s])}</h4><p>Kolom kosong akan tampil sebagai “—” di laporan. Pengurus 4 S (KI, Wakil KI, Penerobos, semua KU, Aghnia) dan pengurus lain dihitung otomatis dari dapukan aktif, satu orang satu hitungan.</p><div class="pu-profile-grid">${fields(s==='DESA'?desaExtras:common,p)}</div></div>`;
   if(s==='DESA')html+=`<div class="pu-form-section"><h4>Sarana desa</h4><div class="pu-profile-grid">${fields(facilities,p)}</div></div>`;
   else html+=`<div class="pu-form-section"><h4>Sarana dan kegiatan kelompok</h4><div class="pu-profile-grid">${fields(facilities.concat(groupExtras),p)}</div></div>`;
   html+=`<div class="pu-form-section"><h4>Nama pengurus</h4><p>Nama dari daftar pengurus aktif terisi otomatis. Isi di sini bila perlu koreksi atau jabatan belum tersedia; pisahkan beberapa nama dengan baris baru.</p><div class="pu-profile-grid">${officers.map(([key,label])=>`<label>${label}<textarea data-pu="nama_${key}" placeholder="Otomatis: ${safe(roster(s,key).join(', '))}">${safe(p['nama_'+key]||'')}</textarea></label>`).join('')}</div></div><button type="button" onclick="puSaveProfile()">💾 Simpan profil ${safe(names[s])}</button> <button type="button" onclick="puCloseProfile()">Tutup</button>`;
