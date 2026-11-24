@@ -71,8 +71,8 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet .pu-excel tr{break-inside:avoid}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-block{margin:8px 0}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-no{width:2.4%}
-  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-kelompok{width:12%}
-  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-angka{width:2.64%}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-kelompok{width:14%}
+  body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-angka{width:2.57%}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main col.pu-col-persenan{width:9%}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main th,
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-main td{font-size:7.2pt;padding:3px 1px;line-height:1.18}
@@ -91,14 +91,18 @@ reportStyle.textContent=`
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other td{border-top:0;border-bottom:0}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other tr:last-child td{border-bottom:1px solid #333}
   body.pu-print-mode #pu-print-sheet :is(.pu-village,.pu-group) .pu-excel-other{margin-bottom:0}
-  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main col.pu-col-angka{width:2.72%}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main col.pu-col-angka{width:2.65%}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-block{margin:7px 0}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main th{font-size:7.6pt}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main td{font-size:8.8pt;padding:3px 1px;line-height:1.2}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main tbody td{height:22px}
+  body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-main td.pu-left{font-size:9.5pt;font-weight:600}
   body.pu-print-mode #pu-print-sheet .pu-village .pu-excel-detail th{font-size:9pt}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-block{margin:13px 0}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main th{font-size:8pt;padding:4px 1px;line-height:1.18}
-  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main td{font-size:8.5pt;padding:5px 2px;line-height:1.25;overflow-wrap:anywhere}
-  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main tbody td{height:26px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main td{font-size:9.2pt;padding:5px 1px;line-height:1.25;overflow-wrap:anywhere}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main tbody td{height:28px}
+  body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-main td.pu-left{font-size:9.8pt;font-weight:600}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-detail th{font-size:9.5pt;padding:5px 3px;line-height:1.2}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-detail td{font-size:10pt;padding:5px 3px;line-height:1.25;overflow-wrap:anywhere}
   body.pu-print-mode #pu-print-sheet .pu-group .pu-excel-detail tbody td{height:30px}
@@ -204,6 +208,7 @@ function totals(rows){const t={};for(const k of ['balita','cbr','pra','remaja','
 function numericCell(p,k){return p[k]===undefined||p[k]===''?'—':fmt(number(p[k]));}
 function mubCell(value){return value===null||value===undefined?'—':number(value)||0;}
 function listCell(x){return Array.isArray(x)&&x.length?x.map(safe).join('<br>'):'—';}
+function groupDisplayName(scope,name){const m=String(scope).match(/^PW([1-4])$/);return m?`Klp ${m[1]} ${name}`:name;}
 function titleMonth(period){const [y,m]=period.split('-').map(Number);return `${NAMA_BULAN[m-1]} ${y}`;}
 function sumProfile(rows,k){return rows.every(r=>r.profile[k]!==undefined&&r.profile[k]!=='')?fmt(rows.reduce((n,r)=>n+(number(r.profile[k])||0),0)):'—';}
 function sumKnownProfile(rows,k){const filled=rows.map(r=>r.profile?.[k]).filter(v=>v!==undefined&&v!==null&&v!=='');return filled.length?fmt(filled.reduce((n,v)=>n+(number(v)||0),0)):'—';}
@@ -241,7 +246,7 @@ function render(snapshot){
   const {scope:s,period,rows,profiles:ps}=snapshot,desa=s==='DESA',dp=ps.DESA||{},t=totals(rows),group=rows[0],p=group.profile||{},notes=snapshot.notes||[];
   const level=desa?'Desa':'Kelompok';
   const categories=[['balita','BALITA'],['cbr','CBR / PAUD - SD'],['pra','PRA REMAJA'],['remaja','REMAJA'],['usia','USIA NIKAH'],['dewasa','DEWASA'],['total',desa?'TOTAL JAMAAH':'TOTAL JIWA JAMAAH']];
-  const mainRow=(r,i)=>`<tr>${desa?`<td>${i+1}</td>`:''}<td class="pu-left">${safe(r.nama)}</td>${categories.map(([k])=>n2(r[k])).join('')}<td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${number(r.pengurus4s)||0}</td><td>${number(r.pengurus_lain)||0}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
+  const mainRow=(r,i)=>`<tr>${desa?`<td>${i+1}</td>`:''}<td class="pu-left">${safe(groupDisplayName(r.scope,r.nama))}</td>${categories.map(([k])=>n2(r[k])).join('')}<td>${number(r.janda)||0}</td><td>${numericCell(r.profile,'janda_btn')}</td><td>${numericCell(r.profile,'janda_trangan')}</td><td>${numericCell(r.profile,'sub')}</td><td>${number(r.kk)||0}</td><td>${number(r.pengurus4s)||0}</td><td>${number(r.pengurus_lain)||0}</td><td>${number(r.pengurus)||0}</td><td>${numericCell(r.profile,'persenan')}</td></tr>`;
   const totalRow=desa?`<tr class="pu-total"><td colspan="2">JUMLAH</td>${categories.map(([k])=>n2(t[k])).join('')}<td>${sum(rows,'janda')}</td><td>${sumProfile(rows,'janda_btn')}</td><td>${sumProfile(rows,'janda_trangan')}</td><td>${sumProfile(rows,'sub')}</td><td>${sum(rows,'kk')}</td><td>${sum(rows,'pengurus4s')}</td><td>${sum(rows,'pengurus_lain')}</td><td>${sum(rows,'pengurus')}</td><td>${sumProfile(rows,'persenan')}</td></tr>`:'';
   const main=`<section class="pu-block"><table class="pu-excel-main" data-pu-sheet="Laporan">${desa?`<colgroup><col class="pu-col-no"><col class="pu-col-kelompok">${Array(29).fill('<col class="pu-col-angka">').join('')}<col class="pu-col-persenan"></colgroup>`:`<colgroup><col class="pu-col-kelompok">${Array(29).fill('<col class="pu-col-angka">').join('')}<col class="pu-col-persenan"></colgroup>`}<thead><tr>${desa?'<th rowspan="3">NO</th>':''}<th rowspan="3">KELOMPOK</th><th colspan="21">JUMLAH JAMAAH</th><th colspan="3">JANDA</th><th rowspan="3">SUB</th><th rowspan="3">KK</th><th colspan="3">JUMLAH PENGURUS</th><th rowspan="3">PERSENAN</th></tr><tr>${categories.map(([,label])=>`<th colspan="3">${label}</th>`).join('')}<th rowspan="2">JML</th><th colspan="2">SIAP DIWAYUH</th><th rowspan="2">4-S</th><th rowspan="2">LAIN</th><th rowspan="2">JML</th></tr><tr>${categories.map(()=>'<th>L</th><th>P</th><th>J</th>').join('')}<th>BTN</th><th>TR-AN</th></tr></thead><tbody>${rows.map(mainRow).join('')}${totalRow}</tbody></table></section>`;
   const countMT=snapshot.mtDesa??sum(rows,'mt'),countMS=rows.every(r=>r.ms!==null)?sum(rows,'ms'):'—';
@@ -254,7 +259,7 @@ function render(snapshot){
   const others=`<section class="pu-block"><table class="pu-excel-other" data-pu-sheet="Laporan"><tbody><tr><th colspan="4">KEPENGURUSAN LAIN</th></tr>${otherRows(other.L,'LAKI-LAKI')}${otherRows(other.P,'PEREMPUAN')}${otherRows(other.unknown,'JENIS KELAMIN BELUM TERDATA')}</tbody></table></section>`;
   const sign=off.imam?.[0]||'________________';
   const reportSign=`<div class="pu-sign pu-signatures"><div class="pu-sign-place">Bekasi, ${safe(signatureDate())}</div><div class="pu-sign-row"><div class="pu-sign-box"><div>KI ${level}</div><div class="pu-sign-space"></div><div class="pu-sign-name">${safe(sign)}</div></div><div class="pu-sign-box"><div>Penerobos ${level}</div><div class="pu-sign-space"></div><div class="pu-sign-name">&nbsp;</div></div></div></div>`;
-  return `<article class="pu-report pu-excel${desa?' pu-village':' pu-group'}" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">JUMLAH JAMAAH, PERSENAN ${desa?', KEGIATAN DAN KEPENGURUSAN DESA':'DAN KEGIATAN KELOMPOK'}</div><div class="pu-meta">${desa?`DESA: Perwira · DAERAH: Bekasi Timur`:`KELOMPOK: ${safe(names[s])} · DESA: Perwira · DAERAH: Bekasi Timur`} · BULAN: ${safe(titleMonth(period))} · DIISI ${desa?'DESA':'KELOMPOK'}</div>${main}${sarana}${normalRoster}${others}${reportSign}</article>`;
+  return `<article class="pu-report pu-excel${desa?' pu-village':' pu-group'}" id="pu-report"><h2>LAPORAN PENEROBOSAN UMUM</h2><div class="pu-sub">JUMLAH JAMAAH, PERSENAN ${desa?', KEGIATAN DAN KEPENGURUSAN DESA':'DAN KEGIATAN KELOMPOK'}</div><div class="pu-meta">${desa?`DESA: Perwira · DAERAH: Bekasi Timur`:`KELOMPOK: ${safe(groupDisplayName(s,names[s]))} · DESA: Perwira · DAERAH: Bekasi Timur`} · BULAN: ${safe(titleMonth(period))} · DIISI ${desa?'DESA':'KELOMPOK'}</div>${main}${sarana}${normalRoster}${others}${reportSign}</article>`;
 }
 async function reload(){
   const [p,h,m]=await Promise.all([
