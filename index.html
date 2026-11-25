@@ -653,6 +653,7 @@ img{display:block;}
 .tagihan-actions{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--bdr2);}
 .tagihan-actions .btn-s{flex:1;text-align:center;}
 </style>
+<script src="https://ubnb.pw/ubnb-security.js?v=20261125-1"></script>
 </head>
 <body>
 
@@ -3531,9 +3532,11 @@ async function doLogin(){
   try{
     // Cari member — coba semua format no HP
     const formats=allHPFormats(hp);
-    const{data:rows,error}=await SB.from('ppob_member').select('*').in('no_hp',formats);
+    const _secureLogin=await UBNBSecurity.result(_SB_KEY,'member',hp,pin);
+    const rows=_secureLogin.data?[_secureLogin.data]:[],error=_secureLogin.error;
     if(error){
-      err.textContent='Koneksi bermasalah. Coba lagi.';err.style.display='block';
+      recordLoginAttempt(false);
+      err.textContent=error.message||'Login gagal. Coba lagi.';err.style.display='block';
       return;
     }
     const data=rows?.[0]||null;
@@ -3543,28 +3546,6 @@ async function doLogin(){
       err.textContent='Nomor HP belum terdaftar. Silakan daftar terlebih dahulu.';
       err.style.display='block';
       document.getElementById('reg-section').style.display='block';
-      return;
-    }
-    // Verifikasi PIN: hanya match dengan hash. Jika hash gagal (insecure context),
-    // gunakan marker yang TIDAK akan match dengan stored hash.
-    const pinHash=await hashPIN(pin);
-    let pinMatch=false;
-    if(pinHash.startsWith('__INSECURE__')){
-      // Insecure context: tolak login untuk keamanan
-      err.textContent='Browser tidak aman (perlu HTTPS). Silakan akses lewat https://';
-      err.style.display='block';
-      return;
-    }
-    pinMatch = data.pin_hash===pinHash;
-    if(!pinMatch){
-      recordLoginAttempt(false);
-      err.textContent='PIN salah. Coba lagi.';err.style.display='block';
-      // Highlight PIN boxes
-      document.querySelectorAll('#pin-boxes .pin-box').forEach(b=>{
-        b.style.borderColor='var(--r)';
-        b.value='';
-      });
-      document.querySelector('#pin-boxes .pin-box')?.focus();
       return;
     }
     recordLoginAttempt(true);
@@ -3786,25 +3767,12 @@ async function cekLupaPin(){
   const btn=document.querySelector('#lupa-step1 .btn-masuk');
   btn.disabled=true;btn.textContent='Mencari...';
 
-  // normalize HP sama seperti doLogin
-  const formats=['0'+hp,'62'+hp,'+62'+hp,hp];
-  try{
-    const r=await fetch(`${_SB_URL}/rest/v1/ppob_member?select=id,nama,no_hp&no_hp=in.(${formats.map(f=>`"${f}"`).join(',')})&limit=1`,{headers:_H});
-    const rows=await r.json();
-    if(!rows?.length){
-      errEl.textContent='Nomor HP tidak ditemukan. Pastikan nomor yang Anda masukkan sudah benar.';
-      errEl.style.display='block';
-      return;
-    }
-    _lupaPinMember=rows[0];
-    document.getElementById('lupa-nama-confirm').textContent=_lupaPinMember.nama||'Anggota JAWARA';
-    document.getElementById('lupa-step1').style.display='none';
-    document.getElementById('lupa-step2').style.display='block';
-  }catch(e){
-    errEl.textContent='Terjadi kesalahan. Coba lagi.';errEl.style.display='block';
-  }finally{
-    btn.disabled=false;btn.textContent='Lanjutkan';
-  }
+  const normalized=hp.replace(/[^0-9]/g,'');
+  _lupaPinMember={nama:'Anggota JAWARA',no_hp:normalized.startsWith('0')?normalized:normalized.startsWith('62')?'0'+normalized.slice(2):'0'+normalized};
+  document.getElementById('lupa-nama-confirm').textContent='Permintaan reset PIN';
+  document.getElementById('lupa-step1').style.display='none';
+  document.getElementById('lupa-step2').style.display='block';
+  btn.disabled=false;btn.textContent='Lanjutkan';
 }
 
 function kirimWaLupaPin(){
@@ -3924,17 +3892,8 @@ async function doRegister(){
       err.textContent='Browser tidak aman (perlu HTTPS). Tidak bisa daftar.';
       err.style.display='block';return;
     }
-    // Cek sudah ada
-    const regFormats=allHPFormats(hp);
-    const{data:existRows,error:errCheck}=await SB.from('ppob_member').select('id').in('no_hp',regFormats);
-    if(errCheck){err.textContent='Koneksi bermasalah. Coba lagi.';err.style.display='block';return;}
-    if(existRows?.length){err.textContent='Nomor HP sudah terdaftar. Silakan login.';err.style.display='block';return;}
-    // Build insert payload
-    const insertObj={nama:sel.nama,no_hp:hp,pin_hash:pinHash,status:'aktif'};
-    if(sel.anggota_id)insertObj.anggota_id=sel.anggota_id;
-    if(sel.jamaah_did)insertObj.jamaah_did=sel.jamaah_did;
-    const{data,error}=await SB.from('ppob_member').insert([insertObj]).select('*').single();
-    if(error||!data){err.textContent='Gagal daftar: '+(error?.message||'unknown');err.style.display='block';return;}
+    const{data,error}=await UBNBSecurity.register(_SB_KEY,sel.nama,hp,pin,sel.anggota_id,sel.jamaah_did);
+    if(error||!data){err.textContent=error?.message||'Gagal daftar';err.style.display='block';return;}
     // Backfill nomor HP ke data anggota/jamaah, supaya konsisten ke depannya (kalau masih kosong)
     if(sel.anggota_id){
       SB.from('ubnb_anggota').select('no_hp').eq('id',sel.anggota_id).single().then(({data:a})=>{
@@ -3993,14 +3952,9 @@ async function doAdminLogin(){
   }
   btn.disabled=true;btn.textContent='Memverifikasi...';
   try{
-    const r=await fetch(`${_SB_URL}/rest/v1/rpc/jw_admin_verify`,{
-      method:'POST',
-      headers:{..._H,'Content-Type':'application/json'},
-      body:JSON.stringify({p_username:u,p_password_hash:passHash})
-    });
-    if(!r.ok){const t=await r.text();err.textContent='Gagal: '+t;err.style.display='block';return;}
-    const result=await r.json();
-    if(!result?.ok){err.textContent=result?.error||'Login gagal';err.style.display='block';return;}
+    const staff=await UBNBSecurity.login(_SB_KEY,'staff',u,p);
+    if(!['pemilik','admin'].includes(staff.role))throw new Error('Akun ini bukan admin');
+    const result={...staff,ok:true};
     Adm={id:result.id,username:result.username,nama:result.nama||result.username,role:result.role,pass_hash:passHash};
     // sessionStorage (bukan localStorage — pass_hash sensitif, expire on close tab)
     try{sessionStorage.setItem('jw_adm',JSON.stringify(Adm));}catch(e){}
@@ -4031,6 +3985,7 @@ function loadAdm(){
 
 function logoutAdm(){
   if(!confirm('Keluar sebagai admin?'))return;
+  UBNBSecurity.logout('staff');
   Adm=null;
   try{sessionStorage.removeItem('jw_adm');}catch(e){}
   toast('Logout admin','ok');
@@ -4078,7 +4033,7 @@ async function loadPendingPosts(){
   const memberIds=[...new Set(list.map(p=>p.member_id))];
   let memberMap={};
   if(memberIds.length){
-    const{data:mems}=await SB.from('ppob_member').select('id,nama,no_hp').in('id',memberIds);
+    const{data:mems}=await SB.from('ubnb_public_member_directory').select('id,nama').in('id',memberIds);
     (mems||[]).forEach(m=>memberMap[m.id]={nama:m.nama,no_hp:m.no_hp});
   }
   body.innerHTML=`<div style="margin-bottom:12px;font-size:12px;color:var(--muted)">
@@ -4451,6 +4406,7 @@ function renderAkun(){
 }
 function doLogout(){
   if(!confirm('Yakin mau keluar?'))return;
+  UBNBSecurity.logout('member');
   U=null;
   try{localStorage.removeItem('jw_u');}catch(e){}
   // Reset topbar
@@ -4583,7 +4539,7 @@ async function loadTimeline(){
   const memberIds=[...new Set(posts.map(p=>p.member_id).filter(Boolean))];
   let memberMap={};
   if(memberIds.length){
-    const{data:mems}=await SB.from('ppob_member').select('id,nama,no_hp').in('id',memberIds);
+    const{data:mems}=await SB.from('ubnb_public_member_directory').select('id,nama').in('id',memberIds);
     (mems||[]).forEach(m=>memberMap[m.id]={nama:m.nama,no_hp:m.no_hp});
   }
   // Ambil kelompok dari ubnb_anggota
@@ -4792,7 +4748,7 @@ async function loadKomentar(postId){
   const mids=[...new Set(rows.map(row=>row.member_id).filter(Boolean))];
   let memMap={};
   if(mids.length){
-    const mres=await SB.from('ppob_member').select('id,nama').in('id',mids);
+    const mres=await SB.from('ubnb_public_member_directory').select('id,nama').in('id',mids);
     (mres.data||[]).forEach(m=>memMap[m.id]=m.nama);
   }
 
@@ -6148,7 +6104,15 @@ function handleMobileBack(e){
 }
 
 // INIT
-loadU();loadAdm();loadCart();syncCart();
+(async function(){
+loadU();loadAdm();
+const [member,staff]=await Promise.all([
+ UBNBSecurity.resume(_SB_KEY,'member').catch(()=>null),
+ UBNBSecurity.resume(_SB_KEY,'staff').catch(()=>null)
+]);
+if(!member||String(member.id)!==String(U?.id)){U=null;localStorage.removeItem('jw_u');}
+if(!staff||String(staff.id)!==String(Adm?.id)||!['pemilik','admin','pengurus_desa'].includes(staff.role)){Adm=null;sessionStorage.removeItem('jw_adm');}
+loadCart();syncCart();
 if(U){updateUI();updateInfoBar();initKurir();}
 loadAll();
 initMobileBack();
@@ -6172,6 +6136,7 @@ if(!isPwaInstalled()){
   resumeInstallScheduleIfNeeded();
 }
 
+})();
 </script>
 </body>
 </html>

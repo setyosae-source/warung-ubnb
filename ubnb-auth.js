@@ -56,6 +56,7 @@ function saveSSO(userData){
 }
 
 function loadSSO(){
+  if(!localStorage.getItem('ubnb_secure_staff')) return null;
   try{
     var raw = localStorage.getItem(SSO_KEY);
     if(!raw) return null;
@@ -71,6 +72,7 @@ function loadSSO(){
 
 // Legacy compatibility: untuk modul yang belum upgrade
 function loadSession(key){
+  if(!localStorage.getItem('ubnb_secure_staff')){ localStorage.removeItem(key); return null; }
   // Prioritaskan SSO; jika ada, pakai itu (otomatis SSO)
   var sso = loadSSO();
   if(sso) return sso;
@@ -95,6 +97,7 @@ function saveSession(key, userData){
 }
 
 function clearAllSessions(){
+  if(global.UBNBSecurity) UBNBSecurity.logout('staff');
   localStorage.removeItem(SSO_KEY);
   LEGACY_KEYS.forEach(function(k){ localStorage.removeItem(k); });
   // Trigger storage event untuk cross-tab logout
@@ -103,51 +106,17 @@ function clearAllSessions(){
 
 // ===== Login =====
 async function login(sb, username, password){
-  var hashed = await sha256(password);
-
-  // Try hashed first
-  var result = await sb
-    .from('users')
-    .select('id,username,nama,role,permissions,menu_layout')
-    .eq('username', username)
-    .eq('password_hash', hashed)
-    .maybeSingle();
-
-  // Fallback: plain text password (legacy users yang belum di-hash)
-  if((result.error || !result.data) && password){
-    result = await sb
-      .from('users')
-      .select('id,username,nama,role,permissions,menu_layout,password_hash')
-      .eq('username', username)
-      .eq('password_hash', password)  // beberapa legacy user pakai plain
-      .maybeSingle();
-  }
-
-  if(result.error || !result.data){
-    throw new Error('Username atau password salah');
-  }
-
-  // Track login
-  try{
-    await sb.rpc('update_user_activity', { p_user_id: result.data.id, p_action: 'login' });
-  }catch(e){ console.warn('[ubnb-auth] update_user_activity:', e.message); }
-
-  // Set audit session var (supaya trigger audit_log capture username)
-  try{
-    await sb.rpc('set_audit_user', {
-      p_username: result.data.username,
-      p_user_id: parseInt(result.data.id, 10)
-    });
-  }catch(e){ console.warn('[ubnb-auth] set_audit_user:', e.message); }
-
-  return _sanitize(result.data);
+  return UBNBSecurity.login(sb,'staff',username,password);
 }
 
 // ===== Bootstrap (auto-login dari SSO) =====
 // Dipanggil di setiap modul saat onLoad untuk cek apakah sudah login via SSO
 async function bootstrap(sb, legacyKey){
-  var cu = loadSSO();
-  if(!cu) return null;
+  var cached = loadSSO();
+  if(!cached) return null;
+  var fresh = await UBNBSecurity.resume(sb,'staff');
+  if(!fresh){ clearAllSessions(); return null; }
+  var cu = Object.assign({}, cached, fresh);
 
   // Set audit session var (supaya trigger audit_log capture username pada operasi DML)
   try{
@@ -174,24 +143,9 @@ async function bootstrap(sb, legacyKey){
 async function verifySession(sb, sessionKey){
   var cu = loadSSO() || loadSession(sessionKey);
   if(!cu) return null;
-  try{
-    var res = await sb.rpc('verify_user_session', { p_user_id: cu.id });
-    if(res.error || !res.data || !res.data.length){
-      clearAllSessions();
-      return null;
-    }
-    var fresh = res.data[0];
-    var updated = Object.assign({}, fresh, {
-      login_at: cu.login_at,
-      last_active_at: _now(),
-      menu_layout: cu.menu_layout  // preserve client-side layout
-    });
-    saveSSO(updated);
-    return updated;
-  }catch(e){
-    console.warn('[ubnb-auth] verifySession error:', e.message);
-    return cu;
-  }
+  var fresh = await UBNBSecurity.resume(sb,'staff');
+  if(!fresh){ clearAllSessions(); return null; }
+  return saveSSO(Object.assign({},cu,fresh));
 }
 
 // ===== Idle Timer =====

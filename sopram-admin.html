@@ -206,6 +206,7 @@ a{color:var(--blue);text-decoration:none;}
 }
 @media(max-width:480px){.detail-grid{grid-template-columns:1fr;}}
 </style>
+<script src="https://ubnb.pw/ubnb-security.js?v=20261125-1"></script>
 </head>
 <body>
 
@@ -462,14 +463,11 @@ async function doLogin(){
   const errEl=document.getElementById('login-err');
   errEl.textContent='';
   if(!username || !kode){errEl.textContent='Isi username & kode';return;}
-  const {data:user,error}=await sb.from('sopram_user')
-    .select('id, username, kode_akses, is_admin, status, jamaah_did, jamaah_desa(nama)')
-    .eq('username',username).maybeSingle();
+  const {data:user,error}=await UBNBSecurity.result(sb,'sopram',username,kode);
   if(error){errEl.textContent='Error: '+error.message;return;}
   if(!user){errEl.textContent='Username tidak ditemukan';return;}
   if(!user.is_admin){errEl.textContent='Akun ini bukan admin';return;}
   if(user.status==='banned'){errEl.textContent='Akun banned';return;}
-  if(user.kode_akses!==kode){errEl.textContent='Kode akses salah';return;}
 
   CU_ADMIN={
     _id:user.id,
@@ -502,7 +500,7 @@ function doLogout(){
 }
 function saveSession(u){try{localStorage.setItem(ADM_SESSION_KEY,JSON.stringify(u));}catch(e){}}
 function loadSession(){try{const s=localStorage.getItem(ADM_SESSION_KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
-function clearSession(){try{localStorage.removeItem(ADM_SESSION_KEY);}catch(e){}}
+function clearSession(){UBNBSecurity.logout('sopram');try{localStorage.removeItem(ADM_SESSION_KEY);}catch(e){}}
 
 function enterApp(){
   document.getElementById('login-bg').style.display='none';
@@ -654,7 +652,7 @@ function renderUsers(){
 async function userToggleBan(id,ban){
   const newStatus=ban?'banned':'aktif';
   if(ban && !confirm('Banned user ini? User tidak bisa login.'))return;
-  const {error}=await sb.from('sopram_user').update({status:newStatus}).eq('id',id);
+  const {error}=await sb.rpc('ubnb_sopram_admin_update',{p_id:id,p_status:newStatus});
   if(error){toast(error.message,true);return;}
   // Log
   const u=_cacheUsers.find(x=>x.id===id);
@@ -668,7 +666,7 @@ async function userToggleBan(id,ban){
 }
 async function userToggleAdmin(id,makeAdmin){
   if(!confirm(makeAdmin?'Jadikan user ini admin?':'Cabut hak admin user ini?'))return;
-  const {error}=await sb.from('sopram_user').update({is_admin:makeAdmin}).eq('id',id);
+  const {error}=await sb.rpc('ubnb_sopram_admin_update',{p_id:id,p_admin:makeAdmin});
   if(error){toast(error.message,true);return;}
   toast(makeAdmin?'Sekarang admin':'Hak admin dicabut');
   loadUsers();
@@ -1062,8 +1060,7 @@ async function init(){
   const saved=loadSession();
   if(saved && saved._id){
     // Verify
-    const {data:user}=await sb.from('sopram_user')
-      .select('id,is_admin,status,username,jamaah_did,jamaah_desa(nama)').eq('id',saved._id).maybeSingle();
+    const user=await UBNBSecurity.resume(sb,'sopram').catch(()=>null);
     if(user && user.is_admin && user.status==='aktif'){
       CU_ADMIN={
         _id:user.id,username:user.username,jamaah_did:user.jamaah_did,

@@ -279,6 +279,7 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
   .topbar-title { font-size:14px; }
 }
 </style>
+<script src="https://ubnb.pw/ubnb-security.js?v=20261125-1"></script>
 </head>
 <body>
 
@@ -491,92 +492,12 @@ async function mintaKodeAkses() {
   btn.disabled = true;
   btn.textContent = '⏳ Memproses...';
 
-  // Cek apakah sudah ada kode
-  const { data: existing } = await sb.from('keluarga_akses')
-    .select('id,kode_akses,aktif')
-    .eq('nama_keluarga', nama)
-    .single();
-
-  let kode;
-
-  if (existing) {
-    kode = existing.kode_akses;
-    // Update no_wa jika berubah
-    await sb.from('keluarga_akses').update({ no_wa: noWa }).eq('nama_keluarga', nama);
-  } else {
-    // Generate kode baru: 6 digit angka
-    kode = String(Math.floor(100000 + Math.random() * 900000));
-
-    const { error } = await sb.from('keluarga_akses').insert([{
-      nama_keluarga: nama,
-      kode_akses: kode,
-      no_wa: noWa,
-      aktif: true
-    }]);
-
-    if (error) {
-      msgEl.style.display = 'block';
-      msgEl.style.color = '#fca5a5';
-      msgEl.textContent = '❌ Gagal generate kode. Coba lagi.';
-      btn.disabled = false;
-      btn.textContent = '📱 Minta Kode Akses via WhatsApp';
-      return;
-    }
-  }
-
-  // PENTING: simpan permintaan ke database DULU supaya admin bisa tau
-  // walau user tidak benar-benar kirim WA
-  try {
-    await sb.from('permintaan_kode_akses').insert([{
-      nama_keluarga: nama,
-      no_wa: noWa,
-      kode_akses: kode,
-      status: 'pending',
-      user_agent: navigator.userAgent.substring(0, 200)
-    }]);
-  } catch(e) {
-    console.error('Gagal log permintaan:', e);
-    // Tetap lanjut walau log gagal
-  }
-
-  // Kirim email notifikasi ke admin via Google Apps Script
-  try {
-    const emailBody = 
-`PERMINTAAN KODE AKSES BARU - DASHBOARD KELUARGA UBNB
-
-Nama Keluarga: ${nama}
-No WhatsApp: ${noWa}
-Kode Akses: ${kode}
-Waktu: ${new Date().toLocaleString('id-ID', {timeZone: 'Asia/Jakarta'})}
-
-ACTION YANG PERLU DILAKUKAN:
-1. Buka WhatsApp Anda
-2. Kirim pesan ke ${noWa}:
-
-  "Assalamu'alaikum, kode akses Dashboard Keluarga ${nama}: ${kode}
-  Cara pakai: buka ubnb.pw klik Dashboard Keluarga, pilih nama keluarga, masukkan kode."
-
-3. Update status di: https://ubnb.pw/permintaan-akses.html
-
-Atau langsung klik link ini untuk buka WA dengan pesan template:
-https://wa.me/${noWa.replace(/^0/, '62').replace(/[^0-9]/g, '')}?text=Assalamu%27alaikum%2C+kode+akses+Dashboard+Keluarga+${encodeURIComponent(nama)}+Anda%3A+%2A${kode}%2A.+Buka+ubnb.pw+%3E+Dashboard+Keluarga+%3E+pilih+nama+keluarga+%3E+masukkan+kode.+Barakallahu+fiikum.
-
----
-Email otomatis dari sistem UBNB Desa Perwira`;
-
-    // Pakai mode no-cors karena Google Apps Script tidak return CORS headers proper
-    fetch('https://script.google.com/macros/s/AKfycby7G4KJFpIwD8ffdPRssc7JG88O1sg4PbGO3SxHJn5hO7kZJsIYusbGXCg8FZBsGAuIgA/exec', {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: JSON.stringify({
-        subject: `🔔 [UBNB] Kode Akses: ${nama}`,
-        body: emailBody
-      })
-    }).catch(err => console.error('Email send error:', err));
-  } catch(e) {
-    console.error('Gagal kirim email notif:', e);
-    // Tetap lanjut walau email gagal
+  // Permintaan tidak boleh membaca atau mengganti kode keluarga tanpa verifikasi.
+  const {error: requestError} = await sb.rpc('ubnb_request_family_access', {p_family:nama,p_phone:noWa});
+  if(requestError){
+    msgEl.style.display='block';msgEl.style.color='#fca5a5';
+    msgEl.textContent='Permintaan belum tersimpan. Silakan coba lagi.';
+    btn.disabled=false;btn.textContent='📱 Minta Kode Akses via WhatsApp';return;
   }
 
   // Buka WA ke admin dengan template (sebagai backup notifikasi)
@@ -704,12 +625,7 @@ async function doLogin() {
   }
   if (!kode) { errEl.textContent = 'Masukkan kode akses.'; errEl.style.display = 'block'; return; }
 
-  const { data, error } = await sb.from('keluarga_akses')
-    .select('*')
-    .eq('nama_keluarga', nama)
-    .eq('kode_akses', kode)
-    .eq('aktif', true)
-    .single();
+  const {data,error}=await UBNBSecurity.result(sb,'family',nama,kode);
 
   if (error || !data) {
     errEl.textContent = 'Kode akses salah. Hubungi admin untuk mendapatkan kode.';
@@ -723,6 +639,7 @@ async function doLogin() {
 }
 
 function doLogout() {
+  UBNBSecurity.logout('family');
   localStorage.removeItem('dk_keluarga');
   CK = null;
   document.getElementById('app').style.display = 'none';
@@ -963,8 +880,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Auto-login jika ada sesi
   const saved = localStorage.getItem('dk_keluarga');
-  if (saved) {
-    CK = saved;
+  const verified = await UBNBSecurity.resume(sb,'family').catch(()=>null);
+  if (saved && verified && verified.nama_keluarga === saved) {
+    CK = verified.nama_keluarga;
     document.getElementById('selKeluarga').value = saved;
     document.getElementById('selKeluargaPicked').value = saved;
     showApp();

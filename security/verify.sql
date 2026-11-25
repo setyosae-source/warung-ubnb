@@ -1,0 +1,73 @@
+-- Run inside BEGIN / ROLLBACK. No production test records are retained.
+do $verify$
+declare uid bigint;uname text:='security-check-'||gen_random_uuid()::text;pw text:=encode(extensions.gen_random_bytes(20),'hex');x jsonb;st text;mt text;mid bigint;n bigint;phone text:='08'||lpad((random()*9999999999)::bigint::text,10,'0');family_name text:='test-'||gen_random_uuid()::text;fid bigint;r text;sid bigint;sname text:='sopram-test-'||gen_random_uuid()::text;stok text;
+begin
+ insert into public.users(username,nama,role,password_hash,permissions) values(uname,'Temporary security check','pemilik',encode(extensions.digest(pw,'sha256'),'hex'),'{}') returning id into uid;
+ insert into public.keluarga_akses(nama_keluarga,kode_akses,aktif) values(family_name,'987654',true) returning id into fid;
+ insert into public.sopram_user(username,kode_akses,is_admin,status) values(sname,'TESTCODE',false,'aktif') returning id into sid;
+ perform set_config('request.headers','{}',true);
+ set local role anon;
+ if public.ubnb_secure_session('staff') is not null then raise exception 'Unauthenticated staff accepted';end if;
+ select count(id) into n from public.users;if n<>0 then raise exception 'Anonymous staff records exposed';end if;
+ select count(id) into n from public.ppob_member;if n<>0 then raise exception 'Anonymous member records exposed';end if;
+ select count(id) into n from public.keluarga_akses;if n<>0 then raise exception 'Anonymous family codes exposed';end if;
+ begin perform password_hash from public.users limit 1;raise exception 'Password hashes exposed';exception when insufficient_privilege then null;end;
+ begin perform pin_hash from public.ppob_member limit 1;raise exception 'PIN hashes exposed';exception when insufficient_privilege then null;end;
+ begin perform kode_akses from public.sopram_user limit 1;raise exception 'Sopram codes exposed';exception when insufficient_privilege then null;end;
+ begin perform public.change_user_name(uid,'forged');raise exception 'Anonymous profile mutation accepted';exception when insufficient_privilege then null;end;
+ x:=public.ubnb_secure_login('staff',uname,encode(extensions.digest(pw,'sha256'),'hex'));if x->>'ok'<>'false' then raise exception 'Stored password hash accepted as password';end if;
+ x:=public.ubnb_secure_login('staff',uname,'wrong');if x->>'ok'<>'false' then raise exception 'Wrong password accepted';end if;
+ x:=public.ubnb_secure_login('staff',uname,pw);if x->>'ok'<>'true' then raise exception 'Staff login failed';end if;
+ st:=x->>'token';if x->'user' ? 'password_hash' then raise exception 'Login returns secret';end if;
+ perform set_config('request.headers',jsonb_build_object('x-ubnb-staff',st)::text,true);
+ if public.ubnb_secure_session('staff')->>'id' is distinct from uid::text then raise exception 'Staff restoration failed';end if;
+ update public.users set nama='Verified staff write' where id=uid;get diagnostics n=row_count;if n<>1 then raise exception 'Admin write failed';end if;
+ if public.ubnb_secure_reauth(uid,pw)->>'id' is distinct from uid::text then raise exception 'Password confirmation failed';end if;
+ perform public.set_audit_user('forged username',uid::integer);
+ if current_setting('app.current_username') is distinct from uname then raise exception 'Audit actor spoofed';end if;
+ begin perform public.change_user_name(uid+999999,'forged');raise exception 'Profile ID substitution accepted';exception when insufficient_privilege then null;end;
+ perform public.ubnb_secure_logout('staff');
+ if public.ubnb_secure_session('staff') is not null then raise exception 'Logged out session accepted';end if;
+ reset role;
+ -- Verify operational logins for every actual role without using real credentials.
+ foreach r in array array['kasir','viewer','admin','pengurus_desa','pengurus_kelompok'] loop
+  update public.users set role=r where id=uid;
+  set local role anon;
+  x:=public.ubnb_secure_login('staff',uname,pw);if x->>'ok'<>'true' then raise exception 'Role login failed: %',r;end if;
+  perform set_config('request.headers',jsonb_build_object('x-ubnb-staff',x->>'token')::text,true);
+  if public.ubnb_secure_session('staff')->>'role' is distinct from r then raise exception 'Role restoration failed: %',r;end if;
+  perform public.update_user_activity(uid,'active');
+  if r<>'admin' then
+   update public.users set role='pemilik' where id=uid;get diagnostics n=row_count;if n<>0 then raise exception 'Role escalation possible: %',r;end if;
+   select count(id) into n from public.keluarga_akses;if n<>0 then raise exception 'Non-admin sees family codes: %',r;end if;
+  end if;
+  perform public.ubnb_secure_logout('staff');reset role;
+ end loop;
+ perform set_config('request.headers','{}',true);
+ set local role anon;
+ x:=public.ubnb_secure_member_register('Temporary member check',phone,'987654',null,null);
+ if x->>'ok'<>'true' then raise exception 'Member registration failed: %',x->>'error';end if;
+ mt:=x->>'token';mid:=(x->'user'->>'id')::bigint;
+ if x->'user' ? 'pin_hash' then raise exception 'PIN exposed by registration';end if;
+ perform set_config('request.headers',jsonb_build_object('x-ubnb-member',mt)::text,true);
+ select count(id) into n from public.ppob_member;if n<>1 then raise exception 'Member isolation failed';end if;
+ begin perform public.jw_toggle_like(mid+999999,0);raise exception 'Member ID substitution accepted';exception when insufficient_privilege then null;end;
+ perform public.ubnb_secure_logout('member');
+ if public.ubnb_secure_session('member') is not null then raise exception 'Logged out member accepted';end if;
+ begin perform public.jw_toggle_like(mid,0);raise exception 'Anonymous member RPC accepted';exception when insufficient_privilege then null;end;
+ perform set_config('request.headers','{}',true);
+ x:=public.ubnb_secure_login('family',family_name,'987654');if x->>'ok'<>'true' then raise exception 'Family login failed';end if;
+ perform set_config('request.headers',jsonb_build_object('x-ubnb-family',x->>'token')::text,true);
+ select count(id) into n from public.keluarga_akses;if n<>1 then raise exception 'Family isolation failed';end if;
+ perform public.ubnb_secure_logout('family');
+ if public.ubnb_secure_session('family') is not null then raise exception 'Logged out family accepted';end if;
+ perform set_config('request.headers','{}',true);
+ x:=public.ubnb_secure_login('sopram',sname,'TESTCODE');if x->>'ok'<>'true' then raise exception 'Sopram login failed';end if;
+ stok:=x->>'token';perform set_config('request.headers',jsonb_build_object('x-ubnb-sopram',stok)::text,true);
+ if public.ubnb_secure_session('sopram')->>'id' is distinct from sid::text then raise exception 'Sopram session restoration failed';end if;
+ update public.sopram_user set bio='Test profile save' where id=sid;get diagnostics n=row_count;if n<>1 then raise exception 'Sopram profile save failed';end if;
+ begin update public.sopram_user set is_admin=true where id=sid;raise exception 'Sopram admin escalation accepted';exception when insufficient_privilege then null;end;
+ perform public.ubnb_secure_logout('sopram');
+ if public.ubnb_secure_session('sopram') is not null then raise exception 'Logged out Sopram accepted';end if;
+ reset role;
+end $verify$;
