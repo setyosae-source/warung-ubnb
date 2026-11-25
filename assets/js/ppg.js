@@ -6536,6 +6536,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
         </div>
         ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}
       </div>
+      <div style="font-size:11px;color:#64748b;margin:4px 0">PPG v88 · Koreksi tanggal kelas</div>
       ${mode52==='active'?activeCards():historyHtml()}`;
 
     if(expanded52&&typeof legacyOpen==='function'){
@@ -7374,6 +7375,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
         </div>
         ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}
       </div>
+      <div style="font-size:11px;color:#64748b;margin:4px 0">PPG v88 · Koreksi tanggal kelas</div>
       ${historyRowsHtml()}`;
   }
 
