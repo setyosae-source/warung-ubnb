@@ -2549,7 +2549,7 @@ function activeCards(){const a=vis().filter(x=>x.status==='active'&&x.date===tod
 function week(d){const x=new Date(d+'T00:00:00'),n=(x.getDay()+6)%7;x.setDate(x.getDate()-n);return x.toISOString().slice(0,10)}
 function history(){const a=vis().filter(x=>x.status==='finished').sort((a,b)=>b.date.localeCompare(a.date));if(!a.length)return '<div class="ppg-empty">Belum ada kelas selesai.</div>';const g=new Map();a.forEach(s=>{let k=hist==='daily'?s.date:hist==='weekly'?week(s.date):s.date.slice(0,7);if(!g.has(k))g.set(k,[]);g.get(k).push(s)});return `<div class="ppg37-subtabs" style="margin-bottom:8px">${[['daily','Harian'],['weekly','Mingguan'],['monthly','Bulanan']].map(x=>`<button class="ppg37-subtab ${hist===x[0]?'active':''}" onclick="ppg37Hist('${x[0]}')">${x[1]}</button>`).join('')}</div>${[...g.entries()].map(([k,v])=>`<div class="ppg37-history-group"><div class="ppg37-history-head">${esc(k)} · ${v.length} kelas</div>${v.map(s=>{const p=pct(s);return `<div class="ppg37-history-item"><b>${esc(s.date)}</b><span><b>${esc(s.className)}</b><br><span class="ppg-mini-note">${esc(s.scope)} · ${esc(s.teacherName)}</span></span><span>${p.h}/${p.n} hadir</span><span class="optional">${p.p}%</span></div>`}).join('')}</div>`).join('')}`}
 window.ppg37Hist=x=>{hist=x;kelas()}; window.ppg37Tab=x=>{tab=x;kelas()};window.ppg37Toggle=()=>{startOpen=!startOpen;kelas()};
-function kelas(){const e=document.getElementById('ppg-page-kelas');if(!e)return;if(ctl()){e.innerHTML=`<div class="ppg-v33-stage"><div><div class="ppg-v33-stage-title">Kelas KBM · Controller Desa</div><div class="ppg-v33-stage-sub">Monitoring kelas aktif dan riwayat.</div></div></div>${activeCards()}<div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Riwayat</div></div><div class="ppg-panel-body">${history()}</div></div>`;return}e.innerHTML=`<div class="ppg37-topline"><div class="ppg37-subtabs"><button class="ppg37-subtab ${tab==='active'?'active':''}" onclick="ppg37Tab('active')">Aktif Hari Ini</button><button class="ppg37-subtab ${tab==='history'?'active':''}" onclick="ppg37Tab('history')">Riwayat</button></div><button class="ppg-btn" onclick="ppg37Toggle()">+ Mulai Kelas Baru</button></div><div class="ppg37-start-panel ${startOpen?'show':''}"><div class="ppg-panel" style="margin-top:0"><div class="ppg-panel-body"><div class="ppg37-start-grid"><div class="ppg37-field"><label>Tanggal</label><input id="p37date" type="date" value="${today()}" readonly></div><div class="ppg37-field"><label>Guru</label><select id="p37guru"><option value="">Pilih guru...</option>${teachers().map(t=>`<option value="${esc(t.did)}">${esc(t.nama)}</option>`).join('')}</select></div><div class="ppg37-field"><label>Kelas</label><select id="p37kelas"><option value="">Pilih kelas...</option>${C.map(k=>`<option>${esc(k)}</option>`).join('')}</select></div><button class="ppg-btn" onclick="ppg37Start()">Mulai Kelas</button></div></div></div></div><div id="p37content">${tab==='active'?activeCards():history()}</div><div id="p37detail"></div>`}
+function kelas(){const e=document.getElementById('ppg-page-kelas');if(!e)return;if(ctl()){e.innerHTML=`<div class="ppg-v33-stage"><div><div class="ppg-v33-stage-title">Kelas KBM · Controller Desa</div><div class="ppg-v33-stage-sub">Monitoring kelas aktif dan riwayat.</div></div></div>${activeCards()}<div class="ppg-panel"><div class="ppg-panel-head"><div class="ppg-panel-title">Riwayat</div></div><div class="ppg-panel-body">${history()}</div></div>`;return}e.innerHTML=`<div class="ppg37-topline"><div class="ppg37-subtabs"><button class="ppg37-subtab ${tab==='active'?'active':''}" onclick="ppg37Tab('active')">Kelas Aktif</button><button class="ppg37-subtab ${tab==='history'?'active':''}" onclick="ppg37Tab('history')">Riwayat</button></div><button class="ppg-btn" onclick="ppg37Toggle()">+ Mulai Kelas Baru</button></div><div class="ppg37-start-panel ${startOpen?'show':''}"><div class="ppg-panel" style="margin-top:0"><div class="ppg-panel-body"><div class="ppg37-start-grid"><div class="ppg37-field"><label>Tanggal</label><input id="p37date" type="date" value="${today()}" readonly></div><div class="ppg37-field"><label>Guru</label><select id="p37guru"><option value="">Pilih guru...</option>${teachers().map(t=>`<option value="${esc(t.did)}">${esc(t.nama)}</option>`).join('')}</select></div><div class="ppg37-field"><label>Kelas</label><select id="p37kelas"><option value="">Pilih kelas...</option>${C.map(k=>`<option>${esc(k)}</option>`).join('')}</select></div><button class="ppg-btn" onclick="ppg37Start()">Mulai Kelas</button></div></div></div></div><div id="p37content">${tab==='active'?activeCards():history()}</div><div id="p37detail"></div>`}
 window.ppg37Start=async()=>{const date=document.getElementById('p37date')?.value||today(),did=document.getElementById('p37guru')?.value,k=document.getElementById('p37kelas')?.value;if(!did||!k)return toast('Pilih guru dan kelas terlebih dahulu.',true);const t=teachers().find(x=>x.did===did);if(!tfc(k).some(x=>x.did===did))return toast('Guru belum ditetapkan untuk kelas ini.',true);const s={id:'K'+Date.now(),scope:sid(),date,className:k,teacherDid:did,teacherName:t.nama,startedAt:ubnbWibIso84(),startedBy:CU?.nama||CU?.username,status:'pending',teacherAttendance:[],students:sfc(k).map(j=>({did:String(j.did),nama:j.nama,status:'Belum Hadir'})),generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}};const a=ss();a.push(s);saveSS(a);const g=await gps();log('MULAI_KELAS',{sessionId:s.id,className:k,teacherName:t.nama,date},g);teacherStep(s)};
 function teacherStep(s){const e=document.getElementById('p37detail');if(!e)return;const ts=tfc(s.className);e.innerHTML=`<div class="ppg-panel"><div class="ppg-panel-head"><div><div class="ppg-panel-title">Absensi Dewan Guru</div><div class="ppg-panel-sub">Wajib sebelum kelas aktif.</div></div></div><div class="ppg-table-wrap"><table class="ppg-table"><thead><tr><th>No</th><th>Nama</th><th>Status</th></tr></thead><tbody>${ts.map((t,i)=>`<tr><td>${i+1}</td><td><b>${esc(t.nama)}</b></td><td><select class="p37ta" data-id="${esc(t.did)}"><option value="">— Pilih —</option><option ${t.did===s.teacherDid?'selected':''}>Hadir</option><option>Izin</option><option>Sakit</option><option>Tidak Hadir</option><option>Terlambat</option></select></td></tr>`).join('')}</tbody></table></div><div class="ppg36-actions"><button class="ppg-btn" onclick="ppg37TeacherDone('${esc(s.id)}')">Selesai Absensi Guru & Aktifkan Kelas</button></div></div>`;e.scrollIntoView({behavior:'smooth'})}
 window.ppg37TeacherDone=id=>{const a=ss(),s=a.find(x=>x.id===id),els=[...document.querySelectorAll('.p37ta')];if(els.some(x=>!x.value))return toast('Status semua dewan guru harus diisi.',true);const tm=new Map(teachers().map(t=>[t.did,t]));s.teacherAttendance=els.map(x=>({did:x.dataset.id,nama:tm.get(x.dataset.id)?.nama||'',status:x.value}));if(!s.teacherAttendance.some(x=>['Hadir','Terlambat'].includes(x.status)))return toast('Belum ada dewan guru yang hadir.',true);s.status='active';saveSS(a);startOpen=false;tab='active';kelas();setTimeout(()=>detail(id),0)};
@@ -5015,7 +5015,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     el.innerHTML=`
       <div class="ppg46-topbar">
         <div class="ppg46-tabs">
-          <button class="ppg46-tab ${kelasMode46==='active'?'active':''}" onclick="ppg46KelasMode('active')">Aktif Hari Ini</button>
+          <button class="ppg46-tab ${kelasMode46==='active'?'active':''}" onclick="ppg46KelasMode('active')">Kelas Aktif</button>
           <button class="ppg46-tab ${kelasMode46==='history'?'active':''}" onclick="ppg46KelasMode('history')">Riwayat</button>
         </div>
         ${controller46()?'':'<button class="ppg46-start-btn" onclick="ppg46OpenStart()">+ Mulai Kelas</button>'}
@@ -6216,7 +6216,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <div class="ppg52-modal-body">
             <div class="ppg52-field">
               <label>Tanggal</label>
-              <input id="ppg52-start-date" type="date" readonly>
+              <input id="ppg52-start-date" type="date" required><div class="ppg52-help">Pilih tanggal pelaksanaan, termasuk tanggal sebelumnya.</div>
             </div>
             <div class="ppg52-field">
               <label>Guru</label>
@@ -6262,7 +6262,9 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     sel.innerHTML='<option value="">Pilih guru...</option>'+
       ts.map(t=>`<option value="${esc(t.did)}" ${String(t.did)===String(def)?'selected':''}>${esc(t.nama)}</option>`).join('');
 
-    document.getElementById('ppg52-start-date').value=today();
+    const dateInput=document.getElementById('ppg52-start-date');
+    dateInput.max=today();
+    dateInput.value=today();
     start52={selected:'',otherOpen:false};
     renderStartClasses();
     document.getElementById('ppg52-start-modal').classList.add('show');
@@ -6323,7 +6325,9 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   }
 
   window.ppg52StartClass=async function(){
-    const date=document.getElementById('ppg52-start-date')?.value||today();
+    if(controller()||!scopeId())return;
+    const date=document.getElementById('ppg52-start-date')?.value||'';
+    if(!validClassDate87(date)){toast('Pilih tanggal yang valid, tidak melebihi hari ini.',true);return}
     const teacherDid=document.getElementById('ppg52-start-teacher')?.value||'';
     const className=start52.selected||'';
 
@@ -6336,7 +6340,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const dupe=sessions().some(s=>
       s.scope===scopeId()&&s.date===date&&s.className===className&&s.status==='active'
     );
-    if(dupe){toast('Kelas ini sudah aktif hari ini.',true);return}
+    if(dupe){toast('Kelas ini sudah aktif pada tanggal tersebut.',true);return}
 
     const isSubstitute=!t.classes.includes(className);
 
@@ -6374,13 +6378,61 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     toast('Kelas aktif.');
   };
 
+  function validClassDate87(d){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return false;
+    const x=new Date(d+'T00:00:00Z');
+    return Number.isFinite(x.getTime())&&x.toISOString().slice(0,10)===d;
+  }
+  function canEditClassDate87(s){
+    return !!s&&!controller()&&!!scopeId()&&s.scope===scopeId()&&
+      !!window.ppg68SessionOwner?.owns(s);
+  }
+  window.ppg87CanEditClassDate=canEditClassDate87;
+  window.ppg87EditClassDate=function(id){
+    const old=sessions().find(x=>String(x.id)===String(id));
+    if(!canEditClassDate87(old)){toast('Hanya akun pembuka kelas yang dapat mengubah tanggal.',true);return}
+    let dlg=document.getElementById('ppg87-date-dialog');
+    if(!dlg){
+      dlg=document.createElement('dialog');
+      dlg.id='ppg87-date-dialog';
+      dlg.style.cssText='border:1px solid #ccd7d0;border-radius:12px;padding:20px;width:min(90vw,360px)';
+      dlg.innerHTML='<form><h3>Edit Tanggal Kelas</h3><label for="ppg87-date">Tanggal pelaksanaan</label><input id="ppg87-date" type="date" required style="display:block;width:100%;margin:12px 0"><div style="display:flex;gap:8px"><button type="button" class="ppg52-secondary" data-cancel>Batal</button><button class="ppg52-primary" type="submit">Simpan</button></div></form>';
+      document.body.appendChild(dlg);
+      dlg.querySelector('[data-cancel]').onclick=()=>dlg.close();
+    }
+    const input=dlg.querySelector('input');
+    input.max=today();input.value=old.date;
+    dlg.querySelector('form').onsubmit=function(e){
+      e.preventDefault();
+      const all=sessions(),s=all.find(x=>String(x.id)===String(id)),date=input.value;
+      if(!canEditClassDate87(s)){toast('Tidak memiliki hak akses.',true);return}
+      if(!validClassDate87(date)){toast('Tanggal tidak valid atau melebihi hari ini.',true);return}
+      if(date===s.date){dlg.close();return}
+      if(all.some(x=>String(x.id)!==String(id)&&x.scope===s.scope&&x.className===s.className&&x.date===date&&x.status==='active')){
+        toast('Sudah ada kelas aktif pada tanggal tersebut.',true);return;
+      }
+      const previousDate=s.date,at=ubnbWibIso84(),account=CU?.nama||CU?.username||'-';
+      s.date=date;s.dateEditedAt=at;s.dateEditedBy=account;s.dateEditedByDid=String(CU?.did||CU?.id||'');
+      saveSessions(all);
+      if(sessions().find(x=>String(x.id)===String(id))?.date!==date){toast('Tanggal belum tersimpan.',true);return}
+      const logs=get(LOGGER_KEY,[]);
+      logs.push({at,type:'EDIT_TANGGAL_KELAS',account,accountDid:s.dateEditedByDid,scope:s.scope,sessionId:s.id,className:s.className,teacherName:s.teacherName,oldDate:previousDate,date});
+      set(LOGGER_KEY,logs);
+      dlg.close();
+      if(s.status==='finished'){window.ppg52KelasMode('history');window.ppg55ReviewKBM?.(id);}
+      else{mode52='active';renderKelas();}
+      toast('Tanggal kelas diperbarui.');
+    };
+    dlg.showModal();
+  };
+
   /* ---------------- KELAS AKTIF ---------------- */
   function activeCards(){
     const rows=visibleSessions()
-      .filter(s=>s.status==='active'&&s.date===today())
+      .filter(s=>s.status==='active')
       .sort((a,b)=>String(a.startedAt||'').localeCompare(String(b.startedAt||'')));
 
-    if(!rows.length)return '<div class="ppg-empty">Belum ada kelas aktif hari ini.</div>';
+    if(!rows.length)return '<div class="ppg-empty">Belum ada kelas aktif.</div>';
 
     return `<div class="ppg52-active-list">${rows.map(s=>{
       const a=attendance(s);
@@ -6390,7 +6442,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
         <button type="button" class="ppg52-active-summary" onclick="ppg52ToggleActive('${esc(s.id)}')">
           <div class="ppg52-active-main">
             <div class="ppg52-active-name">${esc(s.className)}</div>
-            <div class="ppg52-active-meta">Guru: ${esc(s.teacherName||'-')} · Hadir ${a.hadir}/${a.total}${s.substituteTeacher?' · Pengganti':''}</div>
+            <div class="ppg52-active-meta">${esc(s.date||'-')} · Guru: ${esc(s.teacherName||'-')} · Hadir ${a.hadir}/${a.total}${s.substituteTeacher?' · Pengganti':''}</div>
           </div>
           <div class="ppg52-active-att">
             <div class="ppg52-active-pct">${a.pct}%</div>
@@ -6399,7 +6451,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <div class="ppg52-chevron">${expanded?'▾':'▸'}</div>
         </button>
         <div class="ppg52-progress"><span style="width:${a.pct}%"></span></div>
-        <div class="ppg52-detail">${expanded?'<div id="p37detail"></div>':''}</div>
+        <div class="ppg52-detail">${expanded?(canEditClassDate87(s)?`<button type="button" class="ppg52-secondary" onclick="ppg87EditClassDate('${esc(s.id)}')">Edit Tanggal Kelas</button>`:'')+'<div id="p37detail"></div>':''}</div>
       </article>`;
     }).join('')}</div>`;
   }
@@ -6475,7 +6527,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     el.innerHTML=`
       <div class="ppg52-topline">
         <div class="ppg52-tabs">
-          <button class="ppg52-tab ${mode52==='active'?'active':''}" onclick="ppg52KelasMode('active')">Aktif Hari Ini</button>
+          <button class="ppg52-tab ${mode52==='active'?'active':''}" onclick="ppg52KelasMode('active')">Kelas Aktif</button>
           <button class="ppg52-tab ${mode52==='history'?'active':''}" onclick="ppg52KelasMode('history')">Riwayat</button>
         </div>
         ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}
@@ -7313,7 +7365,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     el.innerHTML=`
       <div class="ppg52-topline">
         <div class="ppg52-tabs">
-          <button class="ppg52-tab" onclick="ppg52KelasMode('active')">Aktif Hari Ini</button>
+          <button class="ppg52-tab" onclick="ppg52KelasMode('active')">Kelas Aktif</button>
           <button class="ppg52-tab active" onclick="ppg55HistoryMode('${historyMode55}')">Riwayat</button>
         </div>
         ${controller()?'':'<button class="ppg52-primary" onclick="ppg52OpenStart()">+ Mulai Kelas</button>'}
@@ -7381,7 +7433,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     document.getElementById('ppg55-review-title').textContent=`Review KBM · ${s.className||'-'}`;
     document.getElementById('ppg55-review-body').innerHTML=`
       <div class="ppg55-review-meta">
-        <div class="ppg55-review-stat"><small>Tanggal</small><b>${esc(s.date||'-')}</b></div>
+        <div class="ppg55-review-stat"><small>Tanggal</small><b>${esc(s.date||'-')}</b>${window.ppg87CanEditClassDate?.(s)?`<button type="button" class="ppg52-secondary" onclick="ppg87EditClassDate('${esc(s.id)}')">Edit Tanggal</button>`:''}</div>
         <div class="ppg55-review-stat"><small>Guru</small><b>${esc(s.teacherName||'-')}</b></div>
         <div class="ppg55-review-stat"><small>Kehadiran</small><b>${a.hadir}/${a.total} · ${a.pct}%</b></div>
         <div class="ppg55-review-stat"><small>Status</small><b>Selesai</b></div>
@@ -9690,7 +9742,9 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     for(const x of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])]){
       const id=String(x?.id||'');
       if(!id)continue;
-      map.set(id,chooseSession(map.get(id),x));
+      const previous=map.get(id),chosen=chooseSession(previous,x);
+      const latestDate=[previous,x].filter(v=>v?.dateEditedAt).sort((a,b)=>String(b.dateEditedAt).localeCompare(String(a.dateEditedAt)))[0];
+      map.set(id,latestDate?{...chosen,date:latestDate.date,dateEditedAt:latestDate.dateEditedAt,dateEditedBy:latestDate.dateEditedBy,dateEditedByDid:latestDate.dateEditedByDid}:chosen);
     }
 
     return [...map.values()].sort((x,y)=>
