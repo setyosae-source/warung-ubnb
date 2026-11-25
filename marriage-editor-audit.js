@@ -36,6 +36,7 @@ const esc=x=>escH(String(x??''));
 const date=x=>x?new Date(x).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}):'-';
 const style=document.createElement('style');
 style.textContent='.mra-bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.mra-btn{border:1px solid #cbd5d1;background:white;color:#17583c;border-radius:7px;padding:7px 10px;font:inherit;cursor:pointer}.mra-btn.danger{color:#b91c1c}.mra-dialog{border:1px solid #ccd9d1;border-radius:12px;padding:18px;width:min(850px,94vw);max-height:88vh;overflow:auto;color:#243b30;background:#fafbf9}.mra-dialog::backdrop{background:#0007}.mra-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.mra-content table{width:100%;border-collapse:collapse;font-size:12px}.mra-content td,.mra-content th{padding:8px;text-align:left;border:1px solid #dce4df;vertical-align:top;overflow-wrap:anywhere}.mra-content .scroll{overflow-x:auto}.mra-content label{display:block;margin:12px 0}.mra-content input,.mra-content textarea{display:block;width:100%;padding:9px;border:1px solid #bdcdc3;border-radius:6px;font:inherit}.mra-note{font-size:12px;color:#52665b;line-height:1.5;margin:8px 0}.mra-content button:disabled{opacity:.5;cursor:wait}.mra-actions{display:flex;gap:6px;flex-wrap:wrap}.mra-content h3{margin:16px 0 8px}.mra-diff{white-space:pre-wrap;max-width:280px}';
+style.textContent+=' .mra-dialog{box-sizing:border-box}.mra-content input,.mra-content textarea{box-sizing:border-box;max-width:100%}.mra-mobile-list{display:none}.mra-mobile-card{display:block;width:100%;border:1px solid #d8e4dc;background:#fff;border-radius:12px;padding:12px;margin:0 0 10px;text-align:left;font:inherit;color:#243b30;box-shadow:0 2px 8px #1535220c;cursor:pointer}.mra-mobile-card:focus-visible{outline:3px solid #166534;outline-offset:2px}.mra-mobile-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.mra-mobile-card-date{font-size:12px;color:#64748b;font-weight:700}.mra-mobile-card-pair{font-size:15px;font-weight:800;line-height:1.45;overflow-wrap:anywhere;margin:6px 0}.mra-mobile-card-hint{font-size:11px;color:#64748b;margin-top:7px}.mra-mobile-card .marriage-type{white-space:normal!important;text-align:center;overflow-wrap:anywhere;flex:0 1 auto;max-width:48%;line-height:1.3}.mra-detail-grid{display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px 8px;font-size:13px;line-height:1.45}.mra-detail-grid dt{color:#64748b}.mra-detail-grid dd{margin:0;overflow-wrap:anywhere;font-weight:650}@media(max-width:640px){#marriage-panel-history,#marriage-list-wrap{min-width:0!important;max-width:100%!important}#marriage-list-wrap{overflow-x:hidden!important;min-height:0!important;border:0!important;background:transparent!important}#marriage-list-wrap .marriage-history-table{display:none!important}.mra-mobile-list{display:block;width:100%;max-width:100%}.v11-marriage-history-top{grid-template-columns:minmax(0,1fr)!important;gap:9px!important}.v11-marriage-card{min-width:0!important;max-width:100%!important;padding:9px!important}#marriage-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}#marriage-stats .stat-pill{min-width:0!important;width:100%!important;white-space:normal!important;overflow:visible!important;justify-content:flex-start!important;text-align:left!important;gap:4px!important;padding:9px!important;line-height:1.3!important}#marriage-stats .stat-pill .pl{font-size:11px!important;white-space:normal!important;overflow-wrap:anywhere!important}#marriage-stats .stat-pill .pv{font-size:15px!important;flex:none}.v11-marriage-control .btn-save{height:auto!important;min-height:40px!important;white-space:normal!important;line-height:1.25!important;padding:7px!important}.v11-year-row{grid-template-columns:auto minmax(0,1fr)!important;gap:8px!important}.marriage-inner-tabs button{white-space:normal!important;overflow-wrap:anywhere!important}}';
 document.head.appendChild(style);
 let dialog;
 function panel(title,html){
@@ -77,8 +78,37 @@ window.renderMarriage=function(){
    row.appendChild(td);
   });
  }
+ renderMobileEvents();
  return result;
 };
+function renderMobileEvents(){
+ const wrap=document.getElementById('marriage-list-wrap');
+ if(!wrap||!aMarriageEvents.length)return;
+ const list=document.createElement('div');list.className='mra-mobile-list';
+ aMarriageEvents.forEach(e=>{
+  const type=e.jenis_proses==='internal_perwira'?'Sesama Perwira':e.jenis_proses==='external_in'?'Pasangan Masuk':'Pindah Keluar';
+  const cls=e.jenis_proses==='internal_perwira'?'internal':e.jenis_proses==='external_in'?'in':'out';
+  const people=[{name:e.jamaah_1_nama||'',gender:e.jamaah_1_jk||''},{name:e.jamaah_2_nama||'',gender:e.jamaah_2_jk||''}];
+  if(e.jenis_proses!=='internal_perwira'&&people[1].name&&!people[1].gender)people[1].gender=String(people[0].gender).toLowerCase().startsWith('laki')?'Perempuan':'Laki-laki';
+  const husband=people.find(x=>String(x.gender).toLowerCase().startsWith('laki'))||people[0];
+  const wife=people.find(x=>String(x.gender).toLowerCase().startsWith('perempuan'))||(people[1].name?people[1]:null);
+  const card=document.createElement('button');card.type='button';card.className='mra-mobile-card';
+  card.setAttribute('aria-label','Lihat detail pernikahan '+(husband.name||'-')+' dan '+(wife?.name||'-'));
+  card.innerHTML='<div class="mra-mobile-card-top"><span class="mra-mobile-card-date">'+esc(marriageDateFmt(e.tanggal_nikah))+'</span><span class="marriage-type '+cls+'">'+esc(type)+'</span></div><div class="mra-mobile-card-pair">'+esc(husband.name||'-')+' &amp; '+esc(wife?.name||'-')+'</div><div class="mra-mobile-card-hint">Ketuk untuk lihat detail ›</div>';
+  card.onclick=()=>showEventDetail(e);list.appendChild(card);
+ });
+ wrap.appendChild(list);
+}
+function showEventDetail(e){
+ const type=e.jenis_proses==='internal_perwira'?'Sesama Perwira':e.jenis_proses==='external_in'?'Pasangan Masuk':'Pindah Keluar';
+ const fields=[['Tanggal',marriageDateFmt(e.tanggal_nikah)],['Jenis proses',type],['Jamaah 1',e.jamaah_1_nama],['Kelompok asal 1',e.asal_kelompok_1],['Jamaah 2 / pasangan',e.jamaah_2_nama],['Kelompok asal 2',e.asal_kelompok_2],['Desa asal pasangan',e.asal_desa_external],['Desa tujuan',e.tujuan_desa_external],['Kelompok akhir',e.kelompok_akhir],['KK setelah nikah',e.kk_nama],['Catatan',e.catatan],['Dicatat oleh',e.created_by_name]];
+ const c=panel('Detail pernikahan','<dl class="mra-detail-grid">'+fields.filter(([,v])=>v!=null&&v!=='').map(([k,v])=>'<dt>'+esc(k)+'</dt><dd>'+esc(v)+'</dd>').join('')+'</dl><div class="mra-bar"><button type="button" class="mra-btn" data-edit>Ubah</button><button type="button" class="mra-btn danger" data-delete>Hapus</button></div><p class="mra-note">Hapus memindahkan catatan ke arsip; status nikah dan susunan keluarga tetap.</p>');
+ c.querySelector('[data-edit]').onclick=()=>editEvent(e);
+ c.querySelector('[data-delete]').onclick=ev=>busy(ev.currentTarget,async()=>{
+  if(!confirm('Arsipkan catatan pernikahan ini? Catatan dapat dipulihkan. Status nikah dan susunan keluarga tetap.'))return;
+  await request('event_delete',e.id);dialog.close();await loadMarriageData();toast('Catatan dipindahkan ke arsip');
+ });
+}
 function editEvent(e){
  const c=panel('Ubah catatan pernikahan','<p>'+esc(e.jamaah_1_nama)+' &amp; '+esc(e.jamaah_2_nama||'-')+'</p><p class="mra-note">Perubahan tanggal dan catatan dicatat atas akun yang sedang login. Pasangan dan susunan keluarga mengikuti proses registrasi.</p><label>Tanggal nikah<input type="date" id="mra-date" required></label><label>Catatan<textarea id="mra-note" rows="4"></textarea></label><button type="button" class="mra-btn" data-save>Simpan</button>');
  c.querySelector('input').value=String(e.tanggal_nikah||'').slice(0,10);c.querySelector('textarea').value=e.catatan||'';
