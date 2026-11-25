@@ -25613,7 +25613,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <div class="ppg52-modal-body">
             <div class="ppg52-field">
               <label>Tanggal</label>
-              <input id="ppg52-start-date" type="date" readonly>
+              <input id="ppg52-start-date" type="date" required><small>Gunakan tanggal pelaksanaan KBM, termasuk tanggal lampau.</small>
             </div>
             <div class="ppg52-field">
               <label>Guru</label>
@@ -25647,7 +25647,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     sel.innerHTML='<option value="">Pilih guru...</option>'+
       ts.map(t=>`<option value="${esc(t.did)}" ${String(t.did)===String(def)?'selected':''}>${esc(t.nama)}</option>`).join('');
 
-    document.getElementById('ppg52-start-date').value=today();
+    const dateInput=document.getElementById('ppg52-start-date');dateInput.max=today();dateInput.value=today();
     start52={selected:'',otherOpen:false};
     document.getElementById('ppg96-participants')?.remove();
     document.getElementById('ppg52-start-modal').classList.add('show');
@@ -25728,7 +25728,9 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     return saved;
   }
   window.ppg52StartClass=async function(){
-    if(saving98)return;
+    if(saving98||!window.ppgCanAct66?.())return;
+    const date=document.getElementById('ppg52-start-date')?.value||'';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date>today()||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date){toast('Pilih tanggal yang valid, tidak melebihi hari ini.',true);return;}
     const teacherDid=document.getElementById('ppg52-start-teacher')?.value||'';
     const t=teachers().find(x=>String(x.did)===String(teacherDid));
     if(!t){toast('Pilih guru terlebih dahulu.',true);return}
@@ -25737,7 +25739,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     const female=['p','perempuan','wanita','female'].includes(gender);
     const male=['l','laki-laki','laki laki','pria','male'].includes(gender);
     const now=new Date().toISOString();
-    const session={id:'K'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)),scope:scopeId(),date:today(),className:'KBM',multiClass:true,teacherDid:String(t.did),teacherName:t.nama,startedAt:now,startedByDid:String(CU?.did||CU?.id||''),startedBy:CU?.nama||CU?.username||'-',status:'active',teacherAttendance:[{did:String(t.did),nama:t.nama,status:'Hadir',at:now,source:'start_session'}],students:[],generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}};
+    const session={id:'K'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)),scope:scopeId(),date,className:'KBM',multiClass:true,teacherDid:String(t.did),teacherName:t.nama,startedAt:now,startedByDid:String(CU?.did||CU?.id||''),startedBy:CU?.nama||CU?.username||'-',status:'active',teacherAttendance:[{did:String(t.did),nama:t.nama,status:'Hadir',at:now,source:'start_session'}],students:[],generalMaterials:[],studentMaterials:{},generalNote:'',studentNotes:{}};
     saving98=true;
     try{
       const saved=await persist98(session);
@@ -25747,7 +25749,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       if(!modal){modal=document.createElement('div');modal.id='ppg98-thanks';modal.className='ppg52-modal';document.body.appendChild(modal)}
       const phrase=female?'jazaa killahu':male?'jazaa kallohu':'jazaakumullohu';
       const title=female?'Mba ':male?'Mas ':'';
-      modal.innerHTML=`<div class="ppg52-modal-card"><div class="ppg52-modal-body"><p>Alhamdulillah ${phrase} khoiro ${title}${esc(t.nama)}, sudah absen mengajar kelas KBM hari ini.</p><button class="ppg52-primary" onclick="document.getElementById('ppg98-thanks').classList.remove('show');ppg98Open('${esc(saved.id)}')">Lanjutkan</button></div></div>`;
+      modal.innerHTML=`<div class="ppg52-modal-card"><div class="ppg52-modal-body"><p>Alhamdulillah ${phrase} khoiro ${title}${esc(t.nama)}, sudah absen mengajar kelas KBM pada ${esc(date)}.</p><button class="ppg52-primary" onclick="document.getElementById('ppg98-thanks').classList.remove('show');ppg98Open('${esc(saved.id)}')">Lanjutkan</button></div></div>`;
       modal.classList.add('show');
     }catch(e){toast(e.message||'Gagal membuka sesi. Silakan coba lagi.',true)}finally{saving98=false}
   };
@@ -25864,10 +25866,10 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   /* ---------------- KELAS AKTIF ---------------- */
   function activeCards(){
     const rows=visibleSessions()
-      .filter(s=>s.status==='active'&&s.date===today())
+      .filter(s=>s.status==='active')
       .sort((a,b)=>String(a.startedAt||'').localeCompare(String(b.startedAt||'')));
 
-    if(!rows.length)return '<div class="ppg-empty">Belum ada kelas aktif hari ini.</div>';
+    if(!rows.length)return '<div class="ppg-empty">Belum ada kelas aktif.</div>';
 
     return `<div class="ppg52-active-list">${rows.map(s=>{
       const a=attendance(s);
@@ -25877,7 +25879,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
         <button type="button" class="ppg52-active-summary" onclick="ppg52ToggleActive('${esc(s.id)}')">
           <div class="ppg52-active-main">
             <div class="ppg52-active-name">${esc(s.className)}</div>
-            <div class="ppg52-active-meta">Guru: ${esc(s.teacherName||'-')} · ${window.ppgSessionTime97(s)} · Hadir ${a.hadir}/${a.total}${s.substituteTeacher?' · Pengganti':''}</div>
+            <div class="ppg52-active-meta">${esc(s.date||'-')} · Guru: ${esc(s.teacherName||'-')} · ${window.ppgSessionTime97(s)} · Hadir ${a.hadir}/${a.total}${s.substituteTeacher?' · Pengganti':''}</div>
           </div>
           <div class="ppg52-active-att">
             <div class="ppg52-active-pct">${a.pct}%</div>
@@ -25886,7 +25888,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <div class="ppg52-chevron">${expanded?'▾':'▸'}</div>
         </button>
         <div class="ppg52-progress"><span style="width:${a.pct}%"></span></div>
-        <div class="ppg52-detail">${expanded?'<div id="p37detail"></div>':''}</div>
+        <div class="ppg52-detail">${expanded?(window.ppg47DateAllowed?.(s)?`<button type="button" class="ppg52-secondary kbm47-date-edit" style="pointer-events:auto;opacity:1" onclick="ppg47DateOpen('${esc(s.id)}')">Edit Tanggal Kelas</button>`:'')+'<div id="p37detail"></div>':''}</div>
       </article>`;
     }).join('')}</div>`;
   }
@@ -27598,7 +27600,7 @@ body.ppg54-lock-page{
     document.getElementById('ppg55-review-title').textContent=s.multiClass?'Ringkasan KBM':`Review KBM · ${s.className||'-'}`;
     document.getElementById('ppg55-review-body').innerHTML=`
       <div class="ppg55-review-meta">
-        <div class="ppg55-review-stat"><small>Tanggal</small><b>${esc(s.date||'-')}</b></div>
+        <div class="ppg55-review-stat"><small>Tanggal</small><b>${esc(s.date||'-')}</b>${window.ppg47DateAllowed?.(s)?`<button type="button" class="ppg52-secondary kbm47-date-edit" onclick="ppg47DateOpen('${esc(s.id)}')">Edit Tanggal Kelas</button>`:''}</div>
         <div class="ppg55-review-stat"><small>Guru</small><b>${esc(s.teacherName||'-')}</b></div>
         <div class="ppg55-review-stat"><small>Kehadiran</small><b>${a.hadir}/${a.total} · ${a.pct}%</b></div>
         <div class="ppg55-review-stat"><small>Status</small><b>Selesai</b></div>
@@ -30194,6 +30196,7 @@ body.ppg54-lock-page{
   let pollTimer=null;
 
   const nativeSet=Storage.prototype.setItem;
+  window.ppg47ApplyDate=function(server){const rows=JSON.parse(localStorage.getItem('ubnb_ppg_v37_classes')||'[]');const next=rows.map(x=>String(x.id)===String(server.id)?{...x,date:server.date,dateRevision:server.dateRevision,dateEditedAt:server.dateEditedAt,dateEditedBy:server.dateEditedBy,dateEditedByDid:server.dateEditedByDid}:x);nativeSet.call(localStorage,'ubnb_ppg_v37_classes',JSON.stringify(next));};
   const nativeRemove=Storage.prototype.removeItem;
 
   function editorDid(){
@@ -30331,7 +30334,9 @@ body.ppg54-lock-page{
     for(const x of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])]){
       const id=String(x?.id||'');
       if(!id)continue;
-      byId.set(id,chooseSession(byId.get(id),x));
+      const prev=byId.get(id),chosen=chooseSession(prev,x);
+      const latest=[prev,x].filter(y=>Number(y?.dateRevision)>0).sort((a,b)=>Number(b.dateRevision)-Number(a.dateRevision))[0];
+      byId.set(id,latest?{...chosen,date:latest.date,dateRevision:latest.dateRevision,dateEditedAt:latest.dateEditedAt,dateEditedBy:latest.dateEditedBy,dateEditedByDid:latest.dateEditedByDid}:chosen);
     }
 
     return [...byId.values()].sort((x,y)=>String(x?.startedAt||x?.id||'').localeCompare(String(y?.startedAt||y?.id||'')));
@@ -32836,6 +32841,7 @@ body.ppg54-lock-page{
 
     /* summary tetap boleh diklik untuk review */
     if(e.target.closest('.ppg52-active-summary'))return;
+    if(e.target.closest('.kbm47-date-edit')&&window.ppg47DateAllowed?.(sessions68().find(s=>String(s.id)===idFromCard68(card))))return;
 
     const interactive=e.target.closest('button,input,select,textarea,label');
     if(interactive){
@@ -38278,12 +38284,12 @@ body.nav39-ready .modal-overlay{z-index:40000!important}
  function teacher(){if(!$('ppg-page-kelas')?.classList.contains('active'))return;const m=$('guru-report-modal');if(!m){originalGuru?.();}else if(!m.classList.contains('kbm40-inline'))originalGuru?.();const modal=$('guru-report-modal');if(modal){modal.classList.remove('show');modal.classList.add('kbm40-inline');$('ppg-page-kelas').appendChild(modal);}}
  function header(){const shell=$('ppg-shell');if(!shell?.classList.contains('show'))return;
  const active=shell.querySelector('.ppg-tabs>.ppg-tab.active');let title=active?.textContent.trim()||'Dashboard';
- if($('ppg-page-kelas')?.classList.contains('active'))title=view==='active'?'Kelas KBM / Aktif Hari Ini':report==='teachers'?'Kelas KBM / Laporan / Guru':'Kelas KBM / Laporan / Murid / '+labels[period];
+ if($('ppg-page-kelas')?.classList.contains('active'))title=view==='active'?'Kelas KBM / Kelas Aktif':report==='teachers'?'Kelas KBM / Laporan / Guru':'Kelas KBM / Laporan / Murid / '+labels[period];
  const target=shell.querySelector('.ppg-brand-name');if(target&&target.textContent!==title)target.textContent=title;
  }
  function controls(){const page=$('ppg-page-kelas');if(!page)return;let box=$('kbm40-controls');if(!box){box=document.createElement('div');box.id='kbm40-controls';page.prepend(box);}
  const oldStart=page.querySelector('.ppg52-topline>button[onclick*="ppg52OpenStart"]');const canStart=typeof window.ppgCanAct66==='function'?window.ppgCanAct66():!!oldStart;
- const signature=[view,report,period,canStart].join('|');if(box.dataset.state!==signature){box.dataset.state=signature;box.innerHTML=`${canStart?'<div class="kbm42-actions"><button type="button" class="ppg52-secondary kbm40-permission" onclick="izinGuruOpen()">Izin/Sakit Guru</button><button type="button" class="ppg52-primary kbm40-start" onclick="ppg52OpenStart()">＋ Mulai KBM</button></div>':''}<div class="kbm40-main"><button type="button" class="${view==='active'?'active':''}" onclick="ppg40Active()">Aktif Hari Ini</button><button type="button" class="${view==='reports'?'active':''}" onclick="ppg40Reports()">Laporan</button></div>${view==='reports'?`<div class="kbm40-sub"><button type="button" class="${report==='students'?'active':''}" onclick="ppg40Students()">Laporan Murid</button><button type="button" class="${report==='teachers'?'active':''}" onclick="ppg40Teachers()">Laporan Guru</button></div>${report==='students'?`<div class="kbm40-period">${Object.entries(labels).map(([id,label])=>`<button type="button" class="${period===id?'active':''}" onclick="ppg55HistoryMode('${id}')">${label}</button>`).join('')}</div>`:''}`:''}`;}
+ const signature=[view,report,period,canStart].join('|');if(box.dataset.state!==signature){box.dataset.state=signature;box.innerHTML=`${canStart?'<div class="kbm42-actions"><button type="button" class="ppg52-secondary kbm40-permission" onclick="izinGuruOpen()">Izin/Sakit Guru</button><button type="button" class="ppg52-primary kbm40-start" onclick="ppg52OpenStart()">＋ Mulai KBM</button></div>':''}<div class="kbm40-main"><button type="button" class="${view==='active'?'active':''}" onclick="ppg40Active()">Kelas Aktif</button><button type="button" class="${view==='reports'?'active':''}" onclick="ppg40Reports()">Laporan</button></div>${view==='reports'?`<div class="kbm40-sub"><button type="button" class="${report==='students'?'active':''}" onclick="ppg40Students()">Laporan Murid</button><button type="button" class="${report==='teachers'?'active':''}" onclick="ppg40Teachers()">Laporan Guru</button></div>${report==='students'?`<div class="kbm40-period">${Object.entries(labels).map(([id,label])=>`<button type="button" class="${period===id?'active':''}" onclick="ppg55HistoryMode('${id}')">${label}</button>`).join('')}</div>`:''}`:''}`;}
  for(const el of [...page.children]){if(el===box||el.id==='guru-report-modal')continue;const oldNav=el.classList.contains('ppg52-topline')||el.classList.contains('guru-report-nav')||(el.classList.contains('ppg52-tabs')&&el.querySelector('[onclick*="ppg55HistoryMode"]'));markClass(el,'kbm40-old-nav',!!oldNav);markClass(el,'kbm40-student-hidden',view==='reports'&&report==='teachers'&&!oldNav);}
  }
  function shortcut(){const dashboard=$('ppg-page-dashboard');if(!dashboard||dashboard.querySelector('#ppg40-shortcut'))return;const source=document.querySelector('#ppg-shell>.ppg-tabs>.ppg-tab[data-page="kelas"]');if(!source||source.style.display==='none')return;const b=document.createElement('button');b.type='button';b.id='ppg40-shortcut';b.className='ppg52-primary';b.textContent='Buka Kelas KBM →';b.onclick=()=>{source.click();window.ppg40Active();};dashboard.prepend(b);}
@@ -38788,3 +38794,38 @@ async function pulihkanDuplikat(item){
   catch(e){toast(e.message,true);alert('Gagal memulihkan: '+e.message)}
 }
 </script>
+
+<script id="kbm47-date-correction">(function(){
+ 'use strict';
+ const KEY='ubnb_ppg_v37_classes';
+ const read=()=>JSON.parse(localStorage.getItem(KEY)||'[]');
+ const scope=()=>{try{return JSON.parse(sessionStorage.getItem('ubnb_ppg_v34_scope')||'null')}catch(_){return null}};
+ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ window.ppg47DateAllowed=s=>!!s&&['active','finished'].includes(s.status)&&scope()?.type!=='controller'&&s.scope===scope()?.kelompok&&!!window.ppgCanAct66?.();
+ window.ppg47DateOpen=function(id){
+  const old=read().find(s=>String(s.id)===String(id));
+  if(!window.ppg47DateAllowed(old)){toast('Guru tidak berwenang pada kelompok ini.',true);return}
+  let dlg=document.getElementById('kbm47-date');
+  if(!dlg){dlg=document.createElement('dialog');dlg.id='kbm47-date';dlg.style.cssText='border:1px solid #a9c7b4;border-radius:12px;padding:20px;width:min(88vw,380px);color:#17432e;z-index:2147483647';dlg.innerHTML='<form><h3>Edit Tanggal Kelas</h3><label for="kbm47-input">Tanggal pelaksanaan</label><input id="kbm47-input" type="date" required style="display:block;width:100%;margin:12px 0;padding:10px"><p id="kbm47-message" role="status"></p><div style="display:flex;gap:8px"><button type="button" class="ppg52-secondary" data-cancel>Batal</button><button type="submit" class="ppg52-primary">Simpan Tanggal</button></div></form>';document.body.appendChild(dlg);dlg.querySelector('[data-cancel]').onclick=()=>dlg.close()}
+  const input=dlg.querySelector('input'),msg=dlg.querySelector('[role="status"]'),submit=dlg.querySelector('[type="submit"]');
+  input.max=today();input.value=old.date;msg.textContent='';
+  dlg.querySelector('form').onsubmit=async e=>{
+   e.preventDefault();const date=input.value;
+   if(!window.ppg47DateAllowed(old)||!date||date>today()){msg.textContent='Tanggal tidak valid atau akses tidak diberikan.';return}
+   if(date===old.date){dlg.close();return}
+   submit.disabled=true;msg.textContent='Menyimpan…';
+   try{
+    const {data,error}=await sb.rpc('ppg_correct_class_date',{p_editor_did:String(CU?.did||CU?.id||''),p_scope:old.scope,p_session_id:String(id),p_expected_date:old.date,p_new_date:date});
+    if(error||!data?.ok||!data.session)throw Error(error?.message||data?.error||'Koreksi tanggal gagal.');
+    window.ppg47ApplyDate(data.session);
+    dlg.close();
+    if(old.status==='finished'){window.ppg55HistoryMode?.('daily');window.ppg55ReviewKBM?.(id)}
+    else window.ppg52KelasMode?.('active');
+    toast('Tanggal kelas berhasil diperbarui.');
+   }catch(err){msg.textContent=err.message||'Gagal menyimpan tanggal.'}finally{submit.disabled=false}
+  };
+  if(!dlg.open)dlg.showModal();
+ };
+ const stamp=()=>{const host=document.getElementById('kbm40-controls');if(host&&!host.querySelector('.kbm47-build')){const b=document.createElement('small');b.className='kbm47-build';b.textContent='PPG produksi · v47 · Edit tanggal / backdate';b.style.cssText='display:block;color:#64796b;font-size:11px;margin:4px 0';host.appendChild(b)}};
+ let queued=false;new MutationObserver(()=>{if(!queued){queued=true;requestAnimationFrame(()=>{queued=false;stamp()})}}).observe(document.body,{childList:true,subtree:true});stamp();
+})();</script>
