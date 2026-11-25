@@ -930,7 +930,8 @@ document.addEventListener('click', e=>{
 // ============ VIEW MODE ============
 let currentMode = 'utama'; // 'utama' (read-only) or 'editor'
 
-function toggleMode(){
+async function toggleMode(){
+  if(currentMode==='utama' && !await UBNBSecurity.resume(supa,'staff').catch(()=>null)){await UBNBSecurity.requireStaff(supa);return;}
   currentMode = currentMode === 'utama' ? 'editor' : 'utama';
   applyMode();
 }
@@ -1558,14 +1559,11 @@ async function getIP(){
 
 // Returns {ok, nama, ip} after asking for name+code. ok=false means cancelled or wrong code.
 async function askDeleteAuth(){
-  const nama = prompt('Nama:');
-  if(nama===null) return {ok:false};
-  if(!nama.trim()){ toast('Operasi dibatalkan', true); return {ok:false}; }
-  const k = prompt('Kode:');
-  if(k===null) return {ok:false};
-  if(k !== 'pw354'){ toast('Operasi dibatalkan', true); return {ok:false}; }
-  const ip = await getIP();
-  return {ok:true, nama:nama.trim(), ip};
+  const user=await UBNBSecurity.resume(supa,'staff').catch(()=>null);
+  if(!user){await UBNBSecurity.requireStaff(supa);return {ok:false};}
+  if(!confirm('Hapus data terpilih?'))return {ok:false};
+  const ip=await getIP();
+  return {ok:true,nama:user.nama||user.username,ip};
 }
 
 async function logAudit(action, posId, items, pelaku){
