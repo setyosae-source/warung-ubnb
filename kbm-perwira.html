@@ -426,17 +426,12 @@ async function doLoginKeluarga(){
   const kode=$('inp-kel-kode').value.trim();
   if(!nama||!kode){setLE('Isi nama keluarga dan kode akses');return;}
   try{
-    const {data,error}=await sb.from('keluarga_akses')
-      .select('*')
-      .ilike('nama_keluarga',nama)
-      .eq('kode_akses',kode)
-      .maybeSingle();
+    const {data,error}=await UBNBSecurity.result(sb,'family',nama,kode);
     if(error)throw error;
     if(!data){setLE('Nama keluarga atau kode akses salah');return;}
     CU={
       _login_as:'keluarga',
       nama_keluarga:data.nama_keluarga,
-      kode_akses:data.kode_akses,
       did_kk:data.did_kk||null,
     };
     sessionStorage.setItem('wu_kbm_perwira_keluarga',JSON.stringify(CU));
@@ -445,7 +440,8 @@ async function doLoginKeluarga(){
 }
 
 function keluar(){
-  if(typeof UBNBAuth!=='undefined')UBNBAuth.clearAllSessions();
+  if(CU?._login_as==='keluarga')UBNBSecurity.logout('family');
+  else if(typeof UBNBAuth!=='undefined')UBNBAuth.clearAllSessions();
   sessionStorage.removeItem('wu_kbm_perwira_keluarga');
   location.reload();
 }
@@ -1137,7 +1133,7 @@ document.addEventListener('DOMContentLoaded',async ()=>{
   // Cek session keluarga dulu
   const sk=sessionStorage.getItem('wu_kbm_perwira_keluarga');
   if(sk){
-    try{CU=JSON.parse(sk);init();return;}catch(e){}
+    try{const family=await UBNBSecurity.resume(sb,'family');if(family){CU={_login_as:'keluarga',nama_keluarga:family.nama_keluarga};init();return;}sessionStorage.removeItem('wu_kbm_perwira_keluarga');}catch(e){}
   }
   
   // Cek session staff (pengurus/guru)
