@@ -674,6 +674,7 @@ body.jamaah-photo-open{overflow:hidden!important;}
 
     <div id="subview-jamaah-data">
     <div class="stats-pill" id="jamaah-stats"></div>
+    <button type="button" id="dup-review-button" hidden onclick="bukaTinjauanDuplikat()" style="margin:8px 0 12px;padding:9px 14px;border:1px solid #b7791f;border-radius:8px;background:#fff7e5;color:#754b0b;font-weight:700;cursor:pointer;">🔎 Tinjauan duplikasi jamaah</button>
 
     <!-- MULTI-FILTER PANEL -->
     <div id="filter-panel-wrap" style="margin-bottom:10px;">
@@ -2274,6 +2275,8 @@ async function init(){
     if(dataBtn)showJamaahSub('data',dataBtn);
   }
   await loadAll();
+  const reviewButton=document.getElementById('dup-review-button');
+  if(reviewButton)reviewButton.hidden=String(CU?.did)!=='4075';
   // Login pengurus memakai sessionStorage seperti halaman Edit Jamaah; tidak membutuhkan session password UBNBAuth.
 }
 
@@ -4622,6 +4625,7 @@ function bukaModalTambah(){
   ).join('');
   document.getElementById('modal-tambah-body').innerHTML=`
     <div class="modal-row"><label>Nama *</label><input type="text" id="nj-nama" placeholder="Nama lengkap"></div>
+    <div id="nj-duplikat-hint" style="display:none;margin:8px 16px;padding:10px;border:1px solid #eab767;border-radius:8px;background:#fff8e8;font-size:12px;line-height:1.5;"></div>
     <div class="modal-row"><label>Posisi Keluarga</label>
       <select id="nj-kk-mode" onchange="renderDashboardNewKK()">
         <option value="existing">Ikut KK yang sudah ada</option>
@@ -4670,6 +4674,8 @@ function bukaModalTambah(){
     <div class="modal-row"><label>No. WA</label><input type="text" id="nj-wa" placeholder="08xxx"></div>
   `;
   renderDashboardNewKK();
+  document.getElementById('nj-nama')?.addEventListener('input',cekNamaJamaahMirip);
+  document.getElementById('nj-kelompok')?.addEventListener('change',cekNamaJamaahMirip);
   openMod('modal-tambah');
 }
 
@@ -4706,6 +4712,7 @@ async function simpanJamaahBaru(){
   };
   const {data,error}=await sb.rpc('dashboard_jamaah_create',{p_editor_did:CU.did,p_payload:payload,p_is_kk:isKK,p_kk_did:kkDid});
   if(error||!data?.ok){toast('Gagal simpan: '+(error?.message||data?.error||'unknown'),true);return;}
+  await dkLog('TAMBAH_JAMAAH',{did:data.did,nama,kelompok:kelNama,kemungkinan_duplikat:!!document.getElementById('nj-duplikat-hint')?.dataset.found});
   toast('✅ '+nama+' ditambahkan ke '+(kelNama||'jamaah')+' · KK: '+(data.nama_kk||'-'));
   closeMod('modal-tambah');
   await loadAll();
@@ -38668,3 +38675,87 @@ function ubaidShowSecret(r){const box=ubaidEl('ubaid-secret');box.replaceChildre
 </script>
 
 <script src="marriage-editor-audit.js?v=20261124-mt-audit-1"></script>
+
+<style id="jamaah-duplicate-review-style">
+#dup-review-button[hidden]{display:none!important}
+#dup-review-dialog{border:0;border-radius:14px;width:min(94vw,920px);max-height:90dvh;padding:0;box-shadow:0 24px 90px #0005;color:#1d332b;font:14px/1.5 Arial,sans-serif}
+#dup-review-dialog::backdrop{background:#10231bd0}
+#dup-review-dialog header{position:sticky;top:0;z-index:1;background:#075b3f;color:#fff;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+#dup-review-dialog h2{font-size:18px;margin:0}
+#dup-review-dialog header button{border:1px solid #fff8;background:transparent;color:white;border-radius:7px;padding:7px 10px;cursor:pointer}
+#dup-review-content{padding:16px;overflow:auto;max-height:calc(90dvh - 70px)}
+.dup-card{border:1px solid #d5dfd8;border-radius:10px;padding:14px;margin:12px 0;background:#fff}
+.dup-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+.dup-person{background:#f4f8f5;border-radius:8px;padding:10px;min-width:0;overflow-wrap:anywhere}
+.dup-person b{display:block;font-size:15px}.dup-person small{display:block;color:#576a60}
+.dup-actions{display:flex;flex-wrap:wrap;gap:8px}.dup-actions button{border:1px solid #b5c9b8;background:#fff;border-radius:7px;padding:8px 12px;cursor:pointer;font-weight:700}
+.dup-actions .danger{border-color:#bb5f52;color:#a03020;background:#fff8f7}
+@media(max-width:600px){.dup-pair{grid-template-columns:1fr}#dup-review-content{padding:12px}}
+</style>
+<dialog id="dup-review-dialog" aria-labelledby="dup-review-title">
+  <header><h2 id="dup-review-title">Tinjauan duplikasi jamaah</h2><button type="button" onclick="document.getElementById('dup-review-dialog').close()">Tutup ✕</button></header>
+  <div id="dup-review-content"></div>
+</dialog>
+<script>
+function namaReviewNorm(x){return String(x||'').toLocaleLowerCase('id').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()}
+function namaReviewScore(a,b){
+  a=namaReviewNorm(a);b=namaReviewNorm(b);if(!a||!b)return 0;
+  const prev=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){let corner=prev[0];prev[0]=i;for(let j=1;j<=b.length;j++){const old=prev[j];prev[j]=Math.min(prev[j]+1,prev[j-1]+1,corner+(a[i-1]===b[j-1]?0:1));corner=old}}
+  return 1-prev[b.length]/Math.max(a.length,b.length);
+}
+function cekNamaJamaahMirip(){
+  const box=document.getElementById('nj-duplikat-hint');if(!box)return;
+  const nama=document.getElementById('nj-nama')?.value||'';
+  const kelompok=CU?.kelompok_scope||document.getElementById('nj-kelompok')?.value;
+  const matches=nama.length>=6?(aJamaah||[]).filter(j=>j.kelompok_nama===kelompok&&namaReviewScore(nama,j.nama)>=0.78).sort((a,b)=>namaReviewScore(nama,b.nama)-namaReviewScore(nama,a.nama)).slice(0,5):[];
+  box.replaceChildren();box.style.display=matches.length?'block':'none';box.dataset.found=matches.length?'yes':'';
+  if(!matches.length)return;
+  const title=document.createElement('b');title.textContent='⚠️ Nama mirip sudah ada. Periksa sebelum menyimpan:';box.append(title);
+  matches.forEach(j=>{const p=document.createElement('div');p.textContent=`${j.nama} · ${j.kelompok_nama} · KK ${j.nama_kk||'-'} · DID ${j.did}`;box.append(p)});
+  const note=document.createElement('small');note.textContent='Jika benar orang berbeda, data tetap boleh disimpan. Admin utama akan meninjau kandidat duplikat.';box.append(note);
+}
+async function dupReviewRpc(name,args={}){
+  const {data,error}=await sb.rpc(name,{p_editor_did:CU.did,...args});
+  if(error||!data?.ok)throw new Error(error?.message||data?.error||'Gagal membaca data');return data;
+}
+function dupReviewPerson(x,label){
+  const el=document.createElement('div');el.className='dup-person';
+  const title=document.createElement('small');title.textContent=label;
+  const name=document.createElement('b');name.textContent=x.nama||'-';el.append(title,name);
+  for(const line of [`${x.kelompok||'-'} · DID ${x.did||'-'}`,`KK: ${x.nama_kk||'-'}`,`Lahir: ${x.tgl_lahir||'-'} · Sambung: ${x.status_sambung||'-'}`,`Alamat: ${x.alamat||'-'}`]){const small=document.createElement('small');small.textContent=line;el.append(small)}
+  return el;
+}
+async function bukaTinjauanDuplikat(){
+  if(String(CU?.did)!=='4075')return;
+  const dlg=document.getElementById('dup-review-dialog'),box=document.getElementById('dup-review-content');
+  if(!dlg.open)dlg.showModal();box.textContent='Memuat kandidat duplikat...';
+  try{
+    const [q,a]=await Promise.all([dupReviewRpc('dashboard_jamaah_duplicate_reviews'),dupReviewRpc('dashboard_jamaah_duplicate_archives')]);
+    box.replaceChildren();const intro=document.createElement('p');intro.textContent=`${q.items.length} pasangan perlu ditinjau. Data baru tetap aktif sampai diputuskan. Penghapusan hanya untuk data baru tanpa riwayat terkait; data yang dihapus tersimpan di arsip.`;box.append(intro);
+    if(!q.items.length){const empty=document.createElement('p');empty.textContent='Tidak ada kandidat yang menunggu tinjauan.';box.append(empty)}
+    for(const row of q.items){
+      const card=document.createElement('section');card.className='dup-card';const head=document.createElement('b');head.textContent=`Kemiripan ${Math.round(Number(row.score)*100)}% · ${row.new.kelompok}`;card.append(head);
+      const pair=document.createElement('div');pair.className='dup-pair';pair.append(dupReviewPerson(row.new,'DATA BARU'),dupReviewPerson(row.existing,'DATA SEBELUMNYA'));card.append(pair);
+      const actions=document.createElement('div');actions.className='dup-actions';
+      const distinct=document.createElement('button');distinct.textContent='Orang berbeda · selesai';distinct.onclick=()=>putuskanDuplikat(row,'distinct');
+      const archive=document.createElement('button');archive.className='danger';archive.textContent='Arsipkan & hapus data baru';archive.onclick=()=>putuskanDuplikat(row,'archive');
+      actions.append(distinct,archive);card.append(actions);box.append(card);
+    }
+    const history=document.createElement('details');const sum=document.createElement('summary');sum.textContent=`Arsip data yang dihapus (${a.items.length})`;history.append(sum);
+    for(const item of a.items){const card=document.createElement('section');card.className='dup-card';const line=document.createElement('div');line.textContent=`${item.nama} · ${item.kelompok} · ${item.did} · Alasan: ${item.reason}`;const btn=document.createElement('button');btn.textContent='Pulihkan';btn.onclick=()=>pulihkanDuplikat(item);card.append(line,btn);history.append(card)}box.append(history);
+  }catch(e){box.textContent='Gagal memuat tinjauan: '+e.message}
+}
+async function putuskanDuplikat(row,action){
+  const note=action==='archive'?prompt(`Hapus data baru ${row.new.nama} (${row.new.did})?\nData lama ${row.existing.nama} tetap ada. Tulis alasan (minimal 8 karakter):`):'';
+  if(action==='archive'&&(note===null||note.trim().length<8))return;
+  if(action==='archive'&&!confirm(`Pastikan ${row.new.nama} adalah data ganda dan data yang dipertahankan adalah ${row.existing.nama}. Lanjutkan arsip & hapus?`))return;
+  try{await dupReviewRpc('dashboard_jamaah_duplicate_resolve',{p_review_id:row.id,p_action:action,p_note:note||''});toast(action==='archive'?'Data ganda diarsipkan.':'Ditandai sebagai orang berbeda.');await loadAll();await bukaTinjauanDuplikat()}
+  catch(e){toast(e.message,true);alert('Tindakan ditolak: '+e.message)}
+}
+async function pulihkanDuplikat(item){
+  if(!confirm(`Pulihkan ${item.nama} (${item.did}) ke daftar jamaah?`))return;
+  try{await dupReviewRpc('dashboard_jamaah_duplicate_restore',{p_did:item.did});toast('Jamaah dipulihkan.');await loadAll();await bukaTinjauanDuplikat()}
+  catch(e){toast(e.message,true);alert('Gagal memulihkan: '+e.message)}
+}
+</script>
