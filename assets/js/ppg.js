@@ -6325,7 +6325,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   }
 
   window.ppg52StartClass=async function(){
-    if(controller()||!scopeId())return;
+    if(controller()||!scopeId()||!window.ppgCanAct66?.())return;
     const date=document.getElementById('ppg52-start-date')?.value||'';
     if(!validClassDate87(date)){toast('Pilih tanggal yang valid, tidak melebihi hari ini.',true);return}
     const teacherDid=document.getElementById('ppg52-start-teacher')?.value||'';
@@ -6385,12 +6385,12 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   }
   function canEditClassDate87(s){
     return !!s&&!controller()&&!!scopeId()&&s.scope===scopeId()&&
-      !!window.ppg68SessionOwner?.owns(s);
+      !!window.ppgCanAct66?.();
   }
   window.ppg87CanEditClassDate=canEditClassDate87;
   window.ppg87EditClassDate=function(id){
     const old=sessions().find(x=>String(x.id)===String(id));
-    if(!canEditClassDate87(old)){toast('Hanya akun pembuka kelas yang dapat mengubah tanggal.',true);return}
+    if(!canEditClassDate87(old)){toast('Hanya guru berwenang di kelompok ini yang dapat mengubah tanggal.',true);return}
     let dlg=document.getElementById('ppg87-date-dialog');
     if(!dlg){
       dlg=document.createElement('dialog');
@@ -6402,7 +6402,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
     }
     const input=dlg.querySelector('input');
     input.max=today();input.value=old.date;
-    dlg.querySelector('form').onsubmit=function(e){
+    dlg.querySelector('form').onsubmit=async function(e){
       e.preventDefault();
       const all=sessions(),s=all.find(x=>String(x.id)===String(id)),date=input.value;
       if(!canEditClassDate87(s)){toast('Tidak memiliki hak akses.',true);return}
@@ -6411,13 +6411,17 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       if(all.some(x=>String(x.id)!==String(id)&&x.scope===s.scope&&x.className===s.className&&x.date===date&&x.status==='active')){
         toast('Sudah ada kelas aktif pada tanggal tersebut.',true);return;
       }
-      const previousDate=s.date,at=ubnbWibIso84(),account=CU?.nama||CU?.username||'-';
-      s.date=date;s.dateEditedAt=at;s.dateEditedBy=account;s.dateEditedByDid=String(CU?.did||CU?.id||'');
-      saveSessions(all);
-      if(sessions().find(x=>String(x.id)===String(id))?.date!==date){toast('Tanggal belum tersimpan.',true);return}
-      const logs=get(LOGGER_KEY,[]);
-      logs.push({at,type:'EDIT_TANGGAL_KELAS',account,accountDid:s.dateEditedByDid,scope:s.scope,sessionId:s.id,className:s.className,teacherName:s.teacherName,oldDate:previousDate,date});
-      set(LOGGER_KEY,logs);
+      const submit=dlg.querySelector('button[type="submit"]');
+      submit.disabled=true;
+      try{
+        const {data,error}=await sb.rpc('ppg_correct_class_date',{
+          p_editor_did:String(CU?.did||CU?.id||''),p_scope:scopeId(),
+          p_session_id:String(id),p_expected_date:s.date,p_new_date:date
+        });
+        if(error||!data?.ok||!data.session)throw Error(error?.message||'Koreksi tanggal gagal.');
+        window.ppg88ApplyClassDate(data.session);
+      }catch(err){toast(err.message||'Gagal menyimpan tanggal kelas.',true);return}
+      finally{submit.disabled=false}
       dlg.close();
       if(s.status==='finished'){window.ppg52KelasMode('history');window.ppg55ReviewKBM?.(id);}
       else{mode52='active';renderKelas();}
@@ -6451,7 +6455,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
           <div class="ppg52-chevron">${expanded?'▾':'▸'}</div>
         </button>
         <div class="ppg52-progress"><span style="width:${a.pct}%"></span></div>
-        <div class="ppg52-detail">${expanded?(canEditClassDate87(s)?`<button type="button" class="ppg52-secondary" onclick="ppg87EditClassDate('${esc(s.id)}')">Edit Tanggal Kelas</button>`:'')+'<div id="p37detail"></div>':''}</div>
+        <div class="ppg52-detail">${expanded?(canEditClassDate87(s)?`<button type="button" class="ppg52-secondary ppg88-date-edit" style="pointer-events:auto;opacity:1" onclick="ppg87EditClassDate('${esc(s.id)}')">Edit Tanggal Kelas</button>`:'')+'<div id="p37detail"></div>':''}</div>
       </article>`;
     }).join('')}</div>`;
   }
@@ -9625,6 +9629,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
   let pollTimer=null;
 
   const nativeSet=Storage.prototype.setItem;
+  window.ppg88ApplyClassDate=function(server){const rows=JSON.parse(localStorage.getItem('ubnb_ppg_v37_classes')||'[]');const next=rows.map(x=>String(x.id)===String(server.id)?{...x,date:server.date,dateRevision:server.dateRevision,dateEditedAt:server.dateEditedAt,dateEditedBy:server.dateEditedBy,dateEditedByDid:server.dateEditedByDid}:x);nativeSet.call(localStorage,'ubnb_ppg_v37_classes',JSON.stringify(next));};
   const nativeRemove=Storage.prototype.removeItem;
 
   function editorDid(){
@@ -9743,8 +9748,8 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
       const id=String(x?.id||'');
       if(!id)continue;
       const previous=map.get(id),chosen=chooseSession(previous,x);
-      const latestDate=[previous,x].filter(v=>v?.dateEditedAt).sort((a,b)=>String(b.dateEditedAt).localeCompare(String(a.dateEditedAt)))[0];
-      map.set(id,latestDate?{...chosen,date:latestDate.date,dateEditedAt:latestDate.dateEditedAt,dateEditedBy:latestDate.dateEditedBy,dateEditedByDid:latestDate.dateEditedByDid}:chosen);
+      const latestDate=[previous,x].filter(v=>Number(v?.dateRevision)>0).sort((a,b)=>Number(b.dateRevision)-Number(a.dateRevision))[0];
+      map.set(id,latestDate?{...chosen,date:latestDate.date,dateRevision:latestDate.dateRevision,dateEditedAt:latestDate.dateEditedAt,dateEditedBy:latestDate.dateEditedBy,dateEditedByDid:latestDate.dateEditedByDid}:chosen);
     }
 
     return [...map.values()].sort((x,y)=>
@@ -12006,6 +12011,7 @@ setTimeout(()=>{setTabs();if(document.getElementById('ppg-shell')?.classList.con
 
     /* summary tetap boleh diklik untuk review */
     if(e.target.closest('.ppg52-active-summary'))return;
+    if(e.target.closest('.ppg88-date-edit')&&window.ppg87CanEditClassDate?.(sessions68().find(s=>String(s.id)===idFromCard68(card))))return;
 
     const interactive=e.target.closest('button,input,select,textarea,label');
     if(interactive){
