@@ -2680,6 +2680,7 @@ async function simpanBaru(){
   const caraSerah=document.getElementById('b-cara-serah')?.value||'';
   const caraPembayaran=document.getElementById('b-cara-pembayaran')?.value||'';
   const kasId=parseInt(document.getElementById('b-kas-id').value)||null;
+  if(!kasId||![1,5].includes(kasId)){al('b-alert','Pilih Kas Utama atau Kas BMT untuk pencairan.');return;}
   if(!nama){al('b-alert','Nama wajib diisi');return;}
   if(!tgl){al('b-alert','Tanggal wajib diisi');return;}
   if(!baruD.total_pembiayaan){al('b-alert','Hitung kalkulasi dulu');return;}
@@ -2695,7 +2696,7 @@ async function simpanBaru(){
   const tglPertama=ymd(tglPertamaObj);
   if(!tglPertama){al('b-alert','Tanggal angsuran pertama belum valid. Tanggal pertama harus setelah tanggal akad.');return;}
   const{data:res,error}=await sb.from('bmt_akad').insert([{
-    no_akad:noAkad,nama_jamaah:nama,kelompok,
+    no_akad:noAkad,nama_jamaah:nama,kelompok,kas_pencairan_id:kasId,
     anggota_id:anggotaId?parseInt(anggotaId):null,
     tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,
     tgl_perolehan_barang:baruD.jenis_akad==='Murabahah'?tglPerolehan:null,
@@ -2720,9 +2721,7 @@ async function simpanBaru(){
     status:'Belum Lunas',operator:CU.username
   }]).select().single();
   if(error){al('b-alert','Gagal: '+error.message);return;}
-  // Kas keluar = harga beli - diskon (yang BMT bayar ke supplier)
-  const kasKeluar=(parseFloat(baruD.harga_beli)||0)-(parseFloat(baruD.diskon)||0);
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:kasKeluar,tanggal:tgl,keterangan:'Pencairan '+noAkad+' — '+nama,operator:CU.username}]);
+  // Database menyimpan akad, mutasi, saldo kas dan jurnal pokok secara atomik.
   toast('✅ Akad '+noAkad+' berhasil disimpan!');
   closeModal('modal-akad-baru');
   await loadAll();renderPmbDash();renderDaftar();renderDashboard();
@@ -2877,7 +2876,11 @@ async function simpanEditAngsuran(){
   const margin=parseFloat(document.getElementById('ea-margin').value)||0;
   const catatan=document.getElementById('ea-catatan').value.trim();
   const status=document.getElementById('ea-status').value;
-  if(!tgl||!jumlah){al('ea-alert','Tanggal dan jumlah wajib diisi');return;}
+  if(!tgl||jumlah<=0){al('ea-alert','Tanggal dan jumlah positif wajib diisi');return;}
+  if(pokok<0||margin<0||Math.abs(jumlah-pokok-margin)>0.00001){al('ea-alert','Jumlah angsuran harus sama dengan pokok + margin.');return;}
+  const lama=aAngsuran.find(x=>x.id===_editAngsId);if(!lama){al('ea-alert','Data angsuran tidak ditemukan. Muat ulang halaman.');return;}
+  const perubahan=tgl!==lama.tanggal||jumlah!==Number(lama.jumlah)||pokok!==Number(lama.pokok||0)||margin!==Number(lama.margin||0);
+  if(perubahan&&!confirm(`Perubahan angsuran akan memperbarui jurnal, mutasi dan saldo kas serta sisa akad.\n\nTanggal: ${lama.tanggal} → ${tgl}\nJumlah: ${rp(lama.jumlah)} → ${rp(jumlah)}\nPokok: ${rp(lama.pokok||0)} → ${rp(pokok)}\nMargin: ${rp(lama.margin||0)} → ${rp(margin)}\nDampak saldo kas: ${rp(jumlah-Number(lama.jumlah))}\n\nSetujui perubahan?`))return;
   const{error}=await sb.from('bmt_angsuran').update({
     tanggal:tgl,jumlah,pokok,margin,catatan:catatan||null,status
   }).eq('id',_editAngsId);
