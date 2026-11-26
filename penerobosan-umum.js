@@ -296,8 +296,13 @@ function shortRole(label){return String(label||'dapukan belum diisi')
 function signatureDate(){return new Intl.DateTimeFormat('id-ID',{day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Jakarta'}).format(new Date());}
 function otherGrouped(items,genderMap){
   const maps={L:new Map(),P:new Map(),unknown:new Map()};
+  const knownNames=Object.keys(genderMap).sort((a,b)=>b.length-a.length);
   for(const item of items||[]){
-    const name=item.replace(/ \([\s\S]*\)$/,'').trim();
+    // Nama jamaah dapat memiliki panggilan dalam kurung, misalnya "Hanantirmi (Temy)".
+    // Cocokkan nama lengkap lebih dulu agar kurung panggilan tidak terbaca sebagai dapukan.
+    const lower=item.toLocaleLowerCase('id-ID');
+    const matched=knownNames.find(key=>lower.startsWith(key+' ('));
+    const name=(matched?item.slice(0,matched.length):item.replace(/ \([^()]*\)$/,'')).trim();
     if(!name)continue;
     const role=item.slice(name.length).replace(/^\s*\(|\)$/g,'').trim();
     const key=name.toLocaleLowerCase('id-ID'),gender=genderMap[key]||'unknown';
