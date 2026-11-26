@@ -3202,10 +3202,17 @@ async function eksekusiTutupBuku(){
 async function recalcAllSaldo(){
   toast('⏳ Menghitung ulang saldo semua kas...');
   for(const k of D.kas){
-    const{data}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',k.id);
-    if(!data)continue;
+    // BMT: saldo pembuka resmi + mutasi tahun berjalan, tanpa pagination API.
+    if(Number(k.id)===5){
+      const {error}=await sb.rpc('ubnb_recalc_kas_bmt_2026');
+      if(error){toast('Recalc BMT gagal: '+error.message,true);return;}
+      continue;
+    }
+    const{data,error}=await sb.from('kas_mutasi').select('tipe,jumlah').eq('kas_id',k.id);
+    if(error||!data){toast('Recalc gagal: '+(error?.message||k.nama),true);return;}
     const saldo=data.reduce((s,m)=>m.tipe==='masuk'?s+parseFloat(m.jumlah):s-parseFloat(m.jumlah),0);
-    await sb.from('kas').update({saldo}).eq('id',k.id);
+    const {error:errUpdate}=await sb.from('kas').update({saldo}).eq('id',k.id);
+    if(errUpdate){toast('Recalc gagal: '+errUpdate.message,true);return;}
   }
   await refreshAll();toast('✅ Saldo semua kas sudah dihitung ulang!');
 }
