@@ -5358,7 +5358,7 @@ async function simpanBeli(){
     await sb.from('barang').update({stok:b.stok+qr,harga:k.hjf,harga_beli:k.hb}).eq('id',k.barang_id||k.id);
   }
   // Auto-catat hutang supplier jika belum lunas
-  if(beliStatus!=='lunas'){
+  if(beliStatus==='sebagian'){
     const sisa=totalBeli-dp;
     const supNamaH=supSel?.label&&supSel.label!=='Tanpa supplier'?supSel.label:'Supplier';
     const namaItem=KB.map(k=>k.nama+(k.qty>1?' x'+k.qty:'')).join(', ').slice(0,60);
@@ -5453,15 +5453,17 @@ async function simpanEditBeli(){
   const supNama=document.getElementById('edit-beli-supplier-input').value.trim();
   const pOld=aBeli.find(x=>x.id===id);if(!pOld)return;
 
+  if(status==='sebagian'||pOld.status_bayar==='sebagian'){toast('Edit pembelian sebagian memerlukan rekonsiliasi DP terlebih dahulu.',true);return;}
   const newItems=_editBeliItems.filter(it=>it.qty>0);
   const newTotal=newItems.reduce((s,it)=>s+(it.harga_beli||0)*it.qty,0);
 
   // Simpan ke DB
-  await sb.from('pembelian').update({
+  const {error:editBeliErr}=await sb.from('pembelian').update({
     tgl_beli:tgl,status_bayar:status,catatan,
     items:newItems,total:newTotal,
     supplier_nama:supNama||pOld.supplier_nama
   }).eq('id',id);
+  if(editBeliErr){toast(editBeliErr.message,true);return;}
 
   if(status==='lunas'){
     await sb.from('hutang').update({lunas:true}).eq('ref_id',id).eq('ref_type','pembelian');
@@ -5478,48 +5480,7 @@ async function simpanEditBeli(){
     if(b)await sb.from('barang').update({stok:Math.max(0,b.stok+selisih)}).eq('id',b.id);
   }
   
-  // === ROLLBACK kas_mutasi + jurnal LAMA, REPOST sesuai status baru ===
-  try{
-    // Hapus kas_mutasi lama untuk pembelian ini
-    const{data:kmLama}=await sb.from('kas_mutasi').select('id,kas_id').eq('ref_type','pembelian').eq('ref_id',id);
-    const oldKasIds=[...new Set((kmLama||[]).map(k=>k.kas_id).filter(Boolean))];
-    await sb.from('kas_mutasi').delete().eq('ref_type','pembelian').eq('ref_id',id);
-    // Hapus jurnal lama (BELI-{id})
-    const{data:juLama}=await sb.from('jurnal_umum').select('id').or(`referensi.eq.BELI-${id},referensi.eq.PEMBELIAN-${id}`);
-    if(juLama&&juLama.length){
-      const idsLama=juLama.map(j=>j.id);
-      await sb.from('jurnal_detail').delete().in('jurnal_id',idsLama);
-      await sb.from('jurnal_umum').delete().in('id',idsLama);
-    }
-    // Repost: pakai dp lama dari pOld jika tersedia
-    const dpLama=parseFloat(pOld?.dp||0)||0;
-    const cashOut = status==='lunas' ? newTotal : (status==='sebagian'?dpLama:0);
-    const hutang = newTotal - cashOut;
-    const kasW=_getKasWarungDefault();
-    const kasId=kasW?.id||1;
-    const kasCoa=_coaFromKas(kasId);
-    const ket='Edit Pembelian #'+id+' - '+(supNama||pOld.supplier_nama||'Supplier');
-    const detailJ=[
-      {coa_id:_COA.PERSEDIAAN.id,kode_akun:_COA.PERSEDIAAN.kode,nama_akun:_COA.PERSEDIAAN.nama,debit:newTotal,kredit:0}
-    ];
-    if(cashOut>0){
-      detailJ.push({coa_id:kasCoa.id,kode_akun:kasCoa.kode,nama_akun:kasCoa.nama,debit:0,kredit:cashOut});
-    }
-    if(hutang>0){
-      detailJ.push({coa_id:_COA.HUTANG_SUPPLIER.id,kode_akun:_COA.HUTANG_SUPPLIER.kode,nama_akun:_COA.HUTANG_SUPPLIER.nama,debit:0,kredit:hutang});
-    }
-    if(newTotal>0){
-      await _postTransaksi({
-        kasId, tipe:'keluar', jumlah:cashOut, kategori:'pembelian',
-        refType:'pembelian', refId:id, tanggal:tgl,
-        keterangan:ket,
-        skipKasMutasi:cashOut===0,
-        jurnalDetails:detailJ
-      });
-    }
-    for(const kid of [...new Set([...oldKasIds,kasId])])await recalcSaldo(kid);
-  }catch(e){console.error('Repost edit beli gagal:',e);toast('⚠ Jurnal gagal: '+e.message,true);}
-
+  // Pembukuan pembelian lunas/belum diposting trigger database.
   await lBeli();await lH();await lB();await lKas();renderRiwayatBeli();renderHutang();renderStok();
   _markSaved('modal-edit-beli');closeModal('modal-edit-beli');
   toast('Pembelian & stok berhasil diperbarui!');
@@ -12077,60 +12038,7 @@ async function posKonfirmasiBayar(){
       }
     }
 
-    // Insert hutang kalau Bayar Nanti
-    if(posMetode==='hutang'){
-      const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
-      await sb.from('hutang').insert([{
-        nama:posPel.label,jml:total,
-        ket:'Penjualan POS: '+itemNames,
-        lunas:false,tipe:'piutang',
-        ref_id:txId,ref_type:'transaksi',
-        tgl:tglTx
-      }]);
-    }
-
-    // Insert kas_mutasi + jurnal (via _postTransaksi)
-    try{
-      const ketPos='Penjualan POS - '+(posPel.label||'Umum');
-      const tglRef=tglTx.slice(0,10);
-      // (a) Pencatatan pendapatan
-      if(posMetode==='tunai' && kasId){
-        const kasCoa=_coaFromKas(kasId);
-        await _postTransaksi({
-          kasId, tipe:'masuk', jumlah:total, kategori:'penjualan',
-          refType:'transaksi', refId:txId, tanggal:tglRef,
-          keterangan:ketPos,
-          jurnalDetails:[
-            {coa_id:kasCoa.id,kode_akun:kasCoa.kode,nama_akun:kasCoa.nama,debit:total,kredit:0},
-            {coa_id:_COA.PENJUALAN.id,kode_akun:_COA.PENJUALAN.kode,nama_akun:_COA.PENJUALAN.nama,debit:0,kredit:total}
-          ]
-        });
-      } else if(posMetode==='hutang'){
-        await _postTransaksi({
-          kasId:null, tipe:null, jumlah:0, kategori:'penjualan',
-          refType:'transaksi', refId:txId, tanggal:tglRef,
-          keterangan:ketPos+' (kredit)',
-          skipKasMutasi:true,
-          jurnalDetails:[
-            {coa_id:_COA.PIUTANG_USAHA.id,kode_akun:_COA.PIUTANG_USAHA.kode,nama_akun:_COA.PIUTANG_USAHA.nama,debit:total,kredit:0},
-            {coa_id:_COA.PENJUALAN.id,kode_akun:_COA.PENJUALAN.kode,nama_akun:_COA.PENJUALAN.nama,debit:0,kredit:total}
-          ]
-        });
-      }
-      // (b) Pengakuan HPP
-      if(tHpp>0){
-        await _postTransaksi({
-          kasId:null, tipe:null, jumlah:0, kategori:'hpp',
-          refType:'transaksi', refId:txId, tanggal:tglRef,
-          keterangan:'HPP '+ketPos,
-          skipKasMutasi:true,
-          jurnalDetails:[
-            {coa_id:_COA.HPP.id,kode_akun:_COA.HPP.kode,nama_akun:_COA.HPP.nama,debit:tHpp,kredit:0},
-            {coa_id:_COA.PERSEDIAAN.id,kode_akun:_COA.PERSEDIAAN.kode,nama_akun:_COA.PERSEDIAAN.nama,debit:0,kredit:tHpp}
-          ]
-        });
-      }
-    }catch(e){console.error('Posting jurnal POS penjualan gagal:',e);toast('⚠ Jurnal gagal: '+e.message,true);}
+    // Jurnal, kas dan piutang diposting trigger database.
 
     // Reload data lokal
     if(typeof lT==='function')await lT();
@@ -13405,7 +13313,7 @@ async function posbKonfirmasiSimpan(){
     }catch(e){console.error('Posting jurnal POS pembelian gagal:',e);toast('⚠ Jurnal gagal: '+e.message,true);}
 
     // 4. Insert hutang jika status bukan lunas
-    if(posbStatusBayar!=='lunas'){
+    if(posbStatusBayar==='sebagian'){
       const sisa=total-dp;
       const supNama=posbSup.label||'Supplier';
       const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
@@ -13956,7 +13864,7 @@ async function _postTransaksi(params){
   // === EARLY RETURN: refType='transaksi' sudah dihandle trigger DB v3 ===
   // Trigger fn_jurnal_transaksi_warung otomatis create jurnal + kas_mutasi + update saldo
   // saat INSERT/UPDATE pada tabel transaksi. Untuk hindari dobel posting, skip di app.
-  if(refType==='transaksi'){
+  if(refType==='transaksi'||(refType==='pembelian'&&(await sb.from('pembelian').select('status_bayar').eq('id',refId).single().then(r=>{if(r.error)throw r.error;return r.data.status_bayar;}))!=='sebagian')){
     if(typeof console!=='undefined' && console.debug){
       console.debug('[_postTransaksi] skip refType=transaksi (handled by DB trigger v3)', {refId,kategori});
     }
