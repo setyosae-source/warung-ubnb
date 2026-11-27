@@ -2833,28 +2833,13 @@ function tampilRiwayat(akadId){
 }
 
 // ── HAPUS ANGSURAN ──
-async function hapusAngsuran(angsId, akadId){
-  if(!CU||(CU.role!=='admin'&&CU.role!=='owner'&&CU.role!=='pemilik')){toast('Hanya admin/owner yang bisa hapus');return;}
-  const angs=aAngsuran.find(x=>x.id===angsId);
-  if(!angs)return;
-  const a=aAkad.find(x=>x.id===akadId);
-  if(!confirm(`Hapus angsuran ${fmtTgl(angs.tanggal)} — ${rp(angs.jumlah)}?\n\nKas mutasi terkait juga akan dihapus.`))return;
-  // Hapus dari bmt_angsuran
-  const{error}=await sb.from('bmt_angsuran').delete().eq('id',angsId);
-  if(error){toast('Gagal hapus: '+error.message,true);return;}
-  // Hapus kas_mutasi terkait (cari berdasarkan tanggal + jumlah + kategori angsuran)
-  await sb.from('kas_mutasi').delete()
-    .eq('kas_id',KAS_BMT_ID).eq('tipe','masuk').eq('kategori','angsuran')
-    .eq('jumlah',angs.jumlah).eq('tanggal',angs.tanggal);
-  // Cek apakah akad perlu dikembalikan ke Belum Lunas
-  if(a&&a.status==='Lunas'){
-    await sb.from('bmt_akad').update({status:'Belum Lunas'}).eq('id',akadId);
-  }
-  toast('✅ Angsuran dihapus');
-  await loadAll();
-  tampilRiwayat(akadId);
-  renderDaftar();renderDashboard();renderProyeksiProfit();
-  if(_detailAkadId===akadId)lihatDetail(akadId);
+async function hapusAngsuran(angsId,akadId){
+ const angs=aAngsuran.find(x=>x.id===angsId);if(!angs)return;
+ if(!angs.posting_atomik){toast('Transaksi historis perlu rekonsiliasi pengurus.',true);return;}
+ const alasan=prompt('Alasan pembatalan angsuran '+rp(angs.jumlah));if(!alasan)return;
+ if(!confirm('Batalkan angsuran beserta jurnal, kas dan hak profit?'))return;
+ const {error}=await sb.rpc('bmt_koreksi_angsuran_v1',{p_id:angsId,p_alasan:alasan});
+ if(error){toast(error.message,true);return;}toast('Angsuran dibatalkan dan diarsipkan');await loadAll();tampilRiwayat(akadId);renderDaftar();renderDashboard();if(_detailAkadId===akadId)lihatDetail(akadId);
 }
 
 // ── EDIT ANGSURAN ──
@@ -2888,6 +2873,12 @@ async function simpanEditAngsuran(){
   const lama=aAngsuran.find(x=>x.id===_editAngsId);if(!lama){al('ea-alert','Data angsuran tidak ditemukan. Muat ulang halaman.');return;}
   const perubahan=tgl!==lama.tanggal||jumlah!==Number(lama.jumlah)||pokok!==Number(lama.pokok||0)||margin!==Number(lama.margin||0);
   if(perubahan&&!confirm(`Perubahan angsuran akan memperbarui jurnal, mutasi dan saldo kas serta sisa akad.\n\nTanggal: ${lama.tanggal} → ${tgl}\nJumlah: ${rp(lama.jumlah)} → ${rp(jumlah)}\nPokok: ${rp(lama.pokok||0)} → ${rp(pokok)}\nMargin: ${rp(lama.margin||0)} → ${rp(margin)}\nDampak saldo kas: ${rp(jumlah-Number(lama.jumlah))}\n\nSetujui perubahan?`))return;
+  if(lama.posting_atomik&&perubahan){
+    if(tgl!==lama.tanggal){al('ea-alert','Koreksi tanggal memerlukan rekonsiliasi pengurus.');return;}
+    const alasan=prompt('Alasan koreksi angsuran');if(!alasan)return;
+    const {error}=await sb.rpc('bmt_koreksi_angsuran_v1',{p_id:_editAngsId,p_alasan:alasan,p_jumlah:jumlah,p_pokok:pokok,p_margin:margin,p_lebih:0});
+    if(error){al('ea-alert',error.message);return;}toast('Koreksi tersimpan');closeModal('modal-edit-angs');_editAngsId=null;await loadAll();tampilRiwayat(_editAngsAkadId);renderDaftar();renderDashboard();return;
+  }
   const{error}=await sb.from('bmt_angsuran').update({
     tanggal:tgl,jumlah,pokok,margin,catatan:catatan||null,status
   }).eq('id',_editAngsId);
@@ -4336,6 +4327,33 @@ async function loadPoolDashboard(){
   if(error){console.warn('Dashboard pemodal:',error.message);return;}
   poolDashboard=data;
 }
+async function poolAdminRefresh(){await loadPemodal();renderPmdStats();renderPmdSemua();renderPmdPenuh();renderPmdBH();}
+async function poolSahkan(id){
+ const p=poolDashboard?.pemodal?.find(x=>Number(x.id)===id);if(!p)return;
+ const cutoff=prompt('Tanggal cutoff pengesahan (YYYY-MM-DD)',poolDashboard.cutoff||today());if(!cutoff)return;
+ const raw=prompt('Nominal profit bersih yang telah disetujui setelah biaya (rupiah)');if(raw===null)return;
+ const nominal=Number(raw);if(!Number.isFinite(nominal)||nominal<=0){toast('Nominal tidak valid',true);return;}
+ const ref=prompt('Referensi keputusan pengurus / hasil musyawarah');if(!ref)return;
+ if(!confirm('Sahkan '+rp(nominal)+' dan buat tagihan bagi hasil? Belum ada pengeluaran kas.'))return;
+ const {error}=await sb.rpc('bmt_sahkan_profit_v1',{p_id:id,p_cutoff:cutoff,p_nominal:nominal,p_referensi:ref});
+ if(error){toast(error.message,true);return;}toast('Pengesahan dan tagihan tersimpan');await poolAdminRefresh();
+}
+async function poolModal(){
+ const jenis=prompt('Jenis: penetapan_awal, tambahan_modal, kapitalisasi_profit, penarikan_modal','penetapan_awal');if(!jenis)return;
+ const tanggal=prompt('Tanggal berlaku (YYYY-MM-DD)',today());if(!tanggal)return;
+ const raw=prompt('Nominal modal dalam rupiah');if(raw===null)return;const nominal=Number(raw);
+ if(!Number.isFinite(nominal)||nominal<=0){toast('Nominal tidak valid',true);return;}
+ const ket=prompt('Keterangan mutasi');if(!ket)return;const ref=prompt('Referensi keputusan pengurus');if(!ref)return;
+ if(!confirm('Catat alokasi modal '+rp(nominal)+'? Ini bukan transaksi kas atau jurnal otomatis.'))return;
+ const {error}=await sb.rpc('bmt_catat_modal_ubnb_v1',{p_tanggal:tanggal,p_jenis:jenis,p_nominal:nominal,p_keterangan:ket,p_referensi:ref});
+ if(error){toast(error.message,true);return;}toast('Mutasi modal tercatat');await poolAdminRefresh();
+}
+async function poolRiwayat(btn){
+ const el=btn.parentElement.querySelector('.pool-history');if(!el)return;
+ const {data,error}=await sb.rpc('bmt_status_pengesahan_v1');if(error){el.textContent=error.message;return;}
+ const table=(headers,rows)=>'<div class="tbl-wrap"><table class="bmt-tbl"><thead><tr>'+headers.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+row.map(x=>'<td>'+poolEscape(x)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+ el.innerHTML='<strong>Riwayat pengesahan</strong>'+table(['Penyertaan','Cutoff','Nominal','Keputusan','Operator'],(data.pengesahan||[]).map(x=>[x.penyertaan_id,x.cutoff,rp(x.nominal),x.referensi,x.operator]))+'<strong>Buku mutasi modal</strong>'+table(['Tanggal','Jenis','Nominal','Keterangan','Keputusan','Operator'],(data.modal||[]).map(x=>[x.tanggal,x.jenis,rp(x.nominal),x.keterangan,x.referensi_keputusan,x.operator]));
+}
 function renderPoolDashboard(el){
   if(!el)return;
   if(!poolDashboard){el.textContent='Data distribusi tidak tersedia atau akses belum berwenang.';return;}
@@ -4360,10 +4378,10 @@ function renderPoolDashboard(el){
     }
     return future;
   }
-  const rows=(d.pemodal||[]).map(p=>{const f=forecast(p),hak=Number(p.hak),paid=Number(p.dibayar),m=Number(p.jumlah_modal);return '<tr><td>'+name(p.id)+'<br>'+poolEscape(p.no_penyertaan)+'</td><td>'+rp(m)+'</td><td>'+rp(hak)+'</td><td>'+rp(paid)+'</td><td>'+rp(m+Math.max(0,hak-paid))+'</td><td>'+rp(f)+'</td><td>'+rp(hak+f)+'</td><td>'+(m?((hak+f)/m*100).toFixed(2):'0')+'%</td><td>'+poolEscape(p.tgl_jatuh_tempo)+'</td><td>'+rp(p.review)+'</td></tr>';}).join('');
+  const rows=(d.pemodal||[]).map(p=>{const f=forecast(p),hak=Number(p.hak),paid=Number(p.dibayar),m=Number(p.jumlah_modal);return '<tr><td>'+name(p.id)+'<br>'+poolEscape(p.no_penyertaan)+'</td><td>'+rp(m)+'</td><td>'+rp(hak)+'</td><td>'+rp(paid)+'</td><td>'+rp(m+Math.max(0,hak-paid))+'</td><td>'+rp(f)+'</td><td>'+rp(hak+f)+'</td><td>'+(m?((hak+f)/m*100).toFixed(2):'0')+'%</td><td>'+poolEscape(p.tgl_jatuh_tempo)+'</td><td>'+rp(p.review)+'</td><td><button class="btn sm" onclick="poolSahkan('+Number(p.id)+')">Sahkan</button></td></tr>';}).join('');
   const monthly=(d.bulanan||[]).map(b=>'<tr><td>'+poolEscape(b.bulan)+'</td><td>'+name(b.penyertaan_id)+'</td><td>'+rp(b.hak)+'</td></tr>').join('');
   const detail=(d.akad||[]).map(c=>'<tr><td>'+poolEscape(c.tanggal)+'</td><td>'+poolEscape(aAkad.find(a=>Number(a.id)===Number(c.id))?.no_akad||c.id)+'</td><td>'+rp(c.total)+'</td><td>'+rp(c.ubnb)+'</td><td>'+((c.pemodal||[]).map(x=>name(x.penyertaan_id)+': '+rp(x.modal)+' ('+(Number(x.modal)/Number(c.total)*Number(x.nisbah)).toFixed(2)+'% profit)').join('<br>')||'—')+'</td></tr>').join('');
-  el.innerHTML='<p>Murabahah · sebelum biaya · cutoff '+poolEscape(d.cutoff)+' · Modal resmi UB: '+(d.saldo_resmi==null?'belum ditetapkan (residual)':rp(d.saldo_resmi))+'</p><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Pemodal</th><th>Setoran</th><th>Hak profit</th><th>Dibayar</th><th>Potensi modal diputar</th><th>Proyeksi sisa</th><th>Total potensi</th><th>Imbal hasil</th><th>JT</th><th>Review pasca JT</th></tr></thead><tbody>'+rows+'</tbody></table></div><p>Proyeksi angsuran kontraktual mulai bulan berikutnya, tanpa akad baru; bukan jaminan. Profit belum dibayar diasumsikan diputar.</p><details><summary>Riwayat profit bulanan</summary><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Bulan</th><th>Pemodal</th><th>Hak</th></tr></thead><tbody>'+monthly+'</tbody></table></div></details><details><summary>Komposisi modal setiap akad</summary><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Tanggal</th><th>Akad</th><th>Total</th><th>UBNB</th><th>Pemodal</th></tr></thead><tbody>'+detail+'</tbody></table></div></details><button class="btn sm" onclick="window.print()">Cetak halaman</button>';
+  el.innerHTML='<p>Murabahah · sebelum biaya · cutoff '+poolEscape(d.cutoff)+' · Modal resmi UB: '+(d.saldo_resmi==null?'belum ditetapkan (residual)':rp(d.saldo_resmi))+'</p><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Pemodal</th><th>Setoran</th><th>Hak profit</th><th>Dibayar</th><th>Potensi modal diputar</th><th>Proyeksi sisa</th><th>Total potensi</th><th>Imbal hasil</th><th>JT</th><th>Review pasca JT</th><th>Pengesahan</th></tr></thead><tbody>'+rows+'</tbody></table></div><p>Proyeksi angsuran kontraktual mulai bulan berikutnya, tanpa akad baru; bukan jaminan. Profit belum dibayar diasumsikan diputar.</p><details><summary>Riwayat profit bulanan</summary><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Bulan</th><th>Pemodal</th><th>Hak</th></tr></thead><tbody>'+monthly+'</tbody></table></div></details><details><summary>Komposisi modal setiap akad</summary><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Tanggal</th><th>Akad</th><th>Total</th><th>UBNB</th><th>Pemodal</th></tr></thead><tbody>'+detail+'</tbody></table></div></details><button class="btn sm" onclick="window.print()">Cetak halaman</button><div><button class="btn sm" onclick="poolModal()">Catat mutasi modal UB</button> <button class="btn sm" onclick="poolRiwayat(this)">Riwayat pengesahan & modal</button><div class="pool-history"></div></div>';
 }
 function renderProyeksiBHSemua(){renderPoolDashboard(document.getElementById('pmd-proyeksi-semua'));}
 
@@ -4508,7 +4526,7 @@ async function simpanKonfirmasiBH(){
   toast('✅ Pembayaran BH dikonfirmasi!');closeModal('modal-bayar-bh');await loadPemodal();renderPmdStats();renderPmdBH();renderPmdSemua();renderDashboard();
 }
 async function bayarBHInternal(bhId){
-  if(!confirm('Tandai bagi hasil ini sebagai sudah dibayar?'))return;
+  if(!confirm('Pastikan pembayaran benar-benar telah dilakukan dari Kas BMT. Sistem akan mencatat pengeluaran kas dan jurnal. Lanjutkan?'))return;
   const{error}=await sb.from('ubnb_modal_bagi_hasil').update({sudah_dibayar:true,tgl_bayar:today()}).eq('id',bhId);
   if(error){toast('Gagal: '+error.message,true);return;}
   toast('✅ BH ditandai lunas!');await loadPemodal();renderPmdStats();renderPmdBH();
