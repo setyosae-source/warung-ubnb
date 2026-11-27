@@ -3605,29 +3605,7 @@ async function posKonfirmasiBayar(){
       }
     }
 
-    // Insert hutang kalau Bayar Nanti
-    if(posMetode==='hutang'){
-      const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
-      await sb.from('hutang').insert([{
-        nama:posPel.label,jml:total,
-        ket:'Penjualan POS: '+itemNames,
-        lunas:false,tipe:'piutang',
-        ref_id:txId,ref_type:'transaksi',
-        tgl:tglTx
-      }]);
-    }
-
-    // Insert kas_mutasi kalau Tunai (gap fix dari sistem lama)
-    if(posMetode==='tunai'&&kasId){
-      await sb.from('kas_mutasi').insert([{
-        kas_id:kasId,tipe:'masuk',kategori:'penjualan',
-        jumlah:total,tanggal:tglTx.slice(0,10),
-        keterangan:'Penjualan POS: '+(posPel.label||'Umum'),
-        operator:CU?CU.username:'unknown',
-        ref_type:'transaksi',ref_id:txId
-      }]);
-      if(typeof recalcSaldo==='function')await recalcSaldo(kasId);
-    }
+    // Jurnal, kas dan piutang diposting trigger database.
 
     // Reload data lokal
     if(typeof lT==='function')await lT();
@@ -4946,7 +4924,7 @@ async function posbKonfirmasiSimpan(){
     }
 
     // 3. Insert kas_mutasi (KELUAR) jika lunas/sebagian
-    if(kasId&&dp>0){
+    if(posbStatusBayar==='sebagian'&&kasId&&dp>0){
       const ket='Pembelian POS: '+(posbSup.label||'Supplier')+' #'+beliId;
       await sb.from('kas_mutasi').insert([{
         kas_id:kasId,tipe:'keluar',kategori:'pembelian',
@@ -4959,7 +4937,7 @@ async function posbKonfirmasiSimpan(){
     }
 
     // 4. Insert hutang jika status bukan lunas
-    if(posbStatusBayar!=='lunas'){
+    if(posbStatusBayar==='sebagian'){
       const sisa=total-dp;
       const supNama=posbSup.label||'Supplier';
       const itemNames=items.map(i=>i.nama+(i.qty>1?' x'+i.qty:'')).join(', ').slice(0,80);
