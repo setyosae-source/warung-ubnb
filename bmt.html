@@ -4200,46 +4200,28 @@ function onPilihRek(anggotaId,nama,tabId,noRek,saldo,ddId,mode){
 function setWadTrxMode(mode){document.getElementById('wad-form-setor').style.display=mode==='setor'?'block':'none';document.getElementById('wad-form-tarik').style.display=mode==='tarik'?'block':'none';if(mode==='setor')loadSetoranHariIni();else loadTarikHariIni();}
 function hitungSetor(){const jml=parseFloat(document.getElementById('setor-jumlah').value)||0;const prev=document.getElementById('setor-preview');if(jml>0){prev.style.display='block';document.getElementById('setor-saldo-baru').textContent=rp((window._saldo_setor||0)+jml);}else prev.style.display='none';}
 function hitungTarik(){const jml=parseFloat(document.getElementById('tarik-jumlah').value)||0;const prev=document.getElementById('tarik-preview');const warn=document.getElementById('tarik-warning');if(jml>0){prev.style.display='block';const sisa=(window._saldo_tarik||0)-jml;document.getElementById('tarik-saldo-baru').textContent=rp(sisa);warn.style.display=sisa<0?'block':'none';}else prev.style.display='none';}
-async function simpanSetor(){
-  const anggotaId=parseInt(document.getElementById('setor-anggota-id').value)||0;
-  const tabId=parseInt(document.getElementById('setor-tabungan-id').value)||0;
-  const tgl=document.getElementById('setor-tgl').value;
-  const jml=parseFloat(document.getElementById('setor-jumlah').value)||0;
-  const ket=document.getElementById('setor-ket').value.trim();
-  const kasId=parseInt(document.getElementById('setor-kas').value)||null;
-  if(!anggotaId||!tabId){toast('Pilih anggota dulu',true);return;}
-  if(!tgl||jml<=0){toast('Tanggal dan jumlah wajib diisi',true);return;}
-  const tab=aTabungan.find(t=>t.id===tabId);
-  const saldoLama=parseFloat(tab?.saldo||0),saldoBaru=saldoLama+jml;
-  const{error}=await sb.from('ubnb_wadiah_mutasi').insert([{tabungan_id:tabId,anggota_id:anggotaId,tipe:'setor',jumlah:jml,saldo_sebelum:saldoLama,saldo_sesudah:saldoBaru,tanggal:tgl,keterangan:ket||'Setoran wadiah',kas_id:kasId,operator:CU.username}]);
-  if(error){toast('Gagal: '+error.message,true);return;}
-  const upd={saldo:saldoBaru};if(tab.status==='generated'){upd.status='aktif';upd.tgl_buka=tgl;}
-  await sb.from('ubnb_wadiah_tabungan').update(upd).eq('id',tabId);
-  await sb.from('ubnb_wadiah_saldo_harian').upsert([{tabungan_id:tabId,anggota_id:anggotaId,tanggal:tgl,saldo:saldoBaru}],{onConflict:'tabungan_id,tanggal'});
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'masuk',kategori:'masuk',jumlah:jml,tanggal:tgl,keterangan:'Setoran Wadiah: '+(tab?.ubnb_anggota?.nama||''),operator:CU.username}]);
-  if(aKebijakan&&tgl>=aKebijakan.tgl_mulai_berlaku)await sb.from('ubnb_shu_trx_log').insert([{kebijakan_id:aKebijakan.id,anggota_id:anggotaId,periode:aKebijakan.periode,jenis_trx:'wadiah',ref_tabel:'ubnb_wadiah_mutasi',tanggal:tgl,nilai:jml}]);
-  toast('✅ Setoran berhasil!');resetSetor();await loadWadiah();renderWadDash();filterRekening();loadSetoranHariIni();
+let wadSaving=false;
+async function wadSimpan(mode){
+ if(wadSaving)return;
+ const tabId=Number(document.getElementById(mode+'-tabungan-id').value);
+ const tanggal=document.getElementById(mode+'-tgl').value;
+ const jumlah=Number(document.getElementById(mode+'-jumlah').value);
+ const kas=Number(document.getElementById(mode+'-kas').value);
+ const ket=document.getElementById(mode+'-ket').value.trim();
+ if(!tabId||!tanggal||!Number.isSafeInteger(jumlah)||jumlah<=0||![1,5].includes(kas)){toast('Rekening, tanggal, nominal dan kas wajib valid',true);return;}
+ if(!confirm('Konfirmasi '+mode+' Wadiah '+rp(jumlah)+'? Kas dan jurnal otomatis.'))return;
+ wadSaving=true;
+ try{
+ const {error}=await sb.rpc('bmt_wadiah_transaksi_v1',{p_request:crypto.randomUUID(),p_tab:tabId,p_tipe:mode,p_tanggal:tanggal,p_jumlah:jumlah,p_kas:kas,p_keterangan:ket||mode+' Wadiah'});
+ if(error)throw error;
+ toast('Transaksi Wadiah berhasil');
+ if(mode==='setor')resetSetor();else resetTarik();
+ await loadWadiah();renderWadDash();filterRekening();await loadAll();renderDashboard();
+ if(mode==='setor')loadSetoranHariIni();else loadTarikHariIni();
+ }catch(e){toast('Periksa hasil sebelum mengulang: '+e.message,true);}finally{wadSaving=false;}
 }
-async function simpanTarik(){
-  const anggotaId=parseInt(document.getElementById('tarik-anggota-id').value)||0;
-  const tabId=parseInt(document.getElementById('tarik-tabungan-id').value)||0;
-  const tgl=document.getElementById('tarik-tgl').value;
-  const jml=parseFloat(document.getElementById('tarik-jumlah').value)||0;
-  const ket=document.getElementById('tarik-ket').value.trim();
-  const kasId=parseInt(document.getElementById('tarik-kas').value)||null;
-  if(!anggotaId||!tabId){toast('Pilih anggota dulu',true);return;}
-  if(!tgl||jml<=0){toast('Tanggal dan jumlah wajib diisi',true);return;}
-  const tab=aTabungan.find(t=>t.id===tabId);
-  const saldoLama=parseFloat(tab?.saldo||0);
-  if(jml>saldoLama){toast('Saldo tidak mencukupi!',true);return;}
-  const saldoBaru=saldoLama-jml;
-  const{error}=await sb.from('ubnb_wadiah_mutasi').insert([{tabungan_id:tabId,anggota_id:anggotaId,tipe:'tarik',jumlah:jml,saldo_sebelum:saldoLama,saldo_sesudah:saldoBaru,tanggal:tgl,keterangan:ket||'Penarikan wadiah',kas_id:kasId,operator:CU.username}]);
-  if(error){toast('Gagal: '+error.message,true);return;}
-  await sb.from('ubnb_wadiah_tabungan').update({saldo:saldoBaru}).eq('id',tabId);
-  await sb.from('ubnb_wadiah_saldo_harian').upsert([{tabungan_id:tabId,anggota_id:anggotaId,tanggal:tgl,saldo:saldoBaru}],{onConflict:'tabungan_id,tanggal'});
-  if(kasId)await sb.from('kas_mutasi').insert([{kas_id:kasId,tipe:'keluar',kategori:'keluar',jumlah:jml,tanggal:tgl,keterangan:'Penarikan Wadiah: '+(tab?.ubnb_anggota?.nama||''),operator:CU.username}]);
-  toast('✅ Penarikan berhasil!');resetTarik();await loadWadiah();renderWadDash();filterRekening();loadTarikHariIni();
-}
+async function simpanSetor(){return wadSimpan('setor');}
+async function simpanTarik(){return wadSimpan('tarik');}
 function resetSetor(){['setor-cari','setor-jumlah','setor-ket'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});['setor-anggota-id','setor-tabungan-id'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});document.getElementById('setor-rek-info').style.display='none';document.getElementById('setor-preview').style.display='none';window._saldo_setor=0;}
 function resetTarik(){['tarik-cari','tarik-jumlah','tarik-ket'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});['tarik-anggota-id','tarik-tabungan-id'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});document.getElementById('tarik-rek-info').style.display='none';document.getElementById('tarik-preview').style.display='none';window._saldo_tarik=0;}
 function prefillSetor(anggotaId,tabId){gosub('wad','trx',document.querySelectorAll('#sub-wad .snav')[2]);setWadTrxMode('setor');const tab=aTabungan.find(t=>t.id===tabId);const a=aAnggota.find(x=>x.id===anggotaId);if(!a||!tab)return;document.getElementById('setor-cari').value=a.nama;document.getElementById('setor-anggota-id').value=anggotaId;document.getElementById('setor-tabungan-id').value=tabId;document.getElementById('setor-rek-info').style.display='block';document.getElementById('setor-rek-no').textContent=tab.no_rekening;document.getElementById('setor-rek-saldo').textContent=rp(tab.saldo);window._saldo_setor=parseFloat(tab.saldo||0);}
