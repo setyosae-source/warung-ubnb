@@ -567,18 +567,18 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
       <div class="kas-hint">Kas operasional aktif</div><button class="btn sm" style="margin-top:8px" onclick="bmtTutupIjarah(this)">Posting akrual Ijarah</button><button class="btn sm" style="margin-top:8px" onclick="bmtBiayaOperasional(this)">+ Catat biaya operasional</button>
     </div>
     <div class="kas-box">
-      <div class="kas-lbl">📦 Total Dana Kelola</div>
+      <div class="kas-lbl" id="dash-dana-label">Modal Pemodal Tercatat</div>
       <div class="kas-val gold" id="dash-total-dana">—</div>
-      <div class="kas-hint">Kas + Anggota + Mitra</div>
+      <div class="kas-hint" id="dash-dana-hint">Pokok penyertaan yang belum dikembalikan</div>
     </div>
   </div>
 
   <div class="sumber-box">
-    <span class="sec-lbl">Komposisi Sumber Dana</span>
+    <span class="sec-lbl">Komposisi Modal Tercatat</span>
     <div id="dash-sumber-bar">
       <div class="sb-row"><div class="sb-nm">🏦 Modal UBNB</div><div class="sb-wrap"><div class="sb-fill f-h" style="width:0%"></div></div><div class="sb-v" id="sb-kas">—</div></div>
       <div class="sb-row"><div class="sb-nm">👤 Penyertaan Anggota</div><div class="sb-wrap"><div class="sb-fill f-e" id="bar-int" style="width:0%"></div></div><div class="sb-v" id="sb-int">—</div></div>
-      <div class="sb-row"><div class="sb-nm">🤝 Mitra Eksternal</div><div class="sb-wrap"><div class="sb-fill f-b" id="bar-ext" style="width:0%"></div></div><div class="sb-v" id="sb-ext">—</div></div>
+      <div class="sb-row"><div class="sb-nm">🤝 Sisa Modal Mitra</div><div class="sb-wrap"><div class="sb-fill f-b" id="bar-ext" style="width:0%"></div></div><div class="sb-v" id="sb-ext">—</div></div>
     </div>
   </div>
 
@@ -2045,16 +2045,20 @@ async function bmtTutupIjarah(btn){
 function renderDashboard(){
   const kasBMT=aKas.find(k=>k.id===5)||aKas.find(k=>k.modul&&k.modul.includes('bmt'));
   const kasVal=kasBMT?parseFloat(kasBMT.saldo||0):0;
-  const mpTotal=aPenyertaanInternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
-  const peTotal=aPenyertaanEksternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0);
-  const totalDana=kasVal+mpTotal+peTotal;
+  const mpTotal=aPenyertaanInternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+Number(p.jumlah_modal||0),0);
+  const extSisa=p=>Math.max(0,Number(p.jumlah_modal||0)-aBHEksternal.filter(b=>Number(b.penyertaan_id)===Number(p.id)&&b.sudah_dibayar===true).reduce((s,b)=>s+Number(b.pokok_ke_mitra||0),0));
+  const peTotal=aPenyertaanEksternal.filter(p=>p.status==='aktif').reduce((s,p)=>s+extSisa(p),0);
+  const modalUB=poolDashboard?.saldo_resmi==null?null:Number(poolDashboard.saldo_resmi);
+  const totalDana=mpTotal+peTotal+(modalUB??0);
   document.getElementById('dash-kas-val').textContent=fmtRb(kasVal);
   document.getElementById('dash-total-dana').textContent=fmtRb(totalDana);
-  const pct=v=>totalDana>0?Math.max(Math.round(v/totalDana*100),0.5):0;
-  document.querySelector('.sb-fill.f-h').style.width=pct(kasVal)+'%';
+  document.getElementById('dash-dana-label').textContent=modalUB==null?'Modal Pemodal Tercatat':'Total Modal Tercatat';
+  document.getElementById('dash-dana-hint').textContent=modalUB==null?'Pokok anggota + sisa pokok mitra; modal UB belum ditetapkan':'Modal UB + pokok anggota + sisa pokok mitra';
+  const pct=v=>totalDana>0?Math.max(0,Math.min(100,v/totalDana*100)):0;
+  document.querySelector('.sb-fill.f-h').style.width=pct(modalUB??0)+'%';
   document.getElementById('bar-int').style.width=pct(mpTotal)+'%';
   document.getElementById('bar-ext').style.width=pct(peTotal)+'%';
-  document.getElementById('sb-kas').textContent=fmtRb(kasVal);
+  document.getElementById('sb-kas').textContent=modalUB==null?'Belum ditetapkan':fmtRb(modalUB);
   document.getElementById('sb-int').textContent=fmtRb(mpTotal);
   document.getElementById('sb-ext').textContent=fmtRb(peTotal);
   const aktifAkad=aAkad.filter(a=>a.status==='Belum Lunas');
@@ -2074,13 +2078,13 @@ function renderDashboard(){
     ...aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='penuh')
   ];
   document.getElementById('lyr-pmd-penuh').textContent=penuh.length;
-  document.getElementById('lyr-pmd-penuh-val').textContent=fmtRb(penuh.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0))+' dikelola';
+  document.getElementById('lyr-pmd-penuh-val').textContent=fmtRb(aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh').reduce((s,p)=>s+Number(p.jumlah_modal||0),0)+aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='penuh').reduce((s,p)=>s+extSisa(p),0))+' sisa modal';
   const spesifik=[
     ...aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='spesifik'),
     ...aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='spesifik')
   ];
   document.getElementById('lyr-pmd-spesifik').textContent=spesifik.length;
-  document.getElementById('lyr-pmd-spesifik-val').textContent=fmtRb(spesifik.reduce((s,p)=>s+parseFloat(p.jumlah_modal||0),0))+' dikelola';
+  document.getElementById('lyr-pmd-spesifik-val').textContent=fmtRb(aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='spesifik').reduce((s,p)=>s+Number(p.jumlah_modal||0),0)+aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='spesifik').reduce((s,p)=>s+extSisa(p),0))+' sisa modal';
   const pendingBH=aBHEksternal.filter(b=>!b.sudah_dibayar).length;
   const notif=document.getElementById('lyr-kap-notif');
   if(pendingBH>0){notif.style.display='block';notif.textContent=pendingBH+' pending';}else notif.style.display='none';
