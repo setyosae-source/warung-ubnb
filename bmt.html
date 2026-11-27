@@ -2751,7 +2751,7 @@ function pilihPayAkad(id,nama,noAkad){
   //   margin akad = total_margin
   //   sisa pokok  = pokok akad - akumulasi pokok terbayar
   //   sisa margin = margin akad - akumulasi margin terbayar
-  const pokokAkad=parseFloat(a.harga_beli||0)-parseFloat(a.uang_muka||0);
+  const pokokAkad=a.jenis_akad==='Murabahah'?Number(a.total_pembiayaan||0)-Number(a.total_margin||0)-Number(a.uang_muka||0):parseFloat(a.harga_beli||0)-parseFloat(a.uang_muka||0);
   const marginAkad=parseFloat(a.total_margin||0);
   const sisaPokok=angs.reduce((s,x)=>s-parseFloat(x.pokok||0),pokokAkad);
   const sisaMargin=angs.reduce((s,x)=>s-parseFloat(x.margin||0),marginAkad);
@@ -2791,16 +2791,21 @@ function hitungBreakdownOtomatis(){
   const a=window._payAkad;if(!a)return;
   const jumlah=parseFloat(document.getElementById('pay-jumlah').value)||0;
   if(!jumlah){document.getElementById('pay-breakdown-box').style.display='none';return;}
-  const sisaPokok=window._paySisaPokok||(parseFloat(a.harga_beli||0)-parseFloat(a.uang_muka||0));
-  const sisaMargin=window._paySisaMargin||parseFloat(a.total_margin||0);
+  const sisaPokok=window._paySisaPokok??(parseFloat(a.harga_beli||0)-parseFloat(a.uang_muka||0));
+  const sisaMargin=window._paySisaMargin??parseFloat(a.total_margin||0);
   const totalSisa=sisaPokok+sisaMargin;
-  const pokok=totalSisa>0?Math.round(jumlah*sisaPokok/totalSisa):jumlah;
-  const margin=jumlah-pokok;
+  const mur=a.jenis_akad==='Murabahah';
+  const bayar=mur?Math.min(jumlah,Math.max(0,totalSisa)):jumlah;
+  const basis=Number(a.total_pembiayaan||0)-Number(a.uang_muka||0);
+  const ratio=basis>0?Number(a.total_margin||0)/basis:0;
+  const margin=mur?Math.min(Math.max(0,sisaMargin),Math.max(0,bayar-Math.max(0,sisaPokok),Math.round(bayar*ratio))):totalSisa>0?jumlah-Math.round(jumlah*sisaPokok/totalSisa):0;
+  const pokok=bayar-margin;
+  const lebih=jumlah-bayar;
   document.getElementById('pay-pokok').value=pokok;
   document.getElementById('pay-margin').value=margin;
   document.getElementById('pay-pokok-display').textContent=rp(pokok);
   document.getElementById('pay-margin-display').textContent=rp(margin);
-  document.getElementById('pay-total-display').textContent=rp(jumlah);
+  document.getElementById('pay-total-display').textContent=rp(jumlah)+(lebih>0?' (lebih '+rp(lebih)+')':'');
   document.getElementById('pay-sisa-baru').textContent=rp(Math.max(0,totalSisa-jumlah));
   document.getElementById('pay-breakdown-box').style.display='block';
 }
@@ -2909,10 +2914,11 @@ async function simpanAngsuran(){
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div>';
   // tgl_jatuh_tempo & status diisi otomatis oleh trigger di DB
   const atomik=a.jenis_akad==='Murabahah';
-  if(atomik && jumlah>Number(a.sisa_angsuran)){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';al('pay-alert','Kelebihan pembayaran perlu dicatat melalui pengurus.');return;}
+  const kelebihan=atomik?Math.max(0,jumlah-pokok-margin):0;
+  if(kelebihan>0 && !confirm('Kelebihan '+rp(kelebihan)+' akan menjadi keuntungan UBNB dan tidak dikembalikan. Pastikan nasabah menyetujui. Lanjutkan?')){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';return;}
   const{error}=await sb.from('bmt_angsuran').insert([{
     akad_id:akadId,tanggal:tgl,jumlah,pokok,margin,
-    catatan:ket||null,kas_id:KAS_BMT_ID,operator:CU.username,posting_atomik:atomik
+    catatan:ket||null,kas_id:KAS_BMT_ID,operator:CU.username,posting_atomik:atomik,kelebihan
   }]);
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   if(error){al('pay-alert','Gagal: '+error.message);return;}
