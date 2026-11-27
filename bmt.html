@@ -2027,7 +2027,7 @@ async function renderProyeksiProfit(){
 
 async function bmtBiayaOperasional(btn){
  if(btn.disabled)return;
- const tanggal=prompt('Tanggal pembayaran (YYYY-MM-DD)',today());if(!tanggal)return;
+ const tanggal=prompt('Tanggal pembayaran (YYYY-MM-DD)',new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'}));if(!tanggal)return;
  const kas=prompt('Sumber pembayaran: 1 = Kas Utama, 5 = Kas BMT','5');if(!['1','5'].includes(kas))return;
  const raw=prompt('Nominal biaya dalam rupiah, tanpa titik');if(raw===null)return;const nominal=Number(raw);if(!Number.isSafeInteger(nominal)||nominal<=0){toast('Nominal tidak valid',true);return;}
  const ket=prompt('Keterangan biaya operasional');if(!ket)return;
@@ -4543,6 +4543,8 @@ async function simpanPenyertaanPenuh(){
   if(tglJT&&tglJT<tglMulai){toast('Jatuh tempo tidak boleh sebelum tanggal mulai',true);return;}
   if(jenis==='internal'&&!anggotaId){toast('Pilih anggota dulu',true);return;}
   if(jenis==='eksternal'&&!mitraId){toast('Pilih mitra dulu',true);return;}
+  if(jenis!=='internal'){toast('Penyertaan eksternal umum belum didukung distribusi otomatis',true);return;}
+  if(!confirm('Konfirmasi dana modal '+rp(modal)+' benar-benar sudah diterima di Kas BMT pada '+tglMulai+'?'))return;
   let error=null;
   if(jenis==='internal'){
     const noP=nextNoPenyertaan('MP',aPenyertaanInternal);
@@ -4596,6 +4598,8 @@ async function simpanPenyertaanSpesifik(){
   if(jenis==='internal'&&!anggotaId){toast('Pilih anggota dulu',true);return;}
   if(jenis==='eksternal'&&!mitraId){toast('Pilih mitra dulu',true);return;}
   if(!_akadTerpilihPS.length){toast('Pilih minimal 1 akad',true);return;}
+  if(jenis==='internal'){toast('Penyertaan spesifik internal belum didukung otomatisasi',true);return;}
+  if(!confirm('Konfirmasi dana modal '+rp(modal)+' benar-benar sudah diterima di Kas BMT pada '+tglMulai+'?'))return;
   const akadObjs=aAkad.filter(a=>_akadTerpilihPS.includes(a.id));
   const akadNos=akadObjs.map(a=>a.no_akad);
   const tglJT=new Date(tglMulai);tglJT.setMonth(tglJT.getMonth()+jangka);
@@ -5136,6 +5140,14 @@ function lihatPenyertaanSigned(){if(!_penyDigitalStatus?.verify_code){toast('Kod
 // ═══════════════════════════════════════════
 // DETAIL PENYERTAAN
 // ═══════════════════════════════════════════
+async function bmtKembalikanModal(id,btn){
+ if(btn.disabled)return;const p=aPenyertaanInternal.find(x=>x.id===id);if(!p)return;
+ const tanggal=prompt('Tanggal pengembalian aktual (YYYY-MM-DD)',new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'}));if(!tanggal)return;
+ const bukti=prompt('Nomor bukti pembayaran aktual');if(!bukti)return;
+ if(!confirm('Konfirmasi modal '+rp(p.jumlah_modal)+' sudah benar-benar dikembalikan dari Kas BMT? Sistem akan mencatat jurnal dan kas.'))return;
+ btn.disabled=true;
+ try{const {error}=await sb.rpc('bmt_modal_kembali_v1',{p_id:id,p_tanggal:tanggal,p_bukti:bukti});if(error)throw error;toast('Pengembalian modal tercatat');closeModal('modal-detail-penyertaan');await loadAll();renderDashboard();renderPmdStats();renderPmdSemua();renderPmdPenuh();}catch(e){toast('Pengembalian: '+e.message,true);}finally{btn.disabled=false;}
+}
 function bukaDetailPenyertaan(tipe, id){
   let p, mitra=null, bhList=[], judulBadge='', warna='var(--E)';
 
@@ -5255,6 +5267,7 @@ function bukaDetailPenyertaan(tipe, id){
   }else{
     if(pendingBH.length)aksiHtml+=`<button class="btn emas" onclick="closeModal('modal-detail-penyertaan');bukaBayarBH(${pendingBH[0].id})">✅ Bayar BH Pending (${pendingBH.length})</button>`;
   }
+  if(tipe==='internal-penuh'&&status==='aktif')aksiHtml+=`<button class="btn secondary" onclick="bmtKembalikanModal(${id},this)">Catat pengembalian modal</button>`;
   document.getElementById('dp-actions').innerHTML=aksiHtml;
 
   openModal('modal-detail-penyertaan');
