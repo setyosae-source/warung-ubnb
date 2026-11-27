@@ -564,7 +564,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="kas-box">
       <div class="kas-lbl">💵 Kas Pembiayaan</div>
       <div class="kas-val" id="dash-kas-val">—</div>
-      <div class="kas-hint">Kas operasional aktif</div><button class="btn sm" style="margin-top:8px" onclick="bmtBiayaOperasional(this)">+ Catat biaya operasional</button>
+      <div class="kas-hint">Kas operasional aktif</div><button class="btn sm" style="margin-top:8px" onclick="bmtTutupIjarah(this)">Posting akrual Ijarah</button><button class="btn sm" style="margin-top:8px" onclick="bmtBiayaOperasional(this)">+ Catat biaya operasional</button>
     </div>
     <div class="kas-box">
       <div class="kas-lbl">📦 Total Dana Kelola</div>
@@ -2036,6 +2036,12 @@ async function bmtBiayaOperasional(btn){
  btn.disabled=true;
  try{const {error}=await sb.rpc('bmt_biaya_operasional_v1',{p_request:crypto.randomUUID(),p_tanggal:tanggal,p_kas:Number(kas),p_nominal:nominal,p_keterangan:ket,p_bukti:bukti});if(error)throw error;toast('Biaya dan jurnal berhasil dicatat');await loadAll();renderDashboard();}catch(e){toast('Periksa hasil sebelum mengulang: '+e.message,true);}finally{btn.disabled=false;}
 }
+async function bmtTutupIjarah(btn){
+ if(btn.disabled)return;
+ const cutoff=prompt('Tanggal cutoff laporan Ijarah (YYYY-MM-DD)',new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'}));if(!cutoff)return;
+ if(!confirm('Posting akrual Ijarah sampai '+cutoff+'? Tidak mengubah kas.'))return;
+ btn.disabled=true;try{const {data,error}=await sb.rpc('bmt_ijarah_tutup_periode_v1',{p_cutoff:cutoff});if(error)throw error;toast('Jurnal akrual baru: '+data);}catch(e){toast(e.message,true);}finally{btn.disabled=false;}
+}
 function renderDashboard(){
   const kasBMT=aKas.find(k=>k.id===5)||aKas.find(k=>k.modul&&k.modul.includes('bmt'));
   const kasVal=kasBMT?parseFloat(kasBMT.saldo||0):0;
@@ -2708,8 +2714,18 @@ async function simpanBaru(){
   const tglPertama=ymd(tglPertamaObj);
   if(!tglPertama){al('b-alert','Tanggal angsuran pertama belum valid. Tanggal pertama harus setelah tanggal akad.');return;}
   if(baruD.jenis_akad==='Murabahah' && Number(baruD.uang_muka||0)>0 && !confirm('Pastikan uang muka '+rp(baruD.uang_muka)+' sudah benar-benar diterima di Kas BMT pada tanggal akad. Lanjutkan?'))return;
+  let ijarahMulai=null,ijarahAkhir=null;
+  if(baruD.jenis_akad==='Ijarah'){
+    ijarahMulai=prompt('Awal masa manfaat sewa (YYYY-MM-DD)',tgl);
+    if(!ijarahMulai)return;
+    ijarahAkhir=prompt('Akhir masa manfaat sewa, inklusif (YYYY-MM-DD)');
+    if(!ijarahAkhir)return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(ijarahMulai)||!/^\d{4}-\d{2}-\d{2}$/.test(ijarahAkhir)||ijarahMulai<tgl||ijarahAkhir<ijarahMulai){al('b-alert','Masa manfaat Ijarah tidak valid');return;}
+    if(Number(baruD.uang_muka||0)||Number(baruD.diskon||0)){al('b-alert','Ijarah dengan DP atau diskon memerlukan prosedur khusus');return;}
+    if(!confirm('Konfirmasi pencairan aktual '+rp(baruD.harga_beli)+' dan masa manfaat '+ijarahMulai+' sampai '+ijarahAkhir+'?'))return;
+  }
   const{data:res,error}=await sb.from('bmt_akad').insert([{
-    no_akad:noAkad,nama_jamaah:nama,kelompok,kas_pencairan_id:kasId,posting_margin_dp:baruD.jenis_akad==='Murabahah',
+    no_akad:noAkad,nama_jamaah:nama,kelompok,kas_pencairan_id:kasId,posting_margin_dp:baruD.jenis_akad==='Murabahah',ijarah_mulai:ijarahMulai,ijarah_akhir:ijarahAkhir,
     anggota_id:anggotaId?parseInt(anggotaId):null,
     tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,
     tgl_perolehan_barang:baruD.jenis_akad==='Murabahah'?tglPerolehan:null,
@@ -2916,8 +2932,10 @@ async function simpanAngsuran(){
   const btn=document.getElementById('btn-bayar');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div>';
   // tgl_jatuh_tempo & status diisi otomatis oleh trigger di DB
-  const atomik=a.jenis_akad==='Murabahah';
+  const atomik=['Murabahah','Ijarah'].includes(a.jenis_akad);
+  if(!atomik){al('pay-alert','Jenis akad belum mendukung jurnal otomatis');btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';return;}
   const kelebihan=atomik?Math.max(0,jumlah-pokok-margin):0;
+  if(kelebihan>0&&a.jenis_akad==='Ijarah'){al('pay-alert','Kelebihan Ijarah memerlukan prosedur khusus');btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';return;}
   if(kelebihan>0 && !confirm('Kelebihan '+rp(kelebihan)+' akan menjadi keuntungan UBNB dan tidak dikembalikan. Pastikan nasabah menyetujui. Lanjutkan?')){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';return;}
   const{error}=await sb.from('bmt_angsuran').insert([{
     akad_id:akadId,tanggal:tgl,jumlah,pokok,margin,
