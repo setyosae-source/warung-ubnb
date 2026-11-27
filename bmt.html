@@ -2695,8 +2695,9 @@ async function simpanBaru(){
   const tglPertamaObj=hitungTglAngsuranPertama(tgl,tglRutinVal,modePertama,document.getElementById('b-tgl-pertama-khusus').value);
   const tglPertama=ymd(tglPertamaObj);
   if(!tglPertama){al('b-alert','Tanggal angsuran pertama belum valid. Tanggal pertama harus setelah tanggal akad.');return;}
+  if(baruD.jenis_akad==='Murabahah' && Number(baruD.uang_muka||0)>0 && !confirm('Pastikan uang muka '+rp(baruD.uang_muka)+' sudah benar-benar diterima di Kas BMT pada tanggal akad. Lanjutkan?'))return;
   const{data:res,error}=await sb.from('bmt_akad').insert([{
-    no_akad:noAkad,nama_jamaah:nama,kelompok,kas_pencairan_id:kasId,
+    no_akad:noAkad,nama_jamaah:nama,kelompok,kas_pencairan_id:kasId,posting_margin_dp:baruD.jenis_akad==='Murabahah',
     anggota_id:anggotaId?parseInt(anggotaId):null,
     tanggal_akad:tgl,jenis_akad:baruD.jenis_akad,objek_pembiayaan:objek,
     tgl_perolehan_barang:baruD.jenis_akad==='Murabahah'?tglPerolehan:null,
@@ -2907,12 +2908,15 @@ async function simpanAngsuran(){
   const btn=document.getElementById('btn-bayar');
   btn.disabled=true;btn.innerHTML='<div class="spinner"></div>';
   // tgl_jatuh_tempo & status diisi otomatis oleh trigger di DB
+  const atomik=a.jenis_akad==='Murabahah';
+  if(atomik && jumlah>Number(a.sisa_angsuran)){btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';al('pay-alert','Kelebihan pembayaran perlu dicatat melalui pengurus.');return;}
   const{error}=await sb.from('bmt_angsuran').insert([{
     akad_id:akadId,tanggal:tgl,jumlah,pokok,margin,
-    catatan:ket||null,kas_id:KAS_BMT_ID,operator:CU.username
+    catatan:ket||null,kas_id:KAS_BMT_ID,operator:CU.username,posting_atomik:atomik
   }]);
   btn.disabled=false;btn.innerHTML='💳 Simpan Pembayaran';
   if(error){al('pay-alert','Gagal: '+error.message);return;}
+  if(!atomik){
   // Update status lunas jika sisa ≈ 0
   // Cek lunas: total sisa kewajiban setelah bayar <= 1000
   const totalSisaSetelah=Math.max(0,(window._paySisaPokok+window._paySisaMargin)-jumlah);
@@ -2924,6 +2928,7 @@ async function simpanAngsuran(){
     keterangan:'Angsuran: '+a.nama_jamaah+' ('+a.no_akad+')',
     operator:CU.username
   }]);
+  }
   toast('✅ Angsuran berhasil disimpan!');
   // Reset form
   document.getElementById('pay-akad-search').value='';
