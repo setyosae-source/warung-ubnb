@@ -898,7 +898,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="card" style="margin-top:6px">
       <div class="card-title" style="justify-content:space-between">
         <span>📈 Proyeksi Keuntungan Bagi Hasil</span>
-        <span style="font-size:11px;color:var(--M);font-weight:400">semua pemodal aktif</span>
+        <span style="font-size:11px;color:var(--M);font-weight:400">penyertaan umum Murabahah</span>
       </div>
       <div id="pmd-proyeksi-semua" style="font-size:12px;color:var(--M);padding:8px 0">Memuat...</div>
     </div>
@@ -921,7 +921,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="card" style="margin-top:6px">
       <div class="card-title" style="justify-content:space-between">
         <span>📈 Proyeksi Bagi Hasil Muthlaqah</span>
-        <span style="font-size:11px;color:var(--M);font-weight:400">nisbah × estimasi laba BMT</span>
+        <span style="font-size:11px;color:var(--M);font-weight:400">komposisi modal per akad</span>
       </div>
       <div id="pmd-proyeksi-penuh" style="font-size:12px;color:var(--M);padding:8px 0">Memuat...</div>
     </div>
@@ -1846,6 +1846,7 @@ async function loadPemodal(){
     aPenyertaanEksternal=r3.data||[];
     aBHEksternal=r4.data||[];
     initBHIDropdown();
+    await loadPoolDashboard();
   }catch(e){console.error('loadPemodal error:',e);toast('Gagal memuat data pemodal: '+e.message,true);}
 }
 
@@ -4327,40 +4328,46 @@ function _proyeksiBHCard(el, items){
   el.innerHTML=html;
 }
 
-function renderProyeksiBHSemua(){
-  const el=document.getElementById('pmd-proyeksi-semua');if(!el)return;
-  const items=[];
-  // Internal (penuh + spesifik)
-  aPenyertaanInternal.filter(p=>p.status==='aktif').forEach(p=>{
-    const bhSudah=aBHInternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
-    const bhProyeksi=_hitungProyeksiBHInternal(p);
-    items.push({nama:p.ubnb_anggota?.nama||'—',jenis:p.jenis,nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi});
-  });
-  // Eksternal (penuh + spesifik)
-  aPenyertaanEksternal.filter(p=>p.status==='aktif').forEach(p=>{
-    const m=aMitra.find(x=>x.id===p.mitra_id);
-    const jenis=p.jenis_penyertaan||'spesifik';
-    const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
-    const bhProyeksi=jenis==='penuh'?_hitungProyeksiBHInternal(p):_hitungProyeksiBHEksternal(p);
-    items.push({nama:m?.nama||'—',jenis,nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi});
-  });
-  _proyeksiBHCard(el, items);
+let poolDashboard=null;
+function poolEscape(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function loadPoolDashboard(){
+  poolDashboard=null;
+  const {data,error}=await sb.rpc('bmt_dashboard_pool_v3');
+  if(error){console.warn('Dashboard pemodal:',error.message);return;}
+  poolDashboard=data;
 }
+function renderPoolDashboard(el){
+  if(!el)return;
+  if(!poolDashboard){el.textContent='Data distribusi tidak tersedia atau akses belum berwenang.';return;}
+  const d=poolDashboard;
+  const name=id=>poolEscape(aPenyertaanInternal.find(p=>Number(p.id)===Number(id))?.ubnb_anggota?.nama||'Penyertaan '+id);
+  const cutoff=new Date((d.cutoff||today())+'T00:00:00Z');
+  function forecast(p){
+    let future=0;
+    for(const c of d.akad||[]){
+      const x=(c.pemodal||[]).find(x=>Number(x.penyertaan_id)===Number(p.id));
+      const a=aAkad.find(a=>Number(a.id)===Number(c.id));
+      if(!x||!a||Number(a.sisa_angsuran)<=0||Number(a.jangka)<=0)continue;
+      let left=Math.max(0,Number(a.total_margin)-aAngsuran.filter(s=>Number(s.akad_id)===Number(a.id)&&s.tanggal<=d.cutoff).reduce((sum,s)=>sum+Number(s.margin||0),0));
+      const monthly=Number(a.total_margin)/Number(a.jangka);
+      for(let k=1;k<=120&&left>0;k++){
+        const day=Math.min(28,Number(a.tgl_rutin)||Number(String(a.tanggal_akad).slice(-2))||1);
+        const dt=new Date(Date.UTC(cutoff.getUTCFullYear(),cutoff.getUTCMonth()+k,day)).toISOString().slice(0,10);
+        if(dt>p.tgl_jatuh_tempo)break;
+        const m=Math.min(left,monthly);left-=m;
+        if(dt>=p.tgl_mulai)future+=Math.round(m*Number(x.modal)/Number(c.total)*Number(x.nisbah)/100);
+      }
+    }
+    return future;
+  }
+  const rows=(d.pemodal||[]).map(p=>{const f=forecast(p),hak=Number(p.hak),paid=Number(p.dibayar),m=Number(p.jumlah_modal);return '<tr><td>'+name(p.id)+'<br>'+poolEscape(p.no_penyertaan)+'</td><td>'+rp(m)+'</td><td>'+rp(hak)+'</td><td>'+rp(paid)+'</td><td>'+rp(m+Math.max(0,hak-paid))+'</td><td>'+rp(f)+'</td><td>'+rp(hak+f)+'</td><td>'+(m?((hak+f)/m*100).toFixed(2):'0')+'%</td><td>'+poolEscape(p.tgl_jatuh_tempo)+'</td><td>'+rp(p.review)+'</td></tr>';}).join('');
+  const monthly=(d.bulanan||[]).map(b=>'<tr><td>'+poolEscape(b.bulan)+'</td><td>'+name(b.penyertaan_id)+'</td><td>'+rp(b.hak)+'</td></tr>').join('');
+  const detail=(d.akad||[]).map(c=>'<tr><td>'+poolEscape(c.tanggal)+'</td><td>'+poolEscape(aAkad.find(a=>Number(a.id)===Number(c.id))?.no_akad||c.id)+'</td><td>'+rp(c.total)+'</td><td>'+rp(c.ubnb)+'</td><td>'+((c.pemodal||[]).map(x=>name(x.penyertaan_id)+': '+rp(x.modal)+' ('+(Number(x.modal)/Number(c.total)*Number(x.nisbah)).toFixed(2)+'% profit)').join('<br>')||'—')+'</td></tr>').join('');
+  el.innerHTML='<p>Murabahah · sebelum biaya · cutoff '+poolEscape(d.cutoff)+' · Modal resmi UB: '+(d.saldo_resmi==null?'belum ditetapkan (residual)':rp(d.saldo_resmi))+'</p><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Pemodal</th><th>Setoran</th><th>Hak profit</th><th>Dibayar</th><th>Potensi modal diputar</th><th>Proyeksi sisa</th><th>Total potensi</th><th>Imbal hasil</th><th>JT</th><th>Review pasca JT</th></tr></thead><tbody>'+rows+'</tbody></table></div><p>Proyeksi angsuran kontraktual mulai bulan berikutnya, tanpa akad baru; bukan jaminan. Profit belum dibayar diasumsikan diputar.</p><details><summary>Riwayat profit bulanan</summary><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Bulan</th><th>Pemodal</th><th>Hak</th></tr></thead><tbody>'+monthly+'</tbody></table></div></details><details><summary>Komposisi modal setiap akad</summary><div class="tbl-wrap"><table class="bmt-tbl"><thead><tr><th>Tanggal</th><th>Akad</th><th>Total</th><th>UBNB</th><th>Pemodal</th></tr></thead><tbody>'+detail+'</tbody></table></div></details><button class="btn sm" onclick="window.print()">Cetak halaman</button>';
+}
+function renderProyeksiBHSemua(){renderPoolDashboard(document.getElementById('pmd-proyeksi-semua'));}
 
-function renderProyeksiBHPenuh(){
-  const el=document.getElementById('pmd-proyeksi-penuh');if(!el)return;
-  const items=[];
-  aPenyertaanInternal.filter(p=>p.status==='aktif'&&p.jenis==='penuh').forEach(p=>{
-    const bhSudah=aBHInternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.jumlah_bagi_hasil||0),0);
-    items.push({nama:p.ubnb_anggota?.nama||'—',jenis:'penuh',nisbah:p.nisbah_anggota,modal:p.jumlah_modal,bhSudah,bhProyeksi:_hitungProyeksiBHInternal(p)});
-  });
-  aPenyertaanEksternal.filter(p=>p.status==='aktif'&&(p.jenis_penyertaan||'spesifik')==='penuh').forEach(p=>{
-    const m=aMitra.find(x=>x.id===p.mitra_id);
-    const bhSudah=aBHEksternal.filter(b=>b.penyertaan_id===p.id&&b.sudah_dibayar).reduce((s,b)=>s+parseFloat(b.bh_ke_mitra||0),0);
-    items.push({nama:m?.nama||'—',jenis:'penuh',nisbah:p.nisbah_mitra_pct,modal:p.jumlah_modal,bhSudah,bhProyeksi:_hitungProyeksiBHInternal(p)});
-  });
-  _proyeksiBHCard(el, items);
-}
+function renderProyeksiBHPenuh(){renderPoolDashboard(document.getElementById('pmd-proyeksi-penuh'));}
 
 function renderProyeksiBHSpesifik(){
   const el=document.getElementById('pmd-proyeksi-spesifik');if(!el)return;
@@ -4637,6 +4644,7 @@ async function simpanBHInternal(){
   const catatan=document.getElementById('bhi-catatan').value.trim();
   if(!penyId||!periode||!laba){toast('Isi semua field wajib',true);return;}
   const p=window._bhiPenyertaan;if(!p)return;
+  if(p.jenis==='penuh'){toast('Gunakan distribusi otomatis; pembayaran resmi melalui rekonsiliasi pengurus.',true);return;}
   const bhA=Math.round(laba*(p.nisbah_anggota/100));
   const{error}=await sb.from('ubnb_modal_bagi_hasil').insert([{penyertaan_id:penyId,anggota_id:p.anggota_id,periode,laba_usaha:laba,porsi_anggota_pct:p.nisbah_anggota,jumlah_bagi_hasil:bhA,tgl_bayar:tglBayar||null,sudah_dibayar:!!tglBayar,catatan,operator:CU.username}]);
   if(error){toast('Gagal: '+error.message,true);return;}
