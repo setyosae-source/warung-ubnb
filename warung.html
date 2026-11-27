@@ -15443,12 +15443,14 @@ async function muatMutasiPPOB(){
   const status=document.getElementById('mut-ppob-status');status.textContent='Memuat mutasi provider dan respons saldo…';
   try{
     if(!document.getElementById('mut-ppob-sampai').value){const t=new Date();document.getElementById('mut-ppob-sampai').value=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');}
-    const [cash,responses]=await Promise.all([
+    const [cashResult,responseResult]=await Promise.allSettled([
       mutPPOBAmbil('kas_mutasi','id,kas_id,tanggal,created_at,tipe,jumlah,keterangan,ref_type,ref_id',q=>q.in('kas_id',[2,3,13])),
       mutPPOBAmbil('ppob_transaksi','id,ref_id,created_at,status,raw_response',q=>q.eq('status','sukses'))
     ]);
-    _mutasiPPOBData={cash,responses};tampilMutasiPPOB();
-    status.textContent='Data Supabase: '+cash.length+' mutasi provider. Jejak respons ditampilkan terpisah dari saldo buku.';
+    if(cashResult.status!=='fulfilled')throw cashResult.reason;
+    const cash=cashResult.value,responses=responseResult.status==='fulfilled'?responseResult.value:[];
+    _mutasiPPOBData={cash,responses,responsesAvailable:responseResult.status==='fulfilled'};tampilMutasiPPOB();
+    status.textContent='Data Supabase: '+cash.length+' mutasi provider.'+(responseResult.status==='fulfilled'?' Jejak respons ditampilkan terpisah dari saldo buku.':' Riwayat respons Digiflazz dilindungi; lihat Saldo & Mutasi di EZI Admin POS. Mutasi kas tetap dapat diperiksa di sini.');
   }catch(e){_mutasiPPOBData=null;status.textContent='Gagal memuat: '+(e.message||e);document.getElementById('mut-ppob-body').innerHTML='';document.getElementById('mut-ppob-jejak').innerHTML='';document.getElementById('mut-ppob-summary').textContent='';}
   finally{_mutasiPPOBBusy=false;}
 }
@@ -15466,11 +15468,11 @@ function tampilMutasiPPOB(){
     '<p>Dasar awal tahun: catatan “Saldo Awal Tahun” Bukalapak 1 Januari 2026 Rp217.367, dihitung satu kali sebagai baris mutasi. Berbeda dengan saldo PPOB neraca pembuka Rp723.616; keduanya belum direkonsiliasi. Transfer keluar Bukalapak dan masuk Digiflazz dicatat pada provider masing-masing.</p>'+
     (d.latest&&(!provider||Number(provider)===13)?'<p>Saldo Digiflazz pada respons terakhir '+mutPPOBEsc(d.latest.time)+' ('+mutPPOBEsc(d.latest.ref)+'): <b>'+fmtNum(d.latest.balance)+'</b>. Selisih terhadap saldo buku: '+fmtNum(d.latest.balance-d.saldo[13])+'. Respons terakhir dapat lebih awal dari akhir periode.</p>':'');
   document.getElementById('mut-ppob-body').innerHTML=d.rows.map(x=>'<tr><td>'+mutPPOBEsc(x.date)+'</td><td>'+_mutPPOBNama[x.kas_id]+'</td><td><b>#'+x.id+'</b> '+mutPPOBEsc(x.keterangan)+'<br><small>'+mutPPOBEsc(x.ref_type||'manual')+(x.ref_id?' #'+mutPPOBEsc(x.ref_id):'')+'</small></td><td style="text-align:right">'+(x.tipe==='masuk'?fmtNum(x.amount):'—')+'</td><td style="text-align:right">'+(x.tipe==='keluar'?fmtNum(x.amount):'—')+'</td><td style="text-align:right">'+fmtNum(x.saldo)+'</td></tr>').join('')||'<tr><td colspan="6">Tidak ada mutasi dalam periode ini.</td></tr>';
-  document.getElementById('mut-ppob-jejak').innerHTML=d.jejak.map(x=>'<tr><td>'+mutPPOBEsc(x.from)+' → '+mutPPOBEsc(x.time)+'</td><td>'+mutPPOBEsc(x.ref)+'</td><td>'+fmtNum(x.delta)+'</td><td>'+mutPPOBEsc(x.match)+'</td></tr>').join('')||'<tr><td colspan="4">Tidak ada jejak kenaikan saldo untuk pilihan ini.</td></tr>';
+  document.getElementById('mut-ppob-jejak').innerHTML=d.jejak.map(x=>'<tr><td>'+mutPPOBEsc(x.from)+' → '+mutPPOBEsc(x.time)+'</td><td>'+mutPPOBEsc(x.ref)+'</td><td>'+fmtNum(x.delta)+'</td><td>'+mutPPOBEsc(x.match)+'</td></tr>').join('')||(_mutasiPPOBData.responsesAvailable?'<tr><td colspan="4">Tidak ada jejak kenaikan saldo untuk pilihan ini.</td></tr>':'<tr><td colspan="4">Jejak respons tersedia di <a href="https://proxy.ubnb.pw/admin-pos" target="_blank" rel="noopener">EZI Admin POS → Saldo &amp; Mutasi</a>. Akses respons tetap dilindungi.</td></tr>');
 }
 function unduhMutasiPPOB(){
   const d=hasilMutasiPPOB();if(!d)return;
-  const cell=x=>'"'+String(x??'').replace(/^[=+@-]/,"'</body>").replace(/"/g,'""')+'"';
+  const cell=x=>'"'+String(x??'').replace(/^[=+@-]/,"'$&").replace(/"/g,'""')+'"';
   const rows=[['Tanggal','Provider','ID mutasi','Keterangan','Masuk','Keluar','Saldo buku provider'],...d.rows.map(x=>[x.date,_mutPPOBNama[x.kas_id],x.id,x.keterangan,x.tipe==='masuk'?x.amount:0,x.tipe==='keluar'?x.amount:0,x.saldo])];
   const blob=new Blob(['\ufeff'+rows.map(r=>r.map(cell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Mutasi_Saldo_PPOB_'+document.getElementById('mut-ppob-dari').value+'_'+document.getElementById('mut-ppob-sampai').value+'.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
 }
