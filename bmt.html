@@ -519,6 +519,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
   <button class="mnav" onclick="gomain('pmb',this)">🏦 Pembiayaan</button>
   <button class="mnav" onclick="gomain('wad',this)">💰 Simpanan</button>
   <button class="mnav" onclick="gomain('pmd',this)">🤝 Pemodal</button>
+  <button class="mnav" onclick="gomain('kasbmt',this)">📒 Mutasi Kas</button>
 </div>
 
 <!-- SUB NAV: Dashboard (kosong) -->
@@ -630,6 +631,23 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 </div>
 
 <!-- ═══ PEMBIAYAAN ═════════════════════════════ -->
+<div id="pg-kasbmt" class="pg">
+  <div class="card">
+    <div style="font-size:18px;font-weight:800;color:var(--H)">Mutasi Kas Pembiayaan BMT</div>
+    <p style="font-size:12px;color:var(--M);margin:8px 0">Saldo buku, bukan saldo rekening terverifikasi. Klik transaksi untuk informasi lengkap. Tidak mengubah pembukuan.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+      <div class="fg" style="flex:1;min-width:135px"><label>Dari tanggal</label><input type="date" id="mk-dari" value="2026-01-01" onchange="mkRender()"></div>
+      <div class="fg" style="flex:1;min-width:135px"><label>Sampai tanggal</label><input type="date" id="mk-sampai" onchange="mkRender()"></div>
+      <div class="fg" style="flex:1;min-width:125px"><label>Jenis</label><select id="mk-jenis" onchange="mkRender()"><option value="">Semua</option><option value="masuk">Penerimaan</option><option value="keluar">Pengeluaran</option></select></div>
+      <div class="fg" style="flex:2;min-width:160px"><label>Cari sumber / tujuan / akad</label><input id="mk-cari" oninput="mkRender()" placeholder="Nama, nomor akad, keterangan"></div>
+      <button class="btn secondary" onclick="mkLoad()">Refresh</button><button class="btn secondary" onclick="mkExport()">Excel</button>
+    </div>
+    <div id="mk-status" style="font-size:12px;color:var(--M);margin:8px 0"></div>
+    <div id="mk-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px"></div>
+  </div>
+  <div class="card"><details open><summary style="font-weight:700;cursor:pointer">Ringkasan bulanan (klik bulan untuk melihat mutasi)</summary><div style="overflow:auto"><table class="bmt-tbl"><thead><tr><th>Bulan</th><th>Saldo awal</th><th>Masuk</th><th>Keluar</th><th>Perubahan</th><th>Saldo akhir</th></tr></thead><tbody id="mk-month"></tbody></table></div></details></div>
+  <div class="card"><div style="overflow:auto;max-height:65vh"><table class="bmt-tbl" style="min-width:790px"><thead style="position:sticky;top:0;z-index:1;background:var(--W)"><tr><th>Tanggal</th><th>Jenis / sumber atau tujuan</th><th>Masuk</th><th>Keluar</th><th>Saldo berjalan</th><th>Detail</th></tr></thead><tbody id="mk-rows"></tbody></table></div></div>
+</div>
 <div id="pg-pmb" class="pg">
 
   <!-- Ringkasan -->
@@ -1099,6 +1117,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
 </div>
 
 <!-- Modal: Input Angsuran -->
+<div class="modal-overlay" id="modal-kasbmt-detail"><div class="modal-box"><div class="modal-title">Detail Mutasi Kas BMT<button class="modal-close" onclick="closeModal('modal-kasbmt-detail')">✕</button></div><div id="mk-detail" style="overflow-wrap:anywhere"></div></div></div>
 <div class="modal-overlay" id="modal-input-angs">
   <div class="modal-box">
     <div class="modal-title">💳 Input Pembayaran Angsuran<button class="modal-close" onclick="closeModal('modal-input-angs')">✕</button></div>
@@ -1863,6 +1882,81 @@ async function incrKas(kasId,jumlah,tipe='masuk'){
   kas.saldo=saldo;
 }
 
+
+let mkRows=[],mkFiltered=[],mkOpening=null,mkCurrent=null,mkReady=false,mkSeq=0;
+function mkEsc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function mkToday(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}).split('/').join('-');}
+function mkCategory(r){
+ const k=String(r.keterangan||'').toLowerCase();
+ if(k.includes('hapus angsuran'))return 'Koreksi / pembatalan angsuran';
+ if(k.includes('pengembalian pokok dan bagi hasil'))return 'Pengembalian pokok dan bagi hasil';
+ if(k.includes('bagi hasil'))return 'Bagi hasil pemodal';
+ if(k.includes('uang muka'))return 'Uang muka pembiayaan';
+ if(k.includes('pencairan'))return 'Pencairan pembiayaan';
+ if(k.includes('angsuran'))return 'Angsuran pembiayaan';
+ if(k.includes('penyertaan')||k.includes('modal'))return 'Penyertaan modal';
+ if(k.includes('transfer'))return 'Transfer antar-kas';
+ if(k.includes('top up'))return 'Top up manual';
+ if(k.includes('wadiah'))return 'Mutasi Wadiah';
+ return r.kategori||'Mutasi lainnya';
+}
+async function mkLoad(){
+ const seq=++mkSeq;mkReady=false;mkRows=[];mkFiltered=[];
+ const status=document.getElementById('mk-status');
+ status.textContent='Memuat mutasi...';
+ for(const id of ['mk-summary','mk-month','mk-rows'])document.getElementById(id).innerHTML='';
+ try{
+ const todayJak=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ if(!document.getElementById('mk-sampai').value)document.getElementById('mk-sampai').value=todayJak;
+ const [o,k]=await Promise.all([sb.from('neraca_snapshot').select('saldo,tgl_snapshot').eq('tahun',2025).eq('kode_akun','1-102').order('tgl_snapshot',{ascending:false}).limit(1).maybeSingle(),sb.from('kas').select('saldo').eq('id',5).single()]);
+ if(o.error||k.error||!o.data)throw Error(o.error?.message||k.error?.message||'Saldo awal 2026 tidak tersedia');
+ let all=[];
+ for(let start=0;;start+=500){
+ const q=await sb.from('kas_mutasi').select('id,tanggal,tipe,jumlah,keterangan,kategori,operator,ref_type,ref_id,ref_pair_id,created_at').eq('kas_id',5).gte('tanggal','2026-01-01').lte('tanggal',todayJak).order('tanggal').order('id').range(start,start+499);
+ if(q.error)throw q.error;all.push(...q.data);if(q.data.length<500)break;
+ }
+ if(seq!==mkSeq)return;
+ mkOpening=Number(o.data.saldo);mkCurrent=Number(k.data.saldo);
+ let running=mkOpening;
+ mkRows=all.map(r=>{if(!['masuk','keluar'].includes(r.tipe)||!Number.isFinite(Number(r.jumlah)))throw Error('Mutasi tidak valid #'+r.id);let before=running;running+=Number(r.jumlah)*(r.tipe==='masuk'?1:-1);return {...r,before,running,cat:mkCategory(r)}});
+ mkReady=true;mkRender();
+ }catch(e){if(seq===mkSeq)status.textContent='Gagal memuat mutasi: '+e.message;}
+}
+function mkRender(){
+ if(!mkReady)return;
+ const el=id=>document.getElementById(id),from=el('mk-dari').value,to=el('mk-sampai').value,jenis=el('mk-jenis').value,q=el('mk-cari').value.toLowerCase().trim();
+ if(!from||!to||from<'2026-01-01'||from>to){el('mk-status').textContent='Pilih periode valid mulai 1 Januari 2026';mkFiltered=[];for(const id of ['mk-summary','mk-month','mk-rows'])el(id).innerHTML='';return;}
+ const period=mkRows.filter(r=>r.tanggal>=from&&r.tanggal<=to);
+ const before=mkRows.filter(r=>r.tanggal<from).at(-1)?.running??mkOpening;
+ const inc=period.filter(r=>r.tipe==='masuk').reduce((a,r)=>a+Number(r.jumlah),0),out=period.filter(r=>r.tipe==='keluar').reduce((a,r)=>a+Number(r.jumlah),0);
+ const calculated=mkRows.at(-1)?.running??mkOpening;
+ el('mk-summary').innerHTML=[['Saldo awal periode',before],['Total penerimaan',inc],['Total pengeluaran',out],['Saldo akhir periode',before+inc-out]].map(([l,v])=>'<div style="border:1px solid var(--B);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--M)">'+l+'</div><strong style="color:'+(v<0?'var(--R)':'var(--H)')+'">'+rp(v)+'</strong></div>').join('');
+ mkFiltered=period.filter(r=>(!jenis||r.tipe===jenis)&&(!q||[r.keterangan,r.cat,r.ref_type,r.id].join(' ').toLowerCase().includes(q)));
+ el('mk-status').textContent=mkFiltered.length+' dari '+period.length+' mutasi periode. Saldo dihitung dari semua transaksi (tidak berubah saat pencarian). Saldo buku saat ini '+rp(mkCurrent)+(calculated===mkCurrent?' · cocok dengan mutasi.':' · selisih terhadap mutasi '+rp(mkCurrent-calculated));
+ const months={};for(const r of mkRows){const m=r.tanggal.slice(0,7);if(!months[m])months[m]={start:r.before,inc:0,out:0,end:r.running};const z=months[m];z[r.tipe==='masuk'?'inc':'out']+=Number(r.jumlah);z.end=r.running;}
+ el('mk-month').innerHTML=Object.entries(months).map(([m,z])=>'<tr style="cursor:pointer" onclick="mkMonth(\''+m+'\')"><td>'+m+'</td>'+[z.start,z.inc,z.out,z.inc-z.out,z.end].map(v=>'<td style="white-space:nowrap;'+(v<0?'color:var(--R)':'')+'">'+rp(v)+'</td>').join('')+'</tr>').join('');
+ el('mk-rows').innerHTML=mkFiltered.map(r=>'<tr style="cursor:pointer" onclick="mkDetail('+Number(r.id)+')"><td style="white-space:nowrap">'+mkEsc(r.tanggal)+'</td><td><strong>'+mkEsc(r.cat)+'</strong><div style="font-size:11px;color:var(--M);max-width:420px">'+mkEsc(r.keterangan||'Tidak ada keterangan')+'</div></td><td style="white-space:nowrap;color:var(--H)">'+(r.tipe==='masuk'?rp(r.jumlah):'—')+'</td><td style="white-space:nowrap;color:var(--R)">'+(r.tipe==='keluar'?rp(r.jumlah):'—')+'</td><td style="white-space:nowrap;'+(r.running<0?'color:var(--R)':'')+'">'+rp(r.running)+'</td><td><button class="btn sm" type="button">Detail</button></td></tr>').join('')||'<tr><td colspan="6">Tidak ada mutasi sesuai filter.</td></tr>';
+}
+function mkMonth(m){const [y,n]=m.split('-').map(Number);document.getElementById('mk-dari').value=m+'-01';document.getElementById('mk-sampai').value=m+'-'+new Date(y,n,0).getDate();mkRender();}
+function mkDetail(id){
+ const r=mkRows.find(x=>Number(x.id)===id);if(!r)return;
+ const no=String(r.keterangan||'').match(/BMT\/\d{4}\/\d{2}\/\d+/)?.[0];
+ const akad=aAkad.find(a=>a.no_akad===no);
+ const ang=r.ref_type==='bmt_angsuran'?aAngsuran.find(a=>Number(a.id)===Number(r.ref_id)):null;
+ const linked=ang?aAkad.find(a=>Number(a.id)===Number(ang.akad_id)):r.ref_type==='bmt_akad'?aAkad.find(a=>Number(a.id)===Number(r.ref_id)):akad;
+ const fields=[['ID mutasi',r.id],['Tanggal',r.tanggal],['Jenis',r.tipe==='masuk'?'Penerimaan':'Pengeluaran'],['Kategori',r.cat],['Sumber / tujuan',r.keterangan||'Belum diketahui'],['Nominal',rp(r.jumlah)],['Saldo sebelum',rp(r.before)],['Saldo sesudah',rp(r.running)],['Operator',r.operator||'—'],['Referensi sistem',r.ref_type? r.ref_type+' #'+(r.ref_id??'—'):'Tidak ada referensi langsung'],['Waktu pencatatan',r.created_at||'—']];
+ if(linked)fields.push(['Nomor akad',linked.no_akad],['Nasabah',linked.nama_jamaah],['Objek pembiayaan',linked.objek_pembiayaan||'—'],['Harga beli akad',rp(linked.harga_beli)]);
+ if(ang)fields.push(['Pokok angsuran',rp(ang.pokok)],['Margin angsuran',rp(ang.margin)]);
+ document.getElementById('mk-detail').innerHTML=fields.map(([l,v])=>'<div style="padding:7px 0;border-bottom:1px solid var(--B)"><div style="font-size:11px;color:var(--M)">'+mkEsc(l)+'</div><strong style="font-size:13px">'+mkEsc(v)+'</strong></div>').join('')+(!r.ref_type?'<p style="font-size:12px;color:var(--AM);margin-top:10px">Referensi belum terhubung; kecocokan akad berdasarkan nomor dalam keterangan, bukan bukti pembayaran.</p>':'')+(r.cat.startsWith('Koreksi')?'<p style="font-size:12px;color:var(--AM)">Baris pembatalan pencatatan; bukan otomatis pengeluaran uang aktual.</p>':'');
+ openModal('modal-kasbmt-detail');
+}
+function mkExport(){
+ if(!mkReady)return;
+ if(typeof XLSX==='undefined'){toast('Excel belum tersedia',true);return;}
+ const rows=mkFiltered.map(r=>({'ID':r.id,'Tanggal':r.tanggal,'Jenis':r.tipe,'Kategori':r.cat,'Sumber / tujuan':r.keterangan,'Masuk':r.tipe==='masuk'?Number(r.jumlah):0,'Keluar':r.tipe==='keluar'?Number(r.jumlah):0,'Saldo berjalan':r.running,'Referensi':r.ref_type||'','ID referensi':r.ref_id||'','Status cek':'','Nominal aktual':'','Catatan':''}));
+ const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(rows),'Mutasi BMT');XLSX.writeFile(w,'Mutasi_Kas_BMT_'+document.getElementById('mk-dari').value+'_'+document.getElementById('mk-sampai').value+'.xlsx');
+}
+
 // NAV
 let curMain='dash';
 function gomain(id,btn){
@@ -1879,6 +1973,7 @@ function gomain(id,btn){
   if(firstSub)firstSub.click();
   // Load data lalu render SETELAH data siap
   if(id==='dash'){renderDashboard();renderProyeksiProfit();}
+  if(id==='kasbmt')mkLoad();
   if(id==='pmb'){loadAll().then(()=>{renderPmbDash();});}
   if(id==='wad'){loadWadiah().then(()=>{renderWadDash();filterRekening();});}
   if(id==='pmd'){
