@@ -564,7 +564,7 @@ table.ppr-angs tr.tot td{font-weight:bold;background:#e8f5e9;border-top:2px soli
     <div class="kas-box">
       <div class="kas-lbl">💵 Kas Pembiayaan</div>
       <div class="kas-val" id="dash-kas-val">—</div>
-      <div class="kas-hint">Kas operasional aktif</div>
+      <div class="kas-hint">Kas operasional aktif</div><button class="btn sm" style="margin-top:8px" onclick="bmtBiayaOperasional(this)">+ Catat biaya operasional</button>
     </div>
     <div class="kas-box">
       <div class="kas-lbl">📦 Total Dana Kelola</div>
@@ -2025,6 +2025,17 @@ async function renderProyeksiProfit(){
   el.innerHTML=html;
 }
 
+async function bmtBiayaOperasional(btn){
+ if(btn.disabled)return;
+ const tanggal=prompt('Tanggal pembayaran (YYYY-MM-DD)',today());if(!tanggal)return;
+ const kas=prompt('Sumber pembayaran: 1 = Kas Utama, 5 = Kas BMT','5');if(!['1','5'].includes(kas))return;
+ const raw=prompt('Nominal biaya dalam rupiah, tanpa titik');if(raw===null)return;const nominal=Number(raw);if(!Number.isSafeInteger(nominal)||nominal<=0){toast('Nominal tidak valid',true);return;}
+ const ket=prompt('Keterangan biaya operasional');if(!ket)return;
+ const bukti=prompt('Nomor bukti / referensi pembayaran aktual');if(!bukti)return;
+ if(!confirm('Catat biaya aktual '+rp(nominal)+' dari '+(kas==='5'?'Kas BMT':'Kas Utama')+'? Jurnal dan mutasi kas otomatis. Biaya ditanggung UBNB.'))return;
+ btn.disabled=true;
+ try{const {error}=await sb.rpc('bmt_biaya_operasional_v1',{p_request:crypto.randomUUID(),p_tanggal:tanggal,p_kas:Number(kas),p_nominal:nominal,p_keterangan:ket,p_bukti:bukti});if(error)throw error;toast('Biaya dan jurnal berhasil dicatat');await loadAll();renderDashboard();}catch(e){toast('Periksa hasil sebelum mengulang: '+e.message,true);}finally{btn.disabled=false;}
+}
 function renderDashboard(){
   const kasBMT=aKas.find(k=>k.id===5)||aKas.find(k=>k.modul&&k.modul.includes('bmt'));
   const kasVal=kasBMT?parseFloat(kasBMT.saldo||0):0;
