@@ -1,47 +1,28 @@
-# Status perbaikan akses UBNB — 25 November 2026
+# Checkpoint keamanan — 27 November 2026
 
-Perbaikan siap ditinjau. Publikasi situs dan aktivasi aturan akses baru belum dilakukan karena pemeriksaan persetujuan otomatis meminta izin publikasi yang eksplisit untuk perubahan luas pada cabang utama repositori publik.
+Sumber: main 2f2414a dan katalog/definisi database langsung. Menggantikan checkpoint 25 November yang tertinggal; jangan menerapkan ulang paket lama dari status tersebut.
 
-## Yang sudah diterapkan di database
+## Advisor terbaru
 
-- Fungsi sesi terverifikasi yang dibuat sebelum pekerjaan terputus tetap tersedia.
-- Fungsi permintaan kode keluarga mencatat permintaan tanpa mengembalikan kode atau mengganti kode keluarga.
-- Registrasi Sopram melalui fungsi server membatasi akun baru menjadi pengguna biasa.
-- Fungsi login menolak hash tersimpan sebagai pengganti password, menyatukan pembatasan percobaan untuk variasi format nomor HP, dan menolak masukan registrasi kosong.
-- Perubahan password membatalkan validitas sesi yang memakai kredensial lama.
+UBNB: ERROR 0, WARN 428 (213 anon definer + 213 authenticated definer + extension 1 + leaked password 1), INFO 84. Panel-system: ERROR 0, WARN 16 (7 + 8 + password 1), INFO 20. Warning tetap dibanding 26 November; bukan bukti seluruh akses aman.
 
-## Perubahan situs yang disiapkan
+## Tahap terbatas: verifikasi jalur login pengurus lama
 
-- Portal, kasir, warung, BMT, keluarga, JAWARA dan Sopram memakai sesi yang diverifikasi server.
-- Keluar akun mencabut token sesi yang benar; jenis akun lain tidak ikut tercabut.
-- Halaman keluarga dan Sopram memverifikasi sesi tersimpan sebelum masuk kembali.
-- Permintaan kode keluarga dan lupa PIN tetap tersedia tanpa membaca rahasia akun dari browser.
-- Versi skrip autentikasi diperbarui untuk mencegah pemakaian skrip lama dari cache.
-- Pembaruan profil jamaah pada commit 4bc70e1 ikut tergabung; perubahan tersebut tidak ditimpa.
+Tahap 1 belum selesai. Inventaris 26 November tetap merupakan inventaris awal; klasifikasi berdasarkan nama saja belum cukup. Run ini meninjau isi empat fungsi public dan dua helper private, serta pemanggil pada main terbaru.
 
-## Aturan database yang telah diuji, belum diaktifkan
+| Fungsi | Klasifikasi dan bukti | Prioritas |
+|---|---|---|
+| dashboard_pengurus_profile | Perlu guard/review: menerima DID, mengembalikan nama/scope/peran/can_edit tanpa verifikasi sesi di badan fungsi. Pemanggil dashboard-core.js baris 236/540, dashboard-kelompok.html 1921/2225, peninjau-daerah.html 1909/2214, ubaid/acara.html 1860. Respons ini tidak boleh menjadi bukti identitas. | P1 |
+| dashboard_login_lock_set_pin | Perlu guard: hanya memeriksa pengurus aktif dan format PIN serta belum adanya kunci. Tidak membuktikan kepemilikan DID sebelum memasang PIN pertama dan menerbitkan grant. Risiko pendaftaran kunci oleh pihak lain; belum diuji eksploitasi pada akun nyata. Pemanggil assets/js/dashboard-current.js:3155. | P1 |
+| dashboard_login_lock_verify_pin | Publik diperlukan untuk login, review lanjutan: crypt terhadap hash dan pembatasan 5 kegagalan/10 menit sudah ada; penerbitan grant 8 jam. Scope, konkurensi limit, status aktif dan konsumsi grant belum selesai diverifikasi. | P1 |
+| dashboard_login_lock_status | Perlu guard/review privasi: DID mengungkap status/metode/waktu verifikasi. Pemeriksaan FOUND setelah SELECT count tidak membuktikan keberadaan record lock; kandidat bug fungsional, belum diubah. | P1 |
+| private.ubnb_pengurus_active | Internal: hanya memeriksa keberadaan pengurus aktif, bukan identitas pemanggil. | P2 |
+| private.ubnb_login_issue_grant | Internal: token acak 32 byte, simpan SHA256, expiry 8 jam; helper mempercayai DID dari pemanggil, sehingga guard wajib di endpoint penerbitnya. | P1 |
 
-- Pembatasan lima tabel akses: users, ppob_member, sopram_user, keluarga_akses, anggota_akses.
-- Pembatasan kolom password/PIN/kode Sopram dan pencegahan perubahan hak admin melalui penyimpanan profil.
-- Verifikasi sesi dan identitas pada RPC JAWARA serta pengelolaan profil pengguna.
-- Pencatatan pelaku audit berdasarkan sesi terverifikasi serta penghilangan salinan kredensial dari riwayat audit.
+## Perubahan dan pengujian
 
-Aturan tidak diterapkan merata ke seluruh tabel. Pembatasan tabel operasional lain masih memerlukan pemetaan alur dan pengujian tersendiri; paket ini belum menyatakan seluruh database UBNB sudah aman.
+Tidak ada perubahan perilaku database/frontend; tidak ada data finansial, data pengguna, akun atau kredensial dipublikasikan. Pemeriksaan berupa pembacaan definisi database dan pencocokan referensi main. Tidak menjalankan fungsi mutasi, membuat fixture, atau mengeluarkan grant. Uji positif/negatif dalam transaksi rollback belum dilakukan; wajib dilakukan saat menyiapkan pengganti. Tidak ada akun uji dibuat. Rollback dokumentasi dengan revert commit.
 
-## Hasil verifikasi
+## Berikutnya
 
-- 359 skrip inline: lolos pemeriksaan sintaks.
-- Uji JavaScript: header sesi, isolasi permintaan ke layanan lain, pemilihan kolom, pencabutan token yang tepat, dan login server lolos.
-- Uji database: kasir, viewer, admin, pengurus desa, pengurus kelompok, anggota, keluarga, dan Sopram lolos login/pemulihan sesi.
-- Uji negatif: akses tanpa sesi, pemalsuan ID pengguna/anggota, pembacaan hash, dan eskalasi admin ditolak.
-- Uji password: password benar/legacy berfungsi; hash ditolak; perubahan password membatalkan sesi; variasi nomor HP memakai pembatasan percobaan yang sama.
-- Pengujian calon aturan berjalan dalam subtransaksi yang dibatalkan. Pemeriksaan setelahnya memastikan calon aturan belum aktif dan akun/data uji tidak tertinggal.
-- Uji antarmuka situs yang baru belum dilakukan karena publikasi tertahan.
-
-## Urutan penerapan setelah izin publikasi diberikan
-
-1. Periksa ulang perubahan terbaru di repositori, lalu publikasikan situs termasuk ubnb-security.js dan ubnb-auth.js beserta versi skripnya.
-2. Pastikan hasil deploy tersedia dan uji permintaan login melalui halaman baru.
-3. Terapkan rpc-guards.sql, access-policy.sql dan audit-identity.sql dalam satu migrasi atomik. Simpan definisi sebelumnya dalam tabel private yang disiapkan skrip. Jalankan verify.sql dalam subtransaksi yang dibatalkan; gagalkan seluruh migrasi jika verifikasi gagal.
-4. Uji lagi login, simpan profil, pengaturan pengguna, keluarga dan JAWARA setelah aktivasi. Periksa advisori keamanan yang tersisa; jangan menyimpulkan seluruh tabel sudah terlindungi.
-5. Pengguna dengan identitas lokal lama tanpa token terverifikasi perlu masuk ulang. Akun dan data operasional tidak dihapus.
+Selesaikan pemetaan sesi/grant pengurus dan seluruh pemanggil sebelum membatasi endpoint. Siapkan pembuktian identitas untuk enrollment PIN pertama dan pengikatan DID; publikasikan frontend pengganti dan verifikasi situs sebelum pembatasan database. Jangan mencabut jalur lama sekarang. Inventaris fungsi lain, panel/perangkat, scope editor, keuangan dan regresi masih belum selesai. pg_net tidak disentuh; perlindungan password bocor belum diaktifkan, tidak ada perubahan paket/biaya.
