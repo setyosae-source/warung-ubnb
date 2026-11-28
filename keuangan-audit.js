@@ -1,7 +1,7 @@
 /* Keuangan UBNB - reconciliation and posted-journal reports, 2026-11-28. */
 (function(){
 'use strict';
-const version='2026.11.28-R15';
+const version='2026.11.28-R16';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v)||0;
 const money=v=>`${num(v)<0?'−':''}Rp ${Math.abs(num(v)).toLocaleString('id-ID')}`;
@@ -118,8 +118,7 @@ function bsContext(m){
  return cutoffChoices(m.end)+'<div class="card bs-context"><div class="bs-heading"><strong>Neraca sementara · '+esc(m.year)+'</strong><small>'+esc(version)+'</small></div><label class="bs-date no-print">Posisi per tanggal<input type="date" value="'+esc(m.end)+'" onchange="FinanceAudit.setCutoff(this.value)"></label><details class="bs-notes"><summary>Dasar laporan dan catatan</summary><p>Saldo awal resmi akhir 2025 ditambah jurnal posted sampai tanggal laporan. SHU dan ukhro pembagian laba 2025 mengurangi ekuitas. Saldo kontra-aset ditampilkan negatif. Posisi uang aktual diperiksa melalui Rekonsiliasi Kas.</p><p>Persediaan mengikuti cutoff laporan. STO 27 November menjadi bahan rekonsiliasi mundur untuk cutoff Oktober; penyesuaian November tidak langsung dimasukkan ke Oktober. Nilai persediaan akhir 27 November termasuk stok lokasi lain diterima Setyo untuk laporan sementara 28 November. Renovasi PW4 belum siap dipakai, sehingga disajikan sebagai aset dalam pengerjaan dan belum disusutkan.</p></details></div>';
 }
 function bmtPolicyText(m){
- const opening=num(m.balances.get('3-104'));
- return opening&&Number(m.year)>=2026?'Penyesuaian ekuitas awal BMT '+money(opening)+' masih sementara. Neraca resmi akhir 2025 mencatat piutang margin Rp27.934.592; rincian 21 akad lama di sistem menghasilkan Rp28.492.047 sebelum rekonsiliasi uang muka dan pembulatan (beda Rp557.455). Perlu pencocokan rincian resmi per nasabah dan dasar pengakuan margin sebelum nominal koreksi serta laba BMT dinyatakan final. Sistem saat ini merealisasi margin mengikuti angsuran. Penyesuaian ini bukan biaya operasional 2026 atau pengeluaran kas. Cadangan pengembangan disajikan terpisah dari saldo laba yang belum dialokasikan.':'';
+ return Number(m.year)>=2026?'Dasar laporan manajemen UB mengikuti laporan historis 2025: margin murabahah diakui saat akad; penerimaan angsuran menambah kas dan mengurangi piutang, tanpa mengakui kembali margin yang sama. Penyesuaian transisi ekuitas awal Rp27.934.592 telah dibalik; saldo akun transisi dan margin tangguhan murabahah menjadi nol. Bagi hasil pemodal tetap mengikuti penerimaan sesuai perjanjiannya; akad ijarah mengikuti pencatatan sewa. Dasar ini belum merupakan kesimpulan kepatuhan SAK Syariah. Temuan saldo awal Kelompok 3 Rp100.000 serta alokasi uang muka Aries ditelusuri terpisah; laporan tetap sementara.':'';
 }
 function bmtPolicyHtml(m){const note=bmtPolicyText(m);return note?'<div class="card bmt-method-note"><strong>Dasar pengakuan margin BMT</strong><p>'+esc(note)+'</p></div>':'';}
 function renderBS(y){try{
@@ -161,13 +160,14 @@ function exportReport(kind){if(!window.XLSX)return toast('Excel belum tersedia',
 if(bmtPolicyText(m)){
  const noteSheet=XLSX.utils.aoa_to_sheet([
  ['Dasar pengakuan margin BMT'],['Per',m.end],
- ['Laporan 2025','Penjualan pembiayaan adalah nilai akad; laba mencakup margin yang belum diterima.'],
- ['Pencatatan 2026','Margin diakui sesuai realisasi angsuran dengan pelepasan margin ditangguhkan.'],
- ['Penyesuaian ekuitas awal (sementara)',num(m.balances.get('3-104'))],
- ['Status pemeriksaan',bmtPolicyText(m)],
- ['Selisih rincian margin awal yang perlu ditelusuri',557455],
- ['Dampak','Penyesuaian saldo awal, bukan biaya operasional 2026 atau kas keluar.'],
- ['Perbandingan dan SHU','Perhatikan perubahan dasar pengakuan dan penyesuaian ekuitas awal; laba berjalan bukan otomatis seluruhnya siap dibagikan.']
+ ['Dasar laporan','Laporan manajemen UB: margin murabahah diakui saat akad, konsisten dengan laporan historis2025.'],
+ ['Angsuran','Menambah kas dan mengurangi piutang; margin akad tidak diakui kembali.'],
+ ['Saldo penyesuaian ekuitas awal',num(m.balances.get('3-104'))],
+ ['Saldo margin ditangguhkan',-num(m.balances.get('1-114'))],
+ ['Bagi hasil pemodal','Tetap berdasarkan penerimaan sesuai perjanjian; tidak disamakan dengan laba akad.'],
+ ['Ijarah','Tetap mengikuti pencatatan sewa; perubahan ini hanya untuk murabahah.'],
+ ['Temuan saldo awal','Kelompok3: angsuran2025 benarRp1.540.000, berbedaRp100.000 dari laporan lama; alokasi DP Aries ditelusuri terpisah.'],
+ ['Status',bmtPolicyText(m)]
  ]);noteSheet['!cols']=[{wch:32},{wch:105}];XLSX.utils.book_append_sheet(wb,noteSheet,'Catatan BMT');
 }
 XLSX.writeFile(wb,`UBNB_${kind}_${m.end}.xlsx`);}
