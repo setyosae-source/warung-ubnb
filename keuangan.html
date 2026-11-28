@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Keuangan UBNB | Desa Perwira</title>
+<title>Keuangan UBNB | Rekonsiliasi 2026.11.28-R1</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="ubnb-auth.js?v=20261125-1"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -383,7 +383,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
       <div class="tahun-bar no-print">
         <span style="font-weight:700;color:var(--hijau)">📅 Tahun:</span>
         <select id="dash-tahun" onchange="renderDashboard()">
-          <option>2026</option><option>2025</option><option>2024</option>
+          <option selected>2026</option><option>2025</option><option>2024</option>
         </select>
         <button class="btn primary sm" onclick="refreshAll()">🔄 Refresh</button>
       </div>
@@ -429,7 +429,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
         <div class="card-title">
           <h3>💳 Manajemen Kas</h3>
           <div class="btn-row">
-            <button class="btn secondary" onclick="recalcAllSaldo()">🔄 Recalc</button>
+            <button class="btn secondary" onclick="recalcAllSaldo()">✓ Periksa Saldo</button>
             <button class="btn primary" onclick="openModalTransfer()">↔ Transfer</button>
             <button class="btn primary" onclick="openModalKas()">+ Kas Baru</button>
           </div>
@@ -453,7 +453,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
     <div class="page" id="page-neraca">
       <div class="tahun-bar no-print">
         <span style="font-weight:700">Tahun:</span>
-        <select id="neraca-tahun" onchange="renderNeraca()"><option>2026</option><option>2025</option><option>2024</option></select>
+        <select id="neraca-tahun" onchange="renderNeraca()"><option selected>2026</option><option>2025</option><option>2024</option></select>
         <span style="font-weight:700">Banding:</span>
         <select id="neraca-banding" onchange="renderNeraca()">
           <option value="">— Tanpa —</option><option>2025</option><option>2024</option>
@@ -468,7 +468,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
     <div class="page" id="page-labarugi">
       <div class="tahun-bar no-print">
         <span style="font-weight:700">Tahun:</span>
-        <select id="lr-tahun" onchange="renderLabaRugi()"><option>2026</option><option>2025</option><option>2024</option></select>
+        <select id="lr-tahun" onchange="renderLabaRugi()"><option selected>2026</option><option>2025</option><option>2024</option></select>
         <span style="font-weight:700">Banding:</span>
         <select id="lr-banding" onchange="renderLabaRugi()">
           <option value="">— Tanpa —</option><option>2025</option><option>2024</option>
@@ -485,7 +485,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
         <span style="font-weight:700">Bandingkan:</span>
         <select id="dev-t1"><option>2025</option><option>2024</option></select>
         <span style="font-weight:700">vs</span>
-        <select id="dev-t2"><option>2026</option><option>2025</option></select>
+        <select id="dev-t2"><option selected>2026</option><option>2025</option></select>
         <button class="btn primary sm" onclick="renderDeviasi()">🔍 Analisa</button>
       </div>
       <div id="deviasi-content"></div>
@@ -583,7 +583,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
           <h3>📉 Jadwal Penyusutan</h3>
           <div class="btn-row">
             <select id="peny-tahun" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:7px;font-size:12px;font-weight:700;outline:none;">
-              <option>2026</option><option>2025</option><option>2024</option>
+              <option selected>2026</option><option>2025</option><option>2024</option>
             </select>
             <button class="btn primary" onclick="hitungPenyusutan()">⚙️ Hitung & Simpan</button>
             <button class="btn gold" onclick="window.print()">🖨️ Cetak</button>
@@ -618,7 +618,7 @@ body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;color:var(--text);font
           <h3>✏️ Pos Manual</h3>
           <div class="btn-row">
             <select id="pos-filter-tahun" onchange="renderPosList()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:7px;font-size:12px;font-weight:700;outline:none;">
-              <option>2026</option><option>2025</option><option>2024</option>
+              <option selected>2026</option><option>2025</option><option>2024</option>
             </select>
             <button class="btn primary" onclick="openModalPos()">+ Tambah Pos</button>
           </div>
@@ -1004,11 +1004,12 @@ function keluar(){CU=null;location.reload();}
 
 // ===== LOAD DATA =====
 async function refreshAll(){
+  window.financeLoadError=false;
   toast('🔄 Memuat data...');
   try{
     const load=async(tbl,q)=>{
       try{
-        if(tbl==='jurnal_umum'||tbl==='jurnal_detail'){
+        if(['jurnal_umum','jurnal_detail','kas_mutasi'].includes(tbl)){
           const rows=[];const pageSize=500;
           q=q.order('id',{ascending:true});
           for(let offset=0;;offset+=pageSize){
@@ -1021,7 +1022,7 @@ async function refreshAll(){
         }
         const r=await q;if(r.error)throw r.error;return r.data||[];
       }catch(e){
-        if(tbl==='jurnal_umum'||tbl==='jurnal_detail')throw e;
+        if(['jurnal_umum','jurnal_detail','kas_mutasi','coa','kas'].includes(tbl))throw e;
         console.warn('Load gagal:',tbl,e);return [];
       }
     };
@@ -1066,6 +1067,7 @@ async function refreshAll(){
     renderKasKu();renderKasSummaryKu();
     toast('✅ Data berhasil dimuat!');
   }catch(err){
+    window.financeLoadError=true;
     console.error('refreshAll error:',err);
     toast('❌ Gagal memuat data: '+err.message,true);
   }
@@ -2804,8 +2806,7 @@ async function renderKasMutasi(kasId){
   const el=document.getElementById('kas-mutasi-list');if(!el)return;
   if(!kasId){el.innerHTML='<div class="empty"><div class="ei">💳</div>Pilih kas untuk lihat cashflow</div>';return;}
 
-  const{data}=await sb.from('kas_mutasi').select('*')
-    .eq('kas_id',kasId).order('tanggal',{ascending:true}).order('created_at',{ascending:true});
+  let data; try { data=await financeFetchAll(sb.from('kas_mutasi').select('*').eq('kas_id',kasId).order('tanggal',{ascending:true}).order('id',{ascending:true})); } catch(e) { el.textContent='Mutasi gagal dimuat: '+e.message; return; }
   if(!data||!data.length){el.innerHTML='<div class="empty"><div class="ei">🔄</div>Belum ada mutasi</div>';return;}
 
   // Hitung saldo running kronologis (sumber kebenaran saldo)
@@ -3241,5 +3242,7 @@ async function recalcAllSaldo(){
 }
 
 </script>
+<script src="keuangan-audit.js?v=20261128-r1"></script>
 </body>
 </html>
+
