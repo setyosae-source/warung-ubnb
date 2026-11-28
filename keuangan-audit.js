@@ -1,16 +1,17 @@
 /* Keuangan UBNB - reconciliation and posted-journal reports, 2026-11-28. */
 (function(){
 'use strict';
-const version='2026.11.28-R7';
+const version='2026.11.28-R8';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v)||0;
 const money=v=>`${num(v)<0?'−':''}Rp ${Math.abs(num(v)).toLocaleString('id-ID')}`;
 const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta'}).format(new Date());
-let cutoff=today(), recon=[], reconLoaded=false, reconError='', lastRows={};
+const agreedCutoff='2026-10-31';
+let cutoff=agreedCutoff, recon=[], reconLoaded=false, reconError='', lastRows={};
 const plGroups=new Set(['pendapatan','hpp','biaya','zakat']);
 const selectedDate=y=>Math.min(Number(y),9999)+'-'+(String(cutoff).startsWith(y+'-')?cutoff.slice(5):Number(y)<Number(cutoff.slice(0,4))?'12-31':'01-01');
-function ledger(y){
- const end=selectedDate(y), start=y+'-01-01';
+function ledger(y,dateOverride=null){
+ const end=dateOverride||selectedDate(y), start=y+'-01-01';
  const heads=new Map((D.jurnal_umum||[]).filter(j=>j.status==='posted'&&j.tanggal<=end&&(Number(y)>=2026?(j.referensi==='NERACA-2025'||j.tanggal>= '2026-01-01'):(j.referensi==='NERACA-'+y))).map(j=>[j.id,j]));
  const coa=new Map((D.coa||[]).map(c=>[c.id,c]));
  const balances=new Map(), yearly=new Map(), unitAdjust={Warung:0,PPOB:0}, revenueAdjust={Warung:0,'Servis / lainnya':0};
@@ -111,7 +112,7 @@ function bsGroup(m,group,title,sign){
  return '<div class="bs-group"><h4>'+esc(title)+'</h4>'+accounts.map(c=>bsValueRow(c.kode==='3-103'?'Laba tahun 2025 dibawa ke 2026':c.nama,sign*c.saldo,'bs-account',c.kode)).join('')+'</div>';
 }
 function bsContext(m){
- return '<div class="card bs-context"><div class="bs-heading"><strong>Neraca sementara · '+esc(m.year)+'</strong><small>'+esc(version)+'</small></div><label class="bs-date no-print">Posisi per tanggal<input type="date" value="'+esc(m.end)+'" onchange="FinanceAudit.setCutoff(this.value)"></label><details class="bs-notes"><summary>Dasar laporan dan catatan</summary><p>Saldo awal resmi akhir 2025 ditambah jurnal posted sampai tanggal laporan. SHU dan ukhro pembagian laba 2025 mengurangi ekuitas. Saldo kontra-aset ditampilkan negatif. Posisi uang aktual diperiksa melalui Rekonsiliasi Kas.</p><p>Persediaan mencakup STO dan stok lokasi lain yang tetap diakui sesuai konfirmasi; stok di luar STO belum dihitung fisik ulang. Renovasi dan penyusutan masih perlu penyelesaian daftar aset.</p></details></div>';
+ return '<div class="card bs-context"><div class="bs-heading"><strong>Neraca sementara · '+esc(m.year)+'</strong><small>'+esc(version)+'</small></div><label class="bs-date no-print">Posisi per tanggal<input type="date" value="'+esc(m.end)+'" onchange="FinanceAudit.setCutoff(this.value)"></label><details class="bs-notes"><summary>Dasar laporan dan catatan</summary><p>Saldo awal resmi akhir 2025 ditambah jurnal posted sampai tanggal laporan. SHU dan ukhro pembagian laba 2025 mengurangi ekuitas. Saldo kontra-aset ditampilkan negatif. Posisi uang aktual diperiksa melalui Rekonsiliasi Kas.</p><p>Persediaan mengikuti cutoff laporan. STO 27 November menjadi bahan rekonsiliasi mundur untuk cutoff Oktober; penyesuaian November tidak langsung dimasukkan ke Oktober. Stok di luar STO belum dihitung fisik ulang. Renovasi dan penyusutan masih perlu penyelesaian daftar aset.</p></details></div>';
 }
 function renderBS(y){try{
  validData();const m=ledger(y);lastRows.neraca=bsRows(m);window._neracaData={tahun:y,...m};
@@ -134,7 +135,7 @@ function renderPL(y){try{validData();const m=ledger(y),accounts=plDetails(m);las
  const detail=Object.entries(m.stats).map(([n,u])=>`<div class="card pl-unit"><h3>${esc(n)}</h3>${plUnitTable(accounts[n],u)}</div>`).join('');
  const t=m.totals;document.getElementById('lr-content').innerHTML=plContext(m)+plSummary(m)+detail+`<div class="card"><h3>Rekap keseluruhan UBNB</h3>${tbl(['Uraian','Rupiah'],[['Total pendapatan',money(t.revenue)],['Total HPP / beban langsung',money(t.hpp)],['LABA KOTOR SEBELUM BIAYA',money(t.gross)],['Total biaya dan beban',money(t.cost)],['LABA BERSIH UBNB',money(m.profit)]])}<p>Laundry berdasarkan komisi. Admin renovasi PW4 masuk Warung; admin top-up biasa masuk PPOB. Seluruh nilai memperhitungkan jurnal pembalik. Renovasi masih aset sementara, penyusutan menunggu daftar aset. SHU dan ukhro pembagian laba 2025 tidak menjadi biaya 2026. Laba nol tanpa transaksi belum membuktikan unit tidak beroperasi.</p><details><summary>Rincian akun konsolidasi</summary>${tbl(['Akun','Rupiah'],m.income.filter(c=>c.saldo!==0).map(c=>[esc(c.kode+' '+c.nama),money(c.kelompok==='pendapatan'?-c.saldo:c.saldo)]))}</details></div>`;
  }catch(e){document.getElementById('lr-content').textContent=e.message;}}
-function exportReport(kind){const m=kind==='neraca'?window._neracaData:window._lrData;if(!m?.end||!window.XLSX)return toast('Buka laporan dan tunggu data lengkap',true);const rows=[[kind==='neraca'?'NERACA UBNB':'LABA RUGI UBNB'],['Per',m.end],['Status','Sementara; jurnal posted'],[],...lastRows[kind]];const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:65},{wch:24}];for(const [key,cell] of Object.entries(ws))if(cell&&typeof cell.v==='number')cell.z='#,##0;(#,##0);"-"';const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,kind==='neraca'?'Neraca':'Laba Rugi');if(kind==='labarugi'){
+function exportReport(kind){if(!window.XLSX)return toast('Excel belum tersedia',true);try{validData();}catch(e){return toast(e.message,true);}const y=Number(document.getElementById(kind==='neraca'?'neraca-tahun':'lr-tahun').value),m=ledger(y);lastRows[kind]=kind==='neraca'?bsRows(m):plRows(m);const rows=[[kind==='neraca'?'NERACA UBNB':'LABA RUGI UBNB'],['Per',m.end],['Status','Sementara; jurnal posted'],[],...lastRows[kind]];const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:65},{wch:24}];for(const [key,cell] of Object.entries(ws))if(cell&&typeof cell.v==='number')cell.z='#,##0;(#,##0);"-"';const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,kind==='neraca'?'Neraca':'Laba Rugi');if(kind==='labarugi'){
  const details=plDetails(m);
  const accountRows=[['Laba rugi per akun','Per '+m.end],['Usaha','Kelompok','Kode akun','Nama akun','Nilai','Baris jurnal']];
  const sourceRows=[['Sumber laba rugi','Per '+m.end],['Usaha','Kelompok','Kode akun','Nama akun','Tanggal','ID jurnal','Nomor jurnal','Referensi','Keterangan','ID baris','Debit','Kredit','Nilai laporan']];
@@ -150,6 +151,18 @@ function exportReport(kind){const m=kind==='neraca'?window._neracaData:window._l
  }
 }
 XLSX.writeFile(wb,`UBNB_${kind}_${m.end}.xlsx`);}
+function setReportCutoff(v){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(v)||!Number.isFinite(Date.parse(v+'T12:00:00Z'))||new Date(v+'T12:00:00Z').toISOString().slice(0,10)!==v)return;
+ cutoff=v;lastRows={};window._neracaData=null;window._lrData=null;
+ for(const id of ['dash-tahun','neraca-tahun','lr-tahun']){const el=document.getElementById(id);if(el){if(![...el.options].some(o=>o.value===v.slice(0,4)))el.add(new Option(v.slice(0,4),v.slice(0,4)));el.value=v.slice(0,4);}}
+ updateCutoffTitles();refreshReports();
+}
+function updateCutoffTitles(){
+ const label=cutoff.slice(8,10)+'/'+cutoff.slice(5,7)+'/'+cutoff.slice(0,4);
+ for(const name of ['dashboard','neraca','labarugi'])if(PAGE_TITLES[name])PAGE_TITLES[name].sub='Cutoff '+label+' · '+version;
+ const active=document.querySelector('.page.active')?.id?.replace('page-','');
+ if(['dashboard','neraca','labarugi'].includes(active)){const el=document.getElementById('topbar-subtitle');if(el)el.textContent=PAGE_TITLES[active].sub;}
+}
 function refreshReports(){renderDashboard();const active=document.querySelector('.page.active')?.id;if(active==='page-neraca')renderNeraca();if(active==='page-labarugi')renderLabaRugi();if(active==='page-rekonsiliasi')renderRecon();if(active==='page-kas'){renderKasKu();renderKasSummaryKu();}}
 window.financeFetchAll=async function(q){const rows=[];for(let offset=0;;offset+=500){const r=await q.range(offset,offset+499);if(r.error)throw r.error;rows.push(...(r.data||[]));if((r.data||[]).length<500)return rows;}};
 const oldSaldo=getSaldoAkun;getSaldoAkun=function(k,y){if(Number(y)<2026)return oldSaldo(k,y);const c=D.coa.find(c=>c.kode===k);const v=ledger(y).balances.get(k)||0;return c?.jenis==='kredit'?-v:v;};
@@ -164,7 +177,7 @@ const oldDev=renderDeviasi;renderDeviasi=function(){const y1=Number(document.get
 // Preserve existing cash management controls but fix legacy Indogrosir routing and negative display.
 const oldCode=getFnKodeCOA;getFnKodeCOA=function(id){return Number(id)===3?'1-106':oldCode(id);};
 const oldBB=renderBukuBesar,oldEBB=exportBukuBesar;let auditedBook=null;
-function buildBook(){const month=document.getElementById('bb-bulan')?.value||'',id=Number(document.getElementById('bb-akun')?.value);if(month&&Number(month.slice(0,4))<2026)return null;const c=D.coa.find(c=>c.id===id);if(!c)return null;const y=month?Number(month.slice(0,4)):Number(cutoff.slice(0,4)),end=month?new Date(y,Number(month.slice(5)),0).toLocaleDateString('sv-SE'):selectedDate(y);const h=new Map(D.jurnal_umum.filter(j=>j.status==='posted'&&j.tanggal<=end&&(j.referensi==='NERACA-2025'||j.tanggal>='2026-01-01')).map(j=>[j.id,j]));let balance=0,opening=0;const all=D.jurnal_detail.filter(d=>d.coa_id===id&&h.has(d.jurnal_id)).slice().sort((a,b)=>h.get(a.jurnal_id).tanggal.localeCompare(h.get(b.jurnal_id).tanggal)||a.jurnal_id-b.jurnal_id||num(a.id)-num(b.id));const rows=[];for(const d of all){const j=h.get(d.jurnal_id);balance+=(c.jenis==='kredit'?-1:1)*(num(d.debit)-num(d.kredit));if(month&&!j.tanggal.startsWith(month)){opening=balance;continue;}rows.push([j.tanggal,j.no_jurnal||String(j.id),j.keterangan||'',num(d.debit),num(d.kredit),balance]);}return {name:c.kode+' '+c.nama,end,opening,rows};}
+function buildBook(){const month=document.getElementById('bb-bulan')?.value||'',id=Number(document.getElementById('bb-akun')?.value);if(month&&Number(month.slice(0,4))<2026)return null;const c=D.coa.find(c=>c.id===id);if(!c)return null;const y=month?Number(month.slice(0,4)):Number(cutoff.slice(0,4)),end=month?[new Date(y,Number(month.slice(5)),0).toLocaleDateString('sv-SE'),selectedDate(y)].sort()[0]:selectedDate(y);const h=new Map(D.jurnal_umum.filter(j=>j.status==='posted'&&j.tanggal<=end&&(j.referensi==='NERACA-2025'||j.tanggal>='2026-01-01')).map(j=>[j.id,j]));let balance=0,opening=0;const all=D.jurnal_detail.filter(d=>d.coa_id===id&&h.has(d.jurnal_id)).slice().sort((a,b)=>h.get(a.jurnal_id).tanggal.localeCompare(h.get(b.jurnal_id).tanggal)||a.jurnal_id-b.jurnal_id||num(a.id)-num(b.id));const rows=[];for(const d of all){const j=h.get(d.jurnal_id);balance+=(c.jenis==='kredit'?-1:1)*(num(d.debit)-num(d.kredit));if(month&&!j.tanggal.startsWith(month)){opening=balance;continue;}rows.push([j.tanggal,j.no_jurnal||String(j.id),j.keterangan||'',num(d.debit),num(d.kredit),balance]);}return {name:c.kode+' '+c.nama,end,opening,rows};}
 renderBukuBesar=function(){const m=buildBook();auditedBook=m;if(!m)return oldBB();document.getElementById('bb-content').innerHTML='<p>Buku besar jurnal posted, saldo awal resmi dan koreksi. Per '+esc(m.end)+'</p><h3>'+esc(m.name)+'</h3>'+tbl(['Tanggal','Jurnal','Keterangan','Debit','Kredit','Saldo'],[['Saldo sebelum periode','','','','',money(m.opening)],...m.rows.map(r=>r.map((v,i)=>i>=3?money(v):esc(v)))]);};
 exportBukuBesar=function(){if(!auditedBook)return oldEBB();const m=auditedBook,ws=XLSX.utils.aoa_to_sheet([['Buku besar',m.name],['Per',m.end],['Saldo sebelum periode',m.opening],['Tanggal','Jurnal','Keterangan','Debit','Kredit','Saldo'],...m.rows]);ws['!cols']=[{wch:14},{wch:20},{wch:65},{wch:20},{wch:20},{wch:20}];for(const c of Object.values(ws))if(c&&typeof c.v==='number')c.z='#,##0;(#,##0);"-"';const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Buku Besar');XLSX.writeFile(wb,'UBNB_Buku_Besar_'+m.end+'.xlsx');};
 const oldSummary=renderKasSummaryKu;renderKasSummaryKu=function(){oldSummary();const el=document.getElementById('kas-summary');if(el)el.insertAdjacentHTML('beforeend','<p>Saldo di sini adalah pembukuan. <button class="btn secondary sm" onclick="showPage(\'rekonsiliasi\')">Cocokkan uang aktual</button></p>');};
@@ -172,7 +185,7 @@ recalcAllSaldo=function(){const y=Number(today().slice(0,4));const rows=D.kas.fi
 const oldRefresh=refreshAll;refreshAll=async function(){await oldRefresh();refreshReports();};
 const oldShow=showPage;showPage=function(n,el){oldShow(n,el);if(n==='rekonsiliasi')loadRecon();};
 function reconDate(){return document.getElementById('recon-date').value||today();}
-async function loadRecon(){cutoff=reconDate();reconLoaded=false;reconError='';try{if(!CU)throw Error('Masuk terlebih dahulu');const allowed=await sb.rpc('ubnb_finance_recon_allowed');if(allowed.error)throw allowed.error;if(!allowed.data)throw Error('Rekonsiliasi tersedia untuk pemilik/admin/bendahara/keuangan.');recon=await financeFetchAll(sb.from('keuangan_rekonsiliasi').select('*').or(`and(jenis.eq.aktual,tanggal.eq.${reconDate()}),and(jenis.eq.bukti,tanggal.lte.${reconDate()}))`).eq('diarsipkan',false).order('id'));reconLoaded=true;}catch(e){reconError=e.message;}renderRecon();}
+async function loadRecon(){reconLoaded=false;reconError='';try{if(!CU)throw Error('Masuk terlebih dahulu');const allowed=await sb.rpc('ubnb_finance_recon_allowed');if(allowed.error)throw allowed.error;if(!allowed.data)throw Error('Rekonsiliasi tersedia untuk pemilik/admin/bendahara/keuangan.');recon=await financeFetchAll(sb.from('keuangan_rekonsiliasi').select('*').or(`and(jenis.eq.aktual,tanggal.eq.${reconDate()}),and(jenis.eq.bukti,tanggal.lte.${reconDate()}))`).eq('diarsipkan',false).order('id'));reconLoaded=true;}catch(e){reconError=e.message;}renderRecon();}
 function actualRows(){return recon.filter(r=>r.jenis==='aktual');}
 function matches(b){const rows=(D.kas_mutasi||[]).filter(m=>m.tipe==='keluar'&&num(m.jumlah)===num(b.jumlah)&&(!b.kas_id||m.kas_id===b.kas_id));return rows.sort((a,c)=>Math.abs(Date.parse(a.tanggal)-Date.parse(b.tanggal))-Math.abs(Date.parse(c.tanggal)-Date.parse(b.tanggal))).slice(0,15);}
 let evidenceFilter='pending';
@@ -180,7 +193,7 @@ function isMatched(b){const m=(D.kas_mutasi||[]).find(m=>m.id===b.mutasi_id);ret
 function renderRecon(){
  const out=document.getElementById('recon-result');if(!out)return;
  if(!reconLoaded){out.innerHTML='<p>'+esc(reconError||'Memuat rekonsiliasi…')+'</p>';return;}
- const m=ledger(Number(reconDate().slice(0,4))),actual=actualRows(),known=actual.reduce((s,r)=>s+num(r.jumlah),0),pending=actual.filter(r=>r.jumlah===null||!r.terkonfirmasi);
+ const m=ledger(Number(reconDate().slice(0,4)),reconDate()),actual=actualRows(),known=actual.reduce((s,r)=>s+num(r.jumlah),0),pending=actual.filter(r=>r.jumlah===null||!r.terkonfirmasi);
  document.getElementById('recon-book-date').textContent='Saldo buku per '+m.end+' · Piutang tidak dihitung sebagai kas.';
  const note=r=>r.catatan?'<details class="rek-note"><summary>Catatan</summary><p>'+esc(r.catatan)+'</p></details>':'';
  const status=r=>'<span class="rek-badge '+(r.terkonfirmasi?'ok':'wait')+'">'+(r.terkonfirmasi?'Dikonfirmasi':'Belum dikonfirmasi')+'</span>';
@@ -213,8 +226,9 @@ style.textContent+="#page-neraca{font-size:14px}#page-neraca .card{padding:16px;
 document.getElementById('page-kas').after(page);
 const nav=document.createElement('div');nav.className='nav-item';nav.innerHTML='<span class="nav-icon">✓</span>Rekonsiliasi Kas';nav.onclick=()=>showPage('rekonsiliasi',nav);document.querySelector('[onclick="showPage(\'kas\',this)"]').after(nav);
 PAGE_TITLES.rekonsiliasi={title:'Rekonsiliasi Kas',sub:'Saldo aktual dan bukti · '+version};
-window.FinanceAudit={filter:v=>{evidenceFilter=v;renderRecon();},newEvidence:()=>{reset();document.getElementById("recon-kind").value="bukti";document.getElementById("recon-form").open=true;document.getElementById("recon-label").scrollIntoView({block:"center"});},ledger,money,load:loadRecon,edit,reset,save,match:id=>link(id),unlink:id=>link(id,true),export:exportRecon,setCutoff:v=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return;cutoff=v;refreshReports();},useDate:()=>{cutoff=reconDate();renderRecon();},version};
+window.FinanceAudit={filter:v=>{evidenceFilter=v;renderRecon();},newEvidence:()=>{reset();document.getElementById("recon-kind").value="bukti";document.getElementById("recon-form").open=true;document.getElementById("recon-label").scrollIntoView({block:"center"});},ledger,money,load:loadRecon,edit,reset,save,match:id=>link(id),unlink:id=>link(id,true),export:exportRecon,setCutoff:setReportCutoff,getCutoff:()=>cutoff,useDate:()=>{setReportCutoff(reconDate());renderRecon();},version};
 PAGE_TITLES.neraca={title:'Neraca',sub:'Aset, kewajiban dan ekuitas · '+version};
 PAGE_TITLES.labarugi={title:'Laba Rugi',sub:'Per usaha dan akun · '+version};
+updateCutoffTitles();
 const oldRenderRecon=renderRecon;renderRecon=function(){const sel=document.getElementById('recon-kas');if(sel){const v=sel.value;sel.innerHTML='<option value="">Semua kas</option>'+D.kas.map(k=>`<option value="${k.id}">${esc(k.nama)}</option>`).join('');sel.value=v;}oldRenderRecon();};
 })();
