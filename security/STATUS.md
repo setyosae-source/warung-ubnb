@@ -26,3 +26,20 @@ Tidak ada perubahan perilaku database/frontend; tidak ada data finansial, data p
 ## Berikutnya
 
 Selesaikan pemetaan sesi/grant pengurus dan seluruh pemanggil sebelum membatasi endpoint. Siapkan pembuktian identitas untuk enrollment PIN pertama dan pengikatan DID; publikasikan frontend pengganti dan verifikasi situs sebelum pembatasan database. Jangan mencabut jalur lama sekarang. Inventaris fungsi lain, panel/perangkat, scope editor, keuangan dan regresi masih belum selesai. pg_net tidak disentuh; perlindungan password bocor belum diaktifkan, tidak ada perubahan paket/biaya.
+
+
+# Pembaruan 28 November 2026
+
+Main terbaru yang diamati: f3e29e2085329e6ee261c9630f06b4b9d2221d02. Tahap 1 tetap belum selesai; tidak ada pembatasan login baru diaktifkan.
+
+Advisor langsung: UBNB ERROR 0, WARN 446 (222 anon definer + 222 authenticated definer + extension 1 + password 1), INFO 97. Panel ERROR 0, WARN 16 (7+8+1), INFO 20. UBNB naik 18 warning dibanding kemarin; penyebab individual belum dipastikan. Query katalog memastikan tabel public UBNB tanpa RLS = 0.
+
+Bukti tambahan dari definisi database:
+- dashboard_login_lock_grant_check memanggil private.ubnb_login_grant_valid. Helper mengikat hash token pada DID dan expiry; tidak memeriksa pengurus masih aktif. Ini kandidat kebutuhan pencabutan saat peran berubah, bukan perubahan yang sudah diterapkan.
+- private.ubnb_secure_actor membaca sesi ber-fingerprint kredensial lewat x-ubnb-staff, atau fallback sesi dk_attendance_session lewat x-ubnb-dk. Tidak membaca grant Kunci Login. Jadi validitas grant tidak otomatis memberi sesi staff terverifikasi.
+- private.ubnb_assert_editor mengikat pengurus_did bila tersedia; admin/pemilik dikecualikan, fallback lain mencocokkan nama/username dengan nama jamaah. Pencocokan nama belum merupakan identitas unik dan perlu pengganti berbasis pemetaan akun eksplisit.
+- ubnb_assert_legacy_editor juga memiliki fallback pencocokan nama. Keduanya masuk kategori internal perlu penguatan P1; jangan memotong fallback sebelum pemetaan dan pengganti tersedia.
+
+Pengujian: BEGIN, SET LOCAL ROLE anon, headers kosong dan JWT role anon; dashboard_login_lock_grant_check untuk DID/token sintetis tidak valid mengembalikan ok=false; ROLLBACK berhasil. Tidak ada fixture akun, grant, transaksi finansial atau data pengguna dibuat. Uji positif dan lintas akun belum selesai. Pembacaan assets/js/dashboard-core.js lewat konektor mengembalikan konten kosong; tidak dipakai sebagai bukti pemanggil terbaru. Referensi pemanggil 27 November bersifat historis sampai diverifikasi ulang dari checkout terbaru.
+
+Perubahan run ini hanya checkpoint. Rollback: revert commit dokumentasi. Berikutnya: ambil checkout main baru untuk pemanggil sesi aktual, periksa schema sesi dan pemetaan staff-pengurus, buat fixture terisolasi dalam rollback untuk uji positif/negatif sebelum menyiapkan guard pengganti. Inventaris menyeluruh, panel/perangkat, keuangan dan regresi tetap belum selesai. Tidak ada klaim seluruh warning aman; pg_net dan paket biaya tidak diubah.
