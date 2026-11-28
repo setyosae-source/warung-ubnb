@@ -1,7 +1,7 @@
 /* Keuangan UBNB - reconciliation and posted-journal reports, 2026-11-28. */
 (function(){
 'use strict';
-const version='2026.11.28-R1';
+const version='2026.11.28-R2';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v)||0;
 const money=v=>`${num(v)<0?'−':''}Rp ${Math.abs(num(v)).toLocaleString('id-ID')}`;
@@ -13,13 +13,14 @@ function ledger(y){
  const end=selectedDate(y), start=y+'-01-01';
  const heads=new Map((D.jurnal_umum||[]).filter(j=>j.status==='posted'&&j.tanggal<=end&&(Number(y)>=2026?(j.referensi==='NERACA-2025'||j.tanggal>= '2026-01-01'):(j.referensi==='NERACA-'+y))).map(j=>[j.id,j]));
  const coa=new Map((D.coa||[]).map(c=>[c.id,c]));
- const balances=new Map(), yearly=new Map(), unitAdjust={Warung:0,PPOB:0};
+ const balances=new Map(), yearly=new Map(), unitAdjust={Warung:0,PPOB:0}, revenueAdjust={Warung:0,'Servis / lainnya':0};
  for(const d of D.jurnal_detail||[]){
   const j=heads.get(d.jurnal_id),c=coa.get(d.coa_id);if(!j||!c)continue;
   const v=num(d.debit)-num(d.kredit);balances.set(c.kode,(balances.get(c.kode)||0)+v);
   if(j.tanggal>=start&&plGroups.has(c.kelompok)){
    yearly.set(c.kode,(yearly.get(c.kode)||0)+v);
    // Admin of store improvement belongs to Warung, ordinary bank top-up fees to PPOB.
+   if(c.kode==='4-401'&&String(j.referensi||'').startsWith('AUD2-WRG-OVERPAY-')){revenueAdjust.Warung-=v;revenueAdjust['Servis / lainnya']+=v;}
    if(c.kode==='6-113'&&String(j.referensi||'').startsWith('FIN-PW4-WORKS-')){unitAdjust.Warung-=v;unitAdjust.PPOB+=v;}
   }
  }
@@ -28,18 +29,29 @@ function ledger(y){
  const sum=group=>accounts.filter(c=>c.kelompok===group).reduce((s,c)=>s+c.saldo,0);
  const profit=-income.reduce((s,c)=>s+c.saldo,0);
  const assets=sum('aktiva_lancar')+sum('aktiva_tetap'),liabilities=-sum('kewajiban'),equity=-sum('modal');
- const units={Warung:unitAdjust.Warung,PPOB:unitAdjust.PPOB,BMT:0,Laundry:0,'Organisasi / lainnya':0};
- for(const c of income){let u='Organisasi / lainnya';if(['4-101','4-401','5-101','6-101','6-114'].includes(c.kode))u='Warung';else if(['4-201','4-403','5-201','6-113'].includes(c.kode))u='PPOB';else if(['4-301','4-302','5-302','6-102','6-107'].includes(c.kode))u='BMT';else if(c.kode==='4-402')u='Laundry';units[u]-=c.saldo;}
+ const stats={};for(const n of ['Warung','PPOB','BMT','Laundry','Servis / lainnya','Marketplace / JAWARA','Organisasi / lainnya'])stats[n]={revenue:0,hpp:0,cost:0,gross:0,net:0};
+ for(const c of income){let u='Organisasi / lainnya';if(['4-101','5-101','6-101','6-114'].includes(c.kode))u='Warung';else if(['4-201','4-403','5-201','6-113'].includes(c.kode))u='PPOB';else if(['4-301','4-302','5-302','6-102','6-107'].includes(c.kode))u='BMT';else if(c.kode==='4-402')u='Laundry';else if(c.kode==='4-401')u='Servis / lainnya';
+  if(c.kelompok==='pendapatan')stats[u].revenue-=c.saldo;else if(c.kelompok==='hpp')stats[u].hpp+=c.saldo;else stats[u].cost+=c.saldo;
+ }
+ const units={};for(const [n,u] of Object.entries(stats)){u.cost-=unitAdjust[n]||0;u.revenue+=revenueAdjust[n]||0;u.gross=u.revenue-u.hpp;u.net=u.gross-u.cost;units[n]=u.net;}
+ const totals=Object.values(stats).reduce((t,u)=>({revenue:t.revenue+u.revenue,hpp:t.hpp+u.hpp,gross:t.gross+u.gross,cost:t.cost+u.cost,net:t.net+u.net}),{revenue:0,hpp:0,gross:0,cost:0,net:0});
  const cash=accounts.filter(c=>/^1-10\d$/.test(c.kode)).reduce((s,c)=>s+c.saldo,0);
- return {year:y,end,accounts,income,profit,assets,liabilities,equity,units,cash,difference:assets-liabilities-equity-profit,balances};
+ return {year:y,end,accounts,income,profit,assets,liabilities,equity,units,stats,totals,cash,difference:assets-liabilities-equity-profit,balances};
 }
 function validData(){if(window.financeLoadError||!D.jurnal_umum.length||!D.coa.length)throw Error('Jurnal belum lengkap. Muat ulang sebelum membaca laporan.');}
-function tbl(headers,rows){return '<div class="tbl-wrap"><table class="tbl"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((v,i)=>'<td'+(i?' class="rp"':'')+'>'+v+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
+function tbl(headers,rows){return '<div class="tbl-wrap"><table class="tbl"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr'+(/^(TOTAL|LABA |SELISIH)/.test(String(r[0]))?' class="row-subtotal"':'')+'>'+r.map((v,i)=>'<td'+(i?' class="rp"':'')+'>'+v+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';}
 function context(m){return `<div class="card"><strong>Laporan sementara berbasis jurnal posted · ${version}</strong><p>Per ${esc(m.end)}. Saldo awal memakai NERACA-2025, ditambah mutasi jurnal 2026; rekap laba rugi 2025 tidak dijumlahkan kembali. SHU dan ukhro laba 2025 mengurangi ekuitas. Kas fisik masih direkonsiliasi.</p><label class="no-print">Tanggal batas laporan <input type="date" value="${esc(m.end)}" onchange="FinanceAudit.setCutoff(this.value)"></label></div>`;}
-function bsRows(m){const rows=[];for(const [group,title,sign] of [['aktiva_lancar','ASET LANCAR',1],['aktiva_tetap','ASET TETAP',1],['kewajiban','KEWAJIBAN',-1],['modal','EKUITAS',-1]]){rows.push([title,'']);for(const c of m.accounts.filter(c=>c.kelompok===group&&c.saldo!==0)){let name=c.kode==='3-103'?'Laba tahun 2025 dibawa ke 2026':c.nama;rows.push([c.kode+' '+name,sign*c.saldo]);}}rows.push(['Laba berjalan '+m.year,m.profit],['TOTAL ASET',m.assets],['TOTAL KEWAJIBAN DAN EKUITAS',m.liabilities+m.equity+m.profit],['SELISIH NERACA',m.difference]);return rows;}
-function plRows(m){const rows=[];for(const [group,title,sign] of [['pendapatan','PENDAPATAN',-1],['hpp','HPP / BEBAN MANFAAT',1],['biaya','BIAYA',1],['zakat','ZAKAT',1]]){rows.push([title,'']);for(const c of m.income.filter(c=>c.kelompok===group&&c.saldo!==0))rows.push([c.kode+' '+c.nama,sign*c.saldo]);}rows.push(['LABA BERSIH',m.profit]);return rows;}
+function bsRows(m){const rows=[];
+ const section=(group,title,sign)=>{rows.push([title,'']);for(const c of m.accounts.filter(c=>c.kelompok===group&&c.saldo!==0)){const name=c.kode==='3-103'?'Laba tahun 2025 dibawa ke 2026':c.nama;rows.push([c.kode+' '+name,sign*c.saldo]);}};
+ section('aktiva_lancar','ASET LANCAR',1);section('aktiva_tetap','ASET TETAP',1);rows.push(['TOTAL ASET',m.assets]);
+ section('kewajiban','KEWAJIBAN',-1);rows.push(['TOTAL KEWAJIBAN',m.liabilities]);
+ section('modal','EKUITAS',-1);rows.push(['Laba berjalan '+m.year,m.profit],['TOTAL EKUITAS',m.equity+m.profit],['TOTAL KEWAJIBAN + EKUITAS',m.liabilities+m.equity+m.profit],['SELISIH: ASET − (KEWAJIBAN + EKUITAS)',m.difference]);return rows;}
+function plRows(m){const rows=[];for(const [n,u] of Object.entries(m.stats)){rows.push([n.toUpperCase(),''],['Pendapatan',u.revenue],['HPP / beban langsung',u.hpp],['LABA KOTOR SEBELUM BIAYA',u.gross],['Biaya dan beban setelah laba kotor',u.cost],['LABA / RUGI BERSIH '+n,u.net]);}rows.push(['REKAP KESELURUHAN UBNB',''],['Total pendapatan',m.totals.revenue],['Total HPP / beban langsung',m.totals.hpp],['LABA KOTOR SEBELUM BIAYA',m.totals.gross],['Total biaya dan beban',m.totals.cost],['LABA BERSIH',m.profit]);return rows;}
 function renderBS(y){try{validData();const m=ledger(y);lastRows.neraca=bsRows(m);window._neracaData={tahun:y,...m};document.getElementById('neraca-content').innerHTML=context(m)+`<div class="card"><h3>Neraca UBNB</h3>${tbl(['Uraian','Rupiah'],bsRows(m).map(r=>[esc(r[0]),typeof r[1]==='number'?money(r[1]):'']))}<p>${Math.abs(m.difference)<0.01?'Neraca seimbang secara matematis.':'Neraca belum seimbang: '+money(m.difference)} Kecocokan uang aktual diperiksa pada Rekonsiliasi Kas.</p><p>Piutang, persediaan, kewajiban dan ekuitas menggunakan jurnal; saldo kontra-aset ditampilkan negatif. Saldo debit utang perlu diperiksa dan belum dianggap utang negatif yang telah dikonfirmasi.</p></div>`;}catch(e){document.getElementById('neraca-content').textContent=e.message;}}
-function renderPL(y){try{validData();const m=ledger(y);lastRows.labarugi=plRows(m);window._lrData={tahun:y,labaBersih:m.profit,...m};document.getElementById('lr-content').innerHTML=context(m)+`<div class="card"><h3>Laba rugi per usaha</h3>${tbl(['Usaha / alokasi','Laba / rugi'],Object.entries(m.units).map(([n,v])=>[esc(n),money(v)]).concat([['TOTAL',money(m.profit)]]))}<p>Laundry berdasarkan komisi. Rp105 kelebihan pembayaran historis masuk Warung. Admin renovasi PW4 masuk Warung; admin top-up biasa masuk PPOB. Unit tanpa jurnal belum dapat dinilai.</p></div><div class="card"><h3>Rincian konsolidasi</h3>${tbl(['Akun','Rupiah'],plRows(m).map(r=>[esc(r[0]),typeof r[1]==='number'?money(r[1]):'']))}<p>Nilai bersih memperhitungkan debit dan kredit pembalik. Renovasi toko masih aset sementara; penyusutan dan umur manfaat belum ditetapkan. Selisih persediaan 27 November berada di akun biaya penyesuaian, bukan HPP tambahan.</p></div>`;}catch(e){document.getElementById('lr-content').textContent=e.message;}}
+function renderPL(y){try{validData();const m=ledger(y);lastRows.labarugi=plRows(m);window._lrData={tahun:y,labaBersih:m.profit,...m};
+ const detail=Object.entries(m.stats).map(([n,u])=>`<div class="card"><h3>${esc(n)}</h3>${tbl(['Uraian','Rupiah'],[['Pendapatan',money(u.revenue)],['HPP / beban langsung',money(u.hpp)],['LABA KOTOR SEBELUM BIAYA',money(u.gross)],['Biaya dan beban setelah laba kotor',money(u.cost)],['LABA / RUGI BERSIH',money(u.net)]])}</div>`).join('');
+ const t=m.totals;document.getElementById('lr-content').innerHTML=context(m)+`<div class="card"><h3>Rekap laba rugi per usaha</h3>${tbl(['Usaha / alokasi','Pendapatan','HPP','Laba kotor','Biaya','Laba bersih'],Object.entries(m.stats).map(([n,u])=>[esc(n),money(u.revenue),money(u.hpp),money(u.gross),money(u.cost),money(u.net)]).concat([['TOTAL UBNB',money(t.revenue),money(t.hpp),money(t.gross),money(t.cost),money(t.net)]]))}<p>Laba kotor = pendapatan dikurangi HPP/beban langsung. Laba bersih = laba kotor dikurangi biaya dan beban. Biaya organisasi tetap disajikan terpisah agar tidak dibebankan merata tanpa dasar.</p></div>`+detail+`<div class="card"><h3>Rekap keseluruhan UBNB</h3>${tbl(['Uraian','Rupiah'],[['Total pendapatan',money(t.revenue)],['Total HPP / beban langsung',money(t.hpp)],['LABA KOTOR SEBELUM BIAYA',money(t.gross)],['Total biaya dan beban',money(t.cost)],['LABA BERSIH UBNB',money(m.profit)]])}<p>Laundry berdasarkan komisi. Admin renovasi PW4 masuk Warung; admin top-up biasa masuk PPOB. Seluruh nilai memperhitungkan jurnal pembalik. Renovasi masih aset sementara, penyusutan menunggu daftar aset. SHU dan ukhro pembagian laba 2025 tidak menjadi biaya 2026. Laba nol tanpa transaksi belum membuktikan unit tidak beroperasi.</p><details><summary>Rincian akun konsolidasi</summary>${tbl(['Akun','Rupiah'],m.income.filter(c=>c.saldo!==0).map(c=>[esc(c.kode+' '+c.nama),money(c.kelompok==='pendapatan'?-c.saldo:c.saldo)]))}</details></div>`;
+ }catch(e){document.getElementById('lr-content').textContent=e.message;}}
 function exportReport(kind){const m=kind==='neraca'?window._neracaData:window._lrData;if(!m?.end||!window.XLSX)return toast('Buka laporan dan tunggu data lengkap',true);const rows=[[kind==='neraca'?'NERACA UBNB':'LABA RUGI UBNB'],['Per',m.end],['Status','Sementara; jurnal posted'],[],...lastRows[kind]];const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:65},{wch:24}];for(const [key,cell] of Object.entries(ws))if(cell&&typeof cell.v==='number')cell.z='#,##0;(#,##0);"-"';const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,kind==='neraca'?'Neraca':'Laba Rugi');XLSX.writeFile(wb,`UBNB_${kind}_${m.end}.xlsx`);}
 function refreshReports(){renderDashboard();const active=document.querySelector('.page.active')?.id;if(active==='page-neraca')renderNeraca();if(active==='page-labarugi')renderLabaRugi();if(active==='page-rekonsiliasi')renderRecon();if(active==='page-kas'){renderKasKu();renderKasSummaryKu();}}
 window.financeFetchAll=async function(q){const rows=[];for(let offset=0;;offset+=500){const r=await q.range(offset,offset+499);if(r.error)throw r.error;rows.push(...(r.data||[]));if((r.data||[]).length<500)return rows;}};
