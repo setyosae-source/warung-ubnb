@@ -9,24 +9,19 @@
 - Dashboard, neraca, laba rugi dan ekspor 2026 memakai perhitungan yang sama dan tanggal batas yang terlihat.
 - Pengambilan jurnal/detail/mutasi dipaginasi. Pemeriksaan saldo tidak lagi menimpa saldo kas dengan penjumlahan seluruh riwayat impor saham.
 
-## Kontrol pada ekstraksi 28 November
+## Kontrol
 
-- Kas jurnal seluruhnya Rp81.847.155; kas utama Rp76.976.719.
-- Aset Rp256.048.753; neraca selisih Rp0.
-- Laba Januari-Oktober Rp31.519.049 (termasuk admin renovasi Rp500).
-- Laba sampai 28 November Rp29.845.920; transaksi hari ini dapat mengubah nilai setelah ekstraksi.
-- Posisi uang teridentifikasi Rp63.647.758. Selisih sementara Rp18.199.397. Akbar belum diketahui; Indogrosir dan Digiflazz masih memakai saldo aplikasi.
-- 18 bukti pengeluaran yang baru diaudit, total Rp37.201.802, ditautkan ke mutasi yang sudah diposting; bukan pengeluaran baru.
+Saldo kas, aset, laba dan keseimbangan neraca diuji terhadap agregat jurnal database pada tanggal ekstraksi. Angka posisi keuangan dan bukti pembayaran disimpan dalam database berakses sesi, tidak disertakan sebagai fixture publik. Skenario uji meliputi cutoff, jurnal pembalik, draft/future, saldo awal dan duplikasi pemuatan.
 
 ## Batas laporan sementara / pekerjaan audit tersisa
 
-1. Laporan kas Akbar, bukti rekening/provider bertanggal sama dan pemetaan BMT RA Rp11.978.293 terhadap tabungan eksternal serta penempatan lama; hindari menghitung uang yang sama dua kali.
+1. Laporan kas Akbar, bukti rekening/provider bertanggal sama dan pemetaan BMT RA terhadap tabungan eksternal serta penempatan lama; hindari menghitung uang yang sama dua kali.
 2. Rincian piutang pembiayaan, usaha Warung/PPOB dan pelunasan setelah tanggal laporan. Piutang talangan/penggantian pengurus tidak menjadi uang kas.
-3. Utang supplier bersaldo debit Rp390.000 dan tanggal pembayaran pembelian; selesaikan rekonsiliasi per supplier sebelum reklasifikasi.
-4. Harga pokok/FIFO dan persediaan lokasi lain. Stok lokasi lain Rp2.637.181 belum didukung opname baru; sebagian biaya barang masih sementara.
-5. Daftar aset renovasi Rp9.167.000, tanggal siap digunakan, hak penggunaan lokasi, umur manfaat serta penyusutan; saat ini kapitalisasi masih sementara.
+3. Utang supplier bersaldo debit dan tanggal pembayaran pembelian; selesaikan rekonsiliasi per supplier sebelum reklasifikasi.
+4. Harga pokok/FIFO dan persediaan lokasi lain. Stok lokasi lain lokasi lain belum didukung opname baru; sebagian biaya barang masih sementara.
+5. Daftar aset renovasi toko, tanggal siap digunakan, hak penggunaan lokasi, umur manfaat serta penyusutan; saat ini kapitalisasi masih sementara.
 6. Bagi hasil BMT per pemodal, margin ditangguhkan, ekuitas transisi, dan saldo pembuka; jangan menganggap mutasi kas sebagai laba.
-7. Rekap SHU Rp21.241.500 berbeda Rp10.000 dari rincian penerima Rp21.231.500. Penyerahan kepada kelompok sudah dicatat; bukan bukti bahwa setiap anggota menerima.
+7. Rekap SHU berbeda dari jumlah rincian penerima. Penyerahan kepada kelompok sudah dicatat; bukan bukti bahwa setiap anggota menerima.
 8. Setelah sumber lengkap: laporan arus kas, perubahan ekuitas, kebijakan akuntansi/catatan laporan dan proses tutup buku. Laporan yang seimbang belum berarti selesai audit atau telah tersertifikasi memenuhi seluruh standar.
 
 ## Pengujian
